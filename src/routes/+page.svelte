@@ -100,8 +100,11 @@
 				<a class="hover:text-neutral-900" href="#integrations">Integrations</a>
 			</nav>
 			<div class="flex items-center gap-3">
+				<a class="text-sm text-neutral-600 hover:text-neutral-900" href="/login">
+					Log in
+				</a>
 				<a
-					class="rounded-full bg-stone-800 px-4 py-2 text-xs text-neutral-200"
+					class="rounded-full bg-stone-800 px-4 py-2 text-xs text-neutral-200 transition-colors hover:bg-stone-700"
 					href="https://calendly.com/21andrewch/30min"
 					target="_blank"
 					rel="noreferrer"
@@ -114,16 +117,24 @@
 	<div class="mx-auto flex w-full max-w-7xl flex-col gap-20 px-6 pt-24 pb-20">
 		<section class="flex flex-col gap-16">
 			<div class="mt-20 max-w-3xl">
-				<h1 class="text-3xl">Built to make property management effortless,</h1>
-				<h1 class="text-3xl">Bedrock saves you time and you're in charge.</h1>
-				<a
-					href="https://calendly.com/21andrewch/30min"
-					target="_blank"
-					rel="noreferrer"
-					class="text-md mt-4 inline-flex flex-row items-center gap-1 rounded-full bg-stone-800 px-5 py-2 text-neutral-200"
-				>
-					Book a demo
-				</a>
+				<h1 class="text-3xl">Make property management effortless.</h1>
+				<p class="text-3xl text-neutral-600">Bedrock saves you time, you stay in control.</p>
+				<div class="mt-4 flex items-center gap-3">
+					<a
+						href="/signup"
+						class="text-md inline-flex flex-row items-center gap-1 rounded-full bg-stone-800 px-5 py-2 text-neutral-200 transition-colors hover:bg-stone-700"
+					>
+						Book a demo
+					</a>
+					<a
+						href="https://calendly.com/21andrewch/30min"
+						target="_blank"
+						rel="noreferrer"
+						class="text-md inline-flex flex-row items-center gap-1 rounded-full border border-stone-300 bg-[#F7F7F4] px-5 py-2 text-stone-800 transition-colors hover:bg-stone-200"
+					>
+						Get started
+					</a>
+				</div>
 			</div>
 			<div class="relative overflow-hidden rounded-sm bg-[#1e1e1e] p-6">
 				<svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="none">
@@ -532,19 +543,19 @@
 		<section class="flex mt-20 scroll-my-28 flex-col items-center gap-4 text-center" id="request-demo">
 			<h2 class="text-6xl font-medium">Try Bedrock now.</h2>
 			<a
-				class="rounded-full bg-stone-800 px-6 py-2.5 text-sm text-neutral-100"
+				class="rounded-full bg-stone-800 px-6 py-2.5 text-sm text-neutral-100 transition-colors hover:bg-stone-700"
 				href="https://calendly.com/21andrewch/30min"
 				target="_blank"
 				rel="noreferrer"
 			>
-				Book a demo
+				Contact us
 			</a>
 		</section>
 	</div>
 
 	<footer class="bg-[#F2F1EE]">
 		<div class="mx-auto w-full max-w-7xl px-6 py-10 text-sm text-neutral-600">
-			© {new Date().getFullYear()} Bedrock PMS
+			© {new Date().getFullYear()} Bedrock
 		</div>
 	</footer>
 </div>
