@@ -86,12 +86,12 @@
 </script>
 
 
-<div class="min-h-screen bg-[#F7F7F4] text-neutral-900">
-	<header class="fixed inset-x-0 top-0 z-30 bg-[#f6f5f3]">
+<div class="min-h-screen bg-[#F7F7F4] text-stone-800">
+	<header class="fixed inset-x-0 top-0 z-30 bg-[#F7F7F4]">
 		<div
 			class="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-6 px-6 py-4 md:flex-row md:items-center"
 		>
-			<div class="flex items-center gap-2 text-md font-medium tracking-[0.1em] uppercase" style="font-family: 'Zalando Sans Expanded', sans-serif;">
+			<div class="flex items-center gap-1 text-md font-regular tracking-[0.1em] uppercase" style="font-family: 'Zalando Sans Expanded', sans-serif;">
 				<img src={bedrockLogo} alt="Bedrock" class="h-8 w-8" />
 				Bedrock
 			</div>
@@ -125,16 +125,77 @@
 					Book a demo
 				</a>
 			</div>
-			<div class="relative overflow-hidden rounded-sm bg-[#0b1e24] p-6">
+			<div class="relative overflow-hidden rounded-sm bg-[#1e1e1e] p-6">
+				<svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="none">
+					<defs>
+						<linearGradient id="demo-bg" x1="0" y1="0" x2="1" y2="1">
+							<stop offset="0%" stop-color="#1e1e1e"/>
+							<stop offset="55%" stop-color="#232323"/>
+							<stop offset="100%" stop-color="#191919"/>
+						</linearGradient>
+						<filter id="warp" x="-20%" y="-20%" width="140%" height="140%">
+							<feTurbulence type="fractalNoise" baseFrequency="0.008 0.025" numOctaves="3" seed="8" result="n"/>
+							<feDisplacementMap in="SourceGraphic" in2="n" scale="50" xChannelSelector="R" yChannelSelector="G"/>
+						</filter>
+						<filter id="strata" x="-20%" y="-20%" width="140%" height="140%">
+							<feTurbulence type="fractalNoise" baseFrequency="0.003 0.04" numOctaves="4" seed="12" result="t"/>
+							<feComponentTransfer in="t" result="bands">
+								<feFuncR type="table" tableValues="0 0.1 0.15 0.5 0.55 0.6 0.85 0.9 1"/>
+								<feFuncG type="table" tableValues="0 0.1 0.15 0.5 0.55 0.6 0.85 0.9 1"/>
+								<feFuncB type="table" tableValues="0 0.1 0.15 0.5 0.55 0.6 0.85 0.9 1"/>
+							</feComponentTransfer>
+							<feColorMatrix in="bands" type="matrix" result="a"
+								values="
+									0 0 0 0 0
+									0 0 0 0 0
+									0 0 0 0 0
+									1 0 0 0 0"/>
+							<feGaussianBlur in="a" stdDeviation="0.65" result="soft"/>
+						</filter>
+						<filter id="strata-sharp" x="-20%" y="-20%" width="140%" height="140%">
+							<feTurbulence type="fractalNoise" baseFrequency="0.0005 0.065" numOctaves="2" seed="7" result="t"/>
+							<feComponentTransfer in="t" result="bands">
+								<feFuncR type="discrete" tableValues="0 0.2 0.4 0.8 1"/>
+								<feFuncG type="discrete" tableValues="0 0.2 0.4 0.8 1"/>
+								<feFuncB type="discrete" tableValues="0 0.2 0.4 0.6 0.8 1"/>
+							</feComponentTransfer>
+							<feColorMatrix in="bands" type="matrix" result="a"
+								values="
+									0 0 0 0 0
+									0 0 0 0 0
+									0 0 0 0 0
+									1.2 0 0 0 0"/>
+							<feGaussianBlur in="a" stdDeviation="0.45" result="soft"/>
+						</filter>
+						<filter id="grain" x="0%" y="0%" width="100%" height="100%">
+							<feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="4" seed="5" result="noise"/>
+							<feColorMatrix in="noise" type="matrix"
+								values="
+									0 0 0 0 0
+									0 0 0 0 0
+									0 0 0 0 0
+									0.5 0 0 0 0"/>
+						</filter>
+						<radialGradient id="demo-vignette" cx="50%" cy="30%" r="80%">
+							<stop offset="0%" stop-color="#ffffff" stop-opacity="0.12"/>
+							<stop offset="60%" stop-color="#ffffff" stop-opacity="0.05"/>
+							<stop offset="100%" stop-color="#000000" stop-opacity="0.25"/>
+						</radialGradient>
+					</defs>
+					<rect width="1200" height="700" fill="url(#demo-bg)"/>
+					<g opacity="0.45" filter="url(#warp)">
+						<rect width="1200" height="700" fill="#ffffff" filter="url(#strata)"/>
+					</g>
+					<g opacity="0.5" filter="url(#warp)">
+						<rect width="1200" height="700" fill="#ffffff" filter="url(#strata-sharp)"/>
+					</g>
+					<rect width="1200" height="700" fill="#ffffff" filter="url(#grain)" opacity="0.95"/>
+					<rect width="1200" height="700" fill="url(#demo-vignette)"/>
+				</svg>
 				<div
 					class="pointer-events-none absolute -inset-24 opacity-90 blur-3xl"
-					style="background-image: radial-gradient(900px 520px at 25% 25%, rgba(58, 140, 155, 0.95), transparent 62%), radial-gradient(760px 520px at 80% 30%, rgba(40, 92, 120, 0.85), transparent 60%), radial-gradient(760px 520px at 55% 92%, rgba(18, 44, 62, 0.9), transparent 62%);"
+					style="background-image: radial-gradient(900px 520px at 25% 25%, rgba(85, 85, 85, 0.95), transparent 62%), radial-gradient(760px 520px at 80% 30%, rgba(65, 65, 65, 0.85), transparent 60%), radial-gradient(760px 520px at 55% 92%, rgba(45, 45, 45, 0.9), transparent 62%);"
 				></div>
-				<div
-					class="pointer-events-none absolute inset-0 opacity-[0.08]"
-					style="background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.35), rgba(255,255,255,0.35) 1px, transparent 1px, transparent 8px);"
-				></div>
-				<div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-black/35"></div>
 				<div class="relative z-10 rounded-2xl">
 					<div
 						class="flex aspect-[16/10] min-h-[240px] w-full items-center justify-center p-4 sm:p-6"
@@ -150,7 +211,7 @@
 									<span class="h-2.5 w-2.5 rounded-full bg-[#e1ded7]"></span>
 									<span class="h-2.5 w-2.5 rounded-full bg-[#e9e6df]"></span>
 								</div>
-								<div class="text-[11px] font-semibold tracking-[0.1em] uppercase">Bedrock</div>
+								<div class="text-[12px] font-light">Bedrock</div>
 								<div class="text-[11px] text-neutral-400"></div>
 							</div>
 							<div class="grid h-full grid-cols-[0.9fr_1.6fr]">
@@ -403,7 +464,7 @@
 									<span class="h-2.5 w-2.5 rounded-full bg-[#e1ded7]"></span>
 									<span class="h-2.5 w-2.5 rounded-full bg-[#e9e6df]"></span>
 								</div>
-								<div class="text-[11px] font-semibold tracking-[0.1em] uppercase">Gmail</div>
+								<div class="text-[12px] font-light">Gmail</div>
 								<div class="text-[11px] text-neutral-400">Connected</div>
 							</div>
 							<div class="px-5 py-4">
@@ -436,7 +497,7 @@
 							class="absolute right-[8%] top-[12%] hidden h-[84%] w-[38%] max-w-[320px] rounded-[38px] border border-neutral-200 bg-[#fbfaf8] shadow-2xl sm:block"
 						>
 							<div class="flex items-center justify-between px-6 pt-5 text-xs text-neutral-500">
-								<div class="text-[11px] font-semibold tracking-[0.1em] uppercase">AppFolio</div>
+								<div class="text-[12px] font-light">AppFolio</div>
 								<div class="rounded-full bg-neutral-100 px-2 py-1 text-[11px]">Synced</div>
 							</div>
 							<div class="px-6 pb-6 pt-4">
@@ -471,7 +532,7 @@
 		<section class="flex mt-20 scroll-my-28 flex-col items-center gap-4 text-center" id="request-demo">
 			<h2 class="text-6xl font-medium">Try Bedrock now.</h2>
 			<a
-				class="rounded-full bg-neutral-900 px-6 py-2.5 text-sm text-neutral-100"
+				class="rounded-full bg-stone-800 px-6 py-2.5 text-sm text-neutral-100"
 				href="https://calendly.com/21andrewch/30min"
 				target="_blank"
 				rel="noreferrer"
