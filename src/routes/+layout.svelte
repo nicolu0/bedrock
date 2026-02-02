@@ -1,9 +1,12 @@
 <script lang="ts">
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import bedrockLogo from '$lib/assets/bedrock-logo.png';
 
 	let { children } = $props();
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head>
+	<title>Bedrock</title>
+	<link rel="icon" href={bedrockLogo} />
+</svelte:head>
 {@render children()}

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import bedrockLogo from '$lib/assets/bedrock-logo.png';
+
 	type DemoItem = {
 		id: string;
 		title: string;
@@ -89,8 +91,9 @@
 		<div
 			class="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-6 px-6 py-4 md:flex-row md:items-center"
 		>
-			<div class="flex items-center gap-2 text-md font-semibold tracking-[0.1em] uppercase" style="font-family: 'Zalando Sans Expanded', sans-serif;">
-				 Bedrock
+			<div class="flex items-center gap-2 text-md font-medium tracking-[0.1em] uppercase" style="font-family: 'Zalando Sans Expanded', sans-serif;">
+				<img src={bedrockLogo} alt="Bedrock" class="h-8 w-8" />
+				Bedrock
 			</div>
 			<nav class="flex flex-wrap items-center gap-6 text-sm text-neutral-600">
 				<a class="hover:text-neutral-900" href="#features">Features</a>
