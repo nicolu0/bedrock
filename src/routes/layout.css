@@ -34,6 +34,10 @@
 	font-display: swap;
 }
 
+html {
+	scroll-behavior: smooth;
+}
+
 html, body {
 	background-color: #F7F7F4;
 }

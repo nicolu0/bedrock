@@ -91,10 +91,10 @@
 		<div
 			class="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-6 px-6 py-4 md:flex-row md:items-center"
 		>
-			<div class="flex items-center gap-1 text-md font-regular tracking-[0.1em] uppercase" style="font-family: 'Zalando Sans Expanded', sans-serif;">
+			<a href="/" class="flex items-center gap-1 text-md font-regular tracking-[0.1em] uppercase" style="font-family: 'Zalando Sans Expanded', sans-serif;">
 				<img src={bedrockLogo} alt="Bedrock" class="h-8 w-8" />
 				Bedrock
-			</div>
+			</a>
 			<nav class="flex flex-wrap items-center gap-6 text-sm text-neutral-600">
 				<a class="hover:text-neutral-900" href="#features">Features</a>
 				<a class="hover:text-neutral-900" href="#integrations">Integrations</a>
