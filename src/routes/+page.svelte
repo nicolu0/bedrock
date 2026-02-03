@@ -88,13 +88,16 @@
 	let activeDemoId = 'invoice-email';
 </script>
 
-
 <div class="min-h-screen bg-[#F7F7F4] text-stone-800">
 	<header class="fixed inset-x-0 top-0 z-30 bg-[#F7F7F4]">
 		<div
 			class="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-6 px-6 py-4 md:flex-row md:items-center"
 		>
-			<a href="/" class="flex items-center gap-1 text-md font-regular tracking-[0.1em] uppercase" style="font-family: 'Zalando Sans Expanded', sans-serif;">
+			<a
+				href="/"
+				class="text-md font-regular flex items-center gap-1 tracking-[0.1em] uppercase"
+				style="font-family: 'Zalando Sans Expanded', sans-serif;"
+			>
 				<img src={bedrockLogo} alt="Bedrock" class="h-8 w-8" />
 				Bedrock
 			</a>
@@ -103,9 +106,6 @@
 				<a class="hover:text-neutral-900" href="#integrations">Integrations</a>
 			</nav>
 			<div class="flex items-center gap-3">
-				<a class="text-sm text-neutral-600 hover:text-neutral-900" href="/login">
-					Log in
-				</a>
 				<a
 					class="rounded-full bg-stone-800 px-4 py-2 text-xs text-neutral-200 transition-colors hover:bg-stone-700"
 					href="https://calendly.com/21andrewch/30min"
@@ -140,71 +140,117 @@
 				</div>
 			</div>
 			<div class="relative overflow-hidden rounded-sm bg-[#1e1e1e] p-6">
-				<svg class="pointer-events-none absolute inset-0 h-full w-full" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="none">
+				<svg
+					class="pointer-events-none absolute inset-0 h-full w-full"
+					xmlns="http://www.w3.org/2000/svg"
+					viewBox="0 0 1200 700"
+					preserveAspectRatio="none"
+				>
 					<defs>
 						<linearGradient id="demo-bg" x1="0" y1="0" x2="1" y2="1">
-							<stop offset="0%" stop-color="#1e1e1e"/>
-							<stop offset="55%" stop-color="#232323"/>
-							<stop offset="100%" stop-color="#191919"/>
+							<stop offset="0%" stop-color="#1e1e1e" />
+							<stop offset="55%" stop-color="#232323" />
+							<stop offset="100%" stop-color="#191919" />
 						</linearGradient>
 						<filter id="warp" x="-20%" y="-20%" width="140%" height="140%">
-							<feTurbulence type="fractalNoise" baseFrequency="0.008 0.025" numOctaves="3" seed="8" result="n"/>
-							<feDisplacementMap in="SourceGraphic" in2="n" scale="50" xChannelSelector="R" yChannelSelector="G"/>
+							<feTurbulence
+								type="fractalNoise"
+								baseFrequency="0.008 0.025"
+								numOctaves="3"
+								seed="8"
+								result="n"
+							/>
+							<feDisplacementMap
+								in="SourceGraphic"
+								in2="n"
+								scale="50"
+								xChannelSelector="R"
+								yChannelSelector="G"
+							/>
 						</filter>
 						<filter id="strata" x="-20%" y="-20%" width="140%" height="140%">
-							<feTurbulence type="fractalNoise" baseFrequency="0.003 0.04" numOctaves="4" seed="12" result="t"/>
+							<feTurbulence
+								type="fractalNoise"
+								baseFrequency="0.003 0.04"
+								numOctaves="4"
+								seed="12"
+								result="t"
+							/>
 							<feComponentTransfer in="t" result="bands">
-								<feFuncR type="table" tableValues="0 0.1 0.15 0.5 0.55 0.6 0.85 0.9 1"/>
-								<feFuncG type="table" tableValues="0 0.1 0.15 0.5 0.55 0.6 0.85 0.9 1"/>
-								<feFuncB type="table" tableValues="0 0.1 0.15 0.5 0.55 0.6 0.85 0.9 1"/>
+								<feFuncR type="table" tableValues="0 0.1 0.15 0.5 0.55 0.6 0.85 0.9 1" />
+								<feFuncG type="table" tableValues="0 0.1 0.15 0.5 0.55 0.6 0.85 0.9 1" />
+								<feFuncB type="table" tableValues="0 0.1 0.15 0.5 0.55 0.6 0.85 0.9 1" />
 							</feComponentTransfer>
-							<feColorMatrix in="bands" type="matrix" result="a"
+							<feColorMatrix
+								in="bands"
+								type="matrix"
+								result="a"
 								values="
 									0 0 0 0 0
 									0 0 0 0 0
 									0 0 0 0 0
-									1 0 0 0 0"/>
-							<feGaussianBlur in="a" stdDeviation="0.65" result="soft"/>
+									1 0 0 0 0"
+							/>
+							<feGaussianBlur in="a" stdDeviation="0.65" result="soft" />
 						</filter>
 						<filter id="strata-sharp" x="-20%" y="-20%" width="140%" height="140%">
-							<feTurbulence type="fractalNoise" baseFrequency="0.0005 0.065" numOctaves="2" seed="7" result="t"/>
+							<feTurbulence
+								type="fractalNoise"
+								baseFrequency="0.0005 0.065"
+								numOctaves="2"
+								seed="7"
+								result="t"
+							/>
 							<feComponentTransfer in="t" result="bands">
-								<feFuncR type="discrete" tableValues="0 0.2 0.4 0.8 1"/>
-								<feFuncG type="discrete" tableValues="0 0.2 0.4 0.8 1"/>
-								<feFuncB type="discrete" tableValues="0 0.2 0.4 0.6 0.8 1"/>
+								<feFuncR type="discrete" tableValues="0 0.2 0.4 0.8 1" />
+								<feFuncG type="discrete" tableValues="0 0.2 0.4 0.8 1" />
+								<feFuncB type="discrete" tableValues="0 0.2 0.4 0.6 0.8 1" />
 							</feComponentTransfer>
-							<feColorMatrix in="bands" type="matrix" result="a"
+							<feColorMatrix
+								in="bands"
+								type="matrix"
+								result="a"
 								values="
 									0 0 0 0 0
 									0 0 0 0 0
 									0 0 0 0 0
-									1.2 0 0 0 0"/>
-							<feGaussianBlur in="a" stdDeviation="0.45" result="soft"/>
+									1.2 0 0 0 0"
+							/>
+							<feGaussianBlur in="a" stdDeviation="0.45" result="soft" />
 						</filter>
 						<filter id="grain" x="0%" y="0%" width="100%" height="100%">
-							<feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="4" seed="5" result="noise"/>
-							<feColorMatrix in="noise" type="matrix"
+							<feTurbulence
+								type="fractalNoise"
+								baseFrequency="0.7"
+								numOctaves="4"
+								seed="5"
+								result="noise"
+							/>
+							<feColorMatrix
+								in="noise"
+								type="matrix"
 								values="
 									0 0 0 0 0
 									0 0 0 0 0
 									0 0 0 0 0
-									0.5 0 0 0 0"/>
+									0.5 0 0 0 0"
+							/>
 						</filter>
 						<radialGradient id="demo-vignette" cx="50%" cy="30%" r="80%">
-							<stop offset="0%" stop-color="#ffffff" stop-opacity="0.12"/>
-							<stop offset="60%" stop-color="#ffffff" stop-opacity="0.05"/>
-							<stop offset="100%" stop-color="#000000" stop-opacity="0.25"/>
+							<stop offset="0%" stop-color="#ffffff" stop-opacity="0.12" />
+							<stop offset="60%" stop-color="#ffffff" stop-opacity="0.05" />
+							<stop offset="100%" stop-color="#000000" stop-opacity="0.25" />
 						</radialGradient>
 					</defs>
-					<rect width="1200" height="700" fill="url(#demo-bg)"/>
+					<rect width="1200" height="700" fill="url(#demo-bg)" />
 					<g opacity="0.45" filter="url(#warp)">
-						<rect width="1200" height="700" fill="#ffffff" filter="url(#strata)"/>
+						<rect width="1200" height="700" fill="#ffffff" filter="url(#strata)" />
 					</g>
 					<g opacity="0.5" filter="url(#warp)">
-						<rect width="1200" height="700" fill="#ffffff" filter="url(#strata-sharp)"/>
+						<rect width="1200" height="700" fill="#ffffff" filter="url(#strata-sharp)" />
 					</g>
-					<rect width="1200" height="700" fill="#ffffff" filter="url(#grain)" opacity="0.95"/>
-					<rect width="1200" height="700" fill="url(#demo-vignette)"/>
+					<rect width="1200" height="700" fill="#ffffff" filter="url(#grain)" opacity="0.95" />
+					<rect width="1200" height="700" fill="url(#demo-vignette)" />
 				</svg>
 				<div
 					class="pointer-events-none absolute -inset-24 opacity-90 blur-3xl"
@@ -327,50 +373,48 @@
 
 		<section class="flex scroll-mt-28 flex-col gap-10" id="features">
 			<div class="grid gap-4 md:grid-cols-3">
-				<div
-					class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4"
-				>
+				<div class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4">
 					<div class="text-sm text-neutral-900">Triage Issues</div>
 					<p class="mt-2 text-sm leading-relaxed text-neutral-500">
 						Turns tenant messages into a complete work order: priority, missing details, and a clear
 						next step.
 					</p>
-					<div class="mt-6 flex-1 bg-[#D9D5CF] rounded-sm">
+					<div class="mt-6 flex-1 rounded-sm bg-[#D9D5CF]">
 						<TriageIssuesDemo />
 					</div>
 				</div>
-				<div
-					class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4"
-				>
+				<div class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4">
 					<div class="text-sm text-neutral-900">Dispatch Vendors</div>
 					<p class="mt-2 text-sm leading-relaxed text-neutral-500">
-						Recommends the right vendor, gets availability, schedules access, and keeps tenants updated.
+						Recommends the right vendor, gets availability, schedules access, and keeps tenants
+						updated.
 					</p>
-				<div class="mt-6 flex flex-1 items-stretch rounded-sm bg-[#cfd6cf] p-6">
-					<div class="h-full w-full">
-						<DispatchVendorsDemo />
+					<div class="mt-6 flex flex-1 items-center justify-center rounded-sm bg-[#cfd6cf] p-6">
+						<div class="w-full">
+							<DispatchVendorsDemo />
+						</div>
 					</div>
 				</div>
-			</div>
-				<div
-					class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4"
-				>
+				<div class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4">
 					<div class="text-sm text-neutral-900">Process Invoices</div>
 					<p class="mt-2 text-sm leading-relaxed text-neutral-500">
-						Extracts invoice details, matches to the job, flags surprises, and awaits for approval and
-						payment.
+						Extracts invoice details, matches to the job, flags surprises, and awaits for approval
+						and payment.
 					</p>
-				<div class="mt-6 flex flex-1 items-stretch rounded-sm bg-[#cfd3d6] p-6">
-					<div class="h-full w-full">
-						<ProcessInvoicesDemo />
+					<div class="mt-6 flex flex-1 items-center justify-center rounded-sm bg-[#cfd3d6] p-6">
+						<div class="w-full">
+							<ProcessInvoicesDemo />
+						</div>
 					</div>
 				</div>
 			</div>
-		</div>
 		</section>
 
-		<section class="grid scroll-mt-28 gap-10 lg:grid-cols-[0.9fr_1.6fr] rounded-sm py-2 px-4 bg-[#F2F1EE]" id="integrations">
-			<div class="max-w-sm flex flex-col justify-center">
+		<section
+			class="grid scroll-mt-28 gap-10 rounded-sm bg-[#F2F1EE] px-4 py-2 lg:grid-cols-[0.9fr_1.6fr]"
+			id="integrations"
+		>
+			<div class="flex max-w-sm flex-col justify-center">
 				<h2 class="text-xl">Integrates seamlessly</h2>
 				<p class="mt-2 text-lg text-neutral-500">
 					Draft actions inside your current workflow. You approve; we sync the results back.
@@ -389,94 +433,101 @@
 			<div
 				class="relative flex aspect-[16/10] min-h-[320px] items-center justify-center overflow-hidden rounded-sm border border-neutral-200 bg-neutral-100 lg:aspect-auto lg:h-[640px]"
 			>
-					<div
-						class="absolute inset-0"
-						style="background-image: radial-gradient(900px 520px at 30% 22%, rgba(116, 168, 179, 0.58), transparent 62%), radial-gradient(760px 520px at 80% 32%, rgba(212, 173, 146, 0.36), transparent 62%), radial-gradient(760px 520px at 55% 92%, rgba(163, 176, 118, 0.34), transparent 62%), linear-gradient(180deg, rgba(115, 164, 176, 0.2), rgba(241, 236, 228, 0.5));"
-					></div>
-					<div
-						class="absolute inset-0 opacity-[0.07]"
-						style="background-image: repeating-linear-gradient(135deg, rgba(0,0,0,0.22), rgba(0,0,0,0.22) 1px, transparent 1px, transparent 8px);"
-					></div>
-					<div class="absolute inset-0 bg-gradient-to-t from-[#f6f5f3]/75 via-transparent to-transparent"></div>
+				<div
+					class="absolute inset-0"
+					style="background-image: radial-gradient(900px 520px at 30% 22%, rgba(116, 168, 179, 0.58), transparent 62%), radial-gradient(760px 520px at 80% 32%, rgba(212, 173, 146, 0.36), transparent 62%), radial-gradient(760px 520px at 55% 92%, rgba(163, 176, 118, 0.34), transparent 62%), linear-gradient(180deg, rgba(115, 164, 176, 0.2), rgba(241, 236, 228, 0.5));"
+				></div>
+				<div
+					class="absolute inset-0 opacity-[0.07]"
+					style="background-image: repeating-linear-gradient(135deg, rgba(0,0,0,0.22), rgba(0,0,0,0.22) 1px, transparent 1px, transparent 8px);"
+				></div>
+				<div
+					class="absolute inset-0 bg-gradient-to-t from-[#f6f5f3]/75 via-transparent to-transparent"
+				></div>
 
-					<div class="relative h-full w-full p-6 sm:p-8">
+				<div class="relative h-full w-full p-6 sm:p-8">
+					<div
+						class="absolute top-[20%] left-[12%] w-[74%] max-w-[720px] rounded-2xl border border-neutral-200 bg-[#fbfaf8] shadow-2xl"
+					>
 						<div
-							class="absolute left-[12%] top-[20%] w-[74%] max-w-[720px] rounded-2xl border border-neutral-200 bg-[#fbfaf8] shadow-2xl"
+							class="flex items-center justify-between rounded-t-2xl border-b border-neutral-200 bg-[#f3f2ee] px-4 py-2 text-xs text-neutral-500"
 						>
-							<div
-								class="flex items-center justify-between border-b rounded-t-2xl border-neutral-200 bg-[#f3f2ee] px-4 py-2 text-xs text-neutral-500"
-							>
-								<div class="flex items-center gap-1.5">
-									<span class="h-2.5 w-2.5 rounded-full bg-[#d7d3cc]"></span>
-									<span class="h-2.5 w-2.5 rounded-full bg-[#e1ded7]"></span>
-									<span class="h-2.5 w-2.5 rounded-full bg-[#e9e6df]"></span>
-								</div>
-								<div class="text-[12px] font-light">Gmail</div>
-								<div class="text-[11px] text-neutral-400">Connected</div>
+							<div class="flex items-center gap-1.5">
+								<span class="h-2.5 w-2.5 rounded-full bg-[#d7d3cc]"></span>
+								<span class="h-2.5 w-2.5 rounded-full bg-[#e1ded7]"></span>
+								<span class="h-2.5 w-2.5 rounded-full bg-[#e9e6df]"></span>
 							</div>
-							<div class="px-5 py-4">
-								<div class="text-sm font-semibold text-neutral-900">New maintenance request</div>
-								<div class="mt-2 space-y-2 text-sm text-neutral-700">
-									<div class="rounded-lg bg-neutral-50 px-3 py-2">
-										<span class="text-neutral-500">Tenant:</span>
-										<span class="ml-2">"Water heater is making loud banging noises."</span>
-									</div>
-									<div class="rounded-lg bg-neutral-50 px-3 py-2">
-										<span class="text-neutral-500">Bedrock draft:</span>
-										<span class="ml-2">Ask for a video, mark urgent, recommend vendor.</span>
-									</div>
-								</div>
-								<div class="mt-4 flex flex-wrap gap-2">
-									<span class="rounded-md bg-stone-800 px-3 py-1.5 text-xs text-neutral-100"
-										>Approve</span
-									>
-									<span class="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-700"
-										>Edit</span
-									>
-									<span class="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-700"
-										>Deny</span
-									>
-								</div>
-							</div>
+							<div class="text-[12px] font-light">Gmail</div>
+							<div class="text-[11px] text-neutral-400">Connected</div>
 						</div>
-
-						<div
-							class="absolute right-[8%] top-[12%] hidden h-[84%] w-[38%] max-w-[320px] rounded-[38px] border border-neutral-200 bg-[#fbfaf8] shadow-2xl sm:block"
-						>
-							<div class="flex items-center justify-between px-6 pt-5 text-xs text-neutral-500">
-								<div class="text-[12px] font-light">AppFolio</div>
-								<div class="rounded-full bg-neutral-100 px-2 py-1 text-[11px]">Synced</div>
+						<div class="px-5 py-4">
+							<div class="text-sm font-semibold text-neutral-900">New maintenance request</div>
+							<div class="mt-2 space-y-2 text-sm text-neutral-700">
+								<div class="rounded-lg bg-neutral-50 px-3 py-2">
+									<span class="text-neutral-500">Tenant:</span>
+									<span class="ml-2">"Water heater is making loud banging noises."</span>
+								</div>
+								<div class="rounded-lg bg-neutral-50 px-3 py-2">
+									<span class="text-neutral-500">Bedrock draft:</span>
+									<span class="ml-2">Ask for a video, mark urgent, recommend vendor.</span>
+								</div>
 							</div>
-							<div class="px-6 pb-6 pt-4">
-								<div class="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
-									<div class="text-xs text-neutral-500">Work order</div>
-									<div class="mt-1 text-sm font-semibold text-neutral-900">WO #1842</div>
-									<div class="mt-3 space-y-2 text-xs text-neutral-600">
-										<div class="flex items-center justify-between">
-											<span>Status</span>
-											<span class="font-medium text-neutral-800">Pending</span>
-										</div>
-										<div class="flex items-center justify-between">
-											<span>Vendor</span>
-											<span class="font-medium text-neutral-800">Ace Plumbing</span>
-										</div>
-										<div class="flex items-center justify-between">
-											<span>Next</span>
-											<span class="font-medium text-neutral-800">Schedule access</span>
-										</div>
-									</div>
-								</div>
-								<div class="mt-4 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
-									<div class="text-xs text-neutral-500">Invoice</div>
-									<div class="mt-1 text-sm font-semibold text-neutral-900">Ready for review</div>
-								</div>
+							<div class="mt-4 flex flex-wrap gap-2">
+								<span class="rounded-md bg-stone-800 px-3 py-1.5 text-xs text-neutral-100"
+									>Approve</span
+								>
+								<span
+									class="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-700"
+									>Edit</span
+								>
+								<span
+									class="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-700"
+									>Deny</span
+								>
 							</div>
 						</div>
 					</div>
+
+					<div
+						class="absolute top-[12%] right-[8%] hidden h-[84%] w-[38%] max-w-[320px] rounded-[38px] border border-neutral-200 bg-[#fbfaf8] shadow-2xl sm:block"
+					>
+						<div class="flex items-center justify-between px-6 pt-5 text-xs text-neutral-500">
+							<div class="text-[12px] font-light">AppFolio</div>
+							<div class="rounded-full bg-neutral-100 px-2 py-1 text-[11px]">Synced</div>
+						</div>
+						<div class="px-6 pt-4 pb-6">
+							<div class="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+								<div class="text-xs text-neutral-500">Work order</div>
+								<div class="mt-1 text-sm font-semibold text-neutral-900">WO #1842</div>
+								<div class="mt-3 space-y-2 text-xs text-neutral-600">
+									<div class="flex items-center justify-between">
+										<span>Status</span>
+										<span class="font-medium text-neutral-800">Pending</span>
+									</div>
+									<div class="flex items-center justify-between">
+										<span>Vendor</span>
+										<span class="font-medium text-neutral-800">Ace Plumbing</span>
+									</div>
+									<div class="flex items-center justify-between">
+										<span>Next</span>
+										<span class="font-medium text-neutral-800">Schedule access</span>
+									</div>
+								</div>
+							</div>
+							<div class="mt-4 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+								<div class="text-xs text-neutral-500">Invoice</div>
+								<div class="mt-1 text-sm font-semibold text-neutral-900">Ready for review</div>
+							</div>
+						</div>
+					</div>
+				</div>
 			</div>
 		</section>
 
-		<section class="flex mt-20 scroll-my-28 flex-col items-center gap-4 text-center" id="request-demo">
+		<section
+			class="mt-20 flex scroll-my-28 flex-col items-center gap-4 text-center"
+			id="request-demo"
+		>
 			<h2 class="text-6xl font-medium">Try Bedrock now.</h2>
 			<a
 				class="rounded-full bg-stone-800 px-6 py-2.5 text-sm text-neutral-100 transition-colors hover:bg-stone-700"
