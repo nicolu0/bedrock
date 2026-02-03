@@ -1,4 +1,7 @@
 <script lang="ts">
+	import DispatchVendorsDemo from '$lib/components/DispatchVendorsDemo.svelte';
+	import ProcessInvoicesDemo from '$lib/components/ProcessInvoicesDemo.svelte';
+	import TriageIssuesDemo from '$lib/components/TriageIssuesDemo.svelte';
 	import bedrockLogo from '$lib/assets/bedrock-logo.png';
 
 	type DemoItem = {
@@ -325,112 +328,45 @@
 		<section class="flex scroll-mt-28 flex-col gap-10" id="features">
 			<div class="grid gap-4 md:grid-cols-3">
 				<div
-					class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-6"
+					class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4"
 				>
 					<div class="text-sm text-neutral-900">Triage Issues</div>
 					<p class="mt-2 text-sm leading-relaxed text-neutral-500">
-						Turn tenant messages into a complete work order: priority, missing details, and a clear
+						Turns tenant messages into a complete work order: priority, missing details, and a clear
 						next step.
 					</p>
-					<div class="mt-6 flex-1 rounded-xl bg-[#d9d6cf] p-6">
-						<div class="rounded-xl bg-[#efede7] p-4 text-sm text-neutral-700 shadow-sm">
-							<div class="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
-								Tenant message
-							</div>
-							<div class="mt-2 text-sm font-medium text-neutral-900">
-								"My sink is leaking again."
-							</div>
-							<div class="mt-3 space-y-2 text-xs text-neutral-600">
-								<div class="flex items-center justify-between rounded-lg bg-white/60 px-3 py-2">
-									<span>Category</span>
-									<span class="font-medium text-neutral-800">Plumbing</span>
-								</div>
-								<div class="flex items-center justify-between rounded-lg bg-white/60 px-3 py-2">
-									<span>Priority</span>
-									<span class="font-medium text-neutral-800">Urgent</span>
-								</div>
-								<div class="flex items-center justify-between rounded-lg bg-white/60 px-3 py-2">
-									<span>Next step</span>
-									<span class="font-medium text-neutral-800">Ask for photo</span>
-								</div>
-							</div>
-						</div>
+					<div class="mt-6 flex-1 bg-[#D9D5CF] rounded-sm">
+						<TriageIssuesDemo />
 					</div>
 				</div>
 				<div
-					class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-6"
+					class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4"
 				>
 					<div class="text-sm text-neutral-900">Dispatch Vendors</div>
 					<p class="mt-2 text-sm leading-relaxed text-neutral-500">
-						Recommend the right vendor, get availability, schedule access, and keep tenants updated.
+						Recommends the right vendor, gets availability, schedules access, and keeps tenants updated.
 					</p>
-					<div class="mt-6 flex-1 rounded-xl bg-[#cfd6cf] p-6">
-						<div class="rounded-xl bg-[#efede7] p-4 text-sm text-neutral-700 shadow-sm">
-							<div class="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
-								Vendor outreach
-							</div>
-							<div class="mt-2 text-sm font-medium text-neutral-900">Email drafted</div>
-							<div class="mt-3 space-y-2 text-xs">
-								<div
-									class="flex items-center justify-between rounded-lg bg-white/60 px-3 py-2 text-neutral-700"
-								>
-									<span>Suggested vendor</span>
-									<span class="font-medium text-neutral-800">Ace Plumbing</span>
-								</div>
-								<div
-									class="flex items-center justify-between rounded-lg bg-white/60 px-3 py-2 text-neutral-700"
-								>
-									<span>Availability</span>
-									<span class="font-medium text-neutral-800">Today 2–4pm</span>
-								</div>
-								<div
-									class="flex items-center justify-between rounded-lg bg-white/60 px-3 py-2 text-neutral-700"
-								>
-									<span>Tenant update</span>
-									<span class="font-medium text-neutral-800">Drafted</span>
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-				<div
-					class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-6"
-				>
-					<div class="text-sm text-neutral-900">Process Invoices</div>
-					<p class="mt-2 text-sm leading-relaxed text-neutral-500">
-						Extract invoice details, match to the job, flag surprises, and prep for approval and
-						payment.
-					</p>
-					<div class="mt-6 flex-1 rounded-xl bg-[#cfd3d6] p-6">
-						<div class="rounded-xl bg-[#efede7] p-4 text-sm text-neutral-700 shadow-sm">
-							<div class="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
-								Payable created
-							</div>
-							<div class="mt-2 text-sm font-medium text-neutral-900">Summary</div>
-							<div class="mt-3 space-y-2 text-xs">
-								<div
-									class="flex items-center justify-between rounded-lg bg-white/60 px-3 py-2 text-neutral-700"
-								>
-									<span>Total</span>
-									<span class="font-medium text-neutral-800">$285.00</span>
-								</div>
-								<div
-									class="flex items-center justify-between rounded-lg bg-white/60 px-3 py-2 text-neutral-700"
-								>
-									<span>Matched to</span>
-									<span class="font-medium text-neutral-800">WO #1842</span>
-								</div>
-								<div
-									class="flex items-center justify-between rounded-lg bg-white/60 px-3 py-2 text-neutral-700"
-								>
-									<span>Flag</span>
-									<span class="font-medium text-neutral-800">Labor +20%</span>
-								</div>
-							</div>
-						</div>
+				<div class="mt-6 flex flex-1 items-stretch rounded-sm bg-[#cfd6cf] p-6">
+					<div class="h-full w-full">
+						<DispatchVendorsDemo />
 					</div>
 				</div>
 			</div>
+				<div
+					class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4"
+				>
+					<div class="text-sm text-neutral-900">Process Invoices</div>
+					<p class="mt-2 text-sm leading-relaxed text-neutral-500">
+						Extracts invoice details, matches to the job, flags surprises, and awaits for approval and
+						payment.
+					</p>
+				<div class="mt-6 flex flex-1 items-stretch rounded-sm bg-[#cfd3d6] p-6">
+					<div class="h-full w-full">
+						<ProcessInvoicesDemo />
+					</div>
+				</div>
+			</div>
+		</div>
 		</section>
 
 		<section class="grid scroll-mt-28 gap-10 lg:grid-cols-[0.9fr_1.6fr] rounded-sm py-2 px-4 bg-[#F2F1EE]" id="integrations">
