@@ -107,7 +107,7 @@
 			</nav>
 			<div class="flex items-center gap-3">
 				<a
-					class="rounded-full bg-stone-800 px-4 py-2 text-xs text-neutral-200 transition-colors hover:bg-stone-700"
+					class="rounded-xl bg-stone-800 px-4 py-2 text-xs text-neutral-200 transition-colors hover:bg-stone-700"
 					href="https://calendly.com/21andrewch/30min"
 					target="_blank"
 					rel="noreferrer"
@@ -119,13 +119,13 @@
 	</header>
 	<div class="mx-auto flex w-full max-w-7xl flex-col gap-20 px-6 pt-24 pb-20">
 		<section class="flex flex-col gap-16">
-			<div class="mt-20 max-w-3xl">
-				<h1 class="text-3xl">Make property management effortless.</h1>
-				<p class="text-3xl text-neutral-600">Bedrock saves you time, you stay in control.</p>
-				<div class="mt-4 flex items-center gap-3">
+			<div class="mt-18 max-w-4xl">
+				<h1 class="text-6xl font-medium text-neutral-800">Make property management<br />feel truly <span class="italic">effortless</span>.</h1>
+				<p class="mt-5 text-lg text-neutral-600"><span class="text-neutral-600">Bedrock</span> manages the full maintenance workflow, from tenant messages to<br /><span class="text-lg">approval-ready invoices, helping you grow faster without giving up control.</span></p>
+				<div class="mt-7 flex items-center gap-3">
 					<a
 						href="/signup"
-						class="text-md inline-flex flex-row items-center gap-1 rounded-full bg-stone-800 px-5 py-2 text-neutral-200 transition-colors hover:bg-stone-700"
+						class="inline-flex flex-row items-center gap-1 rounded-xl bg-stone-800 px-4.5 py-2 text-[15px] text-neutral-200 transition-colors hover:bg-stone-700"
 					>
 						Book a demo
 					</a>
@@ -133,7 +133,7 @@
 						href="https://calendly.com/21andrewch/30min"
 						target="_blank"
 						rel="noreferrer"
-						class="text-md inline-flex flex-row items-center gap-1 rounded-full border border-stone-300 bg-[#F7F7F4] px-5 py-2 text-stone-800 transition-colors hover:bg-stone-200"
+						class="inline-flex flex-row items-center gap-1 rounded-xl border border-stone-300 bg-[#F7F7F4] px-4.5 py-2 text-[15px] text-stone-800 transition-colors hover:bg-stone-200"
 					>
 						Get started
 					</a>
@@ -530,7 +530,7 @@
 		>
 			<h2 class="text-6xl font-medium">Try Bedrock now.</h2>
 			<a
-				class="rounded-full bg-stone-800 px-6 py-2.5 text-sm text-neutral-100 transition-colors hover:bg-stone-700"
+				class="rounded-xl bg-stone-800 px-6 py-2.5 text-sm text-neutral-100 transition-colors hover:bg-stone-700"
 				href="https://calendly.com/21andrewch/30min"
 				target="_blank"
 				rel="noreferrer"
