@@ -3,6 +3,7 @@
 	import ProcessInvoicesDemo from '$lib/components/ProcessInvoicesDemo.svelte';
 	import TriageIssuesDemo from '$lib/components/TriageIssuesDemo.svelte';
 	import bedrockLogo from '$lib/assets/bedrock-logo.png';
+	import skyline from '$lib/assets/skyline.png';
 
 	type DemoItem = {
 		id: string;
@@ -88,7 +89,7 @@
 	let activeDemoId = 'invoice-email';
 </script>
 
-<div class="min-h-screen bg-[#F7F7F4] text-stone-800">
+<div class="min-h-screen overflow-x-hidden bg-[#F7F7F4] text-stone-800">
 	<header class="fixed inset-x-0 top-0 z-30 bg-[#F7F7F4]">
 		<div
 			class="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-6 px-6 py-4 md:flex-row md:items-center"
@@ -524,24 +525,33 @@
 			</div>
 		</section>
 
-		<section
-			class="mt-20 flex scroll-my-28 flex-col items-center gap-4 text-center"
-			id="request-demo"
-		>
-			<h2 class="text-6xl font-medium">Try Bedrock now.</h2>
+	</div>
+
+	<footer
+		id="request-demo"
+		class="relative mt-12 overflow-hidden"
+	>
+		<img
+			src={skyline}
+			alt=""
+			class="pointer-events-none absolute inset-x-0 z-0 w-full opacity-60"
+			style="mask-image: linear-gradient(to bottom, black 400px, transparent 480px); -webkit-mask-image: linear-gradient(to bottom, black 400px, transparent 480px);"
+		/>
+		<div
+			class="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-8 bg-gradient-to-b from-transparent to-[#F7F7F4]"
+		></div>
+		<div class="relative z-10 mx-auto flex min-h-[450px] max-w-7xl flex-col items-center justify-center px-6 py-20 text-center">
+			<h2 class="text-6xl font-medium text-stone-800">Try Bedrock now.</h2>
 			<a
-				class="rounded-xl bg-stone-800 px-6 py-2.5 text-sm text-neutral-100 transition-colors hover:bg-stone-700"
+				class="mt-6 rounded-xl bg-stone-800 px-6 py-2.5 text-sm text-neutral-100 transition-colors hover:bg-stone-700"
 				href="https://calendly.com/21andrewch/30min"
 				target="_blank"
 				rel="noreferrer"
 			>
 				Contact us
 			</a>
-		</section>
-	</div>
-
-	<footer class="bg-[#F2F1EE]">
-		<div class="mx-auto w-full max-w-7xl px-6 py-10 text-sm text-neutral-600">
+		</div>
+		<div class="absolute inset-x-0 bottom-8 z-10 text-center text-sm text-stone-500">
 			© {new Date().getFullYear()} Bedrock
 		</div>
 	</footer>
