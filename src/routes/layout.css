@@ -40,4 +40,6 @@ html {
 
 html, body {
 	background-color: #F7F7F4;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
