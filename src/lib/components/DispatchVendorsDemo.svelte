@@ -25,9 +25,11 @@
       suggested: false
     }
   ];
+
+  let showPopup = false;
 </script>
 
-<div class="flex flex-col rounded-md bg-[#efede7] text-sm text-neutral-700 shadow-sm">
+<div class="relative flex flex-col rounded-md bg-[#efede7] text-sm text-neutral-700 shadow-sm">
   <div class="flex-1 space-y-2 p-2 text-xs">
     {#each vendors as vendor}
       <div
@@ -100,8 +102,35 @@
 		</svg>
 		Messaging Arthur
 	</div>
-	<div class="flex gap-1 text-neutral-500 underline decoration-dotted underline-offset-2">
+	<button
+		on:click={() => showPopup = true}
+		class="flex gap-1 text-neutral-500 underline decoration-dotted underline-offset-2 hover:text-neutral-700 cursor-pointer"
+	>
 		View Draft
-	</div>
+	</button>
   </div>
+
+  {#if showPopup}
+    <div class="absolute inset-0 flex items-center justify-center rounded-md backdrop-blur-sm bg-black/10">
+      <div class="m-2 rounded-md border border-neutral-300 bg-[#efede7] p-3 shadow-lg">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-neutral-900">Message to Arthur</h3>
+          <button
+            on:click={() => showPopup = false}
+            class="text-neutral-400 hover:text-neutral-600"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <line x1="3" y1="3" x2="13" y2="13"/>
+              <line x1="13" y1="3" x2="3" y2="13"/>
+            </svg>
+          </button>
+        </div>
+        <div class="text-[11px] text-neutral-700 space-y-1.5">
+          <p>Hi Arthur,</p>
+          <p>The tenant at 123 Main St Unit 5 reported a dripping faucet in the bathroom.</p>
+          <p>Would you be available this week to take a look? Please let me know your availability. Thanks!</p>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
