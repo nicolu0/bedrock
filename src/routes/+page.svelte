@@ -2,8 +2,6 @@
 	import DispatchVendorsDemo from '$lib/components/DispatchVendorsDemo.svelte';
 	import ProcessInvoicesDemo from '$lib/components/ProcessInvoicesDemo.svelte';
 	import TriageIssuesDemo from '$lib/components/TriageIssuesDemo.svelte';
-	import bedrockLogo from '$lib/assets/bedrock-logo.png';
-	import skyline from '$lib/assets/skyline.png';
 
 	type DemoItem = {
 		id: string;
@@ -99,7 +97,7 @@
 				class="text-md font-regular flex items-center gap-1 tracking-[0.1em] uppercase"
 				style="font-family: 'Zalando Sans Expanded', sans-serif;"
 			>
-				<img src={bedrockLogo} alt="Bedrock" class="h-8 w-8" />
+			<img src="/bedrock.png" alt="Bedrock" class="h-5 w-6 mb-0.5" />
 				Bedrock
 			</a>
 			<nav class="flex flex-wrap items-center gap-6 text-sm text-neutral-600">
