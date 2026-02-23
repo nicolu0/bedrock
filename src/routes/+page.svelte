@@ -2,6 +2,7 @@
 	import DispatchVendorsDemo from '$lib/components/DispatchVendorsDemo.svelte';
 	import ProcessInvoicesDemo from '$lib/components/ProcessInvoicesDemo.svelte';
 	import TriageIssuesDemo from '$lib/components/TriageIssuesDemo.svelte';
+	import skyline from '$lib/assets/skyline.png';
 
 	type DemoItem = {
 		id: string;
@@ -87,8 +88,8 @@
 	let activeDemoId = 'invoice-email';
 </script>
 
-<div class="min-h-screen overflow-x-hidden bg-[#F7F7F4] text-stone-800">
-	<header class="fixed inset-x-0 top-0 z-30 bg-[#F7F7F4]">
+<div class="min-h-screen overflow-x-hidden bg-white text-stone-800">
+	<header class="fixed inset-x-0 top-0 z-30 border-b border-stone-200 bg-white/90 backdrop-blur">
 		<div
 			class="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-6 px-6 py-4 md:flex-row md:items-center"
 		>
@@ -97,7 +98,7 @@
 				class="text-md font-regular flex items-center gap-1 tracking-[0.1em] uppercase"
 				style="font-family: 'Zalando Sans Expanded', sans-serif;"
 			>
-			<img src="/bedrock.png" alt="Bedrock" class="h-5 w-6 mb-0.5" />
+				<img src="/bedrock.png" alt="Bedrock" class="mb-0.5 h-5 w-6" />
 				Bedrock
 			</a>
 			<nav class="flex flex-wrap items-center gap-6 text-sm text-neutral-600">
@@ -119,8 +120,15 @@
 	<div class="mx-auto flex w-full max-w-7xl flex-col gap-20 px-6 pt-24 pb-20">
 		<section class="flex flex-col gap-16">
 			<div class="mt-18 max-w-4xl">
-				<h1 class="text-6xl font-medium text-neutral-800">Make property management<br />feel truly <span class="italic">effortless</span>.</h1>
-				<p class="mt-5 text-lg text-neutral-600"><span class="text-neutral-600">Bedrock</span> manages the full maintenance workflow, from tenant messages to<br /><span class="text-lg">approval-ready invoices, helping you grow faster without giving up control.</span></p>
+				<h1 class="text-6xl font-medium text-neutral-800">
+					Make property management<br />feel truly <span class="italic">effortless</span>.
+				</h1>
+				<p class="mt-5 text-lg text-neutral-600">
+					<span class="text-neutral-600">Bedrock</span> manages the full maintenance workflow, from
+					tenant messages to<br /><span class="text-lg"
+						>approval-ready invoices, helping you grow faster without giving up control.</span
+					>
+				</p>
 				<div class="mt-7 flex items-center gap-3">
 					<a
 						href="/signup"
@@ -132,7 +140,7 @@
 						href="https://calendly.com/21andrewch/30min"
 						target="_blank"
 						rel="noreferrer"
-						class="inline-flex flex-row items-center gap-1 rounded-xl border border-stone-300 bg-[#F7F7F4] px-4.5 py-2 text-[15px] text-stone-800 transition-colors hover:bg-stone-200"
+						class="inline-flex flex-row items-center gap-1 rounded-xl border border-stone-300 bg-white px-4.5 py-2 text-[15px] text-stone-800 transition-colors hover:bg-stone-100"
 					>
 						Get started
 					</a>
@@ -260,22 +268,22 @@
 						class="flex aspect-[16/10] min-h-[240px] w-full items-center justify-center p-4 sm:p-6"
 					>
 						<div
-							class="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-neutral-300 bg-[#f5f4f1] shadow-lg"
+							class="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-neutral-300 bg-stone-50 shadow-lg"
 						>
 							<div
-								class="flex items-center justify-between border-b border-neutral-200 bg-[#f0efeb] px-4 py-2 text-xs text-neutral-500"
+								class="flex items-center justify-between border-b border-neutral-200 bg-stone-100 px-4 py-2 text-xs text-neutral-500"
 							>
 								<div class="flex items-center gap-1.5">
-									<span class="h-2.5 w-2.5 rounded-full bg-[#d7d3cc]"></span>
-									<span class="h-2.5 w-2.5 rounded-full bg-[#e1ded7]"></span>
-									<span class="h-2.5 w-2.5 rounded-full bg-[#e9e6df]"></span>
+									<span class="h-2.5 w-2.5 rounded-full bg-stone-300"></span>
+									<span class="h-2.5 w-2.5 rounded-full bg-stone-200"></span>
+									<span class="h-2.5 w-2.5 rounded-full bg-stone-100"></span>
 								</div>
 								<div class="text-[12px] font-light">Bedrock</div>
 								<div class="text-[11px] text-neutral-400"></div>
 							</div>
 							<div class="grid h-full grid-cols-[0.9fr_1.6fr]">
 								<div
-									class="border-r border-neutral-200 bg-[#f4f2ee] px-3 py-4 text-xs text-neutral-500 sm:px-4"
+									class="border-r border-neutral-200 bg-stone-50 px-3 py-4 text-xs text-neutral-500 sm:px-4"
 								>
 									{#each demoSections as section}
 										<div class="mb-4 last:mb-0">
@@ -287,8 +295,8 @@
 													<button
 														class={`flex w-full items-start gap-3 rounded-lg px-2 py-2 text-left text-sm transition ${
 															activeDemoId === item.id
-																? 'bg-[#efece6] text-neutral-900'
-																: 'text-neutral-600 hover:bg-[#edeae4] hover:text-neutral-800'
+																? 'bg-stone-100 text-neutral-900'
+																: 'text-neutral-600 hover:bg-stone-100 hover:text-neutral-800'
 														}`}
 														on:click={() => (activeDemoId = item.id)}
 													>
@@ -333,13 +341,13 @@
 									{/each}
 								</div>
 								<div
-									class="flex flex-col gap-4 bg-[#f8f6f2] px-4 py-4 text-sm text-neutral-700 sm:px-6"
+									class="flex flex-col gap-4 bg-stone-50 px-4 py-4 text-sm text-neutral-700 sm:px-6"
 								>
 									<div class="text-base font-semibold text-neutral-800">
 										{demoDetails[activeDemoId].title}
 									</div>
 									<div
-										class="rounded-xl border border-neutral-200 bg-[#fbfaf8] p-4 text-sm text-neutral-700"
+										class="rounded-xl border border-neutral-200 bg-white p-4 text-sm text-neutral-700"
 									>
 										<div class="mb-2 text-sm font-semibold text-neutral-800">
 											{demoDetails[activeDemoId].summaryTitle}
@@ -358,7 +366,7 @@
 										{demoDetails[activeDemoId].reply}
 									</div>
 									<div
-										class="mt-auto rounded-xl border border-neutral-200 bg-[#fbfaf8] px-3 py-2 text-xs text-neutral-500"
+										class="mt-auto rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-500"
 									>
 										Plan, search, build anything...
 									</div>
@@ -372,35 +380,35 @@
 
 		<section class="flex scroll-mt-28 flex-col gap-10" id="features">
 			<div class="grid gap-4 md:grid-cols-3">
-				<div class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4">
+				<div class="flex min-h-[420px] flex-col rounded-sm bg-stone-50 p-4">
 					<div class="text-sm text-neutral-900">Triage Issues</div>
 					<p class="mt-2 text-sm leading-relaxed text-neutral-500">
 						Turns tenant messages into a complete work order: priority, missing details, and a clear
 						next step.
 					</p>
-					<div class="mt-6 flex-1 rounded-sm bg-[#D9D5CF]">
+					<div class="mt-6 flex-1 rounded-sm bg-stone-200">
 						<TriageIssuesDemo />
 					</div>
 				</div>
-				<div class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4">
+				<div class="flex min-h-[420px] flex-col rounded-sm bg-stone-50 p-4">
 					<div class="text-sm text-neutral-900">Dispatch Vendors</div>
 					<p class="mt-2 text-sm leading-relaxed text-neutral-500">
 						Recommends the right vendor, gets availability, schedules access, and keeps tenants
 						updated.
 					</p>
-					<div class="mt-6 flex flex-1 items-center justify-center rounded-sm bg-[#cfd6cf] p-6">
+					<div class="mt-6 flex flex-1 items-center justify-center rounded-sm bg-stone-200 p-6">
 						<div class="w-full">
 							<DispatchVendorsDemo />
 						</div>
 					</div>
 				</div>
-				<div class="flex min-h-[420px] flex-col rounded-sm bg-[#F2F1EE] p-4">
+				<div class="flex min-h-[420px] flex-col rounded-sm bg-stone-50 p-4">
 					<div class="text-sm text-neutral-900">Process Invoices</div>
 					<p class="mt-2 text-sm leading-relaxed text-neutral-500">
 						Extracts invoice details, matches to the job, flags surprises, and awaits for approval
 						and payment.
 					</p>
-					<div class="mt-6 flex flex-1 items-center justify-center rounded-sm bg-[#cfd3d6] p-6">
+					<div class="mt-6 flex flex-1 items-center justify-center rounded-sm bg-stone-200 p-6">
 						<div class="w-full">
 							<ProcessInvoicesDemo />
 						</div>
@@ -410,7 +418,7 @@
 		</section>
 
 		<section
-			class="grid scroll-mt-28 gap-10 rounded-sm bg-[#F2F1EE] px-4 py-2 lg:grid-cols-[0.9fr_1.6fr]"
+			class="grid scroll-mt-28 gap-10 rounded-sm bg-stone-50 px-4 py-2 lg:grid-cols-[0.9fr_1.6fr]"
 			id="integrations"
 		>
 			<div class="flex max-w-sm flex-col justify-center">
@@ -441,20 +449,20 @@
 					style="background-image: repeating-linear-gradient(135deg, rgba(0,0,0,0.22), rgba(0,0,0,0.22) 1px, transparent 1px, transparent 8px);"
 				></div>
 				<div
-					class="absolute inset-0 bg-gradient-to-t from-[#f6f5f3]/75 via-transparent to-transparent"
+					class="absolute inset-0 bg-gradient-to-t from-stone-50/75 via-transparent to-transparent"
 				></div>
 
 				<div class="relative h-full w-full p-6 sm:p-8">
 					<div
-						class="absolute top-[20%] left-[12%] w-[74%] max-w-[720px] rounded-2xl border border-neutral-200 bg-[#fbfaf8] shadow-2xl"
+						class="absolute top-[20%] left-[12%] w-[74%] max-w-[720px] rounded-2xl border border-neutral-200 bg-white shadow-2xl"
 					>
 						<div
-							class="flex items-center justify-between rounded-t-2xl border-b border-neutral-200 bg-[#f3f2ee] px-4 py-2 text-xs text-neutral-500"
+							class="flex items-center justify-between rounded-t-2xl border-b border-neutral-200 bg-stone-100 px-4 py-2 text-xs text-neutral-500"
 						>
 							<div class="flex items-center gap-1.5">
-								<span class="h-2.5 w-2.5 rounded-full bg-[#d7d3cc]"></span>
-								<span class="h-2.5 w-2.5 rounded-full bg-[#e1ded7]"></span>
-								<span class="h-2.5 w-2.5 rounded-full bg-[#e9e6df]"></span>
+								<span class="h-2.5 w-2.5 rounded-full bg-stone-300"></span>
+								<span class="h-2.5 w-2.5 rounded-full bg-stone-200"></span>
+								<span class="h-2.5 w-2.5 rounded-full bg-stone-100"></span>
 							</div>
 							<div class="text-[12px] font-light">Gmail</div>
 							<div class="text-[11px] text-neutral-400">Connected</div>
@@ -488,7 +496,7 @@
 					</div>
 
 					<div
-						class="absolute top-[12%] right-[8%] hidden h-[84%] w-[38%] max-w-[320px] rounded-[38px] border border-neutral-200 bg-[#fbfaf8] shadow-2xl sm:block"
+						class="absolute top-[12%] right-[8%] hidden h-[84%] w-[38%] max-w-[320px] rounded-[38px] border border-neutral-200 bg-white shadow-2xl sm:block"
 					>
 						<div class="flex items-center justify-between px-6 pt-5 text-xs text-neutral-500">
 							<div class="text-[12px] font-light">AppFolio</div>
@@ -522,13 +530,9 @@
 				</div>
 			</div>
 		</section>
-
 	</div>
 
-	<footer
-		id="request-demo"
-		class="relative mt-12 overflow-hidden"
-	>
+	<footer id="request-demo" class="relative mt-12 overflow-hidden">
 		<img
 			src={skyline}
 			alt=""
@@ -536,9 +540,11 @@
 			style="mask-image: linear-gradient(to bottom, black 400px, transparent 480px); -webkit-mask-image: linear-gradient(to bottom, black 400px, transparent 480px);"
 		/>
 		<div
-			class="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-8 bg-gradient-to-b from-transparent to-[#F7F7F4]"
+			class="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-8 bg-gradient-to-b from-transparent to-white"
 		></div>
-		<div class="relative z-10 mx-auto flex min-h-[450px] max-w-7xl flex-col items-center justify-center px-6 py-20 text-center">
+		<div
+			class="relative z-10 mx-auto flex min-h-[450px] max-w-7xl flex-col items-center justify-center px-6 py-20 text-center"
+		>
 			<h2 class="text-6xl font-medium text-stone-800">Try Bedrock now.</h2>
 			<a
 				class="mt-6 rounded-xl bg-stone-800 px-6 py-2.5 text-sm text-neutral-100 transition-colors hover:bg-stone-700"

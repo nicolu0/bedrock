@@ -38,8 +38,9 @@ html {
 	scroll-behavior: smooth;
 }
 
-html, body {
-	background-color: #F7F7F4;
+html,
+body {
+	background-color: #ffffff;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	overscroll-behavior-x: none;
