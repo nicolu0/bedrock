@@ -118,7 +118,7 @@
 	</header>
 	<div class="mx-auto flex w-full max-w-7xl flex-col gap-20 px-6 pt-24 pb-20">
 		<section class="flex flex-col gap-16">
-			<div class="mt-18 max-w-4xl">
+			<div class="mt-20 max-w-4xl">
 				<h1 class="text-6xl font-medium text-neutral-800">
 					Make property management<br />feel truly <span class="italic">effortless</span>.
 				</h1>

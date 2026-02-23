@@ -29,7 +29,7 @@
   let showPopup = false;
 </script>
 
-<div class="relative flex flex-col rounded-md bg-[#efede7] text-sm text-neutral-700 shadow-sm antialiased">
+<div class="relative flex flex-col rounded-md bg-[#efede7] text-sm text-neutral-700 shadow-sm">
   <div class="flex-1 space-y-2 p-2 text-xs">
     {#each vendors as vendor}
       <div
