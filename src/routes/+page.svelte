@@ -98,7 +98,6 @@
 				class="text-md font-regular flex items-center gap-1 tracking-[0.1em] uppercase"
 				style="font-family: 'Zalando Sans Expanded', sans-serif;"
 			>
-				<img src="/bedrock.png" alt="Bedrock" class="mb-0.5 h-5 w-6" />
 				Bedrock
 			</a>
 			<nav class="flex flex-wrap items-center gap-6 text-sm text-neutral-600">
