@@ -16,6 +16,7 @@
 	export let actions = [];
 	export let connectHref = '/agentmvp/gmail/connect';
 	export let realtimeAccessToken = null;
+	export let workspaceName = null;
 
 	const urgencyBuckets = [
 		{ key: 'high', label: 'High', dot: 'bg-red-500' },
@@ -1902,6 +1903,11 @@
 								</div>
 							</div>
 							<div class="flex flex-col gap-1">
+								{#if workspaceName}
+									<div class="mb-1 text-xs text-neutral-400">
+										Workspace · <span class="text-neutral-600">{workspaceName}</span>
+									</div>
+								{/if}
 								<div class="text-sm font-medium text-neutral-800">Account</div>
 								<div class="flex w-full flex-row gap-4">
 									<form class="w-full" on:submit={handleSignOut}>

@@ -1,5 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { supabaseAdmin } from '$lib/supabaseAdmin';
 
 const getGmailUser = async (supabase, user) => {
 	if (!user) {
@@ -29,61 +30,29 @@ const getGmailUser = async (supabase, user) => {
 	return { connected: false, name: 'Connect Gmail', email: null };
 };
 
-const ensureProfile = async (supabase, user) => {
-	if (!user) return;
-	const name = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User';
-	await supabase.from('users').upsert({ id: user.id, name });
-	const { supabaseAdmin } = await import('$lib/supabaseAdmin');
-	const { data: existingTeam } = await supabaseAdmin
-		.from('teams')
-		.select('id')
-		.eq('owner_user_id', user.id)
-		.maybeSingle();
-	let teamId = existingTeam?.id ?? null;
-	if (!teamId) {
-		const { data: newTeam } = await supabaseAdmin
-			.from('teams')
-			.insert({ owner_user_id: user.id, name: `${name} Team` })
-			.select('id')
-			.single();
-		teamId = newTeam?.id ?? null;
-	}
-	if (teamId) {
-		await supabaseAdmin
-			.from('team_members')
-			.upsert({ team_id: teamId, user_id: user.id, role: 'admin' }, { onConflict: 'user_id' });
-	}
-};
-
-const getTeamId = async (supabase, user) => {
+const getTeamId = async (user) => {
 	if (!user) return null;
-	const { data } = await supabase
-		.from('team_members')
-		.select('team_id')
+	const { data } = await supabaseAdmin
+		.from('members')
+		.select('workspace_id')
 		.eq('user_id', user.id)
 		.maybeSingle();
-	return data?.team_id ?? null;
+	return data?.workspace_id ?? null;
 };
 
 export const load = async ({ locals }) => {
+	if (!locals.user) throw redirect(303, '/login');
+
 	const gmailUser = await getGmailUser(locals.supabase, locals.user);
 	const { data: sessionData } = await locals.supabase.auth.getSession();
 	const realtimeAccessToken = sessionData?.session?.access_token ?? null;
-	if (!locals.user) {
-		return {
-			user: null,
-			gmailUser,
-			issues: [],
-			threadsByIssue: {},
-			messagesByThread: {},
-			connections: [],
-			buildings: [],
-			vendors: [],
-			actions: []
-		};
-	}
 
-	await ensureProfile(locals.supabase, locals.user);
+	const { data: memberRow } = await supabaseAdmin
+		.from('members')
+		.select('workspace_id, workspaces(name)')
+		.eq('user_id', locals.user.id)
+		.maybeSingle();
+	const workspaceName = memberRow?.workspaces?.name ?? null;
 
 	const { data: connections } = await locals.supabase
 		.from('gmail_connections')
@@ -236,6 +205,7 @@ export const load = async ({ locals }) => {
 			user: locals.user,
 			gmailUser,
 			realtimeAccessToken,
+		workspaceName,
 			issues: normalizedIssues,
 			threadsByIssue: {},
 			messagesByThread: {},
@@ -259,6 +229,7 @@ export const load = async ({ locals }) => {
 			user: locals.user,
 			gmailUser,
 			realtimeAccessToken,
+		workspaceName,
 			issues: normalizedIssues,
 			threadsByIssue: {},
 			messagesByThread: {},
@@ -331,6 +302,7 @@ export const load = async ({ locals }) => {
 		user: locals.user,
 		gmailUser,
 		realtimeAccessToken,
+		workspaceName,
 		issues: normalizedIssues,
 		threadsByIssue,
 		messagesByThread,
@@ -344,42 +316,9 @@ export const load = async ({ locals }) => {
 };
 
 export const actions = {
-	signIn: async ({ request, locals }) => {
-		const form = await request.formData();
-		const email = form.get('email');
-		const password = form.get('password');
-
-		if (!email || !password) {
-			return fail(400, { error: 'Email and password are required.' });
-		}
-
-		const { data: signInData, error: signInError } = await locals.supabase.auth.signInWithPassword({
-			email,
-			password
-		});
-
-		if (signInError) {
-			if (signInError.message.toLowerCase().includes('invalid login credentials')) {
-				const { data: signUpData, error: signUpError } = await locals.supabase.auth.signUp({
-					email,
-					password
-				});
-				if (signUpError) {
-					return fail(400, { error: signUpError.message });
-				}
-				await ensureProfile(locals.supabase, signUpData.user);
-				throw redirect(303, '/agentmvp');
-			}
-
-			return fail(400, { error: signInError.message });
-		}
-
-		await ensureProfile(locals.supabase, signInData.user);
-		throw redirect(303, '/agentmvp');
-	},
 	signOut: async ({ locals }) => {
 		await locals.supabase.auth.signOut();
-		throw redirect(303, '/agentmvp');
+		throw redirect(303, '/login');
 	},
 
 	deleteAccount: async ({ locals }) => {
@@ -387,7 +326,6 @@ export const actions = {
 		if (!user) {
 			throw redirect(303, '/agentmvp');
 		}
-		const { supabaseAdmin } = await import('$lib/supabaseAdmin');
 		const deleteData = async (table) => {
 			await locals.supabase.from(table).delete().eq('user_id', user.id);
 		};
@@ -446,7 +384,7 @@ export const actions = {
 	},
 	updateConnection: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const connectionId = form.get('connection_id');
 		const mode = form.get('mode');
@@ -471,7 +409,7 @@ export const actions = {
 
 	disconnectConnection: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const connectionId = form.get('connection_id');
 		if (!connectionId) {
@@ -558,8 +496,8 @@ export const actions = {
 
 	createBuilding: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
-		const teamId = await getTeamId(locals.supabase, user);
+		if (!user) throw redirect(303, '/login');
+		const teamId = await getTeamId(user);
 		if (!teamId) {
 			return fail(400, { error: 'Team not found for user.' });
 		}
@@ -586,7 +524,7 @@ export const actions = {
 
 	createUnit: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const name = form.get('name');
 		const buildingId = form.get('building_id');
@@ -612,7 +550,7 @@ export const actions = {
 
 	createTenant: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const name = form.get('name');
 		const email = form.get('email');
@@ -644,7 +582,7 @@ export const actions = {
 
 	updateTenant: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const tenantId = form.get('tenant_id');
 		const name = form.get('name');
@@ -676,7 +614,7 @@ export const actions = {
 
 	deleteTenant: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const tenantId = form.get('tenant_id');
 		if (!tenantId || typeof tenantId !== 'string') {
@@ -691,8 +629,8 @@ export const actions = {
 
 	createVendor: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
-		const teamId = await getTeamId(locals.supabase, user);
+		if (!user) throw redirect(303, '/login');
+		const teamId = await getTeamId(user);
 		if (!teamId) {
 			return fail(400, { error: 'Team not found for user.' });
 		}
@@ -719,7 +657,7 @@ export const actions = {
 
 	updateVendorNote: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const note = form.get('note');
@@ -740,7 +678,7 @@ export const actions = {
 
 	updateVendorProfile: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const email = form.get('email');
@@ -767,7 +705,7 @@ export const actions = {
 
 	updateVendorDetails: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const email = form.get('email');
@@ -796,7 +734,7 @@ export const actions = {
 
 	renameIssue: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const issueId = form.get('issue_id');
 		const name = form.get('name');
@@ -820,7 +758,7 @@ export const actions = {
 
 	deleteIssue: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const issueId = form.get('issue_id');
 		if (!issueId || typeof issueId !== 'string') {
@@ -835,7 +773,7 @@ export const actions = {
 
 	resetIssues: async ({ locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const { error } = await locals.supabase.from('issues').delete();
 		if (error) {
 			return fail(500, { error: error.message });
@@ -845,7 +783,7 @@ export const actions = {
 
 	renameBuilding: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const buildingId = form.get('building_id');
 		const name = form.get('name');
@@ -869,7 +807,7 @@ export const actions = {
 
 	deleteBuilding: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const buildingId = form.get('building_id');
 		if (!buildingId || typeof buildingId !== 'string') {
@@ -884,7 +822,7 @@ export const actions = {
 
 	renameVendor: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const name = form.get('name');
@@ -908,7 +846,7 @@ export const actions = {
 
 	deleteVendor: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		if (!vendorId || typeof vendorId !== 'string') {
@@ -923,7 +861,7 @@ export const actions = {
 
 	approveAction: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const actionId = form.get('action_id');
 		const emailBodyOverride = form.get('email_body');
@@ -1347,7 +1285,7 @@ export const actions = {
 
 	denyAction: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const actionId = form.get('action_id');
 		if (!actionId || typeof actionId !== 'string') {
@@ -1365,7 +1303,7 @@ export const actions = {
 
 	updateActionDraft: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
 		const actionId = form.get('action_id');
 		const emailBody = form.get('email_body');
