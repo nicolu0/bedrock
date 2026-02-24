@@ -33,6 +33,36 @@ const ensureProfile = async (supabase, user) => {
 	if (!user) return;
 	const name = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User';
 	await supabase.from('users').upsert({ id: user.id, name });
+	const { supabaseAdmin } = await import('$lib/supabaseAdmin');
+	const { data: existingTeam } = await supabaseAdmin
+		.from('teams')
+		.select('id')
+		.eq('owner_user_id', user.id)
+		.maybeSingle();
+	let teamId = existingTeam?.id ?? null;
+	if (!teamId) {
+		const { data: newTeam } = await supabaseAdmin
+			.from('teams')
+			.insert({ owner_user_id: user.id, name: `${name} Team` })
+			.select('id')
+			.single();
+		teamId = newTeam?.id ?? null;
+	}
+	if (teamId) {
+		await supabaseAdmin
+			.from('team_members')
+			.upsert({ team_id: teamId, user_id: user.id, role: 'admin' }, { onConflict: 'user_id' });
+	}
+};
+
+const getTeamId = async (supabase, user) => {
+	if (!user) return null;
+	const { data } = await supabase
+		.from('team_members')
+		.select('team_id')
+		.eq('user_id', user.id)
+		.maybeSingle();
+	return data?.team_id ?? null;
 };
 
 export const load = async ({ locals }) => {
@@ -53,35 +83,35 @@ export const load = async ({ locals }) => {
 		};
 	}
 
+	await ensureProfile(locals.supabase, locals.user);
+
 	const { data: connections } = await locals.supabase
 		.from('gmail_connections')
 		.select('id, email, mode')
 		.order('updated_at', { ascending: false });
 
 	const { data: sidebarBuildings } = await locals.supabase
-		.from('buildings')
+		.from('properties')
 		.select('id, name')
-		.eq('user_id', locals.user.id)
 		.order('name', { ascending: true });
 	const { data: sidebarVendors, error: sidebarVendorsError } = await locals.supabase
 		.from('vendors')
 		.select('id, name, email, phone, trade, note')
-		.eq('user_id', locals.user.id)
 		.order('name', { ascending: true });
 	const { data: sidebarVendorsFallback } = sidebarVendorsError
 		? await locals.supabase
 				.from('vendors')
 				.select('id, name, email, phone, trade')
-				.eq('user_id', locals.user.id)
 				.order('name', { ascending: true })
 		: { data: null };
 	const vendorsData = sidebarVendorsError ? sidebarVendorsFallback : sidebarVendors;
 	const sidebarBuildingIds = (sidebarBuildings ?? []).map((building) => building.id);
 
 	const { data: actions } = await locals.supabase
-		.from('actions')
-		.select('id, issue_id, action_type, title, detail, email_body, vendor_email_to, status, created_at')
-		.eq('user_id', locals.user.id)
+		.from('tasks')
+		.select(
+			'id, issue_id, action_type, title, detail, email_body, vendor_email_to, status, created_at'
+		)
 		.eq('status', 'pending')
 		.order('created_at', { ascending: false });
 
@@ -102,31 +132,38 @@ export const load = async ({ locals }) => {
 	);
 
 	const { data: units } = unitIds.length
-		? await locals.supabase.from('units').select('id, name, building_id').in('id', unitIds)
+		? await locals.supabase.from('units').select('id, name, property_id').in('id', unitIds)
 		: { data: [] };
+	const normalizedUnits = (units ?? []).map((unit) => ({
+		...unit,
+		building_id: unit.property_id
+	}));
 
 	const buildingIds = Array.from(
-		new Set((units ?? []).map((unit) => unit.building_id).filter(Boolean))
+		new Set((normalizedUnits ?? []).map((unit) => unit.building_id).filter(Boolean))
 	);
 
 	const { data: buildings } = buildingIds.length
-		? await locals.supabase.from('buildings').select('id, name').in('id', buildingIds)
+		? await locals.supabase.from('properties').select('id, name').in('id', buildingIds)
 		: { data: [] };
 
 	const { data: allUnits } = sidebarBuildingIds.length
 		? await locals.supabase
 				.from('units')
-				.select('id, name, building_id')
-				.in('building_id', sidebarBuildingIds)
+				.select('id, name, property_id')
+				.in('property_id', sidebarBuildingIds)
 				.order('name', { ascending: true })
 		: { data: [] };
+	const normalizedAllUnits = (allUnits ?? []).map((unit) => ({
+		...unit,
+		building_id: unit.property_id
+	}));
 
-	const unitIdsForTenants = (allUnits ?? []).map((unit) => unit.id);
+	const unitIdsForTenants = (normalizedAllUnits ?? []).map((unit) => unit.id);
 	const { data: allTenants } = unitIdsForTenants.length
 		? await locals.supabase
 				.from('tenants')
 				.select('id, name, email, unit_id')
-				.eq('user_id', locals.user.id)
 				.in('unit_id', unitIdsForTenants)
 				.order('name', { ascending: true })
 		: { data: [] };
@@ -135,7 +172,7 @@ export const load = async ({ locals }) => {
 		? await locals.supabase.from('vendors').select('id, name, email').in('id', vendorIds)
 		: { data: [] };
 
-	const unitMap = new Map((units ?? []).map((unit) => [unit.id, unit]));
+	const unitMap = new Map((normalizedUnits ?? []).map((unit) => [unit.id, unit]));
 	const buildingMap = new Map((buildings ?? []).map((building) => [building.id, building]));
 	const vendorMap = new Map((vendors ?? []).map((vendor) => [vendor.id, vendor]));
 	const tenantMap = new Map((allTenants ?? []).map((tenant) => [tenant.id, tenant]));
@@ -205,7 +242,7 @@ export const load = async ({ locals }) => {
 			connections: connections ?? [],
 			buildings: sidebarBuildings ?? [],
 			vendors: vendorsData ?? [],
-			units: allUnits ?? [],
+			units: normalizedAllUnits ?? [],
 			tenants: allTenants ?? [],
 			actions: normalizedActions
 		};
@@ -228,7 +265,7 @@ export const load = async ({ locals }) => {
 			connections: connections ?? [],
 			buildings: sidebarBuildings ?? [],
 			vendors: vendorsData ?? [],
-			units: allUnits ?? [],
+			units: normalizedAllUnits ?? [],
 			tenants: allTenants ?? [],
 			actions: normalizedActions
 		};
@@ -300,7 +337,7 @@ export const load = async ({ locals }) => {
 		connections: connections ?? [],
 		buildings: sidebarBuildings ?? [],
 		vendors: vendorsData ?? [],
-		units: allUnits ?? [],
+		units: normalizedAllUnits ?? [],
 		tenants: allTenants ?? [],
 		actions: normalizedActions
 	};
@@ -395,14 +432,6 @@ export const actions = {
 			}
 		}
 
-		await deleteData('messages');
-		await deleteData('threads');
-		await deleteData('issues');
-		await deleteData('actions');
-		await deleteData('tenants');
-		await deleteData('units');
-		await deleteData('buildings');
-		await deleteData('vendors');
 		await deleteData('gmail_connections');
 		await deleteData('email_ingestion_state');
 		await deleteData('ingestion_errors');
@@ -530,6 +559,10 @@ export const actions = {
 	createBuilding: async ({ request, locals }) => {
 		const user = locals.user;
 		if (!user) throw redirect(303, '/agentmvp');
+		const teamId = await getTeamId(locals.supabase, user);
+		if (!teamId) {
+			return fail(400, { error: 'Team not found for user.' });
+		}
 		const form = await request.formData();
 		const name = form.get('name');
 		const address = form.get('address');
@@ -537,9 +570,9 @@ export const actions = {
 			return fail(400, { error: 'Building name is required.' });
 		}
 		const { data, error } = await locals.supabase
-			.from('buildings')
+			.from('properties')
 			.insert({
-				user_id: user.id,
+				team_id: teamId,
 				name: name.trim(),
 				address: typeof address === 'string' && address.trim() ? address.trim() : null
 			})
@@ -566,15 +599,15 @@ export const actions = {
 		const { data, error } = await locals.supabase
 			.from('units')
 			.insert({
-				building_id: buildingId,
+				property_id: buildingId,
 				name: name.trim()
 			})
-			.select('id, name, building_id')
+			.select('id, name, property_id')
 			.single();
 		if (error) {
 			return fail(500, { error: error.message });
 		}
-		return { unit: data };
+		return { unit: data ? { ...data, building_id: data.property_id } : data };
 	},
 
 	createTenant: async ({ request, locals }) => {
@@ -633,7 +666,6 @@ export const actions = {
 				updated_at: new Date().toISOString()
 			})
 			.eq('id', tenantId)
-			.eq('user_id', user.id)
 			.select('id, name, email, unit_id')
 			.single();
 		if (error) {
@@ -650,11 +682,7 @@ export const actions = {
 		if (!tenantId || typeof tenantId !== 'string') {
 			return fail(400, { error: 'Tenant is required.' });
 		}
-		const { error } = await locals.supabase
-			.from('tenants')
-			.delete()
-			.eq('id', tenantId)
-			.eq('user_id', user.id);
+		const { error } = await locals.supabase.from('tenants').delete().eq('id', tenantId);
 		if (error) {
 			return fail(500, { error: error.message });
 		}
@@ -664,6 +692,10 @@ export const actions = {
 	createVendor: async ({ request, locals }) => {
 		const user = locals.user;
 		if (!user) throw redirect(303, '/agentmvp');
+		const teamId = await getTeamId(locals.supabase, user);
+		if (!teamId) {
+			return fail(400, { error: 'Team not found for user.' });
+		}
 		const form = await request.formData();
 		const name = form.get('name');
 		const email = form.get('email');
@@ -673,7 +705,7 @@ export const actions = {
 		const { data, error } = await locals.supabase
 			.from('vendors')
 			.insert({
-				user_id: user.id,
+				team_id: teamId,
 				name: name.trim(),
 				email: typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null
 			})
@@ -698,7 +730,6 @@ export const actions = {
 			.from('vendors')
 			.update({ note: typeof note === 'string' ? note : null })
 			.eq('id', vendorId)
-			.eq('user_id', user.id)
 			.select('id, note')
 			.single();
 		if (error) {
@@ -726,7 +757,6 @@ export const actions = {
 				trade: typeof trade === 'string' && trade.trim() ? trade.trim() : null
 			})
 			.eq('id', vendorId)
-			.eq('user_id', user.id)
 			.select('id, email, phone, trade')
 			.single();
 		if (error) {
@@ -756,7 +786,6 @@ export const actions = {
 				note: typeof note === 'string' ? note : null
 			})
 			.eq('id', vendorId)
-			.eq('user_id', user.id)
 			.select('id, email, phone, trade, note')
 			.single();
 		if (error) {
@@ -807,7 +836,7 @@ export const actions = {
 	resetIssues: async ({ locals }) => {
 		const user = locals.user;
 		if (!user) throw redirect(303, '/agentmvp');
-		const { error } = await locals.supabase.from('issues').delete().eq('user_id', user.id);
+		const { error } = await locals.supabase.from('issues').delete();
 		if (error) {
 			return fail(500, { error: error.message });
 		}
@@ -827,10 +856,9 @@ export const actions = {
 			return fail(400, { error: 'Name is required.' });
 		}
 		const { data, error } = await locals.supabase
-			.from('buildings')
+			.from('properties')
 			.update({ name: name.trim() })
 			.eq('id', buildingId)
-			.eq('user_id', user.id)
 			.select('id, name')
 			.single();
 		if (error) {
@@ -847,11 +875,7 @@ export const actions = {
 		if (!buildingId || typeof buildingId !== 'string') {
 			return fail(400, { error: 'Building is required.' });
 		}
-		const { error } = await locals.supabase
-			.from('buildings')
-			.delete()
-			.eq('id', buildingId)
-			.eq('user_id', user.id);
+		const { error } = await locals.supabase.from('properties').delete().eq('id', buildingId);
 		if (error) {
 			return fail(500, { error: error.message });
 		}
@@ -874,7 +898,6 @@ export const actions = {
 			.from('vendors')
 			.update({ name: name.trim() })
 			.eq('id', vendorId)
-			.eq('user_id', user.id)
 			.select('id, name')
 			.single();
 		if (error) {
@@ -891,11 +914,7 @@ export const actions = {
 		if (!vendorId || typeof vendorId !== 'string') {
 			return fail(400, { error: 'Vendor is required.' });
 		}
-		const { error } = await locals.supabase
-			.from('vendors')
-			.delete()
-			.eq('id', vendorId)
-			.eq('user_id', user.id);
+		const { error } = await locals.supabase.from('vendors').delete().eq('id', vendorId);
 		if (error) {
 			return fail(500, { error: error.message });
 		}
@@ -916,12 +935,11 @@ export const actions = {
 		}
 
 		const { data: actionRow, error: actionError } = await locals.supabase
-			.from('actions')
+			.from('tasks')
 			.select(
 				'id, issue_id, action_type, title, detail, status, email_body, vendor_email_subject, vendor_email_to'
 			)
 			.eq('id', actionId)
-			.eq('user_id', user.id)
 			.maybeSingle();
 		if (actionError || !actionRow?.id) {
 			return fail(404, { error: 'Action not found.' });
@@ -1008,10 +1026,9 @@ export const actions = {
 			}
 			if (emailBodyOverride !== null) {
 				await locals.supabase
-					.from('actions')
+					.from('tasks')
 					.update({ email_body: effectiveEmailBody, updated_at: new Date().toISOString() })
-					.eq('id', actionRow.id)
-					.eq('user_id', user.id);
+					.eq('id', actionRow.id);
 			}
 			const { data: tenantRow } = await locals.supabase
 				.from('tenants')
@@ -1139,7 +1156,7 @@ export const actions = {
 				thread_external_id: threadExternalId
 			});
 
-			await locals.supabase.from('actions').update({ status: 'approved' }).eq('id', actionRow.id);
+			await locals.supabase.from('tasks').update({ status: 'approved' }).eq('id', actionRow.id);
 			return { actionId };
 		}
 
@@ -1155,14 +1172,17 @@ export const actions = {
 			const raw = encodeBase64Url(
 				`To: ${vendorEmailTo}\r\nSubject: ${subject}\r\n\r\n${effectiveEmailBody}`
 			);
-			const sendResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-				method: 'POST',
-				headers: {
-					Authorization: `Bearer ${accessToken}`,
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ raw })
-			});
+			const sendResponse = await fetch(
+				'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+				{
+					method: 'POST',
+					headers: {
+						Authorization: `Bearer ${accessToken}`,
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({ raw })
+				}
+			);
 			if (!sendResponse.ok) {
 				return fail(500, { error: await sendResponse.text() });
 			}
@@ -1170,13 +1190,13 @@ export const actions = {
 				.from('issues')
 				.update({ status: 'escalated', vendor_id: null })
 				.eq('id', issueRow.id);
-			await locals.supabase.from('actions').update({ status: 'approved' }).eq('id', actionRow.id);
+			await locals.supabase.from('tasks').update({ status: 'approved' }).eq('id', actionRow.id);
 			return { actionId };
 		}
 
 		const vendorId = issueRow.suggested_vendor_id ?? issueRow.vendor_id;
 		if (!vendorId) {
-			await locals.supabase.from('actions').update({ status: 'approved' }).eq('id', actionRow.id);
+			await locals.supabase.from('tasks').update({ status: 'approved' }).eq('id', actionRow.id);
 			return { actionId };
 		}
 
@@ -1184,7 +1204,6 @@ export const actions = {
 			.from('vendors')
 			.select('id, name, email')
 			.eq('id', vendorId)
-			.eq('user_id', user.id)
 			.maybeSingle();
 		if (vendorError || !vendorRow?.id) {
 			return fail(404, { error: 'Vendor not found.' });
@@ -1195,14 +1214,14 @@ export const actions = {
 
 		const { data: unitRow } = await locals.supabase
 			.from('units')
-			.select('id, name, building_id')
+			.select('id, name, property_id')
 			.eq('id', issueRow.unit_id)
 			.maybeSingle();
-		const { data: buildingRow } = unitRow?.building_id
+		const { data: buildingRow } = unitRow?.property_id
 			? await locals.supabase
-					.from('buildings')
+					.from('properties')
 					.select('id, name, address')
-					.eq('id', unitRow.building_id)
+					.eq('id', unitRow.property_id)
 					.maybeSingle()
 			: { data: null };
 		const { data: tenantRow } = await locals.supabase
@@ -1322,7 +1341,7 @@ export const actions = {
 			.update({ status: 'escalated', vendor_id: vendorId })
 			.eq('id', issueRow.id);
 
-		await locals.supabase.from('actions').update({ status: 'approved' }).eq('id', actionRow.id);
+		await locals.supabase.from('tasks').update({ status: 'approved' }).eq('id', actionRow.id);
 		return { actionId };
 	},
 
@@ -1335,10 +1354,9 @@ export const actions = {
 			return fail(400, { error: 'Action is required.' });
 		}
 		const { error } = await locals.supabase
-			.from('actions')
+			.from('tasks')
 			.update({ status: 'denied' })
-			.eq('id', actionId)
-			.eq('user_id', user.id);
+			.eq('id', actionId);
 		if (error) {
 			return fail(500, { error: error.message });
 		}
@@ -1358,19 +1376,17 @@ export const actions = {
 			return fail(400, { error: 'Email body must be a string.' });
 		}
 		const { data: actionRow, error: actionError } = await locals.supabase
-			.from('actions')
+			.from('tasks')
 			.select('id')
 			.eq('id', actionId)
-			.eq('user_id', user.id)
 			.maybeSingle();
 		if (actionError || !actionRow?.id) {
 			return fail(404, { error: 'Action not found.' });
 		}
 		const { error } = await locals.supabase
-			.from('actions')
+			.from('tasks')
 			.update({ email_body: emailBody ?? '', updated_at: new Date().toISOString() })
-			.eq('id', actionId)
-			.eq('user_id', user.id);
+			.eq('id', actionId);
 		if (error) {
 			return fail(500, { error: error.message });
 		}

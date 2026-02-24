@@ -227,9 +227,7 @@
 		}
 		const emails = vendorInlineActions
 			.flatMap((action) =>
-				action.vendorEmailTo
-					? action.vendorEmailTo.split(',').map((entry) => entry.trim())
-					: []
+				action.vendorEmailTo ? action.vendorEmailTo.split(',').map((entry) => entry.trim()) : []
 			)
 			.filter(Boolean);
 		const unique = Array.from(new Set(emails.map((email) => email.toLowerCase())));
@@ -298,7 +296,9 @@
 				.join(', ');
 		}
 		if (action?.vendorEmail) {
-			return action.vendorName ? `${action.vendorName} <${action.vendorEmail}>` : action.vendorEmail;
+			return action.vendorName
+				? `${action.vendorName} <${action.vendorEmail}>`
+				: action.vendorEmail;
 		}
 		return action?.vendorName ?? 'Vendor';
 	};
@@ -542,7 +542,7 @@
 					latestMessageByThread.set(threadId, timestamp);
 				}
 			)
-			.on('postgres_changes', { event: '*', schema: 'public', table: 'actions' }, (payload) => {
+			.on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
 				if (payload.eventType === 'DELETE') {
 					const removedId = payload.old?.id;
 					if (!removedId) return;
@@ -576,7 +576,6 @@
 			realtimeChannel = null;
 		}
 	});
-
 
 	const handleModeChange = async (connectionId, nextMode) => {
 		if (!connectionId) return;
@@ -1004,10 +1003,10 @@
 			tenants = tenants.map((tenant) =>
 				tenant.id === editingTenantId
 					? {
-						...tenant,
-						name: newTenantName.trim(),
-						email: newTenantEmail.trim()
-					}
+							...tenant,
+							name: newTenantName.trim(),
+							email: newTenantEmail.trim()
+						}
 					: tenant
 			);
 			showNewTenantModal = false;
@@ -1767,310 +1766,308 @@
 					{#if view === 'account'}
 						<div class="space-y-6">
 							<div class="flex flex-col gap-2">
-							<div class="flex items-center justify-between">
-								<div class="text-sm font-medium text-neutral-800">Connected emails</div>
-								<a
-									class="flex flex-row items-center gap-1 rounded-lg px-3 py-1 text-xs text-neutral-700 hover:bg-neutral-200"
-									href={connectHref}
-								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										width="16"
-										height="16"
-										fill="currentColor"
-										class="bi bi-plus"
-										viewBox="0 0 16 16"
+								<div class="flex items-center justify-between">
+									<div class="text-sm font-medium text-neutral-800">Connected emails</div>
+									<a
+										class="flex flex-row items-center gap-1 rounded-lg px-3 py-1 text-xs text-neutral-700 hover:bg-neutral-200"
+										href={connectHref}
 									>
-										<path
-											d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"
-										/>
-									</svg>
-									Add Account
-								</a>
-							</div>
-							<div class="space-y-3">
-								{#each connections as connection}
-									<div
-										class="flex w-full items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 text-left text-sm"
-									>
-										<div class="flex items-center gap-2">
-											<svg
-												width="18"
-												height="18"
-														viewBox="0 0 32 32"
-														fill="none"
-														xmlns="http://www.w3.org/2000/svg"
-													>
-														<path
-															d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
-															fill="white"
-														/>
-														<path
-															d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
-															fill="#EA4335"
-														/>
-														<path
-															d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
-															fill="#FBBC05"
-														/>
-														<path
-															d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
-															fill="#34A853"
-														/>
-														<path
-															d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
-															fill="#C5221F"
-														/>
-														<path
-															d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
-															fill="#C5221F"
-														/>
-														<path
-															d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
-															fill="#C5221F"
-														/>
-														<path
-															d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
-															fill="#4285F4"
-														/>
-													</svg>
-													<div class="font-medium text-neutral-800">{connection.email}</div>
-									</div>
-									<div class="flex items-center gap-2">
-										<div class="relative">
-											<button
-												class="inline-flex h-8 items-center gap-2 rounded-lg border border-neutral-200 px-3 text-sm text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-50"
-												on:click={(event) => {
-													event.stopPropagation();
-													toggleDropdown(connection.id);
-												}}
-												type="button"
-											>
-												{modeLabel(connection.mode)}
-												<span class="text-neutral-400">▾</span>
-											</button>
-											{#if openDropdownId === connection.id}
-												<div
-													class="absolute right-0 z-10 mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
-												>
-													<button
-														class="flex w-full px-3 py-2 text-left hover:bg-neutral-50"
-														on:click={() => handleModeChange(connection.id, 'read')}
-														type="button"
-													>
-														Read
-													</button>
-													<button
-														class="flex w-full px-3 py-2 text-left hover:bg-neutral-50"
-														on:click={() => handleModeChange(connection.id, 'write')}
-														type="button"
-													>
-														Write
-													</button>
-													<button
-														class="flex w-full px-3 py-2 text-left hover:bg-neutral-50"
-														on:click={() => handleModeChange(connection.id, 'both')}
-														type="button"
-													>
-														Both
-													</button>
-												</div>
-											{/if}
-										</div>
-										<button
-											class="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-600"
-											on:click={(event) => {
-												event.stopPropagation();
-												handleDisconnect(connection.id);
-											}}
-											type="button"
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											fill="currentColor"
+											class="bi bi-plus"
+											viewBox="0 0 16 16"
 										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="16"
-												height="16"
-												fill="currentColor"
-												viewBox="0 0 16 16"
-											>
-												<path
-													d="M11 1.5v1h3.5a.5.5 0 0 1 0 1h-.538l-.853 10.66A2 2 0 0 1 11.115 16h-6.23a2 2 0 0 1-1.994-1.84L2.038 3.5H1.5a.5.5 0 0 1 0-1H5v-1A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5m-5 0v1h4v-1a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5M4.5 5.029l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06m6.53-.528a.5.5 0 0 0-.528.47l-.5 8.5a.5.5 0 0 0 .998.058l.5-8.5a.5.5 0 0 0-.47-.528M8 4.5a.5.5 0 0 0-.5.5v8.5a.5.5 0 0 0 1 0V5a.5.5 0 0 0-.5-.5"
-												/>
-											</svg>
-										</button>
-									</div>
+											<path
+												d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"
+											/>
+										</svg>
+										Add Account
+									</a>
 								</div>
-							{/each}
-							</div>
-						</div>
-							<div class="flex flex-col gap-1">
-								<div class="text-sm font-medium text-neutral-800">Account</div>
-							<div class="flex w-full flex-row gap-4">
-								<form class="w-full" on:submit={handleSignOut}>
-									<button
-										type="submit"
-										class="w-full rounded-lg border border-neutral-300 px-4 py-2 text-sm text-neutral-700"
-									>
-										Sign out
-									</button>
-								</form>
-								<form class="w-full" on:submit={handleDeleteAccount}>
-									<button
-										type="submit"
-										class="w-full rounded-lg border border-rose-200 px-4 py-2 text-sm text-rose-600"
-									>
-										Delete account
-									</button>
-								</form>
-							</div>
-							<form class="w-full" on:submit={handleResetIssues}>
-								<button
-									type="submit"
-									class="w-full rounded-lg border border-amber-200 px-4 py-2 text-sm text-amber-700"
-								>
-									Reset all issues
-								</button>
-							</form>
-						</div>
-					</div>
-				{:else if view === 'inbox'}
-					<div class="space-y-4">
-						<div>
-							{#each actions as action, index}
-								<div
-									class={`py-5 ${index < actions.length - 1 ? 'border-b border-neutral-100' : ''}`}
-								>
-											<div class="flex items-start justify-between gap-6">
-												<div class="min-w-0 flex-1 space-y-4">
-													<div class="flex flex-col">
-														<div class="text-sm font-medium text-neutral-900">{action.title}</div>
-														{#if action.detail}
-															<div class="text-sm leading-relaxed text-neutral-600">
-																{action.detail}
-															</div>
-														{/if}
-													</div>
-													{#if action.emailBody}
-														<div class="rounded-lg bg-neutral-50 px-4 py-3">
-															<div class="mb-6">
-																<div class="text-sm font-medium text-neutral-900">
-																	{gmailUser?.name ?? gmailUser?.email ?? 'Bedrock Ops'}
-																</div>
-																<div class="text-sm text-neutral-500">
-														To {action.actionType === 'schedule_vendor'
-															? formatVendorRecipients(action)
-															: action.tenantName && action.tenantEmail
-																? `${action.tenantName} <${action.tenantEmail}>`
-																: action.tenantEmail ?? action.tenantName ?? 'Tenant'}
-													</div>
-															</div>
-															<textarea
-																class="w-full resize-none bg-transparent p-0 text-sm whitespace-pre-line text-neutral-700 focus:outline-none"
-																rows={Math.max(3, action.emailBody.split('\n').length)}
-																bind:value={action.emailBody}
-																on:blur={() => handleActionDraftSave(action)}
-															></textarea>
+								<div class="space-y-3">
+									{#each connections as connection}
+										<div
+											class="flex w-full items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 text-left text-sm"
+										>
+											<div class="flex items-center gap-2">
+												<svg
+													width="18"
+													height="18"
+													viewBox="0 0 32 32"
+													fill="none"
+													xmlns="http://www.w3.org/2000/svg"
+												>
+													<path
+														d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
+														fill="white"
+													/>
+													<path
+														d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+														fill="#EA4335"
+													/>
+													<path
+														d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+														fill="#FBBC05"
+													/>
+													<path
+														d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+														fill="#34A853"
+													/>
+													<path
+														d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+														fill="#C5221F"
+													/>
+													<path
+														d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+														fill="#C5221F"
+													/>
+													<path
+														d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+														fill="#C5221F"
+													/>
+													<path
+														d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+														fill="#4285F4"
+													/>
+												</svg>
+												<div class="font-medium text-neutral-800">{connection.email}</div>
+											</div>
+											<div class="flex items-center gap-2">
+												<div class="relative">
+													<button
+														class="inline-flex h-8 items-center gap-2 rounded-lg border border-neutral-200 px-3 text-sm text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-50"
+														on:click={(event) => {
+															event.stopPropagation();
+															toggleDropdown(connection.id);
+														}}
+														type="button"
+													>
+														{modeLabel(connection.mode)}
+														<span class="text-neutral-400">▾</span>
+													</button>
+													{#if openDropdownId === connection.id}
+														<div
+															class="absolute right-0 z-10 mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
+														>
+															<button
+																class="flex w-full px-3 py-2 text-left hover:bg-neutral-50"
+																on:click={() => handleModeChange(connection.id, 'read')}
+																type="button"
+															>
+																Read
+															</button>
+															<button
+																class="flex w-full px-3 py-2 text-left hover:bg-neutral-50"
+																on:click={() => handleModeChange(connection.id, 'write')}
+																type="button"
+															>
+																Write
+															</button>
+															<button
+																class="flex w-full px-3 py-2 text-left hover:bg-neutral-50"
+																on:click={() => handleModeChange(connection.id, 'both')}
+																type="button"
+															>
+																Both
+															</button>
 														</div>
 													{/if}
-													<div class="flex items-center justify-between gap-4 pt-1">
-														{#if action.issueId}
-															<button
-																class="flex flex-wrap items-center gap-2 rounded-md px-2 py-1 text-xs text-neutral-400 transition hover:bg-stone-100 hover:text-neutral-700"
-																on:click={() => handleActionIssueOpen(action.issueId)}
-																type="button"
-															>
-																{#if action.issueUrgency}
-																	<span
-																		class={`h-2 w-2 flex-none rounded-full ${urgencyBuckets.find((bucket) => bucket.key === action.issueUrgency)?.dot ?? 'bg-neutral-300'}`}
-																	></span>
-																{/if}
-																<span>{action.issueName}</span>
-																{#if action.building || action.unit}
-																	<span>·</span>
-																	<span>{action.building ?? 'Unknown'}</span>
-																	{#if action.unit}
-																		<span>{action.unit}</span>
-																	{/if}
-																{/if}
-																{#if action.createdAt}
-																	<span>·</span>
-																	<span>{formatTimestamp(action.createdAt)}</span>
-																{/if}
-															</button>
-														{:else}
-															<div
-																class="flex flex-wrap items-center gap-2 text-xs text-neutral-400"
-															>
-																{#if action.issueUrgency}
-																	<span
-																		class={`h-2 w-2 flex-none rounded-full ${urgencyBuckets.find((bucket) => bucket.key === action.issueUrgency)?.dot ?? 'bg-neutral-300'}`}
-																	></span>
-																{/if}
-																<span>{action.issueName}</span>
-																{#if action.building || action.unit}
-																	<span>·</span>
-																	<span>{action.building ?? 'Unknown'}</span>
-																	{#if action.unit}
-																		<span>{action.unit}</span>
-																	{/if}
-																{/if}
-																{#if action.createdAt}
-																	<span>·</span>
-																	<span>{formatTimestamp(action.createdAt)}</span>
-																{/if}
-															</div>
-														{/if}
-														<div class="ml-auto flex items-center gap-2">
-															<button
-																class={`inline-flex items-center justify-center rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 transition-opacity duration-200 ${
-																	sendingActionIds.has(action.id)
-																		? 'opacity-40'
-																		: 'hover:bg-neutral-50'
-																}`}
-																on:click={() =>
-																	action.issueId && handleActionIssueOpen(action.issueId)}
-																type="button"
-																disabled={sendingActionIds.has(action.id)}
-															>
-																Modify
-															</button>
-															<button
-																class={`inline-flex h-9 min-w-[104px] items-center justify-center rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition-opacity duration-200 ${
-																	sendingActionIds.has(action.id)
-																		? 'opacity-70'
-																		: 'hover:bg-neutral-800'
-																}`}
-																on:click={() => handleApproveAction(action.id)}
-																type="button"
-																disabled={sendingActionIds.has(action.id)}
-															>
-																{#if sendingActionIds.has(action.id)}
-																	<div
-																		class="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-white"
-																	></div>
-																{:else}
-																	Approve
-																{/if}
-															</button>
+												</div>
+												<button
+													class="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-600"
+													on:click={(event) => {
+														event.stopPropagation();
+														handleDisconnect(connection.id);
+													}}
+													type="button"
+												>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="16"
+														height="16"
+														fill="currentColor"
+														viewBox="0 0 16 16"
+													>
+														<path
+															d="M11 1.5v1h3.5a.5.5 0 0 1 0 1h-.538l-.853 10.66A2 2 0 0 1 11.115 16h-6.23a2 2 0 0 1-1.994-1.84L2.038 3.5H1.5a.5.5 0 0 1 0-1H5v-1A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5m-5 0v1h4v-1a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5M4.5 5.029l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06m6.53-.528a.5.5 0 0 0-.528.47l-.5 8.5a.5.5 0 0 0 .998.058l.5-8.5a.5.5 0 0 0-.47-.528M8 4.5a.5.5 0 0 0-.5.5v8.5a.5.5 0 0 0 1 0V5a.5.5 0 0 0-.5-.5"
+														/>
+													</svg>
+												</button>
+											</div>
+										</div>
+									{/each}
+								</div>
+							</div>
+							<div class="flex flex-col gap-1">
+								<div class="text-sm font-medium text-neutral-800">Account</div>
+								<div class="flex w-full flex-row gap-4">
+									<form class="w-full" on:submit={handleSignOut}>
+										<button
+											type="submit"
+											class="w-full rounded-lg border border-neutral-300 px-4 py-2 text-sm text-neutral-700"
+										>
+											Sign out
+										</button>
+									</form>
+									<form class="w-full" on:submit={handleDeleteAccount}>
+										<button
+											type="submit"
+											class="w-full rounded-lg border border-rose-200 px-4 py-2 text-sm text-rose-600"
+										>
+											Delete account
+										</button>
+									</form>
+								</div>
+								<form class="w-full" on:submit={handleResetIssues}>
+									<button
+										type="submit"
+										class="w-full rounded-lg border border-amber-200 px-4 py-2 text-sm text-amber-700"
+									>
+										Reset all issues
+									</button>
+								</form>
+							</div>
+						</div>
+					{:else if view === 'inbox'}
+						<div class="space-y-4">
+							<div>
+								{#each actions as action, index}
+									<div
+										class={`py-5 ${index < actions.length - 1 ? 'border-b border-neutral-100' : ''}`}
+									>
+										<div class="flex items-start justify-between gap-6">
+											<div class="min-w-0 flex-1 space-y-4">
+												<div class="flex flex-col">
+													<div class="text-sm font-medium text-neutral-900">{action.title}</div>
+													{#if action.detail}
+														<div class="text-sm leading-relaxed text-neutral-600">
+															{action.detail}
 														</div>
+													{/if}
+												</div>
+												{#if action.emailBody}
+													<div class="rounded-lg bg-neutral-50 px-4 py-3">
+														<div class="mb-6">
+															<div class="text-sm font-medium text-neutral-900">
+																{gmailUser?.name ?? gmailUser?.email ?? 'Bedrock Ops'}
+															</div>
+															<div class="text-sm text-neutral-500">
+																To {action.actionType === 'schedule_vendor'
+																	? formatVendorRecipients(action)
+																	: action.tenantName && action.tenantEmail
+																		? `${action.tenantName} <${action.tenantEmail}>`
+																		: (action.tenantEmail ?? action.tenantName ?? 'Tenant')}
+															</div>
+														</div>
+														<textarea
+															class="w-full resize-none bg-transparent p-0 text-sm whitespace-pre-line text-neutral-700 focus:outline-none"
+															rows={Math.max(3, action.emailBody.split('\n').length)}
+															bind:value={action.emailBody}
+															on:blur={() => handleActionDraftSave(action)}
+														></textarea>
+													</div>
+												{/if}
+												<div class="flex items-center justify-between gap-4 pt-1">
+													{#if action.issueId}
+														<button
+															class="flex flex-wrap items-center gap-2 rounded-md px-2 py-1 text-xs text-neutral-400 transition hover:bg-stone-100 hover:text-neutral-700"
+															on:click={() => handleActionIssueOpen(action.issueId)}
+															type="button"
+														>
+															{#if action.issueUrgency}
+																<span
+																	class={`h-2 w-2 flex-none rounded-full ${urgencyBuckets.find((bucket) => bucket.key === action.issueUrgency)?.dot ?? 'bg-neutral-300'}`}
+																></span>
+															{/if}
+															<span>{action.issueName}</span>
+															{#if action.building || action.unit}
+																<span>·</span>
+																<span>{action.building ?? 'Unknown'}</span>
+																{#if action.unit}
+																	<span>{action.unit}</span>
+																{/if}
+															{/if}
+															{#if action.createdAt}
+																<span>·</span>
+																<span>{formatTimestamp(action.createdAt)}</span>
+															{/if}
+														</button>
+													{:else}
+														<div class="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+															{#if action.issueUrgency}
+																<span
+																	class={`h-2 w-2 flex-none rounded-full ${urgencyBuckets.find((bucket) => bucket.key === action.issueUrgency)?.dot ?? 'bg-neutral-300'}`}
+																></span>
+															{/if}
+															<span>{action.issueName}</span>
+															{#if action.building || action.unit}
+																<span>·</span>
+																<span>{action.building ?? 'Unknown'}</span>
+																{#if action.unit}
+																	<span>{action.unit}</span>
+																{/if}
+															{/if}
+															{#if action.createdAt}
+																<span>·</span>
+																<span>{formatTimestamp(action.createdAt)}</span>
+															{/if}
+														</div>
+													{/if}
+													<div class="ml-auto flex items-center gap-2">
+														<button
+															class={`inline-flex items-center justify-center rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 transition-opacity duration-200 ${
+																sendingActionIds.has(action.id)
+																	? 'opacity-40'
+																	: 'hover:bg-neutral-50'
+															}`}
+															on:click={() =>
+																action.issueId && handleActionIssueOpen(action.issueId)}
+															type="button"
+															disabled={sendingActionIds.has(action.id)}
+														>
+															Modify
+														</button>
+														<button
+															class={`inline-flex h-9 min-w-[104px] items-center justify-center rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition-opacity duration-200 ${
+																sendingActionIds.has(action.id)
+																	? 'opacity-70'
+																	: 'hover:bg-neutral-800'
+															}`}
+															on:click={() => handleApproveAction(action.id)}
+															type="button"
+															disabled={sendingActionIds.has(action.id)}
+														>
+															{#if sendingActionIds.has(action.id)}
+																<div
+																	class="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-white"
+																></div>
+															{:else}
+																Approve
+															{/if}
+														</button>
 													</div>
 												</div>
 											</div>
 										</div>
-							{/each}
+									</div>
+								{/each}
+							</div>
 						</div>
-					</div>
-				{:else if view === 'invoices'}
-					<div class="space-y-2">
-						<div class="text-sm text-neutral-500">No invoices to review yet.</div>
-					</div>
+					{:else if view === 'invoices'}
+						<div class="space-y-2">
+							<div class="text-sm text-neutral-500">No invoices to review yet.</div>
+						</div>
 					{:else if view === 'archive'}
 						<div class="space-y-2">
 							<div class="text-sm text-neutral-500">No archived items yet.</div>
 						</div>
-				{:else if view === 'calendar'}
-					<div class="space-y-2">
-						<div class="text-sm text-neutral-500">No scheduled items yet.</div>
-					</div>
+					{:else if view === 'calendar'}
+						<div class="space-y-2">
+							<div class="text-sm text-neutral-500">No scheduled items yet.</div>
+						</div>
 					{:else if view === 'vendor'}
 						{#if !selectedVendor}
 							<div class="mt-12 text-sm text-neutral-500">Select a vendor to view details.</div>
@@ -2276,61 +2273,63 @@
 														{#if !tenants.filter((tenant) => tenant.unit_id === unit.id).length}
 															<div class="mt-2 text-xs text-neutral-500">No tenants yet.</div>
 														{:else}
-										<div class="mt-2 space-y-2">
-											{#each tenants.filter((tenant) => tenant.unit_id === unit.id) as tenant}
-												<div
-													class="flex items-center justify-between text-sm text-neutral-600"
-													on:mouseenter={() => (hoveredRow = rowKey('tenants', tenant.id))}
-													on:mouseleave={() => (hoveredRow = null)}
-												>
-													<div class="min-w-0">
-														{tenant.name}
-														<span class="text-xs text-neutral-400">· {tenant.email}</span>
-													</div>
-													<div class="relative">
-														<button
-															class={`rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 ${hoveredRow === rowKey('tenants', tenant.id) || openRowMenu === rowKey('tenants', tenant.id) ? 'opacity-100' : 'opacity-0'}`}
-															on:click|stopPropagation={() => toggleRowMenu('tenants', tenant.id)}
-															type="button"
-														>
-															<svg
-																xmlns="http://www.w3.org/2000/svg"
-																width="16"
-																height="16"
-																fill="currentColor"
-																class="bi bi-three-dots"
-																viewBox="0 0 16 16"
-															>
-																<path
-																	d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"
-																/>
-															</svg>
-														</button>
-														{#if openRowMenu === rowKey('tenants', tenant.id)}
-															<div
-																class="absolute right-0 z-[999] mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
-																on:click|stopPropagation
-															>
-																<button
-																	class="flex w-full px-3 py-2 text-left hover:bg-neutral-50"
-																	on:click={() => openEditTenantModal(tenant)}
-																	type="button"
-																>
-																	Edit
-																</button>
-																<button
-																	class="flex w-full px-3 py-2 text-left text-rose-600 hover:bg-neutral-50"
-																	on:click={() => deleteRow('tenants', tenant.id)}
-																	type="button"
-																>
-																	Delete
-																</button>
+															<div class="mt-2 space-y-2">
+																{#each tenants.filter((tenant) => tenant.unit_id === unit.id) as tenant}
+																	<div
+																		class="flex items-center justify-between text-sm text-neutral-600"
+																		on:mouseenter={() =>
+																			(hoveredRow = rowKey('tenants', tenant.id))}
+																		on:mouseleave={() => (hoveredRow = null)}
+																	>
+																		<div class="min-w-0">
+																			{tenant.name}
+																			<span class="text-xs text-neutral-400">· {tenant.email}</span>
+																		</div>
+																		<div class="relative">
+																			<button
+																				class={`rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 ${hoveredRow === rowKey('tenants', tenant.id) || openRowMenu === rowKey('tenants', tenant.id) ? 'opacity-100' : 'opacity-0'}`}
+																				on:click|stopPropagation={() =>
+																					toggleRowMenu('tenants', tenant.id)}
+																				type="button"
+																			>
+																				<svg
+																					xmlns="http://www.w3.org/2000/svg"
+																					width="16"
+																					height="16"
+																					fill="currentColor"
+																					class="bi bi-three-dots"
+																					viewBox="0 0 16 16"
+																				>
+																					<path
+																						d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"
+																					/>
+																				</svg>
+																			</button>
+																			{#if openRowMenu === rowKey('tenants', tenant.id)}
+																				<div
+																					class="absolute right-0 z-[999] mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
+																					on:click|stopPropagation
+																				>
+																					<button
+																						class="flex w-full px-3 py-2 text-left hover:bg-neutral-50"
+																						on:click={() => openEditTenantModal(tenant)}
+																						type="button"
+																					>
+																						Edit
+																					</button>
+																					<button
+																						class="flex w-full px-3 py-2 text-left text-rose-600 hover:bg-neutral-50"
+																						on:click={() => deleteRow('tenants', tenant.id)}
+																						type="button"
+																					>
+																						Delete
+																					</button>
+																				</div>
+																			{/if}
+																		</div>
+																	</div>
+																{/each}
 															</div>
-														{/if}
-													</div>
-												</div>
-											{/each}
-										</div>
 														{/if}
 													</div>
 												{/if}
@@ -2473,71 +2472,71 @@
 										{/each}
 									{/if}
 								</div>
-									{#if assignedVendorName || suggestedVendorRecipients.length || vendorInlineActions.length}
-										<div class="space-y-3">
-											{#if assignedVendor}
-												<button
-													class="w-full rounded-lg border border-neutral-100 bg-stone-100 px-4 py-3 text-left transition hover:border-neutral-200"
-													on:click={() => handleVendorSelect(assignedVendor.id)}
-													type="button"
-												>
-													<div class="flex items-center justify-between">
-														<div class="text-sm font-semibold text-neutral-800">
-															{assignedVendorName}
-														</div>
-														<span class="inline-flex items-center gap-1 text-xs text-neutral-400">
-															View Vendor
-															<svg
-																xmlns="http://www.w3.org/2000/svg"
-																width="12"
-																height="12"
-																fill="currentColor"
-																viewBox="0 0 16 16"
-															>
-																<path
-																	d="M1 8a.5.5 0 0 1 .5-.5h10.793L9.146 4.354a.5.5 0 1 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L12.293 8.5H1.5A.5.5 0 0 1 1 8"
-																/>
-															</svg>
-														</span>
+								{#if assignedVendorName || suggestedVendorRecipients.length || vendorInlineActions.length}
+									<div class="space-y-3">
+										{#if assignedVendor}
+											<button
+												class="w-full rounded-lg border border-neutral-100 bg-stone-100 px-4 py-3 text-left transition hover:border-neutral-200"
+												on:click={() => handleVendorSelect(assignedVendor.id)}
+												type="button"
+											>
+												<div class="flex items-center justify-between">
+													<div class="text-sm font-semibold text-neutral-800">
+														{assignedVendorName}
 													</div>
-													{#if assignedVendor.trade || assignedVendor.email || assignedVendor.phone}
-														<div class="mt-1 text-xs text-neutral-500">
-															{assignedVendor.trade ?? ''}
-															{#if assignedVendor.trade && (assignedVendor.email || assignedVendor.phone)}
-																<span> · </span>
-															{/if}
-															{assignedVendor.email ?? ''}
-															{#if assignedVendor.email && assignedVendor.phone}
-																<span> · </span>
-															{/if}
-															{assignedVendor.phone ?? ''}
-														</div>
-													{/if}
-												</button>
-											{/if}
-											{#if suggestedVendorRecipients.length}
-												{#each suggestedVendorRecipients as vendor}
-													{#if vendor.id}
-														<button
-															class="w-full rounded-lg border border-neutral-100 bg-stone-100 px-4 py-3 text-left transition hover:border-neutral-200"
-															on:click={() => handleVendorSelect(vendor.id)}
-															type="button"
+													<span class="inline-flex items-center gap-1 text-xs text-neutral-400">
+														View Vendor
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															width="12"
+															height="12"
+															fill="currentColor"
+															viewBox="0 0 16 16"
 														>
-															<div class="flex items-center justify-between">
-																<div class="text-sm font-semibold text-neutral-800">
-																	{vendor.name ?? vendor.email}
-																</div>
-																<span class="inline-flex items-center gap-1 text-xs text-neutral-400">
-																	View Vendor
-																	<svg
-																		xmlns="http://www.w3.org/2000/svg"
-																		width="12"
-																		height="12"
-																		fill="currentColor"
-																		viewBox="0 0 16 16"
-																	>
-																		<path
-																			d="M1 8a.5.5 0 0 1 .5-.5h10.793L9.146 4.354a.5.5 0 1 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L12.293 8.5H1.5A.5.5 0 0 1 1 8"
+															<path
+																d="M1 8a.5.5 0 0 1 .5-.5h10.793L9.146 4.354a.5.5 0 1 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L12.293 8.5H1.5A.5.5 0 0 1 1 8"
+															/>
+														</svg>
+													</span>
+												</div>
+												{#if assignedVendor.trade || assignedVendor.email || assignedVendor.phone}
+													<div class="mt-1 text-xs text-neutral-500">
+														{assignedVendor.trade ?? ''}
+														{#if assignedVendor.trade && (assignedVendor.email || assignedVendor.phone)}
+															<span> · </span>
+														{/if}
+														{assignedVendor.email ?? ''}
+														{#if assignedVendor.email && assignedVendor.phone}
+															<span> · </span>
+														{/if}
+														{assignedVendor.phone ?? ''}
+													</div>
+												{/if}
+											</button>
+										{/if}
+										{#if suggestedVendorRecipients.length}
+											{#each suggestedVendorRecipients as vendor}
+												{#if vendor.id}
+													<button
+														class="w-full rounded-lg border border-neutral-100 bg-stone-100 px-4 py-3 text-left transition hover:border-neutral-200"
+														on:click={() => handleVendorSelect(vendor.id)}
+														type="button"
+													>
+														<div class="flex items-center justify-between">
+															<div class="text-sm font-semibold text-neutral-800">
+																{vendor.name ?? vendor.email}
+															</div>
+															<span class="inline-flex items-center gap-1 text-xs text-neutral-400">
+																View Vendor
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="12"
+																	height="12"
+																	fill="currentColor"
+																	viewBox="0 0 16 16"
+																>
+																	<path
+																		d="M1 8a.5.5 0 0 1 .5-.5h10.793L9.146 4.354a.5.5 0 1 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L12.293 8.5H1.5A.5.5 0 0 1 1 8"
 																	/>
 																</svg>
 															</span>
@@ -2568,12 +2567,12 @@
 												{/if}
 											{/each}
 										{/if}
-											{#if vendorThreadMessages.length || !vendorInlineActions.length}
-												<MessageThread
-													messages={vendorThreadMessages}
-													tenant={assignedVendorContact ?? { name: 'Vendor', email: '' }}
-												/>
-											{/if}
+										{#if vendorThreadMessages.length || !vendorInlineActions.length}
+											<MessageThread
+												messages={vendorThreadMessages}
+												tenant={assignedVendorContact ?? { name: 'Vendor', email: '' }}
+											/>
+										{/if}
 										{#if vendorInlineActions.length}
 											{#each vendorInlineActions as action (action.id)}
 												{@const recipient = inlineActionRecipient(action, 'vendor')}
