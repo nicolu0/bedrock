@@ -6,6 +6,7 @@
 		user,
 		gmailUser,
 		realtimeAccessToken,
+		workspaceName,
 		issues,
 		threadsByIssue,
 		messagesByThread,
@@ -67,6 +68,7 @@
 		{tenants}
 		{actions}
 		{realtimeAccessToken}
+		{workspaceName}
 		connectHref="/agentmvp/gmail/connect"
 	/>
 {/if}
