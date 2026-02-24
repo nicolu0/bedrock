@@ -47,6 +47,13 @@ export const load = async ({ locals }) => {
 	const { data: sessionData } = await locals.supabase.auth.getSession();
 	const realtimeAccessToken = sessionData?.session?.access_token ?? null;
 
+	const { data: memberRow } = await supabaseAdmin
+		.from('members')
+		.select('workspace_id, workspaces(name)')
+		.eq('user_id', locals.user.id)
+		.maybeSingle();
+	const workspaceName = memberRow?.workspaces?.name ?? null;
+
 	const { data: connections } = await locals.supabase
 		.from('gmail_connections')
 		.select('id, email, mode')
@@ -198,6 +205,7 @@ export const load = async ({ locals }) => {
 			user: locals.user,
 			gmailUser,
 			realtimeAccessToken,
+		workspaceName,
 			issues: normalizedIssues,
 			threadsByIssue: {},
 			messagesByThread: {},
@@ -221,6 +229,7 @@ export const load = async ({ locals }) => {
 			user: locals.user,
 			gmailUser,
 			realtimeAccessToken,
+		workspaceName,
 			issues: normalizedIssues,
 			threadsByIssue: {},
 			messagesByThread: {},
@@ -293,6 +302,7 @@ export const load = async ({ locals }) => {
 		user: locals.user,
 		gmailUser,
 		realtimeAccessToken,
+		workspaceName,
 		issues: normalizedIssues,
 		threadsByIssue,
 		messagesByThread,
