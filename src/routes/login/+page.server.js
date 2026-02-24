@@ -1,10 +1,15 @@
+// @ts-nocheck
 import { fail, redirect } from '@sveltejs/kit';
 import { ensureWorkspace, getWorkspaceForUser } from '$lib/server/workspaces';
 
 /** @type {import('./$types').PageServerLoad} */
+<<<<<<< HEAD
 export const load = async (event) => {
 	const locals = /** @type {any} */ (event.locals);
 	const { url } = event;
+=======
+export const load = async ({ locals, url }) => {
+>>>>>>> 37740da (auth redirect)
 	if (!locals.user) {
 		return { inviteToken: url.searchParams.get('invite') };
 	}
@@ -13,7 +18,11 @@ export const load = async (event) => {
 	if (workspace?.slug) {
 		throw redirect(303, `/${workspace.slug}`);
 	}
+<<<<<<< HEAD
 	throw redirect(303, '/agentmvp');
+=======
+	return {};
+>>>>>>> 37740da (auth redirect)
 };
 
 /** @type {import('./$types').Actions} */
