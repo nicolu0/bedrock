@@ -107,7 +107,7 @@ export const GET = async ({ url }) => {
 	try {
 		watch = await registerWatch(tokenData.access_token);
 	} catch (watchError) {
-		await supabaseAdmin.from('ingestion_errors').insert({
+		await supabaseAdmin.from('errors.ingestion_errors').insert({
 			user_id: state,
 			source: 'gmail-watch',
 			detail: watchError instanceof Error ? watchError.message : 'Watch registration failed'

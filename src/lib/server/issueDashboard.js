@@ -1,6 +1,7 @@
+// @ts-nocheck
 import { fail, redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { supabaseAdmin } from '$lib/supabaseAdmin';
+import { ensureWorkspace, getWorkspaceForUser } from '$lib/server/workspaces';
 
 const getGmailUser = async (supabase, user) => {
 	if (!user) {
@@ -30,29 +31,83 @@ const getGmailUser = async (supabase, user) => {
 	return { connected: false, name: 'Connect Gmail', email: null };
 };
 
-const getTeamId = async (user) => {
-	if (!user) return null;
-	const { data } = await supabaseAdmin
-		.from('members')
-		.select('workspace_id')
-		.eq('user_id', user.id)
-		.maybeSingle();
-	return data?.workspace_id ?? null;
+const resolveWorkspace = async ({ locals, params }) => {
+	if (!locals.user) return null;
+	await ensureWorkspace(locals.supabase, locals.user);
+	const requestedSlug = params?.workspace ?? null;
+	if (requestedSlug) {
+		const selected = await getWorkspaceForUser(locals.supabase, locals.user, requestedSlug);
+		if (!selected || selected.slug !== requestedSlug) {
+			const fallback = await getWorkspaceForUser(locals.supabase, locals.user);
+			if (fallback?.slug) {
+				throw redirect(303, `/${fallback.slug}`);
+			}
+			return null;
+		}
+		return selected;
+	}
+	return await getWorkspaceForUser(locals.supabase, locals.user);
 };
 
-export const load = async ({ locals }) => {
-	if (!locals.user) throw redirect(303, '/login');
+const getWorkspaceRedirect = async ({ locals, params, user }) => {
+	if (!user) return '/agentmvp';
+	await ensureWorkspace(locals.supabase, user);
+	const { supabaseAdmin } = await import('$lib/supabaseAdmin');
+	const { data: adminWorkspace } = await supabaseAdmin
+		.from('workspaces')
+		.select('slug')
+		.eq('admin_user_id', user.id)
+		.maybeSingle();
+	if (adminWorkspace?.slug) {
+		return `/${adminWorkspace.slug}`;
+	}
+	const workspace = await getWorkspaceForUser(locals.supabase, user, params?.workspace ?? null);
+	if (workspace?.slug) {
+		return `/${workspace.slug}`;
+	}
+	const fallback = await getWorkspaceForUser(locals.supabase, user);
+	if (fallback?.slug) {
+		return `/${fallback.slug}`;
+	}
+	return '/agentmvp';
+};
 
+export const load = async ({ locals, params }) => {
 	const gmailUser = await getGmailUser(locals.supabase, locals.user);
 	const { data: sessionData } = await locals.supabase.auth.getSession();
 	const realtimeAccessToken = sessionData?.session?.access_token ?? null;
+	if (!locals.user) {
+		return {
+			user: null,
+			gmailUser,
+			issues: [],
+			threadsByIssue: {},
+			messagesByThread: {},
+			connections: [],
+			buildings: [],
+			vendors: [],
+			actions: []
+		};
+	}
 
-	const { data: memberRow } = await supabaseAdmin
-		.from('members')
-		.select('workspace_id, workspaces(name)')
-		.eq('user_id', locals.user.id)
-		.maybeSingle();
-	const workspaceName = memberRow?.workspaces?.name ?? null;
+	const workspace = await resolveWorkspace({ locals, params });
+	const workspaceId = workspace?.id ?? null;
+	if (!workspaceId) {
+		return {
+			user: locals.user,
+			gmailUser,
+			realtimeAccessToken,
+			issues: [],
+			threadsByIssue: {},
+			messagesByThread: {},
+			connections: [],
+			buildings: [],
+			vendors: [],
+			units: [],
+			tenants: [],
+			actions: []
+		};
+	}
 
 	const { data: connections } = await locals.supabase
 		.from('gmail_connections')
@@ -62,15 +117,18 @@ export const load = async ({ locals }) => {
 	const { data: sidebarBuildings } = await locals.supabase
 		.from('properties')
 		.select('id, name')
+		.eq('workspace_id', workspaceId)
 		.order('name', { ascending: true });
 	const { data: sidebarVendors, error: sidebarVendorsError } = await locals.supabase
 		.from('vendors')
 		.select('id, name, email, phone, trade, note')
+		.eq('workspace_id', workspaceId)
 		.order('name', { ascending: true });
 	const { data: sidebarVendorsFallback } = sidebarVendorsError
 		? await locals.supabase
 				.from('vendors')
 				.select('id, name, email, phone, trade')
+				.eq('workspace_id', workspaceId)
 				.order('name', { ascending: true })
 		: { data: null };
 	const vendorsData = sidebarVendorsError ? sidebarVendorsFallback : sidebarVendors;
@@ -82,6 +140,7 @@ export const load = async ({ locals }) => {
 			'id, issue_id, action_type, title, detail, email_body, vendor_email_to, status, created_at'
 		)
 		.eq('status', 'pending')
+		.eq('workspace_id', workspaceId)
 		.order('created_at', { ascending: false });
 
 	const { data: issues } = await locals.supabase
@@ -89,6 +148,7 @@ export const load = async ({ locals }) => {
 		.select(
 			'id, name, urgency, status, description, vendor_id, suggested_vendor_id, unit_id, tenant_id'
 		)
+		.eq('workspace_id', workspaceId)
 		.order('updated_at', { ascending: false });
 
 	const unitIds = Array.from(new Set((issues ?? []).map((issue) => issue.unit_id).filter(Boolean)));
@@ -205,7 +265,6 @@ export const load = async ({ locals }) => {
 			user: locals.user,
 			gmailUser,
 			realtimeAccessToken,
-		workspaceName,
 			issues: normalizedIssues,
 			threadsByIssue: {},
 			messagesByThread: {},
@@ -214,14 +273,16 @@ export const load = async ({ locals }) => {
 			vendors: vendorsData ?? [],
 			units: normalizedAllUnits ?? [],
 			tenants: allTenants ?? [],
-			actions: normalizedActions
+			actions: normalizedActions,
+			workspace
 		};
 	}
 
 	const { data: threads } = await locals.supabase
 		.from('threads')
 		.select('id, issue_id, participant_type')
-		.in('issue_id', issueIds);
+		.in('issue_id', issueIds)
+		.eq('workspace_id', workspaceId);
 
 	const threadIds = (threads ?? []).map((thread) => thread.id);
 	if (!threadIds.length) {
@@ -229,7 +290,6 @@ export const load = async ({ locals }) => {
 			user: locals.user,
 			gmailUser,
 			realtimeAccessToken,
-		workspaceName,
 			issues: normalizedIssues,
 			threadsByIssue: {},
 			messagesByThread: {},
@@ -238,7 +298,8 @@ export const load = async ({ locals }) => {
 			vendors: vendorsData ?? [],
 			units: normalizedAllUnits ?? [],
 			tenants: allTenants ?? [],
-			actions: normalizedActions
+			actions: normalizedActions,
+			workspace
 		};
 	}
 
@@ -302,7 +363,6 @@ export const load = async ({ locals }) => {
 		user: locals.user,
 		gmailUser,
 		realtimeAccessToken,
-		workspaceName,
 		issues: normalizedIssues,
 		threadsByIssue,
 		messagesByThread,
@@ -311,21 +371,57 @@ export const load = async ({ locals }) => {
 		vendors: vendorsData ?? [],
 		units: normalizedAllUnits ?? [],
 		tenants: allTenants ?? [],
-		actions: normalizedActions
+		actions: normalizedActions,
+		workspace
 	};
 };
 
 export const actions = {
-	signOut: async ({ locals }) => {
+	signIn: async ({ request, locals, params }) => {
+		const form = await request.formData();
+		const email = form.get('email');
+		const password = form.get('password');
+
+		if (!email || !password) {
+			return fail(400, { error: 'Email and password are required.' });
+		}
+
+		const { data: signInData, error: signInError } = await locals.supabase.auth.signInWithPassword({
+			email,
+			password
+		});
+
+		if (signInError) {
+			if (signInError.message.toLowerCase().includes('invalid login credentials')) {
+				const { data: signUpData, error: signUpError } = await locals.supabase.auth.signUp({
+					email,
+					password
+				});
+				if (signUpError) {
+					return fail(400, { error: signUpError.message });
+				}
+				await ensureWorkspace(locals.supabase, signUpData.user);
+				throw redirect(303, await getWorkspaceRedirect({ locals, params, user: signUpData.user }));
+			}
+
+			return fail(400, { error: signInError.message });
+		}
+
+		await ensureWorkspace(locals.supabase, signInData.user);
+		throw redirect(303, await getWorkspaceRedirect({ locals, params, user: signInData.user }));
+	},
+	signOut: async ({ locals, params }) => {
 		await locals.supabase.auth.signOut();
-		throw redirect(303, '/login');
+		const redirectTarget = params?.workspace ? `/${params.workspace}` : '/agentmvp';
+		throw redirect(303, redirectTarget);
 	},
 
-	deleteAccount: async ({ locals }) => {
+	deleteAccount: async ({ locals, params }) => {
 		const user = locals.user;
 		if (!user) {
-			throw redirect(303, '/agentmvp');
+			throw redirect(303, params?.workspace ? `/${params.workspace}` : '/agentmvp');
 		}
+		const { supabaseAdmin } = await import('$lib/supabaseAdmin');
 		const deleteData = async (table) => {
 			await locals.supabase.from(table).delete().eq('user_id', user.id);
 		};
@@ -380,11 +476,11 @@ export const actions = {
 		} catch {
 			// best effort
 		}
-		throw redirect(303, '/agentmvp');
+		throw redirect(303, params?.workspace ? `/${params.workspace}` : '/agentmvp');
 	},
-	updateConnection: async ({ request, locals }) => {
+	updateConnection: async ({ request, locals, params }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const connectionId = form.get('connection_id');
 		const mode = form.get('mode');
@@ -404,12 +500,12 @@ export const actions = {
 			.update({ mode })
 			.eq('id', connectionId)
 			.eq('user_id', user.id);
-		throw redirect(303, '/agentmvp');
+		throw redirect(303, params?.workspace ? `/${params.workspace}` : '/agentmvp');
 	},
 
-	disconnectConnection: async ({ request, locals }) => {
+	disconnectConnection: async ({ request, locals, params }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const connectionId = form.get('connection_id');
 		if (!connectionId) {
@@ -491,15 +587,15 @@ export const actions = {
 			.delete()
 			.eq('connection_id', connectionId)
 			.eq('user_id', user.id);
-		throw redirect(303, '/agentmvp');
+		throw redirect(303, params?.workspace ? `/${params.workspace}` : '/agentmvp');
 	},
 
-	createBuilding: async ({ request, locals }) => {
+	createBuilding: async ({ request, locals, params }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
-		const teamId = await getTeamId(user);
-		if (!teamId) {
-			return fail(400, { error: 'Team not found for user.' });
+		if (!user) throw redirect(303, '/agentmvp');
+		const workspace = await getWorkspaceForUser(locals.supabase, user, params?.workspace ?? null);
+		if (!workspace?.id) {
+			return fail(400, { error: 'Workspace not found for user.' });
 		}
 		const form = await request.formData();
 		const name = form.get('name');
@@ -510,7 +606,7 @@ export const actions = {
 		const { data, error } = await locals.supabase
 			.from('properties')
 			.insert({
-				team_id: teamId,
+				workspace_id: workspace.id,
 				name: name.trim(),
 				address: typeof address === 'string' && address.trim() ? address.trim() : null
 			})
@@ -524,7 +620,7 @@ export const actions = {
 
 	createUnit: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const name = form.get('name');
 		const buildingId = form.get('building_id');
@@ -550,7 +646,7 @@ export const actions = {
 
 	createTenant: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const name = form.get('name');
 		const email = form.get('email');
@@ -582,7 +678,7 @@ export const actions = {
 
 	updateTenant: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const tenantId = form.get('tenant_id');
 		const name = form.get('name');
@@ -614,7 +710,7 @@ export const actions = {
 
 	deleteTenant: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const tenantId = form.get('tenant_id');
 		if (!tenantId || typeof tenantId !== 'string') {
@@ -627,12 +723,12 @@ export const actions = {
 		return { tenantId };
 	},
 
-	createVendor: async ({ request, locals }) => {
+	createVendor: async ({ request, locals, params }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
-		const teamId = await getTeamId(user);
-		if (!teamId) {
-			return fail(400, { error: 'Team not found for user.' });
+		if (!user) throw redirect(303, '/agentmvp');
+		const workspace = await getWorkspaceForUser(locals.supabase, user, params?.workspace ?? null);
+		if (!workspace?.id) {
+			return fail(400, { error: 'Workspace not found for user.' });
 		}
 		const form = await request.formData();
 		const name = form.get('name');
@@ -643,7 +739,7 @@ export const actions = {
 		const { data, error } = await locals.supabase
 			.from('vendors')
 			.insert({
-				team_id: teamId,
+				workspace_id: workspace.id,
 				name: name.trim(),
 				email: typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null
 			})
@@ -657,7 +753,7 @@ export const actions = {
 
 	updateVendorNote: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const note = form.get('note');
@@ -678,7 +774,7 @@ export const actions = {
 
 	updateVendorProfile: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const email = form.get('email');
@@ -705,7 +801,7 @@ export const actions = {
 
 	updateVendorDetails: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const email = form.get('email');
@@ -734,7 +830,7 @@ export const actions = {
 
 	renameIssue: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const issueId = form.get('issue_id');
 		const name = form.get('name');
@@ -758,7 +854,7 @@ export const actions = {
 
 	deleteIssue: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const issueId = form.get('issue_id');
 		if (!issueId || typeof issueId !== 'string') {
@@ -771,10 +867,17 @@ export const actions = {
 		return { issueId };
 	},
 
-	resetIssues: async ({ locals }) => {
+	resetIssues: async ({ locals, params }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
-		const { error } = await locals.supabase.from('issues').delete();
+		if (!user) throw redirect(303, '/agentmvp');
+		const workspace = await getWorkspaceForUser(locals.supabase, user, params?.workspace ?? null);
+		if (!workspace?.id) {
+			return fail(400, { error: 'Workspace not found for user.' });
+		}
+		const { error } = await locals.supabase
+			.from('issues')
+			.delete()
+			.eq('workspace_id', workspace.id);
 		if (error) {
 			return fail(500, { error: error.message });
 		}
@@ -783,7 +886,7 @@ export const actions = {
 
 	renameBuilding: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const buildingId = form.get('building_id');
 		const name = form.get('name');
@@ -807,7 +910,7 @@ export const actions = {
 
 	deleteBuilding: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const buildingId = form.get('building_id');
 		if (!buildingId || typeof buildingId !== 'string') {
@@ -822,7 +925,7 @@ export const actions = {
 
 	renameVendor: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const name = form.get('name');
@@ -846,7 +949,7 @@ export const actions = {
 
 	deleteVendor: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		if (!vendorId || typeof vendorId !== 'string') {
@@ -861,7 +964,7 @@ export const actions = {
 
 	approveAction: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const actionId = form.get('action_id');
 		const emailBodyOverride = form.get('email_body');
@@ -1251,7 +1354,8 @@ export const actions = {
 					name: `Vendor thread: ${vendorRow.name}`,
 					participant_type: 'vendor',
 					participant_id: vendorId,
-					connection_id: sendConnection.id
+					connection_id: sendConnection.id,
+					workspace_id: issueRow.workspace_id
 				})
 				.select('id')
 				.single();
@@ -1285,7 +1389,7 @@ export const actions = {
 
 	denyAction: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const actionId = form.get('action_id');
 		if (!actionId || typeof actionId !== 'string') {
@@ -1303,7 +1407,7 @@ export const actions = {
 
 	updateActionDraft: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/login');
+		if (!user) throw redirect(303, '/agentmvp');
 		const form = await request.formData();
 		const actionId = form.get('action_id');
 		const emailBody = form.get('email_body');
@@ -1331,4 +1435,3 @@ export const actions = {
 		return { actionId };
 	}
 };
-export { load, actions } from '$lib/server/issueDashboard';
