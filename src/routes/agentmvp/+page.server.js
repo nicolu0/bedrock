@@ -1331,3 +1331,4 @@ export const actions = {
 		return { actionId };
 	}
 };
+export { load, actions } from '$lib/server/issueDashboard';

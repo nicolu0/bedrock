@@ -124,13 +124,6 @@
 		(action) => action?.status === 'pending'
 	).length;
 
-	$: if (basePath) {
-		const normalized = normalizeView(routeView);
-		if (normalized !== view) {
-			setView(normalized, { skipRoute: true });
-		}
-	}
-
 	$: if (actions?.length) {
 		const missingScheduleDrafts = actions.filter(
 			(action) => action?.actionType === 'schedule_vendor' && !action?.emailBody
@@ -710,15 +703,6 @@
 		setView('inbox');
 	};
 
-	const handleMyIssuesSelect = () => {
-		selectedBuildingId = null;
-		selectedVendorId = null;
-		if (!selectedIssueId && sortedIssues.length) {
-			selectedIssueId = sortedIssues[0].id;
-		}
-		setView('my-issues');
-	};
-
 	const handleBuildingSelect = (buildingId) => {
 		selectedBuildingId = buildingId;
 		selectedIssueId = null;
@@ -1221,28 +1205,6 @@
 									>{inboxNotificationCount}</span
 								>
 							{/if}
-						</button>
-						<button
-							class={`text-md flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition ${view === 'my-issues' ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
-							on:click={handleMyIssuesSelect}
-							type="button"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="20"
-								height="20"
-								fill="currentColor"
-								class="bi bi-check2-square"
-								viewBox="0 0 16 16"
-							>
-								<path
-									d="M3 1.5A1.5 1.5 0 0 0 1.5 3v10A1.5 1.5 0 0 0 3 14.5h10A1.5 1.5 0 0 0 14.5 13V3A1.5 1.5 0 0 0 13 1.5zm10 1a.5.5 0 0 1 .5.5v10a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5z"
-								/>
-								<path
-									d="M10.854 5.646a.5.5 0 0 1 0 .708L7.5 9.707 5.146 7.354a.5.5 0 1 1 .708-.708L7.5 8.293l2.646-2.647a.5.5 0 0 1 .708 0"
-								/>
-							</svg>
-							<span class="truncate">My issues</span>
 						</button>
 					</div>
 				</div>
