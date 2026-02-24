@@ -104,7 +104,8 @@
 				<a class="hover:text-neutral-900" href="#features">Features</a>
 				<a class="hover:text-neutral-900" href="#integrations">Integrations</a>
 			</nav>
-			<div class="flex items-center gap-3">
+			<div class="flex items-center gap-4">
+				<a class="text-sm text-neutral-600 hover:text-neutral-900" href="/login">Log in</a>
 				<a
 					class="rounded-xl bg-stone-800 px-4 py-2 text-xs text-neutral-200 transition-colors hover:bg-stone-700"
 					href="https://calendly.com/21andrewch/30min"
@@ -138,9 +139,7 @@
 						Book a demo
 					</a>
 					<a
-						href="https://calendly.com/21andrewch/30min"
-						target="_blank"
-						rel="noreferrer"
+						href="/signup"
 						class="inline-flex flex-row items-center gap-1 rounded-xl border border-stone-300 bg-white px-4.5 py-2 text-[15px] text-stone-800 transition-colors hover:bg-stone-100"
 					>
 						Get started
