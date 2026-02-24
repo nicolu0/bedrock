@@ -66,9 +66,6 @@
 		'building-new': 'Properties',
 		vendor: 'Vendors',
 		inbox: 'Inbox',
-		calendar: 'Calendar',
-		invoices: 'Invoices',
-		archive: 'Archive',
 		account: 'Account'
 	};
 	let hoveredSection = null;
@@ -104,13 +101,11 @@
 	$: vendorInvoices = [];
 
 	let invoiceStatus = 'pending'; // pending | approved | denied
-	let showPayableSuccess = false;
 
 	$: inboxNotificationCount = (actions ?? []).filter(
 		(action) => action?.status === 'pending'
 	).length;
-	$: invoiceNotificationCount = invoiceStatus === 'pending' ? 1 : 0;
-	$: calendarNotificationCount = 0;
+
 	$: if (actions?.length) {
 		const missingScheduleDrafts = actions.filter(
 			(action) => action?.actionType === 'schedule_vendor' && !action?.emailBody
@@ -683,42 +678,11 @@
 		}
 	};
 
-	const handleApproveInvoice = () => {
-		invoiceStatus = 'approved';
-		showPayableSuccess = true;
-	};
-
-	const handleDenyInvoice = () => {
-		invoiceStatus = 'denied';
-		showPayableSuccess = false;
-	};
-
-	const handleInvoicesSelect = () => {
-		selectedIssueId = null;
-		selectedBuildingId = null;
-		selectedVendorId = null;
-		setView('invoices');
-	};
-
 	const handleInboxSelect = () => {
 		selectedIssueId = null;
 		selectedBuildingId = null;
 		selectedVendorId = null;
 		setView('inbox');
-	};
-
-	const handleArchiveSelect = () => {
-		selectedIssueId = null;
-		selectedBuildingId = null;
-		selectedVendorId = null;
-		setView('archive');
-	};
-
-	const handleCalendarSelect = () => {
-		selectedIssueId = null;
-		selectedBuildingId = null;
-		selectedVendorId = null;
-		setView('calendar');
 	};
 
 	const handleBuildingSelect = (buildingId) => {
@@ -1166,7 +1130,7 @@
 
 <div class="h-screen bg-white text-neutral-900" on:click={closeRowMenu}>
 	<div class="flex h-screen flex-col md:flex-row">
-		<aside class="flex h-screen w-1/5 flex-col border-r border-neutral-200 bg-neutral-50/80">
+		<aside class="flex h-screen w-1/6 flex-col border-r border-neutral-200 bg-neutral-50/80">
 			<div class="flex h-full min-h-0 flex-col">
 				<div class="flex flex-col space-y-6 px-2 pt-4">
 					<div class="flex items-center justify-between px-2 text-neutral-700">
@@ -1223,72 +1187,6 @@
 									>{inboxNotificationCount}</span
 								>
 							{/if}
-						</button>
-						<button
-							class={`text-md flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition ${view === 'calendar' ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
-							on:click={handleCalendarSelect}
-							type="button"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="19"
-								height="19"
-								fill="currentColor"
-								class="bi bi-calendar4"
-								viewBox="0 0 16 16"
-							>
-								<path
-									d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5M2 2a1 1 0 0 0-1 1v1h14V3a1 1 0 0 0-1-1zm13 3H1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1z"
-								/>
-							</svg>
-							<span class="truncate">Calendar</span>
-							{#if calendarNotificationCount > 0}
-								<span
-									class="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-neutral-200/70 px-1.5 text-[11px] font-semibold text-neutral-700"
-									>{calendarNotificationCount}</span
-								>
-							{/if}
-						</button>
-						<button
-							class={`text-md flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition ${view === 'invoices' ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
-							on:click={handleInvoicesSelect}
-							type="button"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="20"
-								height="20"
-								fill="currentColor"
-								class="bi bi-credit-card-2-front"
-								viewBox="0 0 16 16"
-							>
-								<path
-									d="M14 3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM2 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"
-								/>
-								<path
-									d="M2 5.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5zm0 3a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5m3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5m3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5m3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5"
-								/>
-							</svg>
-							<span class="truncate">Invoices</span>
-						</button>
-						<button
-							class={`text-md flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition ${view === 'archive' ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
-							on:click={handleArchiveSelect}
-							type="button"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="20"
-								height="20"
-								fill="currentColor"
-								class="bi bi-archive"
-								viewBox="0 0 16 16"
-							>
-								<path
-									d="M0 2a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1v7.5a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 1 12.5V5a1 1 0 0 1-1-1zm2 3v7.5A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5V5zm13-3H1v2h14zM5 7.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5"
-								/>
-							</svg>
-							<span class="truncate">Archive</span>
 						</button>
 					</div>
 				</div>
@@ -2056,18 +1954,6 @@
 								{/each}
 							</div>
 						</div>
-					{:else if view === 'invoices'}
-						<div class="space-y-2">
-							<div class="text-sm text-neutral-500">No invoices to review yet.</div>
-						</div>
-					{:else if view === 'archive'}
-						<div class="space-y-2">
-							<div class="text-sm text-neutral-500">No archived items yet.</div>
-						</div>
-					{:else if view === 'calendar'}
-						<div class="space-y-2">
-							<div class="text-sm text-neutral-500">No scheduled items yet.</div>
-						</div>
 					{:else if view === 'vendor'}
 						{#if !selectedVendor}
 							<div class="mt-12 text-sm text-neutral-500">Select a vendor to view details.</div>
@@ -2125,10 +2011,8 @@
 									{:else}
 										<div class="mt-4 space-y-3">
 											{#each vendorInvoices as invoice}
-												<button
-													class="w-full rounded-lg border border-neutral-200 bg-white px-4 py-3 text-left transition hover:border-neutral-300 hover:bg-neutral-50"
-													on:click={handleInvoicesSelect}
-													type="button"
+												<div
+													class="w-full rounded-lg border border-neutral-200 bg-white px-4 py-3 text-left"
 												>
 													<div class="flex items-center justify-between">
 														<div>
@@ -2156,7 +2040,7 @@
 															{/if}
 														</div>
 													</div>
-												</button>
+												</div>
 											{/each}
 										</div>
 									{/if}
@@ -2363,10 +2247,8 @@
 						{#if hasInvoice}
 							<div class="mt-6">
 								<div class="text-[11px] tracking-[0.2em] text-neutral-400 uppercase">Invoice</div>
-								<button
-									class="mt-3 w-full rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-300"
-									on:click={handleInvoicesSelect}
-									type="button"
+								<div
+									class="mt-3 w-full rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left"
 								>
 									<div class="flex items-center justify-between">
 										<div class="flex items-center gap-3">
@@ -2412,7 +2294,7 @@
 											</svg>
 										</span>
 									</div>
-								</button>
+								</div>
 							</div>
 						{/if}
 
