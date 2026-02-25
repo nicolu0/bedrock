@@ -32,11 +32,11 @@
 	];
 </script>
 
-<div class="space-y-4">
-	<div class="border-b border-neutral-100 px-6 pb-2">
+<div class="space-y-0">
+	<div class="px-6 pb-2">
 		<div class="text-sm font-normal text-neutral-700">{propertyTitle}</div>
 	</div>
-	<div class="px-6">
+	<div class="px-6 py-2">
 		<div class="flex items-center gap-2">
 			{#each tabs as tab}
 				<a

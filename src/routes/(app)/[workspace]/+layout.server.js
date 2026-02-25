@@ -20,6 +20,31 @@ const loadPropertiesList = async (supabase, adminClient, workspaceId) => {
 	return adminProperties ?? [];
 };
 
+const loadUnitsList = async (supabase, adminClient, workspaceId) => {
+	const { data: units, error: unitsError } = await supabase
+		.from('units')
+		.select('id, name, property_id, properties!inner(workspace_id)')
+		.eq('properties.workspace_id', workspaceId)
+		.order('name', { ascending: true });
+	if (!unitsError) {
+		return (units ?? []).map((unit) => ({
+			id: unit.id,
+			name: unit.name,
+			property_id: unit.property_id
+		}));
+	}
+	const { data: adminUnits } = await adminClient
+		.from('units')
+		.select('id, name, property_id, properties!inner(workspace_id)')
+		.eq('properties.workspace_id', workspaceId)
+		.order('name', { ascending: true });
+	return (adminUnits ?? []).map((unit) => ({
+		id: unit.id,
+		name: unit.name,
+		property_id: unit.property_id
+	}));
+};
+
 export const load = async ({ locals, params }) => {
 	if (!locals.user) {
 		throw redirect(303, '/');
@@ -39,7 +64,8 @@ export const load = async ({ locals, params }) => {
 				{ onConflict: 'workspace_id,user_id' }
 			);
 		const properties = loadPropertiesList(locals.supabase, supabaseAdmin, adminWorkspace.id);
-		return { workspace: adminWorkspace, properties };
+		const units = loadUnitsList(locals.supabase, supabaseAdmin, adminWorkspace.id);
+		return { workspace: adminWorkspace, properties, units };
 	}
 	const { data: memberWorkspace } = await supabaseAdmin
 		.from('members')
@@ -53,7 +79,8 @@ export const load = async ({ locals, params }) => {
 			supabaseAdmin,
 			memberWorkspace.workspaces.id
 		);
-		return { workspace: memberWorkspace.workspaces, properties };
+		const units = loadUnitsList(locals.supabase, supabaseAdmin, memberWorkspace.workspaces.id);
+		return { workspace: memberWorkspace.workspaces, properties, units };
 	}
 	const { data: fallback } = await supabaseAdmin
 		.from('workspaces')
