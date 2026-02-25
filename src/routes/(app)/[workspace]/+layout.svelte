@@ -144,7 +144,7 @@
 				</div>
 			</aside>
 			<section class="flex flex-1 flex-col overflow-y-auto bg-white">
-				<div class="w-full pt-3 pb-10">
+				<div class="w-full">
 					<slot />
 				</div>
 			</section>

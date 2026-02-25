@@ -33,7 +33,7 @@
 </script>
 
 <div class="space-y-0">
-	<div class="flex items-center justify-between border-b border-neutral-100 px-6 pb-2">
+	<div class="flex items-center justify-between border-b border-neutral-100 px-6 py-2">
 		<div class="text-sm font-normal text-neutral-700">{propertyTitle}</div>
 		{#if currentPath === `${basePath}/properties/${propertySlug}/units`}
 			<button type="button" class="text-xs text-neutral-600 transition hover:text-neutral-900">

@@ -45,7 +45,7 @@
 </script>
 
 <div class="space-y-2">
-	<div class="flex items-center justify-between border-b border-neutral-100 px-6 pb-2">
+	<div class="flex items-center justify-between border-b border-neutral-100 px-6 py-2">
 		<h1 class="text-sm font-normal text-neutral-700">Properties</h1>
 		<button
 			on:click={openNewPropertyModal}
