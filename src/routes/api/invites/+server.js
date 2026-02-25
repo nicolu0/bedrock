@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
-import { MAILGUN_API_KEY } from '$env/static/private';
 import { env } from '$env/dynamic/private';
 
 export const POST = async ({ locals, request, url }) => {
@@ -44,7 +43,8 @@ export const POST = async ({ locals, request, url }) => {
 		const origin = url.origin;
 		const inviteLink = `${origin}/accept-invite?token=${invite.token}`;
 
-		if (mailgunDomain && MAILGUN_API_KEY) {
+		const mailgunApiKey = env.MAILGUN_API_KEY ?? '';
+		if (mailgunDomain && mailgunApiKey) {
 			try {
 				const formData = new FormData();
 				formData.append('from', mailgunFrom);
@@ -58,7 +58,7 @@ export const POST = async ({ locals, request, url }) => {
 				const mailRes = await fetch(`https://api.mailgun.net/v3/${mailgunDomain}/messages`, {
 					method: 'POST',
 					headers: {
-						Authorization: `Basic ${Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64')}`
+						Authorization: `Basic ${Buffer.from(`api:${mailgunApiKey}`).toString('base64')}`
 					},
 					body: formData
 				});
