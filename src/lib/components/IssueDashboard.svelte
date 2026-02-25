@@ -2,6 +2,8 @@
 	// @ts-nocheck
 	import { fade, fly } from 'svelte/transition';
 	import { onDestroy, onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { supabase } from '$lib/supabaseClient';
 	import MessageThread from '$lib/components/MessageThread.svelte';
 	export let issues = [];
@@ -32,8 +34,7 @@
 	};
 
 	let selectedIssueId = issues[0]?.id ?? null;
-	let view = 'inbox';
-	let viewHistory = [];
+	let view = 'my-issues';
 	let openDropdownId = null;
 	let selectedBuildingId = buildings[0]?.id ?? null;
 	let selectedVendorId = vendors[0]?.id ?? null;
@@ -63,6 +64,7 @@
 	let sendingActionIds = new Set();
 	const sectionTitles = {
 		issues: 'Issues',
+		'my-issues': 'My issues',
 		building: 'Properties',
 		'building-new': 'Properties',
 		vendor: 'Vendors',
@@ -79,22 +81,37 @@
 	let openRowMenu = null;
 	let editingRow = null;
 	let editValue = '';
+	const routableViews = new Set(['inbox', 'my-issues', 'issues', 'building', 'vendor', 'account']);
 
 	const setView = (next, options = {}) => {
 		if (!next || next === view) return;
-		if (!options?.skipHistory) {
-			viewHistory = [...viewHistory, view];
-		}
 		view = next;
+		if (!options?.skipRoute) {
+			navigateToView(next);
+		}
 	};
 
-	const handleBack = () => {
-		if (!viewHistory.length) return;
-		const previous = viewHistory[viewHistory.length - 1];
-		viewHistory = viewHistory.slice(0, -1);
-		view = previous;
+	const normalizeView = (value) => {
+		if (!value) return 'my-issues';
+		return routableViews.has(value) ? value : 'inbox';
 	};
 
+	const normalizeBasePath = (value) => {
+		if (!value) return '';
+		return value.endsWith('/') ? value.slice(0, -1) : value;
+	};
+
+	const navigateToView = (next) => {
+		const normalizedBase = normalizeBasePath(basePath);
+		if (!normalizedBase) return;
+		if (!routableViews.has(next)) return;
+		const target = `${normalizedBase}/${next}`;
+		if ($page.url.pathname !== target) {
+			goto(target, { keepfocus: true, noScroll: true });
+		}
+	};
+
+	$: isIssuesView = view === 'issues' || view === 'my-issues';
 	// Check if selected issue has a pending invoice
 	$: hasInvoice = false;
 
@@ -106,6 +123,13 @@
 	$: inboxNotificationCount = (actions ?? []).filter(
 		(action) => action?.status === 'pending'
 	).length;
+
+	$: if (basePath) {
+		const normalized = normalizeView(routeView);
+		if (normalized !== view) {
+			setView(normalized, { skipRoute: true });
+		}
+	}
 
 	$: if (actions?.length) {
 		const missingScheduleDrafts = actions.filter(
@@ -135,7 +159,7 @@
 		return (a?.name ?? '').localeCompare(b?.name ?? '');
 	});
 
-	$: if (!selectedIssueId && sortedIssues.length && view === 'issues') {
+	$: if (!selectedIssueId && sortedIssues.length && isIssuesView) {
 		selectedIssueId = sortedIssues[0].id;
 	}
 
@@ -441,7 +465,7 @@
 					issues = issues.map((issue) => (issue.id === normalized.id ? normalized : issue));
 				} else {
 					issues = [normalized, ...issues];
-					if (!selectedIssueId && view === 'issues') {
+					if (!selectedIssueId && isIssuesView) {
 						selectedIssueId = normalized.id;
 					}
 				}
@@ -628,7 +652,7 @@
 		selectedIssueId = issueId;
 		selectedBuildingId = null;
 		selectedVendorId = null;
-		setView('issues');
+		setView(view === 'my-issues' ? 'my-issues' : 'issues');
 	};
 
 	const handleActionIssueOpen = (issueId) => {
@@ -684,6 +708,15 @@
 		selectedBuildingId = null;
 		selectedVendorId = null;
 		setView('inbox');
+	};
+
+	const handleMyIssuesSelect = () => {
+		selectedBuildingId = null;
+		selectedVendorId = null;
+		if (!selectedIssueId && sortedIssues.length) {
+			selectedIssueId = sortedIssues[0].id;
+		}
+		setView('my-issues');
 	};
 
 	const handleBuildingSelect = (buildingId) => {
@@ -1189,6 +1222,28 @@
 								>
 							{/if}
 						</button>
+						<button
+							class={`text-md flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition ${view === 'my-issues' ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
+							on:click={handleMyIssuesSelect}
+							type="button"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="20"
+								height="20"
+								fill="currentColor"
+								class="bi bi-check2-square"
+								viewBox="0 0 16 16"
+							>
+								<path
+									d="M3 1.5A1.5 1.5 0 0 0 1.5 3v10A1.5 1.5 0 0 0 3 14.5h10A1.5 1.5 0 0 0 14.5 13V3A1.5 1.5 0 0 0 13 1.5zm10 1a.5.5 0 0 1 .5.5v10a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5V3a.5.5 0 0 1 .5-.5z"
+								/>
+								<path
+									d="M10.854 5.646a.5.5 0 0 1 0 .708L7.5 9.707 5.146 7.354a.5.5 0 1 1 .708-.708L7.5 8.293l2.646-2.647a.5.5 0 0 1 .708 0"
+								/>
+							</svg>
+							<span class="truncate">My issues</span>
+						</button>
 					</div>
 				</div>
 				<div class="min-h-0 flex-1 space-y-4 overflow-y-auto pb-24">
@@ -1225,7 +1280,7 @@
 								<div class="mt-1 flex-1 space-y-1">
 									{#each sortedIssues as issue}
 										<div
-											class={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-2 text-left text-sm transition ${issue.id === selectedIssueId && view === 'issues' ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
+											class={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-2 text-left text-sm transition ${issue.id === selectedIssueId && isIssuesView ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
 											on:mouseenter={() => (hoveredRow = rowKey('issues', issue.id))}
 											on:mouseleave={() => (hoveredRow = null)}
 											on:click={() => {
@@ -1636,30 +1691,7 @@
 				<div
 					class="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-100 bg-white/95 px-6 py-4 backdrop-blur"
 				>
-					<div class="flex items-center gap-2">
-						<button
-							class={`rounded-md p-1 transition ${viewHistory.length ? 'text-neutral-900 hover:bg-neutral-100' : 'cursor-default text-neutral-300'}`}
-							on:click={handleBack}
-							type="button"
-							disabled={!viewHistory.length}
-							aria-label="Go back"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="16"
-								height="16"
-								fill="currentColor"
-								class="bi bi-chevron-left"
-								viewBox="0 0 16 16"
-							>
-								<path
-									fill-rule="evenodd"
-									d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0"
-								/>
-							</svg>
-						</button>
-						<div class="text-sm font-normal text-neutral-800">{sectionTitle}</div>
-					</div>
+					<div class="text-sm font-normal text-neutral-800">{sectionTitle}</div>
 				</div>
 				<div class={`px-8 pb-10 ${view === 'inbox' ? 'pt-2' : 'pt-6'}`}>
 					{#if view === 'account'}
