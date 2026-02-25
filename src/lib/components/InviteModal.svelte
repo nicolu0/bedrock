@@ -1,5 +1,5 @@
 <script>
-	import { fade } from 'svelte/transition';
+	import { fade, scale } from 'svelte/transition';
 	import { createEventDispatcher } from 'svelte';
 
 	const dispatch = createEventDispatcher();
@@ -67,8 +67,8 @@
 
 <!-- Backdrop -->
 <div
-	class="fixed inset-0 z-40 bg-neutral-900/10 backdrop-blur-[2px]"
-	in:fade={{ duration: 80 }}
+	class="fixed inset-0 z-40 bg-neutral-900/20"
+	transition:fade={{ duration: 120 }}
 	on:click={close}
 	role="presentation"
 ></div>
@@ -77,8 +77,7 @@
 <div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-4">
 	<div
 		class="pointer-events-auto w-full max-w-lg rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl"
-		in:fade={{ duration: 80 }}
-		out:fade={{ duration: 80 }}
+		transition:scale={{ duration: 140, start: 0.9 }}
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="invite-modal-title"
@@ -87,7 +86,7 @@
 		<div class="flex items-center justify-between">
 			<div id="invite-modal-title" class="text-lg font-medium text-neutral-800">Invite member</div>
 			<button
-				class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+				class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
 				on:click={close}
 				type="button"
 				aria-label="Close"
@@ -128,7 +127,7 @@
 						<button
 							type="button"
 							on:click={() => removeRow(i)}
-							class="rounded-xl border border-stone-200 px-2.5 py-2 text-neutral-400 hover:text-neutral-700"
+							class="rounded-xl border border-stone-200 px-2.5 py-2 text-neutral-400 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
 							aria-label="Remove"
 						>
 							<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
@@ -146,7 +145,7 @@
 			<button
 				type="button"
 				on:click={addRow}
-				class="text-sm text-neutral-500 hover:text-neutral-800"
+				class="text-sm text-neutral-500 hover:text-neutral-800 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400 rounded"
 			>
 				+ Add another
 			</button>
@@ -154,7 +153,7 @@
 				<button
 					type="button"
 					on:click={close}
-					class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50"
+					class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
 				>
 					Cancel
 				</button>
@@ -162,7 +161,7 @@
 					type="button"
 					on:click={submit}
 					disabled={submitting}
-					class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 disabled:opacity-50 disabled:cursor-not-allowed"
+					class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
 				>
 					{submitting ? 'Sending…' : rows.length > 1 ? 'Send invites' : 'Send invite'}
 				</button>
