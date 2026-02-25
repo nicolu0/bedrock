@@ -18,7 +18,8 @@
 	export let actions = [];
 	export let connectHref = '/agentmvp/gmail/connect';
 	export let realtimeAccessToken = null;
-	export let workspaceName = null;
+	export let basePath = '';
+	export let routeView = null;
 
 	const urgencyBuckets = [
 		{ key: 'high', label: 'High', dot: 'bg-red-500' },
