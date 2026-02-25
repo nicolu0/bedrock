@@ -76,32 +76,25 @@
 								</a>
 							{/each}
 							<div class="mt-2">
-								<div class="flex items-center justify-between">
-									<div
-										class="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-normal text-neutral-400"
+								<button
+									type="button"
+									class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-neutral-400 transition hover:bg-neutral-100"
+									on:click={() => (propertiesOpen = !propertiesOpen)}
+								>
+									<span class="truncate">{propertiesItem.label}</span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="14"
+										height="14"
+										fill="currentColor"
+										class={`transition ${propertiesOpen ? '' : '-rotate-90'}`}
+										viewBox="0 0 16 16"
 									>
-										<span class="truncate">{propertiesItem.label}</span>
-									</div>
-									<button
-										type="button"
-										class="flex flex-1 items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-neutral-400 transition hover:bg-neutral-100"
-										on:click={() => (propertiesOpen = !propertiesOpen)}
-									>
-										<span class="truncate">{propertiesItem.label}</span>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="14"
-											height="14"
-											fill="currentColor"
-											class={`transition ${propertiesOpen ? '' : '-rotate-90'}`}
-											viewBox="0 0 16 16"
-										>
-											<path
-												d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-											/>
-										</svg>
-									</button>
-								</div>
+										<path
+											d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+										/>
+									</svg>
+								</button>
 								{#if propertiesOpen}
 									<div class="mt-0 space-y-1">
 										<a
