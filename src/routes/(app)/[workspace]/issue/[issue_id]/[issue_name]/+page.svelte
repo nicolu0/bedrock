@@ -55,44 +55,72 @@
 				</div>
 
 				<div class="mt-6 space-y-4">
-					<div class="rounded-xl border border-neutral-200 bg-white p-4">
+					<div class="rounded-xl border border-neutral-200 bg-white">
 						<div class="flex items-center gap-3 text-sm text-neutral-700">
 							<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
 							<div class="font-medium">Andrew Chang</div>
 							<div class="text-neutral-400">18min ago</div>
 						</div>
 						<div class="mt-3 text-sm text-neutral-800">Copying linear</div>
-						<div
-							class="mt-4 flex items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-400"
-						>
-							<span>Leave a reply...</span>
-							<div class="flex items-center gap-2">
-								<span>📎</span>
-								<span>↗</span>
+						<div class="mt-4 border-t border-neutral-200 px-4 py-3">
+							<div class="flex items-center justify-between text-sm text-neutral-400">
+								<div class="flex items-center gap-3">
+									<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
+									<span>Leave a reply...</span>
+								</div>
+								<div class="flex items-center gap-3">
+									<span>📎</span>
+									<span
+										class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500"
+									>
+										↑
+									</span>
+								</div>
 							</div>
 						</div>
 					</div>
-					<div class="rounded-xl border border-neutral-200 bg-white p-4">
+					<div class="rounded-xl border border-neutral-200 bg-white">
 						<div class="flex items-center gap-3 text-sm text-neutral-700">
 							<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
 							<div class="font-medium">Andrew Chang</div>
 							<div class="text-neutral-400">18min ago</div>
 						</div>
 						<div class="mt-3 text-sm text-neutral-800">Test</div>
-						<div
-							class="mt-4 flex items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-400"
-						>
-							<span>Leave a reply...</span>
-							<div class="flex items-center gap-2">
-								<span>📎</span>
-								<span>↗</span>
+						<div class="mt-4 border-t border-neutral-200 px-4 py-3">
+							<div class="flex items-center justify-between text-sm text-neutral-400">
+								<div class="flex items-center gap-3">
+									<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
+									<span>Leave a reply...</span>
+								</div>
+								<div class="flex items-center gap-3">
+									<span>📎</span>
+									<span
+										class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500"
+									>
+										↑
+									</span>
+								</div>
 							</div>
 						</div>
 					</div>
 					<div
-						class="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm text-neutral-400"
+						class="rounded-xl border border-neutral-200 bg-white px-4 py-4 text-sm text-neutral-400"
 					>
-						Leave a comment...
+						<div>Leave a comment...</div>
+						<div class="mt-6 flex items-center justify-between">
+							<div class="flex items-center gap-3">
+								<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
+								<span>Leave a reply...</span>
+							</div>
+							<div class="flex items-center gap-3">
+								<span>📎</span>
+								<span
+									class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500"
+								>
+									↑
+								</span>
+							</div>
+						</div>
 					</div>
 				</div>
 			</div>
