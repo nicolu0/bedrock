@@ -89,7 +89,7 @@
 </script>
 
 <div class="min-h-screen overflow-x-hidden bg-white text-stone-800">
-	<header class="fixed inset-x-0 top-0 z-30 border-b border-stone-200 bg-white/90 backdrop-blur">
+	<header class="landing-exit-header fixed inset-x-0 top-0 z-30 border-b border-stone-200 bg-white/90 backdrop-blur">
 		<div
 			class="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-6 px-6 py-4 md:flex-row md:items-center"
 		>
@@ -117,7 +117,7 @@
 			</div>
 		</div>
 	</header>
-	<div class="mx-auto flex w-full max-w-7xl flex-col gap-20 px-6 pt-24 pb-20">
+	<div class="landing-exit-content mx-auto flex w-full max-w-7xl flex-col gap-20 px-6 pt-24 pb-20">
 		<section class="flex flex-col gap-16">
 			<div class="mt-20 max-w-4xl">
 				<h1 class="anim-hero text-6xl font-medium text-neutral-800">
