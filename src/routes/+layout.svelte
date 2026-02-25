@@ -1,6 +1,6 @@
 <script lang="ts">
 	import './layout.css';
-	import bedrockLogo from '$lib/assets/bedrock-logo.png';
+	import bedrockLogo from '$lib/assets/bedrock-logo.svg';
 	import { onNavigate } from '$app/navigation';
 
 	let { children } = $props();

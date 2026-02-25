@@ -70,13 +70,18 @@
 							{#each navItems as item}
 								<a
 									href={`${basePath}/${item.href}`}
-									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${currentPath === `${basePath}/${item.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
+									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-normal transition ${currentPath === `${basePath}/${item.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
 								>
 									<span class="truncate">{item.label}</span>
 								</a>
 							{/each}
 							<div class="mt-2">
 								<div class="flex items-center justify-between">
+									<div
+										class="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-normal text-neutral-400"
+									>
+										<span class="truncate">{propertiesItem.label}</span>
+									</div>
 									<button
 										type="button"
 										class="flex flex-1 items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-neutral-400 transition hover:bg-neutral-100"
@@ -102,7 +107,7 @@
 										<a
 											href={`${basePath}/${propertiesItem.href}`}
 											data-sveltekit-preload-data="hover"
-											class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+											class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm font-normal transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
 										>
 											<span>All properties</span>
 										</a>
@@ -114,7 +119,7 @@
 													<a
 														href={`${basePath}/${propertiesItem.href}/${slugify(property.name)}`}
 														data-sveltekit-preload-data="hover"
-														class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+														class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm font-normal transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
 													>
 														<span class="truncate">{property.name}</span>
 													</a>
