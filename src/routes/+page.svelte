@@ -120,16 +120,16 @@
 	<div class="mx-auto flex w-full max-w-7xl flex-col gap-20 px-6 pt-24 pb-20">
 		<section class="flex flex-col gap-16">
 			<div class="mt-20 max-w-4xl">
-				<h1 class="text-6xl font-medium text-neutral-800">
+				<h1 class="anim-hero text-6xl font-medium text-neutral-800">
 					Make property management<br />feel truly <span class="italic">effortless</span>.
 				</h1>
-				<p class="mt-5 text-lg text-neutral-600">
+				<p class="anim-sub mt-5 text-lg text-neutral-600">
 					<span class="text-neutral-600">Bedrock</span> manages the full maintenance workflow, from
 					tenant messages to<br /><span class="text-lg"
 						>approval-ready invoices, helping you grow faster without giving up control.</span
 					>
 				</p>
-				<div class="mt-7 flex items-center gap-3">
+				<div class="anim-cta mt-7 flex items-center gap-3">
 					<a
 						href="https://calendly.com/21andrewch/30min"
 						target="_blank"
@@ -146,7 +146,7 @@
 					</a>
 				</div>
 			</div>
-			<div class="relative overflow-hidden rounded-sm bg-[#1e1e1e] p-6">
+			<div class="anim-demo relative overflow-hidden rounded-sm bg-[#1e1e1e] p-6">
 				<svg
 					class="pointer-events-none absolute inset-0 h-full w-full"
 					xmlns="http://www.w3.org/2000/svg"
@@ -263,7 +263,7 @@
 					class="pointer-events-none absolute -inset-24 opacity-90 blur-3xl"
 					style="background-image: radial-gradient(900px 520px at 25% 25%, rgba(85, 85, 85, 0.95), transparent 62%), radial-gradient(760px 520px at 80% 30%, rgba(65, 65, 65, 0.85), transparent 60%), radial-gradient(760px 520px at 55% 92%, rgba(45, 45, 45, 0.9), transparent 62%);"
 				></div>
-				<div class="relative z-10 rounded-2xl">
+				<div class="anim-demo-ui relative z-10 rounded-2xl">
 					<div
 						class="flex aspect-[16/10] min-h-[240px] w-full items-center justify-center p-4 sm:p-6"
 					>

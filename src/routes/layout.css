@@ -46,3 +46,22 @@ body {
 	overscroll-behavior-x: none;
 	overflow-x: hidden;
 }
+
+@keyframes page-enter {
+	from {
+		opacity: 0;
+		filter: blur(10px);
+		transform: translateY(18px);
+	}
+	to {
+		opacity: 1;
+		filter: blur(0px);
+		transform: translateY(0);
+	}
+}
+
+.anim-hero     { animation: page-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) 200ms both; will-change: opacity, filter, transform; }
+.anim-sub      { animation: page-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) 450ms both; will-change: opacity, filter, transform; }
+.anim-cta      { animation: page-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) 700ms both; will-change: opacity, filter, transform; }
+.anim-demo     { animation: page-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) 875ms both; will-change: opacity, filter, transform; }
+.anim-demo-ui  { animation: page-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) 1050ms both; will-change: opacity, filter, transform; }
