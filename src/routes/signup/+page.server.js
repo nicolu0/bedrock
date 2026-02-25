@@ -31,20 +31,23 @@ const bootstrap = async (user) => {
 	await supabaseAdmin.from('members').insert({ workspace_id: workspace.id, user_id: user.id, role: 'admin' });
 };
 
+/** @returns {Promise<string|null>} workspace slug, or null if invite invalid */
 const acceptInvite = async (user, token) => {
 	const { data: invite } = await supabaseAdmin
 		.from('invites')
-		.select('*')
+		.select('*, workspaces(slug)')
 		.eq('token', token)
 		.maybeSingle();
 
-	if (!invite || invite.accepted_at || new Date(invite.expires_at) < new Date()) return;
-	if (invite.email !== user.email) return;
+	if (!invite || invite.accepted_at || new Date(invite.expires_at) < new Date()) return null;
+	if (invite.email !== user.email) return null;
 
 	const name = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User';
 	await supabaseAdmin.from('users').upsert({ id: user.id, name });
 	await supabaseAdmin.from('members').insert({ workspace_id: invite.workspace_id, user_id: user.id, role: invite.role });
 	await supabaseAdmin.from('invites').update({ accepted_at: new Date().toISOString() }).eq('token', token);
+
+	return invite.workspaces?.slug ?? null;
 };
 
 export const actions = {
@@ -69,11 +72,11 @@ export const actions = {
 		if (!data.user) return fail(400, { error: 'Signup failed. Please try again.' });
 
 		if (inviteToken) {
-			await acceptInvite(data.user, inviteToken);
-		} else {
-			await bootstrap(data.user);
+			const workspaceSlug = await acceptInvite(data.user, inviteToken);
+			throw redirect(303, workspaceSlug ? `/${workspaceSlug}` : '/agentmvp');
 		}
 
+		await bootstrap(data.user);
 		throw redirect(303, '/agentmvp');
 	}
 };
