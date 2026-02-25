@@ -3,20 +3,21 @@ import { redirect, error } from '@sveltejs/kit';
 import { ensureWorkspace } from '$lib/server/workspaces';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
-const loadPropertiesList = async (supabase, adminClient, workspaceId) => {
-	const { data: properties, error: propertiesError } = await supabase
-		.from('properties')
-		.select('id, name')
-		.eq('workspace_id', workspaceId)
-		.order('name', { ascending: true });
-	if (!propertiesError) {
-		return properties ?? [];
-	}
-	const { data: adminProperties } = await adminClient
-		.from('properties')
-		.select('id, name')
-		.eq('workspace_id', workspaceId)
-		.order('name', { ascending: true });
+const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, userId) => {
+	const buildQuery = (client) => {
+		let q = client
+			.from('properties')
+			.select('id, name, owner:users(name)')
+			.eq('workspace_id', workspaceId)
+			.order('name', { ascending: true });
+		if (userRole === 'property_owner') {
+			q = q.eq('owner_id', userId);
+		}
+		return q;
+	};
+	const { data: properties, error: propertiesError } = await buildQuery(supabase);
+	if (!propertiesError) return properties ?? [];
+	const { data: adminProperties } = await buildQuery(adminClient);
 	return adminProperties ?? [];
 };
 
@@ -63,13 +64,13 @@ export const load = async ({ locals, params }) => {
 				{ workspace_id: adminWorkspace.id, user_id: locals.user.id, role: 'admin' },
 				{ onConflict: 'workspace_id,user_id' }
 			);
-		const properties = loadPropertiesList(locals.supabase, supabaseAdmin, adminWorkspace.id);
+		const properties = loadPropertiesList(locals.supabase, supabaseAdmin, adminWorkspace.id, 'admin', locals.user.id);
 		const units = loadUnitsList(locals.supabase, supabaseAdmin, adminWorkspace.id);
 		return { workspace: adminWorkspace, properties, units };
 	}
 	const { data: memberWorkspace } = await supabaseAdmin
 		.from('members')
-		.select('workspaces:workspaces(id, name, slug)')
+		.select('role, workspaces:workspaces(id, name, slug)')
 		.eq('user_id', locals.user.id)
 		.eq('workspaces.slug', params.workspace)
 		.maybeSingle();
@@ -77,7 +78,9 @@ export const load = async ({ locals, params }) => {
 		const properties = loadPropertiesList(
 			locals.supabase,
 			supabaseAdmin,
-			memberWorkspace.workspaces.id
+			memberWorkspace.workspaces.id,
+			memberWorkspace.role,
+			locals.user.id
 		);
 		const units = loadUnitsList(locals.supabase, supabaseAdmin, memberWorkspace.workspaces.id);
 		return { workspace: memberWorkspace.workspaces, properties, units };

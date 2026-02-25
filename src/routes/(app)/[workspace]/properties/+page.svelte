@@ -2,6 +2,13 @@
 	// @ts-nocheck
 	export let data;
 	$: propertiesPromise = data?.properties ?? Promise.resolve([]);
+
+	function getInitials(name) {
+		if (!name) return '';
+		const parts = name.trim().split(/\s+/);
+		if (parts.length === 1) return parts[0][0].toUpperCase();
+		return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+	}
 </script>
 
 <div class="space-y-2">
@@ -45,7 +52,9 @@
 							<div class="text-neutral-500">--</div>
 							<div class="text-neutral-500">--</div>
 							<div class="flex items-center">
-								<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
+								<div class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600">
+									{getInitials(property.owner?.name)}
+								</div>
 							</div>
 						</div>
 					{/each}

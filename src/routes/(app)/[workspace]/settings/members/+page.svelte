@@ -60,7 +60,12 @@
 		</div>
 		{#each data.members as member}
 			<div class="grid grid-cols-[2fr_1fr] gap-4 border-t border-neutral-100 px-5 py-3 text-sm">
-				<div class="text-neutral-800">{member.users?.name ?? '—'}</div>
+				<div class="flex items-center gap-1.5 text-neutral-800">
+					{member.users?.name ?? '—'}
+					{#if member.user_id === data.currentUserId}
+						<span class="text-xs text-neutral-400">(You)</span>
+					{/if}
+				</div>
 				<div>
 					<span class="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600">
 						{roleLabels[member.role] ?? member.role}
