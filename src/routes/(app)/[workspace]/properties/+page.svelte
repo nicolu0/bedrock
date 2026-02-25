@@ -16,6 +16,11 @@
 	let newPropertyCountry = '';
 	let createPropertyError = '';
 
+	let suggestions = [];
+	let showSuggestions = false;
+	let addressInputEl;
+	let debounceTimer;
+
 	const openNewPropertyModal = () => {
 		showNewPropertyModal = true;
 		createPropertyError = '';
@@ -30,12 +35,54 @@
 		newPropertyPostalCode = '';
 		newPropertyCountry = '';
 		createPropertyError = '';
+		suggestions = [];
+		showSuggestions = false;
 		document.activeElement?.blur();
 	};
 
 	function onKeydown(e) {
-		if (e.key === 'Escape' && showNewPropertyModal) {
-			closeNewPropertyModal();
+		if (e.key === 'Escape') {
+			if (showSuggestions) {
+				showSuggestions = false;
+				suggestions = [];
+			} else if (showNewPropertyModal) {
+				closeNewPropertyModal();
+			}
+		}
+	}
+
+	async function onAddressInput(e) {
+		const val = e.target.value.trim();
+		clearTimeout(debounceTimer);
+		if (val.length < 3) {
+			suggestions = [];
+			showSuggestions = false;
+			return;
+		}
+		debounceTimer = setTimeout(async () => {
+			const res = await fetch(`/api/places?input=${encodeURIComponent(val)}`);
+			const data = await res.json();
+suggestions = Array.isArray(data) ? data : [];
+			showSuggestions = suggestions.length > 0;
+		}, 300);
+	}
+
+	async function selectSuggestion(s) {
+		showSuggestions = false;
+		suggestions = [];
+		const res = await fetch(`/api/places?place_id=${s.place_id}`);
+		const parts = await res.json();
+		newPropertyAddress = [parts.streetNumber, parts.route].filter(Boolean).join(' ');
+		newPropertyCity = parts.city ?? '';
+		newPropertyState = parts.state ?? '';
+		newPropertyPostalCode = parts.postalCode ?? '';
+		newPropertyCountry = parts.country ?? '';
+	}
+
+	function onWindowClick(e) {
+		if (showSuggestions && addressInputEl && !addressInputEl.closest('.address-wrapper')?.contains(e.target)) {
+			showSuggestions = false;
+			suggestions = [];
 		}
 	}
 
@@ -59,7 +106,7 @@
 	}
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window on:keydown={onKeydown} on:click={onWindowClick} />
 
 <div class="space-y-2">
 	<div class="flex items-center justify-between border-b border-neutral-100 px-6 pb-2">
@@ -162,19 +209,38 @@
 						required
 						type="text"
 					/>
-					<input
-						class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
-						placeholder="Address"
-						name="address"
-						bind:value={newPropertyAddress}
-						type="text"
-					/>
+					<div class="address-wrapper relative">
+						<input
+							class="w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							placeholder="Address"
+							name="address"
+							bind:value={newPropertyAddress}
+							bind:this={addressInputEl}
+							on:input={onAddressInput}
+							type="text"
+							autocomplete="off"
+							required
+						/>
+						{#if showSuggestions}
+							<ul class="absolute z-10 mt-1 w-full rounded-xl border border-stone-200 bg-white shadow-lg">
+								{#each suggestions as s}
+									<li>
+										<button type="button" on:click={() => selectSuggestion(s)}
+											class="w-full px-3.5 py-2.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 first:rounded-t-xl last:rounded-b-xl">
+											{s.description}
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					</div>
 					<input
 						class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
 						placeholder="City"
 						name="city"
 						bind:value={newPropertyCity}
 						type="text"
+						required
 					/>
 					<div class="flex gap-2">
 						<input
@@ -183,6 +249,7 @@
 							name="state"
 							bind:value={newPropertyState}
 							type="text"
+							required
 						/>
 						<input
 							class="w-32 rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
@@ -190,6 +257,7 @@
 							name="postalCode"
 							bind:value={newPropertyPostalCode}
 							type="text"
+							required
 						/>
 					</div>
 					<input
@@ -198,6 +266,7 @@
 						name="country"
 						bind:value={newPropertyCountry}
 						type="text"
+						required
 					/>
 				</div>
 				<div class="mt-5 flex items-center justify-end gap-2">
@@ -210,7 +279,7 @@
 					</button>
 					<button
 						class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
-						disabled={!newPropertyName.trim()}
+						disabled={!newPropertyName.trim() || !newPropertyAddress.trim() || !newPropertyCity.trim() || !newPropertyState.trim() || !newPropertyPostalCode.trim() || !newPropertyCountry.trim()}
 						type="submit"
 					>
 						Create property
