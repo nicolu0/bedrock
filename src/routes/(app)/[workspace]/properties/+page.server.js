@@ -28,8 +28,27 @@ export const actions = {
 		const form = await request.formData();
 		const name = form.get('name');
 		const address = form.get('address');
+		const city = form.get('city');
+		const state = form.get('state');
+		const postalCode = form.get('postalCode');
+		const country = form.get('country');
 		if (!name || typeof name !== 'string' || !name.trim()) {
 			return fail(400, { error: 'Property name is required.' });
+		}
+		if (!address || typeof address !== 'string' || !address.trim()) {
+			return fail(400, { error: 'Address is required.' });
+		}
+		if (!city || typeof city !== 'string' || !city.trim()) {
+			return fail(400, { error: 'City is required.' });
+		}
+		if (!state || typeof state !== 'string' || !state.trim()) {
+			return fail(400, { error: 'State is required.' });
+		}
+		if (!postalCode || typeof postalCode !== 'string' || !postalCode.trim()) {
+			return fail(400, { error: 'Postal code is required.' });
+		}
+		if (!country || typeof country !== 'string' || !country.trim()) {
+			return fail(400, { error: 'Country is required.' });
 		}
 		const workspace = await resolveWorkspace(locals.user.id, params.workspace);
 		if (!workspace?.id) {
@@ -40,7 +59,11 @@ export const actions = {
 			.insert({
 				workspace_id: workspace.id,
 				name: name.trim(),
-				address: typeof address === 'string' && address.trim() ? address.trim() : null
+				address: typeof address === 'string' && address.trim() ? address.trim() : null,
+				city: typeof city === 'string' && city.trim() ? city.trim() : null,
+				state: typeof state === 'string' && state.trim() ? state.trim() : null,
+				postal_code: typeof postalCode === 'string' && postalCode.trim() ? postalCode.trim() : null,
+				country: typeof country === 'string' && country.trim() ? country.trim() : null
 			})
 			.select('id, name')
 			.single();

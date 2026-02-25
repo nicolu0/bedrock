@@ -24,24 +24,26 @@ const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, 
 const loadUnitsList = async (supabase, adminClient, workspaceId) => {
 	const { data: units, error: unitsError } = await supabase
 		.from('units')
-		.select('id, name, property_id, properties!inner(workspace_id)')
+		.select('id, name, tenant_name, property_id, properties!inner(workspace_id)')
 		.eq('properties.workspace_id', workspaceId)
 		.order('name', { ascending: true });
 	if (!unitsError) {
 		return (units ?? []).map((unit) => ({
 			id: unit.id,
 			name: unit.name,
+			tenant_name: unit.tenant_name,
 			property_id: unit.property_id
 		}));
 	}
 	const { data: adminUnits } = await adminClient
 		.from('units')
-		.select('id, name, property_id, properties!inner(workspace_id)')
+		.select('id, name, tenant_name, property_id, properties!inner(workspace_id)')
 		.eq('properties.workspace_id', workspaceId)
 		.order('name', { ascending: true });
 	return (adminUnits ?? []).map((unit) => ({
 		id: unit.id,
 		name: unit.name,
+		tenant_name: unit.tenant_name,
 		property_id: unit.property_id
 	}));
 };

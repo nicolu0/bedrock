@@ -1,6 +1,10 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
+	import { getContext } from 'svelte';
+	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
+	import { fade, scale } from 'svelte/transition';
 
 	export let data;
 	$: propertiesPromise = data?.properties ?? Promise.resolve([]);
@@ -20,7 +24,42 @@
 		if (!match?.id) return [];
 		return (units ?? []).filter((unit) => unit.property_id === match.id);
 	})();
+
+	const showNewUnitModal = getContext('showNewUnitModal');
+
+	let newUnitName = '';
+	let newUnitTenantName = '';
+	let newUnitVacant = false;
+	let createUnitError = '';
+
+	const closeModal = () => {
+		$showNewUnitModal = false;
+		newUnitName = '';
+		newUnitTenantName = '';
+		newUnitVacant = false;
+		createUnitError = '';
+		document.activeElement?.blur();
+	};
+
+	function onKeydown(e) {
+		if (e.key === 'Escape' && $showNewUnitModal) closeModal();
+	}
+
+	const enhanceCreateUnit = () => {
+		return async ({ result }) => {
+			if (result?.type === 'success') {
+				closeModal();
+				await invalidateAll();
+				return;
+			}
+			if (result?.type === 'failure') {
+				createUnitError = result.data?.error ?? 'Unable to create unit.';
+			}
+		};
+	};
 </script>
+
+<svelte:window on:keydown={onKeydown} />
 
 <div class="space-y-2">
 	<div>
@@ -63,3 +102,85 @@
 		{/await}
 	</div>
 </div>
+
+{#if $showNewUnitModal}
+	<div
+		class="fixed inset-0 z-40 bg-neutral-900/20"
+		transition:fade={{ duration: 120 }}
+		on:click={closeModal}
+	></div>
+	<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-4">
+		<div
+			class="pointer-events-auto w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl"
+			transition:scale={{ duration: 140, start: 0.9 }}
+			on:click|stopPropagation
+			role="dialog"
+			aria-modal="true"
+		>
+			<form method="POST" action="?/createUnit" use:enhance={enhanceCreateUnit}>
+				<div class="flex items-center justify-between">
+					<div class="text-lg font-medium text-neutral-800">New unit</div>
+					<button
+						class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
+						on:click={closeModal}
+						type="button"
+						aria-label="Close"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+							<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708" />
+						</svg>
+					</button>
+				</div>
+				<div class="mt-5 flex flex-col gap-3">
+					{#if createUnitError}
+						<p class="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-600">{createUnitError}</p>
+					{/if}
+					<input
+						class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+						placeholder="Unit number"
+						name="name"
+						bind:value={newUnitName}
+						required
+						type="text"
+					/>
+					<div class="flex flex-col gap-1.5">
+						<input
+							class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500 disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
+							placeholder="Tenant name"
+							name="tenantName"
+							bind:value={newUnitTenantName}
+							disabled={newUnitVacant}
+							type="text"
+						/>
+						<label class="flex cursor-pointer items-center gap-2 px-1">
+							<input
+								type="checkbox"
+								class="h-3.5 w-3.5 cursor-pointer rounded accent-stone-700"
+								bind:checked={newUnitVacant}
+								on:change={() => { if (newUnitVacant) newUnitTenantName = ''; }}
+							/>
+							<span class="text-xs text-neutral-500">Unit currently vacant</span>
+						</label>
+					</div>
+					<input type="hidden" name="vacant" value={newUnitVacant} />
+				</div>
+				<div class="mt-5 flex items-center justify-end gap-2">
+					<button
+						class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
+						on:click={closeModal}
+						type="button"
+					>
+						Cancel
+					</button>
+					<button
+						class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
+						disabled={!newUnitName.trim()}
+						type="submit"
+					>
+						Create unit
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+{/if}

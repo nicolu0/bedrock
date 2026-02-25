@@ -96,7 +96,7 @@
 									</svg>
 								</button>
 								{#if propertiesOpen}
-									<div class="mt-0 space-y-1">
+									<div class="mt-1 space-y-1">
 										<a
 											href={`${basePath}/${propertiesItem.href}`}
 											data-sveltekit-preload-data="hover"

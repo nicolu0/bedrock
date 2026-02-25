@@ -2,6 +2,7 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { fade, scale } from 'svelte/transition';
 
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
@@ -73,13 +74,15 @@
 
 {#if showLogoutModal}
 	<div
-		class="fixed inset-0 z-40 bg-neutral-900/10 backdrop-blur-[2px]"
+		class="fixed inset-0 z-40 bg-neutral-900/20"
+		transition:fade={{ duration: 120 }}
 		on:click={() => (showLogoutModal = false)}
 		role="presentation"
 	></div>
 	<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-4">
 		<div
 			class="pointer-events-auto w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl"
+			transition:scale={{ duration: 140, start: 0.9 }}
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="logout-modal-title"
@@ -89,7 +92,7 @@
 				<button
 					type="button"
 					on:click={() => (showLogoutModal = false)}
-					class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+					class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
 					aria-label="Close"
 				>
 					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
@@ -102,14 +105,14 @@
 				<button
 					type="button"
 					on:click={() => (showLogoutModal = false)}
-					class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50"
+					class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
 				>
 					Cancel
 				</button>
 				<form method="POST" action="/api/logout">
 					<button
 						type="submit"
-						class="rounded-xl bg-red-600 px-4 py-2 text-sm text-white transition-colors hover:bg-red-700"
+						class="rounded-xl bg-red-600 px-4 py-2 text-sm text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400"
 					>
 						Log out
 					</button>
