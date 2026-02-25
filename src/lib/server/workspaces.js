@@ -37,6 +37,18 @@ const ensureWorkspace = async (supabase, user) => {
 		.maybeSingle();
 	let workspace = existingWorkspace ?? null;
 	if (!workspace) {
+		// If the user is already a member somewhere (e.g. accepted an invite),
+		// don't create a new workspace for them.
+		const { data: existingMember } = await supabaseAdmin
+			.from('members')
+			.select('workspace_id, workspaces(id, slug)')
+			.eq('user_id', user.id)
+			.limit(1)
+			.maybeSingle();
+		if (existingMember?.workspaces) {
+			return existingMember.workspaces;
+		}
+
 		const workspaceName = `${name} Workspace`;
 		const baseSlug = slugify(workspaceName);
 		const slug = await getAvailableSlug(supabaseAdmin, baseSlug);

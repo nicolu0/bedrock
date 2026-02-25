@@ -46,3 +46,38 @@ body {
 	overscroll-behavior-x: auto;
 	overflow-x: hidden;
 }
+
+@keyframes page-enter {
+	from {
+		opacity: 0;
+		filter: blur(10px);
+		transform: translateY(18px);
+	}
+	to {
+		opacity: 1;
+		filter: blur(0px);
+		transform: translateY(0);
+	}
+}
+
+.anim-hero     { animation: page-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) 200ms both; will-change: opacity, filter, transform; }
+.anim-sub      { animation: page-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) 450ms both; will-change: opacity, filter, transform; }
+.anim-cta      { animation: page-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) 700ms both; will-change: opacity, filter, transform; }
+.anim-demo     { animation: page-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) 875ms both; will-change: opacity, filter, transform; }
+.anim-demo-ui  { animation: page-enter 1.1s cubic-bezier(0.22, 1, 0.36, 1) 1050ms both; will-change: opacity, filter, transform; }
+
+@keyframes page-exit-down {
+	from { opacity: 1; filter: blur(0);    transform: translateY(0);    }
+	to   { opacity: 0; filter: blur(10px); transform: translateY(18px); }
+}
+@keyframes page-exit-up {
+	from { opacity: 1; transform: translateY(0);     }
+	to   { opacity: 0; transform: translateY(-24px); }
+}
+
+.is-navigating .landing-exit-header  { animation: page-exit-up   0.35s cubic-bezier(0.55, 0, 1, 0.45) forwards; }
+.is-navigating .landing-exit-content { animation: page-exit-down 0.35s cubic-bezier(0.55, 0, 1, 0.45) forwards; }
+
+.anim-auth-1 { animation: page-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1)  50ms both; will-change: opacity, filter, transform; }
+.anim-auth-2 { animation: page-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) 130ms both; will-change: opacity, filter, transform; }
+.anim-auth-3 { animation: page-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) 210ms both; will-change: opacity, filter, transform; }
