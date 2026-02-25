@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { redirect } from '@sveltejs/kit';
+import { redirect, error } from '@sveltejs/kit';
 import { ensureWorkspace } from '$lib/server/workspaces';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
@@ -82,13 +82,14 @@ export const load = async ({ locals, params }) => {
 		const units = loadUnitsList(locals.supabase, supabaseAdmin, memberWorkspace.workspaces.id);
 		return { workspace: memberWorkspace.workspaces, properties, units };
 	}
-	const { data: fallback } = await supabaseAdmin
+	// Check if the workspace slug exists at all
+	const { data: existingWorkspace } = await supabaseAdmin
 		.from('workspaces')
 		.select('slug')
-		.eq('admin_user_id', locals.user.id)
+		.eq('slug', params.workspace)
 		.maybeSingle();
-	if (fallback?.slug) {
-		throw redirect(303, `/${fallback.slug}`);
+	if (!existingWorkspace) {
+		throw error(404, "This workspace doesn't exist.");
 	}
-	throw redirect(303, '/');
+	throw error(403, "You don't have access to this workspace.");
 };
