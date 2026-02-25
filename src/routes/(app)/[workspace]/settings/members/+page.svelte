@@ -34,9 +34,9 @@
 			</button>
 		</div>
 	</div>
-	<div class="flex items-center gap-3">
+	<div class="flex items-stretch gap-3">
 		<div
-			class="flex w-80 items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2"
+			class="flex w-80 items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3"
 		>
 			<span class="text-neutral-400">🔍</span>
 			<input
@@ -45,7 +45,7 @@
 			/>
 		</div>
 		<button
-			class="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700"
+			class="rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-700"
 		>
 			All
 		</button>

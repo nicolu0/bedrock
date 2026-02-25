@@ -41,7 +41,7 @@ export const POST = async ({ locals, request, url }) => {
 		const mailgunDomain = env.MAILGUN_DOMAIN ?? '';
 		const mailgunFrom = env.MAILGUN_FROM ?? `Bedrock <noreply@${mailgunDomain}>`;
 		const origin = url.origin;
-		const inviteLink = `${origin}/accept-invite?token=${invite.token}`;
+		const inviteLink = `${origin}/signup?invite=${invite.token}`;
 
 		const mailgunApiKey = env.MAILGUN_API_KEY ?? '';
 		if (mailgunDomain && mailgunApiKey) {
