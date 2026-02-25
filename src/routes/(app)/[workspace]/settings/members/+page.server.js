@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
-export const load = async ({ parent }) => {
+export const load = async ({ parent, locals }) => {
 	const { workspace } = await parent();
 
 	const { data: members } = await supabaseAdmin
@@ -10,5 +10,5 @@ export const load = async ({ parent }) => {
 		.eq('workspace_id', workspace.id)
 		.order('role', { ascending: true }); // 'admin' sorts before 'member' alphabetically
 
-	return { members: members ?? [] };
+	return { members: members ?? [], currentUserId: locals.user.id };
 };

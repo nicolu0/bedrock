@@ -1,9 +1,11 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
+import { env } from '$env/dynamic/private';
 
 export const load = async ({ locals, url }) => {
 	if (locals.user) throw redirect(303, '/agentmvp');
-	return { inviteToken: url.searchParams.get('invite') };
+	const inviteToken = url.searchParams.get('invite');
+	return { inviteToken, isInvite: !!inviteToken };
 };
 
 const bootstrap = async (user) => {
@@ -51,6 +53,45 @@ const acceptInvite = async (user, token) => {
 };
 
 export const actions = {
+	contact: async ({ request }) => {
+		const data = await request.formData();
+		const name = data.get('name')?.trim();
+		const email = data.get('email')?.trim();
+		const role = data.get('role');
+		const units = data.get('units');
+		const currentSoftware = data.get('currentSoftware')?.trim();
+		const painPoint = data.get('painPoint')?.trim();
+
+		if (!name || !email) return fail(400, { error: 'Name and email are required.' });
+
+		const mailgunDomain = env.MAILGUN_DOMAIN ?? '';
+		const mailgunApiKey = env.MAILGUN_API_KEY ?? '';
+		if (mailgunDomain && mailgunApiKey) {
+			try {
+				const body = new FormData();
+				body.append('from', env.MAILGUN_FROM ?? `Bedrock <noreply@${mailgunDomain}>`);
+				body.append('to', 'nicoluo@gmail.com');
+				body.append('subject', `New Bedrock interest — ${name}`);
+				body.append('text', `Name: ${name}\nEmail: ${email}\nRole: ${role}\nUnits managed: ${units}\nCurrent software: ${currentSoftware}\nBiggest pain point:\n\n${painPoint}`);
+				const mailRes = await fetch(`https://api.mailgun.net/v3/${mailgunDomain}/messages`, {
+					method: 'POST',
+					headers: { Authorization: `Basic ${Buffer.from(`api:${mailgunApiKey}`).toString('base64')}` },
+					body
+				});
+				if (!mailRes.ok) {
+					const detail = await mailRes.text();
+					console.error('[contact] Mailgun error', mailRes.status, detail);
+				}
+			} catch (e) {
+				console.error('[contact] Mailgun fetch failed', e);
+			}
+		} else {
+			console.warn('[contact] Skipping email — MAILGUN_DOMAIN or MAILGUN_API_KEY not set.');
+		}
+
+		return { success: true };
+	},
+
 	signup: async ({ request, locals, url }) => {
 		const form = await request.formData();
 		const name = form.get('name');
