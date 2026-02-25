@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
@@ -10,7 +11,15 @@
 	];
 
 	const isActive = (href) => $page.url.pathname === `${basePath}/settings/${href}`;
+
+	function onKeydown(e) {
+		if (e.key === 'Escape' && !document.querySelector('[role="dialog"]')) {
+			history.back();
+		}
+	}
 </script>
+
+<svelte:window on:keydown={onKeydown} />
 
 <div class="min-h-screen bg-white text-neutral-900">
 	<div class="flex min-h-screen">
