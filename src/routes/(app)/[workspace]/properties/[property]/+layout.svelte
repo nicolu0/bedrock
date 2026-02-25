@@ -1,6 +1,11 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
+	import { setContext } from 'svelte';
+	import { writable } from 'svelte/store';
+
+	const showNewUnitModal = writable(false);
+	setContext('showNewUnitModal', showNewUnitModal);
 
 	export let data;
 	$: workspaceSlug = $page.params.workspace;
@@ -36,7 +41,11 @@
 	<div class="flex items-center justify-between border-b border-neutral-100 px-6 pb-2">
 		<div class="text-sm font-normal text-neutral-700">{propertyTitle}</div>
 		{#if currentPath === `${basePath}/properties/${propertySlug}/units`}
-			<button type="button" class="text-xs text-neutral-600 transition hover:text-neutral-900">
+			<button
+				type="button"
+				on:click={() => ($showNewUnitModal = true)}
+				class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
+			>
 				+ New unit
 			</button>
 		{/if}
