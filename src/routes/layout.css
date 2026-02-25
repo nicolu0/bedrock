@@ -43,6 +43,6 @@ body {
 	background-color: #ffffff;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
-	overscroll-behavior-x: none;
+	overscroll-behavior-x: auto;
 	overflow-x: hidden;
 }
