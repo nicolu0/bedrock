@@ -27,11 +27,16 @@ export const actions = {
 			return fail(400, { error: 'Email and password are required.' });
 		}
 
-		const { error } = await locals.supabase.auth.signInWithPassword({ email, password });
+		const { data: authData, error } = await locals.supabase.auth.signInWithPassword({ email, password });
 		if (error) return fail(400, { error: error.message });
 
 		if (inviteToken) {
 			throw redirect(303, `/accept-invite?token=${inviteToken}`);
+		}
+
+		const workspace = await ensureWorkspace(locals.supabase, authData.user);
+		if (workspace?.slug) {
+			throw redirect(303, `/${workspace.slug}`);
 		}
 		throw redirect(303, '/agentmvp');
 	}

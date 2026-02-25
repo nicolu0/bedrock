@@ -6,11 +6,11 @@
 
 <div class="flex min-h-screen flex-col items-center justify-center bg-white px-6">
 	<a
-		class="mb-8 text-xl font-regular flex items-center gap-1 tracking-[0.1em] uppercase text-neutral-800"
+		class="anim-auth-1 mb-8 text-xl font-regular flex items-center gap-1 tracking-[0.1em] uppercase text-neutral-800"
 		style="font-family: 'Zalando Sans Expanded', sans-serif;"
 		href="/"
 	>Bedrock</a>
-	<div class="w-full max-w-xs">
+	<div class="anim-auth-2 w-full max-w-xs">
 		<form method="POST" action="?/signup" use:enhance class="flex flex-col gap-4">
 			<input type="hidden" name="invite_token" value={data.inviteToken ?? ''} />
 			{#if form?.error}
@@ -56,7 +56,7 @@
 				Get started
 			</button>
 		</form>
-		<p class="mt-6 text-center text-sm text-neutral-500">
+		<p class="anim-auth-3 mt-6 text-center text-sm text-neutral-500">
 			Already have an account? <a class="text-neutral-800 hover:underline" href="/login">Log in</a>
 		</p>
 	</div>
