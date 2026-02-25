@@ -20,6 +20,7 @@
 	export let realtimeAccessToken = null;
 	export let basePath = '';
 	export let routeView = null;
+	export let workspaceName = null;
 
 	const urgencyBuckets = [
 		{ key: 'high', label: 'High', dot: 'bg-red-500' },
