@@ -15,8 +15,13 @@
 	let showLogoutModal = false;
 
 	function onKeydown(e) {
-		if (e.key === 'Escape' && showLogoutModal) {
+		if (e.key !== 'Escape') return;
+		if (showLogoutModal) {
 			showLogoutModal = false;
+			return;
+		}
+		if (!document.querySelector('[role="dialog"]')) {
+			history.back();
 		}
 	}
 </script>
@@ -27,13 +32,14 @@
 	<div class="flex min-h-screen">
 		<aside class="w-1/6 border-r border-neutral-200 bg-neutral-50/80">
 			<div class="px-5 pt-6">
-				<a
-					href={`${basePath}/my-issues`}
+				<button
+					type="button"
+					on:click={() => history.back()}
 					class="inline-flex items-center gap-2 text-sm text-neutral-600 hover:text-neutral-900"
 				>
 					<span aria-hidden="true">←</span>
 					Back to app
-				</a>
+				</button>
 			</div>
 			<div class="px-5 pt-6 pb-8">
 				<div class="space-y-1">
