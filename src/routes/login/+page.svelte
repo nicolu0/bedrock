@@ -25,7 +25,6 @@
 					autocomplete="email"
 					class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
 					placeholder="jane@company.com"
-					name="email"
 					required
 				/>
 			</div>
@@ -38,15 +37,9 @@
 					autocomplete="current-password"
 					class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
 					placeholder="••••••••"
-					name="password"
 					required
 				/>
 			</div>
-			{#if data?.form?.error}
-				<div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-600">
-					{data.form.error}
-				</div>
-			{/if}
 			<button
 				type="submit"
 				class="mt-2 rounded-xl bg-stone-800 px-4 py-2.5 text-sm text-neutral-200 transition-colors hover:bg-stone-700"
