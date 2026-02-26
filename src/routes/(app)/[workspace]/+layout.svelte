@@ -2,6 +2,16 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+
+	onMount(() => {
+		document.documentElement.style.overscrollBehavior = 'none';
+		document.body.style.overscrollBehavior = 'none';
+		return () => {
+			document.documentElement.style.overscrollBehavior = '';
+			document.body.style.overscrollBehavior = '';
+		};
+	});
 
 	export let data;
 	$: workspaceSlug = $page.params.workspace;
