@@ -177,7 +177,7 @@
 				</div>
 			</aside>
 			<section class="flex-1 overflow-y-auto">
-				<div class={`h-full w-full transition-opacity duration-200 ${mainContentClass}`}>
+				<div class="w-full h-full">
 					<slot />
 				</div>
 			</section>
