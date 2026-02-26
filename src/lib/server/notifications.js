@@ -25,3 +25,22 @@ export async function notifyWorkspace(workspaceId, issueId, title, body) {
 
 	await supabaseAdmin.from('notifications').insert(rows);
 }
+
+/**
+ * Creates a notification for a single user.
+ * @param {string} userId
+ * @param {string} workspaceId
+ * @param {string} issueId
+ * @param {string} title
+ * @param {string} body
+ */
+export async function notifyUser(userId, workspaceId, issueId, title, body) {
+	await supabaseAdmin.from('notifications').insert({
+		user_id: userId,
+		workspace_id: workspaceId,
+		issue_id: issueId,
+		title,
+		body,
+		type: 'info',
+	});
+}

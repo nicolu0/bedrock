@@ -49,7 +49,46 @@
 		}
 	}
 
+	async function handleApprove(n) {
+		const assigneeId = n.meta?.suggested_assignee_id;
+		if (!assigneeId) return;
+		const fd = new FormData();
+		fd.append('notif_id', n.id);
+		fd.append('issue_id', n.issues?.id ?? '');
+		fd.append('assignee_id', assigneeId);
+		// Optimistic update
+		n.is_read = true;
+		n.requires_action = false;
+		notifications = notifications;
+		await fetch('?/approveAssignment', { method: 'POST', body: fd });
+		if (n.issues?.id) {
+			goto(`/${workspaceSlug}/issue/${n.issues.id}/${slugify(n.issues.name)}`);
+		}
+	}
+
+	async function handleReassignConfirm(n) {
+		const assigneeId = reassignValue[n.id];
+		if (!assigneeId) return;
+		const fd = new FormData();
+		fd.append('notif_id', n.id);
+		fd.append('issue_id', n.issues?.id ?? '');
+		fd.append('assignee_id', assigneeId);
+		// Optimistic update
+		n.is_read = true;
+		n.requires_action = false;
+		reassignOpen[n.id] = false;
+		notifications = notifications;
+		await fetch('?/approveAssignment', { method: 'POST', body: fd });
+		if (n.issues?.id) {
+			goto(`/${workspaceSlug}/issue/${n.issues.id}/${slugify(n.issues.name)}`);
+		}
+	}
+
 	let notifications = [];
+	let members = [];
+	let reassignOpen = {};
+	let reassignValue = {};
+
 	$: filteredNotifications =
 		filter === 'Unread' ? notifications.filter((n) => !n.is_read) : notifications;
 </script>
@@ -88,7 +127,7 @@
 			{/each}
 		</div>
 	{:then resolved}
-		{#if (notifications = resolved) || true}
+		{#if (notifications = resolved) && (members = data.members) !== undefined || true}
 			{#if filteredNotifications.length === 0}
 				<div class="px-6 py-8 text-sm text-neutral-400">
 					{filter === 'Unread' ? 'No unread notifications.' : 'No notifications yet.'}
@@ -96,53 +135,148 @@
 			{:else}
 				<div class="divide-y divide-neutral-100">
 					{#each filteredNotifications as n}
-						<button
-							class="w-full px-6 py-3 text-left transition hover:bg-stone-50"
-							type="button"
-							on:click={() => handleClick(n)}
-						>
-							<div class="flex items-start gap-3">
-								<div class="mt-1.5 flex-shrink-0">
-									{#if !n.is_read}
-										<span class="block h-2 w-2 rounded-full bg-blue-500"></span>
-									{:else}
-										<span class="block h-2 w-2"></span>
-									{/if}
-								</div>
-								<div class="min-w-0 flex-1">
-									<div class="flex items-center justify-between gap-3">
-										<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
-										<div class="flex flex-shrink-0 items-center gap-2">
-											{#if n.issues?.units}
-												<div
-													class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
-												>
-													{#if n.issues.units.properties?.name}
-														<span class="px-2 py-0.5">{n.issues.units.properties.name}</span>
-														<span class="border-l border-neutral-200 px-2 py-0.5"
-															>{n.issues.units.name}</span
-														>
-													{:else}
-														<span class="px-2 py-0.5">{n.issues.units.name}</span>
-													{/if}
-												</div>
-											{/if}
-											{#if n.issues?.status}
-												<span
-													class={`h-3 w-3 flex-shrink-0 rounded-full border ${statusClass(n.issues.status)}`}
-												></span>
-											{/if}
-										</div>
+						{#if n.requires_action && data.isAdmin}
+							<!-- Assignment suggestion — actionable card -->
+							<div class="w-full px-6 py-3 text-left transition hover:bg-stone-50">
+								<div class="flex items-start gap-3">
+									<div class="mt-1.5 flex-shrink-0">
+										{#if !n.is_read}
+											<span class="block h-2 w-2 rounded-full bg-blue-500"></span>
+										{:else}
+											<span class="block h-2 w-2"></span>
+										{/if}
 									</div>
-									<div class="mt-0.5 flex items-center justify-between gap-3">
-										<p class="truncate text-xs text-neutral-500">{n.body}</p>
-										<span class="flex-shrink-0 text-xs text-neutral-400"
-											>{timeAgo(n.created_at)}</span
+									<div class="min-w-0 flex-1">
+										<button
+											class="w-full text-left"
+											type="button"
+											on:click={() => handleClick(n)}
 										>
+										<div class="flex items-center justify-between gap-3">
+											<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
+											<div class="flex flex-shrink-0 items-center gap-2">
+												{#if n.issues?.units}
+													<div
+														class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
+													>
+														{#if n.issues.units.properties?.name}
+															<span class="px-2 py-0.5">{n.issues.units.properties.name}</span>
+															<span class="border-l border-neutral-200 px-2 py-0.5"
+																>{n.issues.units.name}</span
+															>
+														{:else}
+															<span class="px-2 py-0.5">{n.issues.units.name}</span>
+														{/if}
+													</div>
+												{/if}
+												{#if n.issues?.status}
+													<span
+														class={`h-3 w-3 flex-shrink-0 rounded-full border ${statusClass(n.issues.status)}`}
+													></span>
+												{/if}
+											</div>
+										</div>
+										<div class="mt-0.5 flex items-center justify-between gap-3">
+											<p class="truncate text-xs text-neutral-500">{n.body}</p>
+											<span class="flex-shrink-0 text-xs text-neutral-400">{timeAgo(n.created_at)}</span>
+										</div>
+										</button>
+										<div class="mt-2 flex items-center gap-2">
+											<button
+												class="rounded-md bg-neutral-800 px-2.5 py-1 text-xs text-white transition hover:bg-neutral-700"
+												type="button"
+												on:click={() => handleApprove(n)}
+											>
+												Approve
+											</button>
+											<button
+												class="rounded-md border border-neutral-200 px-2.5 py-1 text-xs text-neutral-600 transition hover:bg-neutral-50"
+												type="button"
+												on:click={() => {
+													reassignOpen[n.id] = !reassignOpen[n.id];
+													if (!reassignValue[n.id]) {
+														const others = members.filter(
+															(m) => m.user_id !== n.meta?.suggested_assignee_id
+														);
+														reassignValue[n.id] = others[0]?.user_id ?? '';
+													}
+												}}
+											>
+												Reassign ▾
+											</button>
+										</div>
+										{#if reassignOpen[n.id]}
+											<div class="mt-2 flex items-center gap-2">
+												<select
+													class="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-700"
+													bind:value={reassignValue[n.id]}
+												>
+													{#each members.filter((m) => m.user_id !== n.meta?.suggested_assignee_id) as m}
+														<option value={m.user_id}>{m.users?.name ?? m.user_id}</option>
+													{/each}
+												</select>
+												<button
+													class="rounded-md bg-neutral-800 px-2.5 py-1 text-xs text-white transition hover:bg-neutral-700"
+													type="button"
+													on:click={() => handleReassignConfirm(n)}
+												>
+													Assign
+												</button>
+											</div>
+										{/if}
 									</div>
 								</div>
 							</div>
-						</button>
+						{:else}
+							<!-- Standard notification row -->
+							<button
+								class="w-full px-6 py-3 text-left transition hover:bg-stone-50"
+								type="button"
+								on:click={() => handleClick(n)}
+							>
+								<div class="flex items-start gap-3">
+									<div class="mt-1.5 flex-shrink-0">
+										{#if !n.is_read}
+											<span class="block h-2 w-2 rounded-full bg-blue-500"></span>
+										{:else}
+											<span class="block h-2 w-2"></span>
+										{/if}
+									</div>
+									<div class="min-w-0 flex-1">
+										<div class="flex items-center justify-between gap-3">
+											<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
+											<div class="flex flex-shrink-0 items-center gap-2">
+												{#if n.issues?.units}
+													<div
+														class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
+													>
+														{#if n.issues.units.properties?.name}
+															<span class="px-2 py-0.5">{n.issues.units.properties.name}</span>
+															<span class="border-l border-neutral-200 px-2 py-0.5"
+																>{n.issues.units.name}</span
+															>
+														{:else}
+															<span class="px-2 py-0.5">{n.issues.units.name}</span>
+														{/if}
+													</div>
+												{/if}
+												{#if n.issues?.status}
+													<span
+														class={`h-3 w-3 flex-shrink-0 rounded-full border ${statusClass(n.issues.status)}`}
+													></span>
+												{/if}
+											</div>
+										</div>
+										<div class="mt-0.5 flex items-center justify-between gap-3">
+											<p class="truncate text-xs text-neutral-500">{n.body}</p>
+											<span class="flex-shrink-0 text-xs text-neutral-400"
+												>{timeAgo(n.created_at)}</span
+											>
+										</div>
+									</div>
+								</div>
+							</button>
+						{/if}
 					{/each}
 				</div>
 			{/if}
