@@ -58,23 +58,34 @@
 			<div>Name</div>
 			<div>Role</div>
 		</div>
-		{#each data.members as member}
-			<div class="grid grid-cols-[2fr_1fr] gap-4 border-t border-neutral-100 px-5 py-3 text-sm">
-				<div class="flex items-center gap-1.5 text-neutral-800">
-					{member.users?.name ?? '—'}
-					{#if member.user_id === data.currentUserId}
-						<span class="text-xs text-neutral-400">(You)</span>
-					{/if}
-				</div>
-				<div>
-					<span class="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600">
-						{roleLabels[member.role] ?? member.role}
-					</span>
-				</div>
+		{#await data.members}
+			<div class="divide-y divide-neutral-100">
+				{#each Array(3) as _}
+					<div class="grid grid-cols-[2fr_1fr] gap-4 border-t border-neutral-100 px-5 py-3">
+						<div class="h-4 w-32 animate-pulse rounded bg-neutral-100"></div>
+						<div class="h-5 w-16 animate-pulse rounded-full bg-neutral-100"></div>
+					</div>
+				{/each}
 			</div>
-		{:else}
-			<div class="px-5 py-4 text-sm text-neutral-600">No members yet.</div>
-		{/each}
+		{:then members}
+			{#each members as member}
+				<div class="grid grid-cols-[2fr_1fr] gap-4 border-t border-neutral-100 px-5 py-3 text-sm">
+					<div class="flex items-center gap-1.5 text-neutral-800">
+						{member.users?.name ?? '—'}
+						{#if member.user_id === data.currentUserId}
+							<span class="text-xs text-neutral-400">(You)</span>
+						{/if}
+					</div>
+					<div>
+						<span class="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600">
+							{roleLabels[member.role] ?? member.role}
+						</span>
+					</div>
+				</div>
+			{:else}
+				<div class="px-5 py-4 text-sm text-neutral-600">No members yet.</div>
+			{/each}
+		{/await}
 	</div>
 </div>
 
