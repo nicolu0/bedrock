@@ -4,6 +4,16 @@
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { ensureIssuesCache, issuesCache } from '$lib/stores/issuesCache';
+	import { onMount } from 'svelte';
+
+	onMount(() => {
+		document.documentElement.style.overscrollBehavior = 'none';
+		document.body.style.overscrollBehavior = 'none';
+		return () => {
+			document.documentElement.style.overscrollBehavior = '';
+			document.body.style.overscrollBehavior = '';
+		};
+	});
 
 	export let data;
 	$: workspaceSlug = $page.params.workspace;
