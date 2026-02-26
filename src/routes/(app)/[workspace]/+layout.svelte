@@ -143,8 +143,8 @@
 					</div>
 				</div>
 			</aside>
-			<section class="flex flex-1 flex-col overflow-y-auto bg-white">
-				<div class="w-full">
+			<section class="flex-1 overflow-y-auto">
+				<div class="w-full h-full">
 					<slot />
 				</div>
 			</section>
