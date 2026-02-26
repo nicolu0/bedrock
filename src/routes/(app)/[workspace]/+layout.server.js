@@ -52,15 +52,17 @@ export const load = async ({ locals, params }) => {
 	if (!locals.user) {
 		throw redirect(303, '/');
 	}
-	await ensureWorkspace(locals.supabase, locals.user);
-	const { data: adminWorkspace } = await supabaseAdmin
-		.from('workspaces')
-		.select('id, name, slug, admin_user_id')
-		.eq('slug', params.workspace)
-		.eq('admin_user_id', locals.user.id)
-		.maybeSingle();
+	const [, { data: adminWorkspace }] = await Promise.all([
+		ensureWorkspace(locals.supabase, locals.user),
+		supabaseAdmin
+			.from('workspaces')
+			.select('id, name, slug, admin_user_id')
+			.eq('slug', params.workspace)
+			.eq('admin_user_id', locals.user.id)
+			.maybeSingle()
+	]);
 	if (adminWorkspace?.slug) {
-		await supabaseAdmin
+		supabaseAdmin
 			.from('members')
 			.upsert(
 				{ workspace_id: adminWorkspace.id, user_id: locals.user.id, role: 'admin' },
