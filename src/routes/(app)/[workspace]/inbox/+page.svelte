@@ -56,14 +56,10 @@
 		fd.append('notif_id', n.id);
 		fd.append('issue_id', n.issues?.id ?? '');
 		fd.append('assignee_id', assigneeId);
-		// Optimistic update
 		n.is_read = true;
 		n.requires_action = false;
 		notifications = notifications;
 		await fetch('?/approveAssignment', { method: 'POST', body: fd });
-		if (n.issues?.id) {
-			goto(`/${workspaceSlug}/issue/${n.issues.id}/${slugify(n.issues.name)}`);
-		}
 	}
 
 	async function handleReassignConfirm(n) {
@@ -73,15 +69,11 @@
 		fd.append('notif_id', n.id);
 		fd.append('issue_id', n.issues?.id ?? '');
 		fd.append('assignee_id', assigneeId);
-		// Optimistic update
 		n.is_read = true;
 		n.requires_action = false;
 		reassignOpen[n.id] = false;
 		notifications = notifications;
 		await fetch('?/approveAssignment', { method: 'POST', body: fd });
-		if (n.issues?.id) {
-			goto(`/${workspaceSlug}/issue/${n.issues.id}/${slugify(n.issues.name)}`);
-		}
 	}
 
 	let notifications = [];
