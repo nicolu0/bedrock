@@ -69,7 +69,6 @@
 									<span>Leave a reply...</span>
 								</div>
 								<div class="flex items-center gap-3">
-									<span>📎</span>
 									<span
 										class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500"
 									>
@@ -93,7 +92,6 @@
 									<span>Leave a reply...</span>
 								</div>
 								<div class="flex items-center gap-3">
-									<span>📎</span>
 									<span
 										class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500"
 									>
@@ -113,7 +111,6 @@
 								<span>Leave a reply...</span>
 							</div>
 							<div class="flex items-center gap-3">
-								<span>📎</span>
 								<span
 									class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500"
 								>
@@ -127,37 +124,16 @@
 		</div>
 	</div>
 
-	<aside class="flex w-1/5 flex-none border-l border-neutral-200">
-		<div class="flex w-full flex-col px-6 py-4">
-			<div class="flex items-center justify-between">
-				<div class="text-sm font-semibold text-neutral-700">{issueId}</div>
-				<div class="flex items-center gap-2 text-neutral-400">
-					<button class="rounded-md p-1 transition hover:bg-neutral-100" type="button">⟲</button>
-					<button class="rounded-md p-1 transition hover:bg-neutral-100" type="button">↗</button>
-					<button class="rounded-md p-1 transition hover:bg-neutral-100" type="button">⋯</button>
+	<aside class="flex w-1/5 border-l border-neutral-200">
+		<div class="flex w-full flex-col px-6 py-2">
+			<div class="space-y-4 text-sm text-neutral-600">
+				<div class="flex items-center gap-2">
+					<div class="h-4 w-4 rounded-full bg-neutral-200"></div>
+					<span>Andrew Chang</span>
 				</div>
-			</div>
-			<div class="mt-4 space-y-4 text-sm text-neutral-600">
 				<div class="flex items-center gap-2">
 					<span class="h-3 w-3 rounded-full border border-amber-500"></span>
 					<span>{statusLabel}</span>
-				</div>
-				<div class="text-neutral-400">Set priority</div>
-				<div class="flex items-center gap-2">
-					<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-					<span>Andrew Chang</span>
-				</div>
-				<div class="pt-2 text-xs tracking-[0.2em] text-neutral-400 uppercase">Labels</div>
-				<div class="text-neutral-500">Add label</div>
-				<div class="pt-2 text-xs tracking-[0.2em] text-neutral-400 uppercase">Project</div>
-				<div class="flex items-center gap-2">
-					<div class="h-5 w-5 rounded-md bg-neutral-100"></div>
-					<span>Issues</span>
-				</div>
-				<div class="pt-2 text-xs tracking-[0.2em] text-neutral-400 uppercase">Milestone</div>
-				<div class="flex items-center gap-2">
-					<div class="h-5 w-5 rounded-md bg-amber-100"></div>
-					<span>Layout</span>
 				</div>
 			</div>
 		</div>
