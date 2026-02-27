@@ -129,13 +129,13 @@
 				{filter === 'Unread' ? 'No unread notifications.' : 'No notifications yet.'}
 			</div>
 		{:else}
-			<div class="divide-y divide-neutral-100">
+			<div>
 				{#each filtered as n}
 					{#if n.requires_action && data.isAdmin}
 						<!-- Assignment suggestion — actionable card -->
 						<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 						<div
-							class="w-full cursor-pointer px-6 py-3 text-left transition hover:bg-stone-50"
+							class="w-full cursor-pointer border-b border-neutral-100 px-6 py-3 text-left transition hover:bg-stone-50 last:border-b-0"
 							on:click={() => handleClick(n)}
 						>
 							<div class="flex items-start gap-3">
@@ -225,7 +225,7 @@
 					{:else}
 						<!-- Standard notification row -->
 						<button
-							class="w-full px-6 py-3 text-left transition hover:bg-stone-50"
+							class="w-full border-b border-neutral-100 px-6 py-3 text-left transition hover:bg-stone-50 last:border-b-0"
 							type="button"
 							on:click={() => handleClick(n)}
 						>
