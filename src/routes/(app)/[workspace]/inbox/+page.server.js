@@ -20,12 +20,14 @@ export const load = async ({ parent, locals }) => {
 		return data ?? [];
 	})();
 
-	const { data: membersData } = await supabaseAdmin
-		.from('members')
-		.select('user_id, users(name)')
-		.eq('workspace_id', workspace.id);
+	const members = (async () => {
+		const { data } = await supabaseAdmin
+			.from('members')
+			.select('user_id, users(name)')
+			.eq('workspace_id', workspace.id);
+		return data ?? [];
+	})();
 
-	const members = membersData ?? [];
 	const isAdmin = workspace.admin_user_id === locals.user.id;
 
 	return { notifications, members, isAdmin, currentUserId: locals.user.id };

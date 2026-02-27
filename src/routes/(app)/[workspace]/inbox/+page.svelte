@@ -6,8 +6,18 @@
 	export let data;
 
 	let filter = 'All';
+	let reassignOpen = {};
+	let reassignValue = {};
+
+	let notifications = [];
+	let members = [];
+
+	const ready = (async () => {
+		[notifications, members] = await Promise.all([data.notifications, data.members]);
+	})();
 
 	$: workspaceSlug = $page.params.workspace;
+	$: filtered = filter === 'Unread' ? notifications.filter((n) => !n.is_read) : notifications;
 
 	const slugify = (value) => {
 		if (!value) return 'issue';
@@ -75,14 +85,6 @@
 		notifications = notifications;
 		await fetch('?/approveAssignment', { method: 'POST', body: fd });
 	}
-
-	let notifications = [];
-	let members = [];
-	let reassignOpen = {};
-	let reassignValue = {};
-
-	$: filteredNotifications =
-		filter === 'Unread' ? notifications.filter((n) => !n.is_read) : notifications;
 </script>
 
 <div>
@@ -106,7 +108,7 @@
 		{/each}
 	</div>
 
-	{#await data.notifications}
+	{#await ready}
 		<div class="divide-y divide-neutral-100">
 			{#each Array(4) as _}
 				<div class="flex items-start gap-3 px-6 py-3">
@@ -118,160 +120,157 @@
 				</div>
 			{/each}
 		</div>
-	{:then resolved}
-		{#if (notifications = resolved) && (members = data.members) !== undefined || true}
-			{#if filteredNotifications.length === 0}
-				<div class="px-6 py-8 text-sm text-neutral-400">
-					{filter === 'Unread' ? 'No unread notifications.' : 'No notifications yet.'}
-				</div>
-			{:else}
-				<div class="divide-y divide-neutral-100">
-					{#each filteredNotifications as n}
-						{#if n.requires_action && data.isAdmin}
-							<!-- Assignment suggestion — actionable card -->
-							<div class="w-full px-6 py-3 text-left transition hover:bg-stone-50">
-								<div class="flex items-start gap-3">
-									<div class="mt-1.5 flex-shrink-0">
-										{#if !n.is_read}
-											<span class="block h-2 w-2 rounded-full bg-blue-500"></span>
-										{:else}
-											<span class="block h-2 w-2"></span>
-										{/if}
+	{:then}
+		{#if filtered.length === 0}
+			<div class="px-6 py-8 text-sm text-neutral-400">
+				{filter === 'Unread' ? 'No unread notifications.' : 'No notifications yet.'}
+			</div>
+		{:else}
+			<div class="divide-y divide-neutral-100">
+				{#each filtered as n}
+					{#if n.requires_action && data.isAdmin}
+						<!-- Assignment suggestion — actionable card -->
+						<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+						<div
+							class="w-full cursor-pointer px-6 py-3 text-left transition hover:bg-stone-50"
+							on:click={() => handleClick(n)}
+						>
+							<div class="flex items-start gap-3">
+								<div class="mt-1.5 flex-shrink-0">
+									{#if !n.is_read}
+										<span class="block h-2 w-2 rounded-full bg-blue-500"></span>
+									{:else}
+										<span class="block h-2 w-2"></span>
+									{/if}
+								</div>
+								<div class="min-w-0 flex-1">
+									<div class="flex items-center justify-between gap-3">
+										<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
+										<div class="flex flex-shrink-0 items-center gap-2">
+											{#if n.issues?.units}
+												<div
+													class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
+												>
+													{#if n.issues.units.properties?.name}
+														<span class="px-2 py-0.5">{n.issues.units.properties.name}</span>
+														<span class="border-l border-neutral-200 px-2 py-0.5"
+															>{n.issues.units.name}</span
+														>
+													{:else}
+														<span class="px-2 py-0.5">{n.issues.units.name}</span>
+													{/if}
+												</div>
+											{/if}
+											{#if n.issues?.status}
+												<span
+													class={`h-3 w-3 flex-shrink-0 rounded-full border ${statusClass(n.issues.status)}`}
+												></span>
+											{/if}
+										</div>
 									</div>
-									<div class="min-w-0 flex-1">
+									<div class="mt-0.5 flex items-center justify-between gap-3">
+										<p class="truncate text-xs text-neutral-500">{n.body}</p>
+										<span class="flex-shrink-0 text-xs text-neutral-400">{timeAgo(n.created_at)}</span>
+									</div>
+									<div class="mt-2 flex items-center gap-2">
 										<button
-											class="w-full text-left"
+											class="rounded-md bg-neutral-800 px-2.5 py-1 text-xs text-white transition hover:bg-neutral-700"
 											type="button"
-											on:click={() => handleClick(n)}
+											on:click|stopPropagation={() => handleApprove(n)}
 										>
-										<div class="flex items-center justify-between gap-3">
-											<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
-											<div class="flex flex-shrink-0 items-center gap-2">
-												{#if n.issues?.units}
-													<div
-														class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
-													>
-														{#if n.issues.units.properties?.name}
-															<span class="px-2 py-0.5">{n.issues.units.properties.name}</span>
-															<span class="border-l border-neutral-200 px-2 py-0.5"
-																>{n.issues.units.name}</span
-															>
-														{:else}
-															<span class="px-2 py-0.5">{n.issues.units.name}</span>
-														{/if}
-													</div>
-												{/if}
-												{#if n.issues?.status}
-													<span
-														class={`h-3 w-3 flex-shrink-0 rounded-full border ${statusClass(n.issues.status)}`}
-													></span>
-												{/if}
-											</div>
-										</div>
-										<div class="mt-0.5 flex items-center justify-between gap-3">
-											<p class="truncate text-xs text-neutral-500">{n.body}</p>
-											<span class="flex-shrink-0 text-xs text-neutral-400">{timeAgo(n.created_at)}</span>
-										</div>
+											Approve
 										</button>
+										<button
+											class="rounded-md border border-neutral-200 px-2.5 py-1 text-xs text-neutral-600 transition hover:bg-neutral-50"
+											type="button"
+											on:click|stopPropagation={() => {
+												reassignOpen[n.id] = !reassignOpen[n.id];
+												if (!reassignValue[n.id]) {
+													const others = members.filter(
+														(m) => m.user_id !== n.meta?.suggested_assignee_id
+													);
+													reassignValue[n.id] = others[0]?.user_id ?? '';
+												}
+											}}
+										>
+											Reassign ▾
+										</button>
+									</div>
+									{#if reassignOpen[n.id]}
 										<div class="mt-2 flex items-center gap-2">
+											<select
+												class="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-700"
+												bind:value={reassignValue[n.id]}
+												on:click|stopPropagation
+											>
+												{#each members.filter((m) => m.user_id !== n.meta?.suggested_assignee_id) as m}
+													<option value={m.user_id}>{m.users?.name ?? m.user_id}</option>
+												{/each}
+											</select>
 											<button
 												class="rounded-md bg-neutral-800 px-2.5 py-1 text-xs text-white transition hover:bg-neutral-700"
 												type="button"
-												on:click={() => handleApprove(n)}
+												on:click|stopPropagation={() => handleReassignConfirm(n)}
 											>
-												Approve
-											</button>
-											<button
-												class="rounded-md border border-neutral-200 px-2.5 py-1 text-xs text-neutral-600 transition hover:bg-neutral-50"
-												type="button"
-												on:click={() => {
-													reassignOpen[n.id] = !reassignOpen[n.id];
-													if (!reassignValue[n.id]) {
-														const others = members.filter(
-															(m) => m.user_id !== n.meta?.suggested_assignee_id
-														);
-														reassignValue[n.id] = others[0]?.user_id ?? '';
-													}
-												}}
-											>
-												Reassign ▾
+												Assign
 											</button>
 										</div>
-										{#if reassignOpen[n.id]}
-											<div class="mt-2 flex items-center gap-2">
-												<select
-													class="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-700"
-													bind:value={reassignValue[n.id]}
+									{/if}
+								</div>
+							</div>
+						</div>
+					{:else}
+						<!-- Standard notification row -->
+						<button
+							class="w-full px-6 py-3 text-left transition hover:bg-stone-50"
+							type="button"
+							on:click={() => handleClick(n)}
+						>
+							<div class="flex items-start gap-3">
+								<div class="mt-1.5 flex-shrink-0">
+									{#if !n.is_read}
+										<span class="block h-2 w-2 rounded-full bg-blue-500"></span>
+									{:else}
+										<span class="block h-2 w-2"></span>
+									{/if}
+								</div>
+								<div class="min-w-0 flex-1">
+									<div class="flex items-center justify-between gap-3">
+										<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
+										<div class="flex flex-shrink-0 items-center gap-2">
+											{#if n.issues?.units}
+												<div
+													class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
 												>
-													{#each members.filter((m) => m.user_id !== n.meta?.suggested_assignee_id) as m}
-														<option value={m.user_id}>{m.users?.name ?? m.user_id}</option>
-													{/each}
-												</select>
-												<button
-													class="rounded-md bg-neutral-800 px-2.5 py-1 text-xs text-white transition hover:bg-neutral-700"
-													type="button"
-													on:click={() => handleReassignConfirm(n)}
-												>
-													Assign
-												</button>
-											</div>
-										{/if}
+													{#if n.issues.units.properties?.name}
+														<span class="px-2 py-0.5">{n.issues.units.properties.name}</span>
+														<span class="border-l border-neutral-200 px-2 py-0.5"
+															>{n.issues.units.name}</span
+														>
+													{:else}
+														<span class="px-2 py-0.5">{n.issues.units.name}</span>
+													{/if}
+												</div>
+											{/if}
+											{#if n.issues?.status}
+												<span
+													class={`h-3 w-3 flex-shrink-0 rounded-full border ${statusClass(n.issues.status)}`}
+												></span>
+											{/if}
+										</div>
+									</div>
+									<div class="mt-0.5 flex items-center justify-between gap-3">
+										<p class="truncate text-xs text-neutral-500">{n.body}</p>
+										<span class="flex-shrink-0 text-xs text-neutral-400"
+											>{timeAgo(n.created_at)}</span
+										>
 									</div>
 								</div>
 							</div>
-						{:else}
-							<!-- Standard notification row -->
-							<button
-								class="w-full px-6 py-3 text-left transition hover:bg-stone-50"
-								type="button"
-								on:click={() => handleClick(n)}
-							>
-								<div class="flex items-start gap-3">
-									<div class="mt-1.5 flex-shrink-0">
-										{#if !n.is_read}
-											<span class="block h-2 w-2 rounded-full bg-blue-500"></span>
-										{:else}
-											<span class="block h-2 w-2"></span>
-										{/if}
-									</div>
-									<div class="min-w-0 flex-1">
-										<div class="flex items-center justify-between gap-3">
-											<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
-											<div class="flex flex-shrink-0 items-center gap-2">
-												{#if n.issues?.units}
-													<div
-														class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
-													>
-														{#if n.issues.units.properties?.name}
-															<span class="px-2 py-0.5">{n.issues.units.properties.name}</span>
-															<span class="border-l border-neutral-200 px-2 py-0.5"
-																>{n.issues.units.name}</span
-															>
-														{:else}
-															<span class="px-2 py-0.5">{n.issues.units.name}</span>
-														{/if}
-													</div>
-												{/if}
-												{#if n.issues?.status}
-													<span
-														class={`h-3 w-3 flex-shrink-0 rounded-full border ${statusClass(n.issues.status)}`}
-													></span>
-												{/if}
-											</div>
-										</div>
-										<div class="mt-0.5 flex items-center justify-between gap-3">
-											<p class="truncate text-xs text-neutral-500">{n.body}</p>
-											<span class="flex-shrink-0 text-xs text-neutral-400"
-												>{timeAgo(n.created_at)}</span
-											>
-										</div>
-									</div>
-								</div>
-							</button>
-						{/if}
-					{/each}
-				</div>
-			{/if}
+						</button>
+					{/if}
+				{/each}
+			</div>
 		{/if}
 	{:catch}
 		<div class="px-6 py-8 text-sm text-neutral-400">Failed to load notifications.</div>
