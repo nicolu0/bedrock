@@ -29,10 +29,9 @@
 	];
 
 	const statusStyles = {
-		processing: 'bg-neutral-200 text-neutral-700 border-neutral-300',
-		'in progress': 'bg-sky-100 text-sky-800 border-sky-200',
-		resolved: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-		escalated: 'bg-amber-100 text-amber-800 border-amber-200'
+		todo: 'bg-neutral-200 text-neutral-700 border-neutral-300',
+		in_progress: 'bg-sky-100 text-sky-800 border-sky-200',
+		done: 'bg-emerald-100 text-emerald-800 border-emerald-200'
 	};
 
 	let selectedIssueId = issues[0]?.id ?? null;
@@ -143,12 +142,10 @@
 	}
 
 	const issuePriorityRank = (issue) => {
-		if (issue?.status === 'processing') return 0;
-		const urgency = issue?.urgency ?? '';
-		if (urgency === 'high') return 1;
-		if (urgency === 'medium') return 2;
-		if (urgency === 'low') return 3;
-		return 4;
+		if (issue?.status === 'todo') return 0;
+		if (issue?.status === 'in_progress') return 1;
+		if (issue?.status === 'done') return 2;
+		return 3;
 	};
 
 	$: sortedIssues = [...issues].sort((a, b) => {

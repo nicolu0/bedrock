@@ -136,5 +136,5 @@ export const GET = async ({ url }) => {
 	if (workspaceSlug) {
 		throw redirect(302, `/${workspaceSlug}/settings/integrations`);
 	}
-	throw redirect(302, '/agentmvp');
+	throw redirect(302, '/');
 };

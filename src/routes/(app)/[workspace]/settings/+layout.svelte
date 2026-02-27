@@ -7,6 +7,7 @@
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	const items = [
+		{ id: 'integrations', label: 'Integrations', href: 'integrations' },
 		{ id: 'preferences', label: 'Preferences', href: 'preferences' },
 		{ id: 'members', label: 'Members', href: 'members' }
 	];
@@ -58,7 +59,10 @@
 					{/each}
 					<button
 						type="button"
-						on:click={(e) => { e.currentTarget.blur(); showLogoutModal = true; }}
+						on:click={(e) => {
+							e.currentTarget.blur();
+							showLogoutModal = true;
+						}}
 						class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-red-500 transition hover:bg-red-50 hover:text-red-600"
 					>
 						Log out
@@ -92,11 +96,19 @@
 				<button
 					type="button"
 					on:click={() => (showLogoutModal = false)}
-					class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
+					class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
 					aria-label="Close"
 				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-						<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708" />
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="24"
+						height="24"
+						fill="currentColor"
+						viewBox="0 0 16 16"
+					>
+						<path
+							d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"
+						/>
 					</svg>
 				</button>
 			</div>
@@ -105,14 +117,14 @@
 				<button
 					type="button"
 					on:click={() => (showLogoutModal = false)}
-					class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
+					class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
 				>
 					Cancel
 				</button>
 				<form method="POST" action="/api/logout">
 					<button
 						type="submit"
-						class="rounded-xl bg-red-600 px-4 py-2 text-sm text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400"
+						class="rounded-xl bg-red-600 px-4 py-2 text-sm text-white transition-colors hover:bg-red-700 focus-visible:ring-1 focus-visible:ring-red-400 focus-visible:outline-none"
 					>
 						Log out
 					</button>
