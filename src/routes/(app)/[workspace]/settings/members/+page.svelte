@@ -60,10 +60,10 @@
 		</div>
 		{#await data.members}
 			<div class="divide-y divide-neutral-100">
-				{#each Array(3) as _}
+				{#each Array(3) as _, i}
 					<div class="grid grid-cols-[2fr_1fr] gap-4 border-t border-neutral-100 px-5 py-3">
-						<div class="h-4 w-32 animate-pulse rounded bg-neutral-100"></div>
-						<div class="h-5 w-16 animate-pulse rounded-full bg-neutral-100"></div>
+						<div class="shimmer h-4 rounded" style="width: {i % 2 === 0 ? '8rem' : '6rem'}"></div>
+						<div class="shimmer h-5 w-16 rounded-full"></div>
 					</div>
 				{/each}
 			</div>
@@ -92,3 +92,15 @@
 {#if showInviteModal}
 	<InviteModal on:close={() => (showInviteModal = false)} />
 {/if}
+
+<style>
+	@keyframes shimmer {
+		0% { background-position: -200% 0; }
+		100% { background-position: 200% 0; }
+	}
+	.shimmer {
+		background: linear-gradient(90deg, #f5f5f4 25%, #e8e5e3 50%, #f5f5f4 75%);
+		background-size: 200% 100%;
+		animation: shimmer 1.6s ease-in-out infinite;
+	}
+</style>

@@ -110,12 +110,15 @@
 
 	{#await ready}
 		<div class="divide-y divide-neutral-100">
-			{#each Array(4) as _}
+			{#each Array(5) as _, i}
 				<div class="flex items-start gap-3 px-6 py-3">
-					<div class="mt-1.5 h-2 w-2 rounded-full bg-neutral-200"></div>
-					<div class="flex-1 space-y-1.5">
-						<div class="h-3 w-48 rounded bg-neutral-100"></div>
-						<div class="h-3 w-72 rounded bg-neutral-100"></div>
+					<div class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full shimmer"></div>
+					<div class="flex-1 space-y-2">
+						<div class="flex items-center justify-between gap-3">
+							<div class="shimmer h-3 rounded" style="width: {i % 2 === 0 ? '45%' : '55%'}"></div>
+							<div class="shimmer h-3 w-20 rounded"></div>
+						</div>
+						<div class="shimmer h-3 rounded" style="width: {i % 3 === 0 ? '70%' : '80%'}"></div>
 					</div>
 				</div>
 			{/each}
@@ -276,3 +279,15 @@
 		<div class="px-6 py-8 text-sm text-neutral-400">Failed to load notifications.</div>
 	{/await}
 </div>
+
+<style>
+	@keyframes shimmer {
+		0% { background-position: -200% 0; }
+		100% { background-position: 200% 0; }
+	}
+	.shimmer {
+		background: linear-gradient(90deg, #f5f5f4 25%, #e8e5e3 50%, #f5f5f4 75%);
+		background-size: 200% 100%;
+		animation: shimmer 1.6s ease-in-out infinite;
+	}
+</style>
