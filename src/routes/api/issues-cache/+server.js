@@ -52,13 +52,60 @@ export const GET = async ({ locals, url }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
-	const { data: issues } = await supabaseAdmin
+	const { count: totalIssuesCount } = await supabaseAdmin
+		.from('issues')
+		.select('id', { count: 'exact', head: true });
+	const { count: workspaceIssuesCount } = await supabaseAdmin
+		.from('issues')
+		.select('id', { count: 'exact', head: true })
+		.eq('workspace_id', workspace.id);
+
+	let issues = null;
+	let issuesError = null;
+	let usedFieldFallback = false;
+	({ data: issues, error: issuesError } = await supabaseAdmin
 		.from('issues')
 		.select('id, name, status, parent_id, unit_id, description')
 		.eq('workspace_id', workspace.id)
-		.order('updated_at', { ascending: false });
+		.order('updated_at', { ascending: false }));
+	if (issuesError) {
+		({ data: issues, error: issuesError } = await supabaseAdmin
+			.from('issues')
+			.select('id, name, status, parent_id, unit_id')
+			.eq('workspace_id', workspace.id)
+			.order('updated_at', { ascending: false }));
+		usedFieldFallback = true;
+	}
+	let effectiveIssues = issues ?? [];
+	let usedFallback = false;
+	if (!effectiveIssues.length) {
+		let fallbackIssues = null;
+		let fallbackError = null;
+		({ data: fallbackIssues, error: fallbackError } = await supabaseAdmin
+			.from('issues')
+			.select(
+				'id, name, status, parent_id, unit_id, description, units!inner(properties!inner(workspace_id))'
+			)
+			.eq('units.properties.workspace_id', workspace.id)
+			.order('updated_at', { ascending: false }));
+		if (fallbackError) {
+			({ data: fallbackIssues } = await supabaseAdmin
+				.from('issues')
+				.select('id, name, status, parent_id, unit_id, units!inner(properties!inner(workspace_id))')
+				.eq('units.properties.workspace_id', workspace.id)
+				.order('updated_at', { ascending: false }));
+			usedFieldFallback = true;
+		}
+		if (fallbackIssues?.length) {
+			effectiveIssues = fallbackIssues;
+			usedFallback = true;
+		}
+	}
+	const issueCount = effectiveIssues?.length ?? 0;
 
-	const unitIds = Array.from(new Set((issues ?? []).map((issue) => issue.unit_id).filter(Boolean)));
+	const unitIds = Array.from(
+		new Set((effectiveIssues ?? []).map((issue) => issue.unit_id).filter(Boolean))
+	);
 	const { data: units } = unitIds.length
 		? await supabaseAdmin.from('units').select('id, name, property_id').in('id', unitIds)
 		: { data: [] };
@@ -72,7 +119,7 @@ export const GET = async ({ locals, url }) => {
 		: { data: [] };
 	const propertyMap = new Map((properties ?? []).map((property) => [property.id, property]));
 
-	const normalizedIssues = (issues ?? []).map((issue) => {
+	const normalizedIssues = (effectiveIssues ?? []).map((issue) => {
 		const unit = unitMap.get(issue.unit_id);
 		const property = unit ? propertyMap.get(unit.property_id) : null;
 		const status = allowedStatuses.has(issue.status) ? issue.status : 'todo';
@@ -154,6 +201,17 @@ export const GET = async ({ locals, url }) => {
 		sections: filteredSections,
 		issues: normalizedIssues,
 		assignee,
-		workspaceId: workspace.id
+		workspaceId: workspace.id,
+		debug: {
+			workspaceSlug,
+			workspaceId: workspace.id,
+			issueCount,
+			sectionCount: filteredSections.length,
+			usedFallback,
+			usedFieldFallback,
+			issuesError: issuesError?.message ?? null,
+			totalIssuesCount: totalIssuesCount ?? 0,
+			workspaceIssuesCount: workspaceIssuesCount ?? 0
+		}
 	});
 };

@@ -1,8 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-
-	export let data;
+	import { issuesCache } from '$lib/stores/issuesCache';
 
 	const statusConfig = {
 		in_progress: {
@@ -19,18 +18,31 @@
 		}
 	};
 
-	$: issueId = data?.issue?.id ?? $page.params.issue_id ?? 'HUB-1';
+	$: issueId = $page.params.issue_id ?? 'HUB-1';
 	$: issueNameSlug = $page.params.issue_name ?? 'issues-page-layout';
+	$: issueRecord =
+		($issuesCache.data?.issues ?? []).find((issue) => String(issue.id) === String(issueId)) ?? null;
 	$: issueName =
-		data?.issue?.name ??
+		issueRecord?.name ??
 		(issueNameSlug
 			? issueNameSlug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 			: 'Issues Page Layout');
-	$: issueDescription = data?.issue?.description ?? '';
-	$: statusKey = data?.issue?.status ?? 'todo';
+	$: issueDescription = issueRecord?.description ?? '';
+	$: statusKey = issueRecord?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
-	$: assigneeName = data?.assignee?.name ?? 'Unassigned';
-	$: subIssues = data?.subIssues ?? [];
+	$: assigneeName = $issuesCache.data?.assignee?.name ?? 'Unassigned';
+	$: sectionIssue = ($issuesCache.data?.sections ?? [])
+		.flatMap((section) => section.items ?? [])
+		.find((item) => String(item.id) === String(issueId));
+	$: rawSubIssues = ($issuesCache.data?.issues ?? []).filter(
+		(issue) => String(issue.parent_id ?? issue.parentId ?? '') === String(issueId)
+	);
+	$: subIssues = rawSubIssues.length
+		? rawSubIssues
+		: (sectionIssue?.subIssues ?? []).map((item) => ({
+				...item,
+				name: item.name ?? item.title
+			}));
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${
 		subIssues.length
 	}`;
