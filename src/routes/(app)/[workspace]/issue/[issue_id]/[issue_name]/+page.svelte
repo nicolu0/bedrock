@@ -18,31 +18,35 @@
 		}
 	};
 
-	$: issueId = $page.params.issue_id ?? 'HUB-1';
+	export let data;
+
+	const statusConfig = {
+		in_progress: {
+			label: 'In Progress',
+			statusClass: 'border-amber-500 text-amber-600'
+		},
+		todo: {
+			label: 'Todo',
+			statusClass: 'border-neutral-500 text-neutral-700'
+		},
+		done: {
+			label: 'Done',
+			statusClass: 'border-emerald-500 text-emerald-700'
+		}
+	};
+
+	$: issueId = data?.issue?.id ?? $page.params.issue_id ?? 'HUB-1';
 	$: issueNameSlug = $page.params.issue_name ?? 'issues-page-layout';
-	$: issueRecord =
-		($issuesCache.data?.issues ?? []).find((issue) => String(issue.id) === String(issueId)) ?? null;
 	$: issueName =
-		issueRecord?.name ??
+		data?.issue?.name ??
 		(issueNameSlug
 			? issueNameSlug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 			: 'Issues Page Layout');
-	$: issueDescription = issueRecord?.description ?? '';
-	$: statusKey = issueRecord?.status ?? 'todo';
+	$: issueDescription = data?.issue?.description ?? '';
+	$: statusKey = data?.issue?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
-	$: assigneeName = $issuesCache.data?.assignee?.name ?? 'Unassigned';
-	$: sectionIssue = ($issuesCache.data?.sections ?? [])
-		.flatMap((section) => section.items ?? [])
-		.find((item) => String(item.id) === String(issueId));
-	$: rawSubIssues = ($issuesCache.data?.issues ?? []).filter(
-		(issue) => String(issue.parent_id ?? issue.parentId ?? '') === String(issueId)
-	);
-	$: subIssues = rawSubIssues.length
-		? rawSubIssues
-		: (sectionIssue?.subIssues ?? []).map((item) => ({
-				...item,
-				name: item.name ?? item.title
-			}));
+	$: assigneeName = data?.assignee?.name ?? 'Unassigned';
+	$: subIssues = data?.subIssues ?? [];
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${
 		subIssues.length
 	}`;

@@ -14,6 +14,8 @@
 			document.body.style.overscrollBehavior = '';
 		};
 	});
+	import { browser } from '$app/environment';
+	import { ensureIssuesCache, issuesCache } from '$lib/stores/issuesCache';
 
 	export let data;
 	$: workspaceSlug = $page.params.workspace;
@@ -187,7 +189,7 @@
 				</div>
 			</aside>
 			<section class="flex-1 overflow-y-auto">
-				<div class="w-full h-full">
+				<div class={`h-full w-full transition-opacity duration-200 ${mainContentClass}`}>
 					<slot />
 				</div>
 			</section>
