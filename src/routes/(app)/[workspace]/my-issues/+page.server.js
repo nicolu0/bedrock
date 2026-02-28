@@ -24,11 +24,29 @@ const statusOrder = ['in_progress', 'todo', 'done'];
 const allowedStatuses = new Set(statusOrder);
 
 const loadSections = async (workspaceId) => {
-	const { data: issues } = await supabaseAdmin
+	let { data: issues } = await supabaseAdmin
 		.from('issues')
 		.select('id, name, status, parent_id, unit_id')
 		.eq('workspace_id', workspaceId)
 		.order('updated_at', { ascending: false });
+
+	if (!issues?.length) {
+		const { data: fallbackUnits } = await supabaseAdmin
+			.from('units')
+			.select('id, properties!inner(workspace_id)')
+			.eq('properties.workspace_id', workspaceId);
+		const fallbackUnitIds = Array.from(
+			new Set((fallbackUnits ?? []).map((unit) => unit.id).filter(Boolean))
+		);
+		if (fallbackUnitIds.length) {
+			const { data: fallbackIssues } = await supabaseAdmin
+				.from('issues')
+				.select('id, name, status, parent_id, unit_id')
+				.in('unit_id', fallbackUnitIds)
+				.order('updated_at', { ascending: false });
+			issues = fallbackIssues ?? [];
+		}
+	}
 
 	const unitIds = Array.from(new Set((issues ?? []).map((issue) => issue.unit_id).filter(Boolean)));
 	const { data: units } = unitIds.length

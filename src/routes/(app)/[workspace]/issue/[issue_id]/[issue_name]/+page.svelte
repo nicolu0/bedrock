@@ -3,21 +3,6 @@
 	import { page } from '$app/stores';
 	import { issuesCache } from '$lib/stores/issuesCache';
 
-	const statusConfig = {
-		in_progress: {
-			label: 'In Progress',
-			statusClass: 'border-amber-500 text-amber-600'
-		},
-		todo: {
-			label: 'Todo',
-			statusClass: 'border-neutral-500 text-neutral-700'
-		},
-		done: {
-			label: 'Done',
-			statusClass: 'border-emerald-500 text-emerald-700'
-		}
-	};
-
 	export let data;
 
 	const statusConfig = {

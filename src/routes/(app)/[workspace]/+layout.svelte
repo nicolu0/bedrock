@@ -14,9 +14,6 @@
 			document.body.style.overscrollBehavior = '';
 		};
 	});
-	import { browser } from '$app/environment';
-	import { ensureIssuesCache, issuesCache } from '$lib/stores/issuesCache';
-
 	export let data;
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';

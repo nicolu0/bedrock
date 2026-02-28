@@ -52,11 +52,44 @@ export const GET = async ({ locals, url }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
-	const { data: issues } = await supabaseAdmin
+	let { data: issues, error: issuesError } = await supabaseAdmin
 		.from('issues')
-		.select('id, name, status, parent_id, unit_id, description')
+		.select('id, name, status, parent_id, unit_id')
 		.eq('workspace_id', workspace.id)
 		.order('updated_at', { ascending: false });
+	console.log('[issues-cache] primary issues', {
+		workspaceId: workspace.id,
+		count: issues?.length ?? 0,
+		error: issuesError?.message ?? null
+	});
+
+	if (!issues?.length) {
+		const { data: fallbackUnits, error: fallbackUnitsError } = await supabaseAdmin
+			.from('units')
+			.select('id, properties!inner(workspace_id)')
+			.eq('properties.workspace_id', workspace.id);
+		console.log('[issues-cache] fallback units', {
+			workspaceId: workspace.id,
+			count: fallbackUnits?.length ?? 0,
+			error: fallbackUnitsError?.message ?? null
+		});
+		const fallbackUnitIds = Array.from(
+			new Set((fallbackUnits ?? []).map((unit) => unit.id).filter(Boolean))
+		);
+		if (fallbackUnitIds.length) {
+			const { data: fallbackIssues, error: fallbackIssuesError } = await supabaseAdmin
+				.from('issues')
+				.select('id, name, status, parent_id, unit_id')
+				.in('unit_id', fallbackUnitIds)
+				.order('updated_at', { ascending: false });
+			console.log('[issues-cache] fallback issues', {
+				workspaceId: workspace.id,
+				count: fallbackIssues?.length ?? 0,
+				error: fallbackIssuesError?.message ?? null
+			});
+			issues = fallbackIssues ?? [];
+		}
+	}
 
 	const unitIds = Array.from(new Set((issues ?? []).map((issue) => issue.unit_id).filter(Boolean)));
 	const { data: units } = unitIds.length
