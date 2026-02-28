@@ -76,13 +76,7 @@ export const load = async ({ locals }) => {
 	const vendorsData = sidebarVendorsError ? sidebarVendorsFallback : sidebarVendors;
 	const sidebarBuildingIds = (sidebarBuildings ?? []).map((building) => building.id);
 
-	const { data: actions } = await locals.supabase
-		.from('tasks')
-		.select(
-			'id, issue_id, action_type, title, detail, email_body, vendor_email_to, status, created_at'
-		)
-		.eq('status', 'pending')
-		.order('created_at', { ascending: false });
+	const actions = [];
 
 	const { data: issues } = await locals.supabase
 		.from('issues')
@@ -174,38 +168,13 @@ export const load = async ({ locals }) => {
 		};
 	});
 
-	const issueMap = new Map(normalizedIssues.map((issue) => [issue.id, issue]));
-	const normalizedActions = (actions ?? []).map((action) => {
-		const issue = action.issue_id ? issueMap.get(action.issue_id) : null;
-		return {
-			id: action.id,
-			issueId: action.issue_id ?? null,
-			actionType: action.action_type ?? 'triage_issue',
-			title: action.title,
-			detail: action.detail,
-			emailBody: action.email_body ?? '',
-			vendorEmailTo: action.vendor_email_to ?? null,
-			status: action.status,
-			createdAt: action.created_at,
-			issueName: issue?.name ?? 'Unknown issue',
-			issueUrgency: issue?.urgency ?? null,
-			issueStatus: issue?.status ?? null,
-			unit: issue?.unit ?? null,
-			building: issue?.building ?? null,
-			vendorName: issue?.suggestedVendorName ?? issue?.vendorName ?? null,
-			vendorEmail: issue?.suggestedVendorEmail ?? issue?.vendorEmail ?? null,
-			tenantName: issue?.tenantName ?? null,
-			tenantEmail: issue?.tenantEmail ?? null
-		};
-	});
-
 	const issueIds = normalizedIssues.map((issue) => issue.id);
 	if (!issueIds.length) {
 		return {
 			user: locals.user,
 			gmailUser,
 			realtimeAccessToken,
-		workspaceName,
+			workspaceName,
 			issues: normalizedIssues,
 			threadsByIssue: {},
 			messagesByThread: {},
@@ -214,7 +183,7 @@ export const load = async ({ locals }) => {
 			vendors: vendorsData ?? [],
 			units: normalizedAllUnits ?? [],
 			tenants: allTenants ?? [],
-			actions: normalizedActions
+			actions
 		};
 	}
 
@@ -229,7 +198,7 @@ export const load = async ({ locals }) => {
 			user: locals.user,
 			gmailUser,
 			realtimeAccessToken,
-		workspaceName,
+			workspaceName,
 			issues: normalizedIssues,
 			threadsByIssue: {},
 			messagesByThread: {},
@@ -238,7 +207,7 @@ export const load = async ({ locals }) => {
 			vendors: vendorsData ?? [],
 			units: normalizedAllUnits ?? [],
 			tenants: allTenants ?? [],
-			actions: normalizedActions
+			actions
 		};
 	}
 
@@ -311,7 +280,7 @@ export const load = async ({ locals }) => {
 		vendors: vendorsData ?? [],
 		units: normalizedAllUnits ?? [],
 		tenants: allTenants ?? [],
-		actions: normalizedActions
+		actions
 	};
 };
 
@@ -860,6 +829,7 @@ export const actions = {
 	},
 
 	approveAction: async ({ request, locals }) => {
+		return fail(400, { error: 'Actions are disabled.' });
 		const user = locals.user;
 		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
@@ -1284,6 +1254,7 @@ export const actions = {
 	},
 
 	denyAction: async ({ request, locals }) => {
+		return fail(400, { error: 'Actions are disabled.' });
 		const user = locals.user;
 		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();
@@ -1302,6 +1273,7 @@ export const actions = {
 	},
 
 	updateActionDraft: async ({ request, locals }) => {
+		return fail(400, { error: 'Actions are disabled.' });
 		const user = locals.user;
 		if (!user) throw redirect(303, '/login');
 		const form = await request.formData();

@@ -1,5 +1,5 @@
 <div class="space-y-0">
-	<div class="border-b border-neutral-100 px-6 pb-2">
+	<div class="border-b border-neutral-100 px-6 py-2">
 		<div class="flex items-center gap-3">
 			<div class="flex w-full items-center gap-2 rounded-md bg-white">
 				<svg

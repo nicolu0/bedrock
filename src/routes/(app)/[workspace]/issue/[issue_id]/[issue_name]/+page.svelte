@@ -1,13 +1,40 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
+	import { issuesCache } from '$lib/stores/issuesCache';
 
-	$: issueId = $page.params.issue_id ?? 'HUB-1';
+	export let data;
+
+	const statusConfig = {
+		in_progress: {
+			label: 'In Progress',
+			statusClass: 'border-amber-500 text-amber-600'
+		},
+		todo: {
+			label: 'Todo',
+			statusClass: 'border-neutral-500 text-neutral-700'
+		},
+		done: {
+			label: 'Done',
+			statusClass: 'border-emerald-500 text-emerald-700'
+		}
+	};
+
+	$: issueId = data?.issue?.id ?? $page.params.issue_id ?? 'HUB-1';
 	$: issueNameSlug = $page.params.issue_name ?? 'issues-page-layout';
-	$: issueName = issueNameSlug
-		? issueNameSlug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-		: 'Issues Page Layout';
-	const statusLabel = 'In Progress';
+	$: issueName =
+		data?.issue?.name ??
+		(issueNameSlug
+			? issueNameSlug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+			: 'Issues Page Layout');
+	$: issueDescription = data?.issue?.description ?? '';
+	$: statusKey = data?.issue?.status ?? 'todo';
+	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
+	$: assigneeName = data?.assignee?.name ?? 'Unassigned';
+	$: subIssues = data?.subIssues ?? [];
+	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${
+		subIssues.length
+	}`;
 </script>
 
 <div class="flex h-full">
@@ -25,8 +52,24 @@
 		</div>
 
 		<div class="flex-1 px-10 py-8">
-			<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
-			<div class="mt-2 text-sm text-neutral-500">Add description...</div>
+			<div class="flex flex-wrap items-start justify-between gap-6">
+				<div class="min-w-0">
+					<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
+					<div class="mt-2 text-sm text-neutral-500">
+						{issueDescription || 'Add description...'}
+					</div>
+				</div>
+				<div class="flex items-center gap-4 text-sm text-neutral-600">
+					<div class="flex items-center gap-2">
+						<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
+						<span>{assigneeName}</span>
+					</div>
+					<div class="flex items-center gap-2">
+						<span class={`h-3 w-3 rounded-full border ${statusMeta.statusClass}`}></span>
+						<span>{statusMeta.label}</span>
+					</div>
+				</div>
+			</div>
 			<div class="mt-6 flex items-center gap-3 text-sm text-neutral-600">
 				<button
 					class="inline-flex items-center gap-2 rounded-md px-2 py-1 transition hover:bg-neutral-100"
@@ -38,88 +81,63 @@
 				<div class="ml-auto text-neutral-400">@</div>
 			</div>
 
+			{#if subIssues.length}
+				<div class="mt-8">
+					<div class="flex items-center justify-between text-sm text-neutral-600">
+						<div class="flex items-center gap-2">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="14"
+								height="14"
+								fill="currentColor"
+								class="text-neutral-400"
+								viewBox="0 0 16 16"
+							>
+								<path
+									d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+								/>
+							</svg>
+							<span class="text-neutral-700">Sub-issues</span>
+							<span class="text-neutral-400">{subIssueProgress}</span>
+						</div>
+						<div class="flex items-center gap-2 text-neutral-400">
+							<button class="rounded-md p-1 transition hover:bg-neutral-100" type="button">
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									fill="currentColor"
+									viewBox="0 0 16 16"
+								>
+									<path
+										d="M8 1a1 1 0 0 1 1 1v5h5a1 1 0 1 1 0 2H9v5a1 1 0 1 1-2 0V9H2a1 1 0 1 1 0-2h5V2a1 1 0 0 1 1-1"
+									/>
+								</svg>
+							</button>
+						</div>
+					</div>
+					<div class="mt-3 space-y-2">
+						{#each subIssues as subIssue}
+							<div
+								class="flex items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm"
+							>
+								<div class="flex items-center gap-3">
+									<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
+									<span class="text-neutral-800">{subIssue.name}</span>
+								</div>
+								<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
 			<div class="mt-8 border-t border-neutral-200 pt-6">
 				<div class="flex items-center justify-between">
 					<h2 class="text-base font-semibold text-neutral-800">Activity</h2>
 					<div class="text-sm text-neutral-400">Unsubscribe</div>
 				</div>
-				<div class="mt-4 space-y-4 text-sm text-neutral-600">
-					<div class="flex items-center gap-3">
-						<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-						<span>Andrew Chang created the issue · 54min ago</span>
-					</div>
-					<div class="flex items-center gap-3">
-						<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-						<span>Andrew Chang changed project from Vanessa to Issues · 36min ago</span>
-					</div>
-				</div>
-
-				<div class="mt-6 space-y-4">
-					<div class="rounded-xl border border-neutral-200 bg-white">
-						<div class="flex items-center gap-3 px-4 pt-4 text-sm text-neutral-700">
-							<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-							<div class="font-medium">Andrew Chang</div>
-							<div class="text-neutral-400">18min ago</div>
-						</div>
-						<div class="mt-3 px-4 text-sm text-neutral-800">Copying linear</div>
-						<div class="mt-4 border-t border-neutral-200 px-4 py-3">
-							<div class="flex items-center justify-between text-sm text-neutral-400">
-								<div class="flex items-center gap-3">
-									<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-									<span>Leave a reply...</span>
-								</div>
-								<div class="flex items-center gap-3">
-									<span
-										class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500"
-									>
-										↑
-									</span>
-								</div>
-							</div>
-						</div>
-					</div>
-					<div class="rounded-xl border border-neutral-200 bg-white">
-						<div class="flex items-center gap-3 px-4 pt-4 text-sm text-neutral-700">
-							<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-							<div class="font-medium">Andrew Chang</div>
-							<div class="text-neutral-400">18min ago</div>
-						</div>
-						<div class="mt-3 px-4 text-sm text-neutral-800">Test</div>
-						<div class="mt-4 border-t border-neutral-200 px-4 py-3">
-							<div class="flex items-center justify-between text-sm text-neutral-400">
-								<div class="flex items-center gap-3">
-									<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-									<span>Leave a reply...</span>
-								</div>
-								<div class="flex items-center gap-3">
-									<span
-										class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500"
-									>
-										↑
-									</span>
-								</div>
-							</div>
-						</div>
-					</div>
-					<div
-						class="rounded-xl border border-neutral-200 bg-white px-4 py-4 text-sm text-neutral-400"
-					>
-						<div>Leave a comment...</div>
-						<div class="mt-6 flex items-center justify-between">
-							<div class="flex items-center gap-3">
-								<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-								<span>Leave a reply...</span>
-							</div>
-							<div class="flex items-center gap-3">
-								<span
-									class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500"
-								>
-									↑
-								</span>
-							</div>
-						</div>
-					</div>
-				</div>
+				<div class="mt-4 text-sm text-neutral-500">No activity yet.</div>
 			</div>
 		</div>
 	</div>
@@ -133,7 +151,7 @@
 				</div>
 				<div class="flex items-center gap-2">
 					<span class="h-3 w-3 rounded-full border border-amber-500"></span>
-					<span>{statusLabel}</span>
+					<span>{statusMeta.label}</span>
 				</div>
 			</div>
 		</div>
