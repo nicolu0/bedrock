@@ -9,8 +9,8 @@
 
 	const tabs = ['Assigned', 'Subscribed', 'Activity'];
 
-	$: sections = $issuesCache.data?.sections ?? data?.sections ?? [];
-	$: isLoading = $issuesCache.loading && sections.length === 0;
+	$: sections = $issuesCache.data?.sections ?? [];
+	$: isLoading = sections.length === 0 && $issuesCache.loading;
 	$: expandedSections = sections.map((section) => {
 		const rows = section.items.flatMap((item) => {
 			const subRows = (item.subIssues ?? []).map((subIssue) => ({
@@ -29,12 +29,19 @@
 
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
-	$: if (
-		browser &&
-		data?.sections?.length &&
-		(!$issuesCache.data || $issuesCache.workspace !== workspaceSlug)
-	) {
-		primeIssuesCache(workspaceSlug, { sections: data.sections });
+
+	// Prime cache from streaming server data (handles both resolved value and client Promise)
+	$: if (browser && data.sections) {
+		const prime = (s) => {
+			if (s?.length && (!$issuesCache.data || $issuesCache.workspace !== workspaceSlug)) {
+				primeIssuesCache(workspaceSlug, { sections: s });
+			}
+		};
+		if (data.sections instanceof Promise) {
+			data.sections.then(prime);
+		} else {
+			prime(data.sections);
+		}
 	}
 
 	const slugify = (value) => {

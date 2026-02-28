@@ -1,23 +1,49 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
+	import { browser } from '$app/environment';
+	import {
+		notificationsCache,
+		primeNotificationsCache
+	} from '$lib/stores/notificationsCache.js';
+	import { membersCache, primeMembersCache } from '$lib/stores/membersCache.js';
 
 	export let data;
 
 	let filter = 'All';
 	let reassignOpen = {};
 	let reassignValue = {};
-
-	let notifications = [];
-	let members = [];
-
-	const ready = (async () => {
-		[notifications, members] = await Promise.all([data.notifications, data.members]);
-	})();
+	let loadError = false;
+	$: isAdmin = data.workspace?.admin_user_id === data.currentUserId;
 
 	$: workspaceSlug = $page.params.workspace;
-	$: filtered = filter === 'Unread' ? notifications.filter((n) => !n.is_read) : notifications;
+
+	// Derive display data from cache (null = not yet cached)
+	$: notifications =
+		$notificationsCache.workspace === workspaceSlug &&
+		$notificationsCache.data?.notifications != null
+			? $notificationsCache.data.notifications
+			: null;
+	$: members =
+		$membersCache.workspace === workspaceSlug && $membersCache.data != null
+			? $membersCache.data
+			: [];
+
+	$: filtered =
+		filter === 'Unread' ? (notifications ?? []).filter((n) => !n.is_read) : notifications ?? [];
+
+	// Prime cache from server data — re-runs after invalidate() triggers a fresh load
+	$: if (browser && data.notifications && data.members) {
+		Promise.all([data.notifications, data.members])
+			.then(([n, m]) => {
+				primeNotificationsCache(workspaceSlug, { notifications: n, members: m });
+				primeMembersCache(workspaceSlug, m);
+			})
+			.catch(() => {
+				loadError = true;
+			});
+	}
 
 	const slugify = (value) => {
 		if (!value) return 'issue';
@@ -47,11 +73,22 @@
 
 	async function handleClick(n) {
 		if (!n.is_read) {
+			// Optimistic update
+			notificationsCache.update((state) => ({
+				...state,
+				data: state.data
+					? {
+							...state.data,
+							notifications: state.data.notifications.map((notif) =>
+								notif.id === n.id ? { ...notif, is_read: true } : notif
+							)
+						}
+					: state.data
+			}));
 			const fd = new FormData();
 			fd.append('id', n.id);
 			await fetch('?/markRead', { method: 'POST', body: fd });
-			n.is_read = true;
-			notifications = notifications;
+			invalidate('app:notifications');
 		}
 		const issue = n.issues;
 		if (issue?.id) {
@@ -62,28 +99,48 @@
 	async function handleApprove(n) {
 		const assigneeId = n.meta?.suggested_assignee_id;
 		if (!assigneeId) return;
+		// Optimistic update
+		notificationsCache.update((state) => ({
+			...state,
+			data: state.data
+				? {
+						...state.data,
+						notifications: state.data.notifications.map((notif) =>
+							notif.id === n.id ? { ...notif, is_read: true, requires_action: false } : notif
+						)
+					}
+				: state.data
+		}));
 		const fd = new FormData();
 		fd.append('notif_id', n.id);
 		fd.append('issue_id', n.issues?.id ?? '');
 		fd.append('assignee_id', assigneeId);
-		n.is_read = true;
-		n.requires_action = false;
-		notifications = notifications;
 		await fetch('?/approveAssignment', { method: 'POST', body: fd });
+		invalidate('app:notifications');
 	}
 
 	async function handleReassignConfirm(n) {
 		const assigneeId = reassignValue[n.id];
 		if (!assigneeId) return;
+		// Optimistic update
+		notificationsCache.update((state) => ({
+			...state,
+			data: state.data
+				? {
+						...state.data,
+						notifications: state.data.notifications.map((notif) =>
+							notif.id === n.id ? { ...notif, is_read: true, requires_action: false } : notif
+						)
+					}
+				: state.data
+		}));
+		reassignOpen[n.id] = false;
 		const fd = new FormData();
 		fd.append('notif_id', n.id);
 		fd.append('issue_id', n.issues?.id ?? '');
 		fd.append('assignee_id', assigneeId);
-		n.is_read = true;
-		n.requires_action = false;
-		reassignOpen[n.id] = false;
-		notifications = notifications;
 		await fetch('?/approveAssignment', { method: 'POST', body: fd });
+		invalidate('app:notifications');
 	}
 </script>
 
@@ -108,22 +165,7 @@
 		{/each}
 	</div>
 
-	{#await ready}
-		<div class="divide-y divide-neutral-100">
-			{#each Array(5) as _, i}
-				<div class="flex items-start gap-3 px-6 py-3">
-					<div class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full shimmer"></div>
-					<div class="flex-1 space-y-2">
-						<div class="flex items-center justify-between gap-3">
-							<div class="shimmer h-3 rounded" style="width: {i % 2 === 0 ? '45%' : '55%'}"></div>
-							<div class="shimmer h-3 w-20 rounded"></div>
-						</div>
-						<div class="shimmer h-3 rounded" style="width: {i % 3 === 0 ? '70%' : '80%'}"></div>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{:then}
+	{#if notifications !== null}
 		{#if filtered.length === 0}
 			<div class="px-6 py-8 text-sm text-neutral-400">
 				{filter === 'Unread' ? 'No unread notifications.' : 'No notifications yet.'}
@@ -131,7 +173,7 @@
 		{:else}
 			<div>
 				{#each filtered as n}
-					{#if n.requires_action && data.isAdmin}
+					{#if n.requires_action && isAdmin}
 						<!-- Assignment suggestion — actionable card -->
 						<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 						<div
@@ -275,9 +317,25 @@
 				{/each}
 			</div>
 		{/if}
-	{:catch}
+	{:else if loadError}
 		<div class="px-6 py-8 text-sm text-neutral-400">Failed to load notifications.</div>
-	{/await}
+	{:else}
+		<!-- First visit: skeleton while server data loads -->
+		<div class="divide-y divide-neutral-100">
+			{#each Array(5) as _, i}
+				<div class="flex items-start gap-3 px-6 py-3">
+					<div class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full shimmer"></div>
+					<div class="flex-1 space-y-2">
+						<div class="flex items-center justify-between gap-3">
+							<div class="shimmer h-3 rounded" style="width: {i % 2 === 0 ? '45%' : '55%'}"></div>
+							<div class="shimmer h-3 w-20 rounded"></div>
+						</div>
+						<div class="shimmer h-3 rounded" style="width: {i % 3 === 0 ? '70%' : '80%'}"></div>
+					</div>
+				</div>
+			{/each}
+		</div>
+	{/if}
 </div>
 
 <style>

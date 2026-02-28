@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { json } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
+import { resolveWorkspace } from '$lib/server/workspaces';
 
 const statusConfig = {
 	in_progress: {
@@ -23,23 +24,6 @@ const statusConfig = {
 const statusOrder = ['in_progress', 'todo', 'done'];
 const allowedStatuses = new Set(statusOrder);
 
-const resolveWorkspace = async (workspaceSlug, userId) => {
-	if (!workspaceSlug) return null;
-	const { data: adminWorkspace } = await supabaseAdmin
-		.from('workspaces')
-		.select('id, slug')
-		.eq('slug', workspaceSlug)
-		.eq('admin_user_id', userId)
-		.maybeSingle();
-	if (adminWorkspace?.id) return adminWorkspace;
-	const { data: memberWorkspace } = await supabaseAdmin
-		.from('members')
-		.select('workspaces:workspaces(id, slug)')
-		.eq('user_id', userId)
-		.eq('workspaces.slug', workspaceSlug)
-		.maybeSingle();
-	return memberWorkspace?.workspaces ?? null;
-};
 
 export const GET = async ({ locals, url }) => {
 	if (!locals.user) {

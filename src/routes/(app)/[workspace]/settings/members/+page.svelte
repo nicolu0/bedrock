@@ -1,4 +1,8 @@
 <script>
+	// @ts-nocheck
+	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
+	import { membersCache, primeMembersCache } from '$lib/stores/membersCache.js';
 	import InviteModal from '$lib/components/InviteModal.svelte';
 
 	export let data;
@@ -12,6 +16,21 @@
 	};
 
 	let showInviteModal = false;
+
+	$: workspaceSlug = $page.params.workspace;
+
+	// Derive from cache (null = not yet cached)
+	$: members =
+		$membersCache.workspace === workspaceSlug && $membersCache.data != null
+			? $membersCache.data
+			: null;
+
+	// Prime cache from server data — re-runs after invalidate('app:members')
+	$: if (browser && data.members) {
+		data.members.then((m) => {
+			primeMembersCache(workspaceSlug, m);
+		});
+	}
 </script>
 
 <div class="space-y-6">
@@ -21,7 +40,7 @@
 			<p class="text-sm text-neutral-500">Manage who has access to this workspace.</p>
 		</div>
 		<div class="flex items-center gap-2">
-<button
+			<button
 				class="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
 				on:click={(e) => { e.currentTarget.blur(); showInviteModal = true; }}
 			>
@@ -58,16 +77,7 @@
 			<div>Name</div>
 			<div>Role</div>
 		</div>
-		{#await data.members}
-			<div class="divide-y divide-neutral-100">
-				{#each Array(3) as _, i}
-					<div class="grid grid-cols-[2fr_1fr] gap-4 border-t border-neutral-100 px-5 py-3">
-						<div class="shimmer h-4 rounded" style="width: {i % 2 === 0 ? '8rem' : '6rem'}"></div>
-						<div class="shimmer h-5 w-16 rounded-full"></div>
-					</div>
-				{/each}
-			</div>
-		{:then members}
+		{#if members !== null}
 			{#each members as member}
 				<div class="grid grid-cols-[2fr_1fr] gap-4 border-t border-neutral-100 px-5 py-3 text-sm">
 					<div class="flex items-center gap-1.5 text-neutral-800">
@@ -85,7 +95,17 @@
 			{:else}
 				<div class="px-5 py-4 text-sm text-neutral-600">No members yet.</div>
 			{/each}
-		{/await}
+		{:else}
+			<!-- First visit: skeleton while server data loads -->
+			<div class="divide-y divide-neutral-100">
+				{#each Array(3) as _, i}
+					<div class="grid grid-cols-[2fr_1fr] gap-4 border-t border-neutral-100 px-5 py-3">
+						<div class="shimmer h-4 rounded" style="width: {i % 2 === 0 ? '8rem' : '6rem'}"></div>
+						<div class="shimmer h-5 w-16 rounded-full"></div>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</div>
 </div>
 

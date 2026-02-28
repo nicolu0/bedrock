@@ -10,43 +10,44 @@ export const load = async ({ locals, params, parent }) => {
 		throw redirect(303, '/');
 	}
 
-	const parentData = await parent();
-	const workspaceId = parentData?.workspace?.id ?? null;
-	if (!workspaceId) {
-		return { issue: null, subIssues: [], assignee: null };
-	}
+	const issueId = params.issue_id;
+	const userId = locals.user.id;
 
-	const { data: issue } = await supabaseAdmin
-		.from('issues')
-		.select('id, name, status, description')
-		.eq('id', params.issue_id)
-		.eq('workspace_id', workspaceId)
-		.maybeSingle();
+	const { workspace } = await parent();
+	const workspaceId = workspace?.id ?? null;
+	if (!workspaceId) return { issueDetail: null };
 
-	const normalizedIssue = issue
-		? {
-				...issue,
-				status: allowedStatuses.has(issue.status) ? issue.status : 'todo'
-			}
-		: null;
+	const issueDetail = (async () => {
+		const [{ data: issue }, { data: subIssues }, { data: assignee }] = await Promise.all([
+			supabaseAdmin
+				.from('issues')
+				.select('id, name, status, description')
+				.eq('id', issueId)
+				.eq('workspace_id', workspaceId)
+				.maybeSingle(),
+			supabaseAdmin
+				.from('issues')
+				.select('id, name, status, parent_id')
+				.eq('parent_id', issueId)
+				.eq('workspace_id', workspaceId)
+				.order('updated_at', { ascending: false }),
+			supabaseAdmin.from('users').select('id, name').eq('id', userId).maybeSingle()
+		]);
 
-	const { data: subIssues } = await supabaseAdmin
-		.from('issues')
-		.select('id, name, status, parent_id')
-		.eq('parent_id', params.issue_id)
-		.eq('workspace_id', workspaceId)
-		.order('updated_at', { ascending: false });
+		const normalizedIssue = issue
+			? {
+					...issue,
+					status: allowedStatuses.has(issue.status) ? issue.status : 'todo'
+				}
+			: null;
 
-	const normalizedSubIssues = (subIssues ?? []).map((subIssue) => ({
-		...subIssue,
-		status: allowedStatuses.has(subIssue.status) ? subIssue.status : 'todo'
-	}));
+		const normalizedSubIssues = (subIssues ?? []).map((subIssue) => ({
+			...subIssue,
+			status: allowedStatuses.has(subIssue.status) ? subIssue.status : 'todo'
+		}));
 
-	const { data: assignee } = await supabaseAdmin
-		.from('users')
-		.select('id, name')
-		.eq('id', locals.user.id)
-		.maybeSingle();
+		return { issue: normalizedIssue, subIssues: normalizedSubIssues, assignee };
+	})();
 
-	return { issue: normalizedIssue, subIssues: normalizedSubIssues, assignee };
+	return { issueDetail }; // streamed — navigation doesn't wait
 };

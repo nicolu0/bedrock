@@ -91,4 +91,24 @@ const getWorkspaceForUser = async (supabase, user, slug = null) => {
 	return data?.workspaces ?? null;
 };
 
-export { ensureWorkspace, getWorkspaceForUser, slugify };
+/** @param {string} workspaceSlug @param {string} userId */
+const resolveWorkspace = async (workspaceSlug, userId) => {
+	if (!workspaceSlug) return null;
+	const { supabaseAdmin } = await import('$lib/supabaseAdmin');
+	const { data: adminWorkspace } = await supabaseAdmin
+		.from('workspaces')
+		.select('id, slug')
+		.eq('slug', workspaceSlug)
+		.eq('admin_user_id', userId)
+		.maybeSingle();
+	if (adminWorkspace?.id) return adminWorkspace;
+	const { data: memberWorkspace } = await supabaseAdmin
+		.from('members')
+		.select('workspaces:workspaces(id, slug)')
+		.eq('user_id', userId)
+		.eq('workspaces.slug', workspaceSlug)
+		.maybeSingle();
+	return memberWorkspace?.workspaces ?? null;
+};
+
+export { ensureWorkspace, getWorkspaceForUser, resolveWorkspace, slugify };

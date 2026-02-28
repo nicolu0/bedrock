@@ -1,10 +1,16 @@
 // @ts-nocheck
+import { redirect } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
 export const load = async ({ parent, locals }) => {
-	const { workspace } = await parent();
+	if (!locals.user) throw redirect(303, '/');
+
+	const currentUserId = locals.user.id;
+	const _parent = parent();
 
 	const notifications = (async () => {
+		const { workspace } = await _parent;
+		if (!workspace?.id) return [];
 		const { data } = await supabaseAdmin
 			.from('notifications')
 			.select(
@@ -21,6 +27,8 @@ export const load = async ({ parent, locals }) => {
 	})();
 
 	const members = (async () => {
+		const { workspace } = await _parent;
+		if (!workspace?.id) return [];
 		const { data } = await supabaseAdmin
 			.from('members')
 			.select('user_id, users(name)')
@@ -28,9 +36,7 @@ export const load = async ({ parent, locals }) => {
 		return data ?? [];
 	})();
 
-	const isAdmin = workspace.admin_user_id === locals.user.id;
-
-	return { notifications, members, isAdmin, currentUserId: locals.user.id };
+	return { notifications, members, currentUserId };
 };
 
 export const actions = {

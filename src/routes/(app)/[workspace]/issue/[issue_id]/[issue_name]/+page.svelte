@@ -1,7 +1,11 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { issuesCache } from '$lib/stores/issuesCache';
+	import { browser } from '$app/environment';
+	import { get } from 'svelte/store';
+	import { getIssueDetail, primeIssueDetail } from '$lib/stores/issueDetailCache.js';
+	import { issuesCache } from '$lib/stores/issuesCache.js';
+	import { membersCache } from '$lib/stores/membersCache.js';
 
 	export let data;
 
@@ -20,21 +24,58 @@
 		}
 	};
 
-	$: issueId = data?.issue?.id ?? $page.params.issue_id ?? 'HUB-1';
-	$: issueNameSlug = $page.params.issue_name ?? 'issues-page-layout';
+	const issueId = $page.params.issue_id;
+	const cached = browser ? getIssueDetail(issueId) : null;
+
+	// Seed partial data from the issues list cache (title + status are already loaded)
+	const listItem = browser
+		? get(issuesCache)
+				?.data?.sections?.flatMap((s) => s.items)
+				?.find((item) => item.issueId === issueId) ?? null
+		: null;
+
+	// Seed assignee from members cache using the current user's ID (from layout data)
+	const memberEntry = browser && data.userId
+		? get(membersCache)?.data?.find((m) => m.user_id === data.userId) ?? null
+		: null;
+	const seedAssignee = memberEntry ? { id: data.userId, name: memberEntry.users?.name } : null;
+
+	let issue = cached?.issue ?? (listItem ? { id: issueId, name: listItem.title, status: listItem.status, description: null } : null);
+	let subIssues = cached?.subIssues ?? [];
+	let assignee = cached?.assignee ?? seedAssignee;
+
+	// When stream resolves: update locals + prime cache
+	// Only overwrite issue if the stream returned a real value — prevents null wiping out the seed
+	$: if (browser && data.issueDetail) {
+		if (data.issueDetail instanceof Promise) {
+			data.issueDetail.then((detail) => {
+				if (!detail) return;
+				const { issue: i, subIssues: s, assignee: a } = detail;
+				if (i) issue = i;
+				subIssues = s ?? [];
+				assignee = a ?? assignee;
+				if (i) primeIssueDetail(issueId, { issue: i, subIssues: s ?? [], assignee: a ?? assignee });
+			});
+		} else if (data.issueDetail) {
+			const { issue: i, subIssues: s, assignee: a } = data.issueDetail;
+			if (i) issue = i;
+			subIssues = s ?? [];
+			assignee = a ?? assignee;
+			if (i) primeIssueDetail(issueId, { issue: i, subIssues: s ?? [], assignee: a ?? assignee });
+		}
+	}
+
+	$: issueNameSlug = $page.params.issue_name ?? '';
 	$: issueName =
-		data?.issue?.name ??
+		issue?.name ??
 		(issueNameSlug
 			? issueNameSlug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-			: 'Issues Page Layout');
-	$: issueDescription = data?.issue?.description ?? '';
-	$: statusKey = data?.issue?.status ?? 'todo';
+			: 'Issue');
+	$: issueDescription = issue?.description ?? '';
+	$: statusKey = issue?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
-	$: assigneeName = data?.assignee?.name ?? 'Unassigned';
-	$: subIssues = data?.subIssues ?? [];
-	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${
-		subIssues.length
-	}`;
+	$: assigneeName = assignee?.name ?? 'Unassigned';
+	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
 </script>
 
 <div class="flex h-full">

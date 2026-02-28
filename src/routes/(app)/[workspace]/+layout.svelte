@@ -3,30 +3,18 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
-	import { ensureIssuesCache, issuesCache } from '$lib/stores/issuesCache';
+	import { ensureIssuesCache } from '$lib/stores/issuesCache';
+	import { ensureNotificationsCache } from '$lib/stores/notificationsCache';
+	import { ensureMembersCache } from '$lib/stores/membersCache';
 	export let data;
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: isSettingsRoute = $page.url.pathname.startsWith(`${basePath}/settings`);
 	$: currentPath = $page.url.pathname;
-	$: bootLoading = !isSettingsRoute && $issuesCache.loading;
-	$: if (browser) {
-		console.log('[issues-cache] boot state', {
-			workspaceSlug,
-			bootLoading,
-			loading: $issuesCache.loading,
-			data: Boolean($issuesCache.data),
-			error: Boolean($issuesCache.error)
-		});
-	}
 	$: activeItem = [...navItems, propertiesItem, settingsItem].find(
 		(item) => currentPath === `${basePath}/${item.href}`
 	);
 	$: propertiesPromise = data?.properties ?? Promise.resolve([]);
-	$: sidebarContentClass = bootLoading
-		? 'opacity-0 pointer-events-none select-none'
-		: 'opacity-100';
-	$: mainContentClass = bootLoading ? 'opacity-0 pointer-events-none select-none' : 'opacity-100';
 	const navItems = [
 		{ id: 'inbox', label: 'Inbox', href: 'inbox' },
 		{ id: 'my-issues', label: 'My issues', href: 'my-issues' },
@@ -48,6 +36,8 @@
 
 	$: if (browser && workspaceSlug) {
 		ensureIssuesCache(workspaceSlug);
+		ensureNotificationsCache(workspaceSlug);
+		ensureMembersCache(workspaceSlug);
 	}
 </script>
 
@@ -57,9 +47,7 @@
 	<div class="h-screen bg-white text-neutral-900">
 		<div class="flex h-screen flex-col md:flex-row">
 			<aside class="flex h-screen w-1/6 flex-col border-r border-neutral-200 bg-neutral-50/80">
-				<div
-					class={`flex h-full min-h-0 flex-col transition-opacity duration-200 ${sidebarContentClass}`}
-				>
+				<div class="flex h-full min-h-0 flex-col">
 					<div class="flex flex-1 flex-col space-y-6 px-2 pt-4">
 						<div class="flex items-center justify-between px-2 text-neutral-700">
 							<div class="flex items-center gap-2">
@@ -176,7 +164,7 @@
 				</div>
 			</aside>
 			<section class="flex-1 overflow-y-auto">
-				<div class={`h-full w-full transition-opacity duration-200 ${mainContentClass}`}>
+				<div class="h-full w-full">
 					<slot />
 				</div>
 			</section>

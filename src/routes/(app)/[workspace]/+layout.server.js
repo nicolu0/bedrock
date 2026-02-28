@@ -70,7 +70,7 @@ export const load = async ({ locals, params }) => {
 			);
 		const properties = loadPropertiesList(locals.supabase, supabaseAdmin, adminWorkspace.id, 'admin', locals.user.id);
 		const units = loadUnitsList(locals.supabase, supabaseAdmin, adminWorkspace.id);
-		return { workspace: adminWorkspace, properties, units };
+		return { workspace: adminWorkspace, properties, units, userId: locals.user.id };
 	}
 	const { data: memberWorkspace } = await supabaseAdmin
 		.from('members')
@@ -87,7 +87,7 @@ export const load = async ({ locals, params }) => {
 			locals.user.id
 		);
 		const units = loadUnitsList(locals.supabase, supabaseAdmin, memberWorkspace.workspaces.id);
-		return { workspace: memberWorkspace.workspaces, properties, units };
+		return { workspace: memberWorkspace.workspaces, properties, units, userId: locals.user.id };
 	}
 	// Check if the workspace slug exists at all
 	const { data: existingWorkspace } = await supabaseAdmin
