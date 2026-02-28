@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
+import { notifyWorkspace } from '$lib/server/notifications';
 
 const getGmailUser = async (supabase, user) => {
 	if (!user) {
@@ -858,12 +859,25 @@ export const actions = {
 
 		const { data: issueRow, error: issueError } = await locals.supabase
 			.from('issues')
-			.select('id, name, description, tenant_id, unit_id, vendor_id, suggested_vendor_id')
+			.select('id, name, description, tenant_id, unit_id, vendor_id, suggested_vendor_id, workspace_id, issue_number')
 			.eq('id', actionRow.issue_id)
 			.maybeSingle();
 		if (issueError || !issueRow?.id) {
 			return fail(404, { error: 'Issue not found.' });
 		}
+
+		const buildNotifTitle = async () => {
+			const workspaceId = issueRow.workspace_id;
+			if (!workspaceId) return issueRow.name ?? 'Issue';
+			const { data: ws } = await supabaseAdmin
+				.from('workspaces')
+				.select('name')
+				.eq('id', workspaceId)
+				.maybeSingle();
+			const prefix = ws?.name ? ws.name.slice(0, 3).toUpperCase() : 'WS';
+			const num = issueRow.issue_number ?? '';
+			return `[${prefix}${num ? ' ' + num : ''}] ${issueRow.name ?? 'Issue'}`;
+		};
 
 		const { data: sendConnection } = await locals.supabase
 			.from('gmail_connections')
@@ -1065,6 +1079,15 @@ export const actions = {
 			});
 
 			await locals.supabase.from('tasks').update({ status: 'approved' }).eq('id', actionRow.id);
+			if (issueRow.workspace_id) {
+				const notifTitle = await buildNotifTitle();
+				await notifyWorkspace(
+					issueRow.workspace_id,
+					issueRow.id,
+					notifTitle,
+					'Agent updated issue status to In Progress.'
+				).catch(() => {});
+			}
 			return { actionId };
 		}
 
@@ -1099,6 +1122,15 @@ export const actions = {
 				.update({ status: 'escalated', vendor_id: null })
 				.eq('id', issueRow.id);
 			await locals.supabase.from('tasks').update({ status: 'approved' }).eq('id', actionRow.id);
+			if (issueRow.workspace_id) {
+				const notifTitle = await buildNotifTitle();
+				await notifyWorkspace(
+					issueRow.workspace_id,
+					issueRow.id,
+					notifTitle,
+					`Agent dispatched vendor for ${issueRow.name}.`
+				).catch(() => {});
+			}
 			return { actionId };
 		}
 
@@ -1250,6 +1282,25 @@ export const actions = {
 			.eq('id', issueRow.id);
 
 		await locals.supabase.from('tasks').update({ status: 'approved' }).eq('id', actionRow.id);
+		if (issueRow.workspace_id) {
+			const notifTitle = await buildNotifTitle();
+			const unitName = unitRow?.name ?? null;
+			const buildingName = buildingRow?.name ?? null;
+			const locationPart =
+				unitName && buildingName
+					? `for ${unitName} at ${buildingName}`
+					: unitName
+						? `for ${unitName}`
+						: buildingName
+							? `at ${buildingName}`
+							: '';
+			await notifyWorkspace(
+				issueRow.workspace_id,
+				issueRow.id,
+				notifTitle,
+				`Agent dispatched ${vendorRow.name}${locationPart ? ' ' + locationPart : ''}.`
+			).catch(() => {});
+		}
 		return { actionId };
 	},
 
