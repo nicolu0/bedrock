@@ -615,7 +615,8 @@ When you believe you have completed the task, call done().
 
 			if (name === 'create_subissue') {
 				const title = typeof args.title === 'string' ? args.title.trim() : '';
-				const status = typeof args.status === 'string' ? args.status : 'todo';
+				const statusValue = typeof args.status === 'string' ? args.status : 'todo';
+				const status = ['todo', 'in_progress', 'done'].includes(statusValue) ? statusValue : 'todo';
 				const reasoning = typeof args.reasoning === 'string' ? args.reasoning : '';
 				const parentIssueId =
 					typeof args.parent_issue_id === 'string'

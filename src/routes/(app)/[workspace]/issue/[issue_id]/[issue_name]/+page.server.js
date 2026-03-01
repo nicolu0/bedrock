@@ -69,7 +69,7 @@ export const load = async ({ locals, params, parent }) => {
 			.from('messages')
 			.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
 			.in('issue_id', issueIds)
-			.order('timestamp', { ascending: false });
+			.order('timestamp', { ascending: true });
 
 		messagesByIssue = (messages ?? []).reduce((acc, message) => {
 			if (!message.issue_id) {
