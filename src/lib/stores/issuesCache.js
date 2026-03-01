@@ -67,7 +67,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 		now - currentState.fetchedAt < CACHE_TTL
 	) {
 		console.log('[issues-cache] cache hit', { workspaceSlug });
-		return currentState.data;
 	}
 
 	const sessionCached = readSessionCache();
@@ -94,7 +93,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 			sections: sessionSections,
 			issues: sessionIssues
 		});
-		return sessionCached.data;
 	}
 	if (sessionCached && !sessionValid) {
 		console.log('[issues-cache] session invalid, clearing', { workspaceSlug });
