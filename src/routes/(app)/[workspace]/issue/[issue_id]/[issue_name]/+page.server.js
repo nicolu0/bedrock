@@ -40,7 +40,7 @@ export const load = async ({ locals, params, parent }) => {
 	// Fast initial fetch for canonical validation + immediate page data
 	const { data: issue } = await supabaseAdmin
 		.from('issues')
-		.select('id, name, status, description')
+		.select('id, name, status')
 		.eq('id', issueId)
 		.eq('workspace_id', workspaceId)
 		.maybeSingle();
@@ -51,6 +51,7 @@ export const load = async ({ locals, params, parent }) => {
 
 	const normalizedIssue = {
 		...issue,
+		description: issue?.description ?? null,
 		status: allowedStatuses.has(issue.status) ? issue.status : 'todo'
 	};
 
@@ -120,25 +121,27 @@ export const load = async ({ locals, params, parent }) => {
 
 	// Streamed detail fetch for client-side seeding/cache priming
 	const issueDetail = (async () => {
-		const [{ data: fullIssue }, { data: fullSubIssues }, { data: fullAssignee }] = await Promise.all([
-			supabaseAdmin
-				.from('issues')
-				.select('id, name, status, description')
-				.eq('id', issueId)
-				.eq('workspace_id', workspaceId)
-				.maybeSingle(),
-			supabaseAdmin
-				.from('issues')
-				.select('id, name, status, parent_id')
-				.eq('parent_id', issueId)
-				.eq('workspace_id', workspaceId)
-				.order('updated_at', { ascending: false }),
-			supabaseAdmin.from('users').select('id, name').eq('id', userId).maybeSingle()
-		]);
+		const [{ data: fullIssue }, { data: fullSubIssues }, { data: fullAssignee }] =
+			await Promise.all([
+				supabaseAdmin
+					.from('issues')
+					.select('id, name, status')
+					.eq('id', issueId)
+					.eq('workspace_id', workspaceId)
+					.maybeSingle(),
+				supabaseAdmin
+					.from('issues')
+					.select('id, name, status, parent_id')
+					.eq('parent_id', issueId)
+					.eq('workspace_id', workspaceId)
+					.order('updated_at', { ascending: false }),
+				supabaseAdmin.from('users').select('id, name').eq('id', userId).maybeSingle()
+			]);
 
 		const normalizedFullIssue = fullIssue
 			? {
 					...fullIssue,
+					description: fullIssue?.description ?? null,
 					status: allowedStatuses.has(fullIssue.status) ? fullIssue.status : 'todo'
 				}
 			: null;
