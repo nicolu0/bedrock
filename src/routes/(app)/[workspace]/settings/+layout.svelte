@@ -1,7 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { goto, afterNavigate } from '$app/navigation';
 	import { fade, scale } from 'svelte/transition';
 
 	$: workspaceSlug = $page.params.workspace;
@@ -14,6 +14,17 @@
 
 	const isActive = (href) => $page.url.pathname === `${basePath}/settings/${href}`;
 
+	// Module-level so it survives tab switches within settings
+	let returnTo = null;
+
+	afterNavigate(({ from }) => {
+		if (from && !from.url.pathname.includes('/settings/')) {
+			returnTo = from.url.pathname + from.url.search;
+		}
+	});
+
+	$: exitUrl = returnTo ?? (workspaceSlug ? `/${workspaceSlug}` : '/');
+
 	let showLogoutModal = false;
 
 	function onKeydown(e) {
@@ -23,7 +34,7 @@
 			return;
 		}
 		if (!document.querySelector('[role="dialog"]')) {
-			history.back();
+			goto(exitUrl);
 		}
 	}
 </script>
@@ -36,7 +47,7 @@
 			<div class="px-5 pt-6">
 				<button
 					type="button"
-					on:click={() => history.back()}
+					on:click={() => goto(exitUrl)}
 					class="inline-flex items-center gap-2 text-sm text-neutral-600 hover:text-neutral-900"
 				>
 					<span aria-hidden="true">←</span>
