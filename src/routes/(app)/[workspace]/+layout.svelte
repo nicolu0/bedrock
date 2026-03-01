@@ -6,6 +6,7 @@
 	import { ensureIssuesCache } from '$lib/stores/issuesCache';
 	import { ensureNotificationsCache } from '$lib/stores/notificationsCache';
 	import { ensureMembersCache } from '$lib/stores/membersCache';
+	import { ensureActivityCache } from '$lib/stores/activityCache';
 	export let data;
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
@@ -38,6 +39,7 @@
 		ensureIssuesCache(workspaceSlug);
 		ensureNotificationsCache(workspaceSlug);
 		ensureMembersCache(workspaceSlug);
+		ensureActivityCache(workspaceSlug);
 	}
 </script>
 

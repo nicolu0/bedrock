@@ -9,6 +9,7 @@
 	import { getIssueDetail, primeIssueDetail } from '$lib/stores/issueDetailCache.js';
 	import { issuesCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
+	import { activityCache } from '$lib/stores/activityCache.js';
 
 	export let data;
 
@@ -74,9 +75,9 @@
 
 		subIssues = cached?.subIssues ?? data?.subIssues ?? [];
 		assignee = cached?.assignee ?? data?.assignee ?? seedAssignee;
-		messagesByIssue = data?.messagesByIssue ?? {};
-		emailDraftsByMessageId = data?.emailDraftsByMessageId ?? {};
-		draftIssueIds = data?.draftIssueIds ?? [];
+		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
+		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
+		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
 	}
 
 	// When stream resolves: update locals + prime cache
@@ -121,30 +122,10 @@
 		}
 	}
 
-	let _handledActivityPromise = null;
-	let _handledActivityIssueId = null;
-
-	$: if (
-		browser &&
-		issueId &&
-		data?.activityDetail &&
-		(data.activityDetail !== _handledActivityPromise || issueId !== _handledActivityIssueId)
-	) {
-		_handledActivityPromise = data.activityDetail;
-		_handledActivityIssueId = issueId;
-
-		const handleActivity = (detail) => {
-			if (!detail) return;
-			messagesByIssue = detail.messagesByIssue ?? {};
-			emailDraftsByMessageId = detail.emailDraftsByMessageId ?? {};
-			draftIssueIds = detail.draftIssueIds ?? [];
-		};
-
-		if (data.activityDetail instanceof Promise) {
-			data.activityDetail.then(handleActivity);
-		} else {
-			handleActivity(data.activityDetail);
-		}
+	$: if (browser && issueId) {
+		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
+		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
+		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
 	}
 
 	$: issueName =
