@@ -52,7 +52,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 	if (!workspaceSlug) return null;
 	if (!browser) return null;
 	const fetcher = options.fetch ?? fetch;
-	console.log('[issues-cache] ensure start', { workspaceSlug });
 
 	const now = Date.now();
 	let currentState;
@@ -66,7 +65,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 		currentState.workspace === workspaceSlug &&
 		now - currentState.fetchedAt < CACHE_TTL
 	) {
-		console.log('[issues-cache] cache hit', { workspaceSlug });
 		return currentState.data;
 	}
 
@@ -80,7 +78,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 		now - sessionCached.fetchedAt < CACHE_TTL &&
 		sessionValid
 	) {
-		console.log('[issues-cache] session hit', { workspaceSlug });
 		issuesCache.set({
 			workspace: workspaceSlug,
 			data: sessionCached.data,
@@ -88,16 +85,9 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 			error: null,
 			fetchedAt: sessionCached.fetchedAt
 		});
-		console.log('[issues-cache] session stored', {
-			workspaceSlug,
-			fetchedAt: sessionCached.fetchedAt,
-			sections: sessionSections,
-			issues: sessionIssues
-		});
 		return sessionCached.data;
 	}
 	if (sessionCached && !sessionValid) {
-		console.log('[issues-cache] session invalid, clearing', { workspaceSlug });
 		clearSessionCache();
 	}
 
@@ -113,14 +103,11 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 
 	inFlight = (async () => {
 		try {
-			console.log('[issues-cache] fetch', { workspaceSlug });
 			const response = await fetcher(`/api/issues-cache?workspace=${workspaceSlug}`);
 			if (!response.ok) {
 				throw new Error('Issues cache fetch failed');
 			}
 			const data = await response.json();
-			console.log('[issues-cache] fetch data', data);
-			console.log('[issues-cache] fetch ok', { workspaceSlug, keys: Object.keys(data ?? {}) });
 			const payload = {
 				workspace: workspaceSlug,
 				data,
@@ -138,12 +125,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 					fetchedAt: payload.fetchedAt
 				});
 				writeSessionCache(payload);
-				console.log('[issues-cache] stored', {
-					workspaceSlug,
-					fetchedAt: payload.fetchedAt,
-					sections: nextSections,
-					issues: nextIssues
-				});
 				return data;
 			}
 			issuesCache.update((state) => ({
@@ -151,14 +132,8 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 				loading: false,
 				error: null
 			}));
-			console.log('[issues-cache] fetch empty, keeping existing', {
-				workspaceSlug,
-				sections: nextSections,
-				issues: nextIssues
-			});
 			return currentState?.data;
 		} catch (error) {
-			console.log('[issues-cache] fetch error', { workspaceSlug, error });
 			issuesCache.set({
 				workspace: workspaceSlug,
 				data: null,
@@ -189,11 +164,6 @@ export const primeIssuesCache = (workspaceSlug, data) => {
 		loading: false,
 		error: null,
 		fetchedAt: payload.fetchedAt
-	});
-	console.log('[issues-cache] primed', {
-		workspaceSlug,
-		fetchedAt: payload.fetchedAt,
-		sections: data?.sections?.length ?? 0
 	});
 	writeSessionCache(payload);
 };

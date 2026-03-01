@@ -13,11 +13,11 @@ export const load = async ({ locals, params, parent }) => {
 	const issueId = params.issue_id;
 	const userId = locals.user.id;
 
-	const { workspace } = await parent();
-	const workspaceId = workspace?.id ?? null;
-	if (!workspaceId) return { issueDetail: null };
-
 	const issueDetail = (async () => {
+		const { workspace } = await parent();
+		const workspaceId = workspace?.id ?? null;
+		if (!workspaceId) return null;
+
 		const [{ data: issue }, { data: subIssues }, { data: assignee }] = await Promise.all([
 			supabaseAdmin
 				.from('issues')
