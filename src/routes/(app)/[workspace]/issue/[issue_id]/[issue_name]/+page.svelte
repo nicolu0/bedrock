@@ -61,6 +61,9 @@
 	let _seededForIssueId = null;
 	$: if (issueId && issueId !== _seededForIssueId) {
 		_seededForIssueId = issueId;
+		issue = null;
+		subIssues = [];
+		assignee = seedAssignee;
 		issue =
 			cached?.issue ??
 			data?.issue ??
@@ -98,6 +101,7 @@
 		const _issueId = issueId;
 
 		const handle = (detail) => {
+			if (_issueId !== issueId) return;
 			if (!detail) return;
 
 			const { issue: i, subIssues: s, assignee: a } = detail;
