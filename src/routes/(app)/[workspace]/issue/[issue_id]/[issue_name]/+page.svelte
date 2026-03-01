@@ -9,6 +9,7 @@
 	import { getIssueDetail, primeIssueDetail } from '$lib/stores/issueDetailCache.js';
 	import { issuesCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
+	import { activityCache } from '$lib/stores/activityCache.js';
 
 	export let data;
 
@@ -36,15 +37,15 @@
 	// Seed partial data from the issues list cache (title + status are already loaded)
 	$: listItem =
 		browser && issueId
-			? get(issuesCache)
+			? (get(issuesCache)
 					?.data?.sections?.flatMap((s) => s.items)
-					?.find((item) => item.issueId === issueId) ?? null
+					?.find((item) => item.issueId === issueId) ?? null)
 			: null;
 
 	// Seed assignee from members cache using the current user's ID (from layout data)
 	$: memberEntry =
 		browser && data?.userId
-			? get(membersCache)?.data?.find((m) => m.user_id === data.userId) ?? null
+			? (get(membersCache)?.data?.find((m) => m.user_id === data.userId) ?? null)
 			: null;
 
 	$: seedAssignee = memberEntry ? { id: data.userId, name: memberEntry.users?.name } : null;
@@ -52,6 +53,9 @@
 	let issue = null;
 	let subIssues = [];
 	let assignee = null;
+	let messagesByIssue = {};
+	let emailDraftsByMessageId = {};
+	let draftIssueIds = [];
 
 	// Reset local state when route/issue changes, preferring cache -> server data -> list seed
 	let _seededForIssueId = null;
@@ -71,6 +75,9 @@
 
 		subIssues = cached?.subIssues ?? data?.subIssues ?? [];
 		assignee = cached?.assignee ?? data?.assignee ?? seedAssignee;
+		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
+		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
+		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
 	}
 
 	// When stream resolves: update locals + prime cache
@@ -115,6 +122,12 @@
 		}
 	}
 
+	$: if (browser && issueId) {
+		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
+		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
+		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
+	}
+
 	$: issueName =
 		issue?.name ??
 		(issueNameSlug
@@ -126,11 +139,6 @@
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
 	$: assigneeName = assignee?.name ?? data?.assignee?.name ?? 'Unassigned';
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
-
-	// Activity data
-	$: messagesByIssue = data?.messagesByIssue ?? {};
-	$: emailDraftsByMessageId = data?.emailDraftsByMessageId ?? {};
-	$: draftIssueIds = data?.draftIssueIds ?? [];
 
 	const collectMessagesForIssue = (issueId) => {
 		const messages = messagesByIssue[issueId] ?? [];
