@@ -207,7 +207,6 @@
 				<span class="text-neutral-700">My issues</span>
 				<span class="text-neutral-300">›</span>
 				<span class="h-3 w-3 rounded-full border border-amber-500"></span>
-				<span class="text-neutral-700">{issueId}</span>
 				<span class="text-neutral-500">{issueName}</span>
 			</div>
 			<div class="flex items-center gap-2">
