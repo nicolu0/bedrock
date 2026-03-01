@@ -46,22 +46,24 @@
 
 	// When stream resolves: update locals + prime cache
 	// Only overwrite issue if the stream returned a real value — prevents null wiping out the seed
-	$: if (browser && data.issueDetail) {
-		if (data.issueDetail instanceof Promise) {
-			data.issueDetail.then((detail) => {
-				if (!detail) return;
-				const { issue: i, subIssues: s, assignee: a } = detail;
-				if (i) issue = i;
-				subIssues = s ?? [];
-				assignee = a ?? assignee;
-				if (i) primeIssueDetail(issueId, { issue: i, subIssues: s ?? [], assignee: a ?? assignee });
-			});
-		} else if (data.issueDetail) {
-			const { issue: i, subIssues: s, assignee: a } = data.issueDetail;
+	// _handledPromise guards against re-registering .then() on every reactive re-run (infinite loop)
+	let _handledPromise = null;
+	$: if (browser && data.issueDetail && data.issueDetail !== _handledPromise) {
+		_handledPromise = data.issueDetail;
+		const _assignee = assignee; // captured synchronously — not a closure over live `assignee`
+		const _issueId = issueId;
+		const handle = (detail) => {
+			if (!detail) return;
+			const { issue: i, subIssues: s, assignee: a } = detail;
 			if (i) issue = i;
 			subIssues = s ?? [];
-			assignee = a ?? assignee;
-			if (i) primeIssueDetail(issueId, { issue: i, subIssues: s ?? [], assignee: a ?? assignee });
+			assignee = a ?? _assignee;
+			if (i) primeIssueDetail(_issueId, { issue: i, subIssues: s ?? [], assignee: a ?? _assignee });
+		};
+		if (data.issueDetail instanceof Promise) {
+			data.issueDetail.then(handle);
+		} else {
+			handle(data.issueDetail);
 		}
 	}
 

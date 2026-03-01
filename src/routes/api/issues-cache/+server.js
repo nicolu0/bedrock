@@ -83,7 +83,7 @@ export const GET = async ({ locals, url }) => {
 			issueId: issue.id,
 			title: issue.name,
 			name: issue.name,
-			description: issue.description ?? '',
+			description: '',
 			assignees: 0,
 			property: property?.name ?? 'Unknown',
 			unit: unit?.name ?? 'Unknown',
