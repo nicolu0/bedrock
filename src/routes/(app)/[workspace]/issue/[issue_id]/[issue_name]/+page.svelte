@@ -36,15 +36,15 @@
 	// Seed partial data from the issues list cache (title + status are already loaded)
 	$: listItem =
 		browser && issueId
-			? get(issuesCache)
+			? (get(issuesCache)
 					?.data?.sections?.flatMap((s) => s.items)
-					?.find((item) => item.issueId === issueId) ?? null
+					?.find((item) => item.issueId === issueId) ?? null)
 			: null;
 
 	// Seed assignee from members cache using the current user's ID (from layout data)
 	$: memberEntry =
 		browser && data?.userId
-			? get(membersCache)?.data?.find((m) => m.user_id === data.userId) ?? null
+			? (get(membersCache)?.data?.find((m) => m.user_id === data.userId) ?? null)
 			: null;
 
 	$: seedAssignee = memberEntry ? { id: data.userId, name: memberEntry.users?.name } : null;
@@ -52,6 +52,9 @@
 	let issue = null;
 	let subIssues = [];
 	let assignee = null;
+	let messagesByIssue = {};
+	let emailDraftsByMessageId = {};
+	let draftIssueIds = [];
 
 	// Reset local state when route/issue changes, preferring cache -> server data -> list seed
 	let _seededForIssueId = null;
@@ -71,6 +74,9 @@
 
 		subIssues = cached?.subIssues ?? data?.subIssues ?? [];
 		assignee = cached?.assignee ?? data?.assignee ?? seedAssignee;
+		messagesByIssue = data?.messagesByIssue ?? {};
+		emailDraftsByMessageId = data?.emailDraftsByMessageId ?? {};
+		draftIssueIds = data?.draftIssueIds ?? [];
 	}
 
 	// When stream resolves: update locals + prime cache
@@ -115,6 +121,32 @@
 		}
 	}
 
+	let _handledActivityPromise = null;
+	let _handledActivityIssueId = null;
+
+	$: if (
+		browser &&
+		issueId &&
+		data?.activityDetail &&
+		(data.activityDetail !== _handledActivityPromise || issueId !== _handledActivityIssueId)
+	) {
+		_handledActivityPromise = data.activityDetail;
+		_handledActivityIssueId = issueId;
+
+		const handleActivity = (detail) => {
+			if (!detail) return;
+			messagesByIssue = detail.messagesByIssue ?? {};
+			emailDraftsByMessageId = detail.emailDraftsByMessageId ?? {};
+			draftIssueIds = detail.draftIssueIds ?? [];
+		};
+
+		if (data.activityDetail instanceof Promise) {
+			data.activityDetail.then(handleActivity);
+		} else {
+			handleActivity(data.activityDetail);
+		}
+	}
+
 	$: issueName =
 		issue?.name ??
 		(issueNameSlug
@@ -126,11 +158,6 @@
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
 	$: assigneeName = assignee?.name ?? data?.assignee?.name ?? 'Unassigned';
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
-
-	// Activity data
-	$: messagesByIssue = data?.messagesByIssue ?? {};
-	$: emailDraftsByMessageId = data?.emailDraftsByMessageId ?? {};
-	$: draftIssueIds = data?.draftIssueIds ?? [];
 
 	const collectMessagesForIssue = (issueId) => {
 		const messages = messagesByIssue[issueId] ?? [];
