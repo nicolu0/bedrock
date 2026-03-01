@@ -5,21 +5,43 @@ import { supabaseAdmin } from '$lib/supabaseAdmin';
 const statusOrder = ['in_progress', 'todo', 'done'];
 const allowedStatuses = new Set(statusOrder);
 
+const slugify = (value) =>
+	(value ?? '')
+		.toString()
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+
 export const load = async ({ locals, params, parent }) => {
 	if (!locals.user) {
 		throw redirect(303, '/');
 	}
 
+	const issueId = params.issue_id;
+	const userId = locals.user.id;
+
 	const parentData = await parent();
 	const workspaceId = parentData?.workspace?.id ?? null;
+
 	if (!workspaceId) {
-		return { issue: null, subIssues: [], assignee: null };
+		return {
+			issue: null,
+			subIssues: [],
+			assignee: null,
+			messagesByIssue: {},
+			emailDraftsByMessageId: {},
+			draftIssueIds: [],
+			userId,
+			issueDetail: Promise.resolve(null)
+		};
 	}
 
+	// Fast initial fetch for canonical validation + immediate page data
 	const { data: issue } = await supabaseAdmin
 		.from('issues')
-		.select('id, name, status')
-		.eq('id', params.issue_id)
+		.select('id, name, status, description')
+		.eq('id', issueId)
 		.eq('workspace_id', workspaceId)
 		.maybeSingle();
 
@@ -27,20 +49,10 @@ export const load = async ({ locals, params, parent }) => {
 		throw error(404, 'Issue not found.');
 	}
 
-	const normalizedIssue = issue
-		? {
-				...issue,
-				status: allowedStatuses.has(issue.status) ? issue.status : 'todo'
-			}
-		: null;
-
-	const slugify = (value) =>
-		(value ?? '')
-			.toString()
-			.trim()
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-+|-+$/g, '');
+	const normalizedIssue = {
+		...issue,
+		status: allowedStatuses.has(issue.status) ? issue.status : 'todo'
+	};
 
 	if (normalizedIssue?.name) {
 		const expectedSlug = slugify(normalizedIssue.name);
@@ -53,7 +65,7 @@ export const load = async ({ locals, params, parent }) => {
 	const { data: subIssues } = await supabaseAdmin
 		.from('issues')
 		.select('id, name, status, parent_id')
-		.eq('parent_id', params.issue_id)
+		.eq('parent_id', issueId)
 		.eq('workspace_id', workspaceId)
 		.order('updated_at', { ascending: false });
 
@@ -62,7 +74,8 @@ export const load = async ({ locals, params, parent }) => {
 		status: allowedStatuses.has(subIssue.status) ? subIssue.status : 'todo'
 	}));
 
-	const issueIds = [params.issue_id, ...normalizedSubIssues.map((item) => item.id)];
+	const issueIds = [issueId, ...normalizedSubIssues.map((item) => item.id)];
+
 	let messagesByIssue = {};
 	if (issueIds.length) {
 		const { data: messages } = await supabaseAdmin
@@ -72,12 +85,8 @@ export const load = async ({ locals, params, parent }) => {
 			.order('timestamp', { ascending: true });
 
 		messagesByIssue = (messages ?? []).reduce((acc, message) => {
-			if (!message.issue_id) {
-				return acc;
-			}
-			if (!acc[message.issue_id]) {
-				acc[message.issue_id] = [];
-			}
+			if (!message.issue_id) return acc;
+			if (!acc[message.issue_id]) acc[message.issue_id] = [];
 			acc[message.issue_id].push(message);
 			return acc;
 		}, {});
@@ -93,9 +102,7 @@ export const load = async ({ locals, params, parent }) => {
 			.order('updated_at', { ascending: false });
 
 		emailDraftsByMessageId = (emailDrafts ?? []).reduce((acc, draft) => {
-			if (!draft.message_id || acc[draft.message_id]) {
-				return acc;
-			}
+			if (!draft.message_id || acc[draft.message_id]) return acc;
 			acc[draft.message_id] = draft;
 			return acc;
 		}, {});
@@ -108,8 +115,45 @@ export const load = async ({ locals, params, parent }) => {
 	const { data: assignee } = await supabaseAdmin
 		.from('users')
 		.select('id, name')
-		.eq('id', locals.user.id)
+		.eq('id', userId)
 		.maybeSingle();
+
+	// Streamed detail fetch for client-side seeding/cache priming
+	const issueDetail = (async () => {
+		const [{ data: fullIssue }, { data: fullSubIssues }, { data: fullAssignee }] = await Promise.all([
+			supabaseAdmin
+				.from('issues')
+				.select('id, name, status, description')
+				.eq('id', issueId)
+				.eq('workspace_id', workspaceId)
+				.maybeSingle(),
+			supabaseAdmin
+				.from('issues')
+				.select('id, name, status, parent_id')
+				.eq('parent_id', issueId)
+				.eq('workspace_id', workspaceId)
+				.order('updated_at', { ascending: false }),
+			supabaseAdmin.from('users').select('id, name').eq('id', userId).maybeSingle()
+		]);
+
+		const normalizedFullIssue = fullIssue
+			? {
+					...fullIssue,
+					status: allowedStatuses.has(fullIssue.status) ? fullIssue.status : 'todo'
+				}
+			: null;
+
+		const normalizedFullSubIssues = (fullSubIssues ?? []).map((subIssue) => ({
+			...subIssue,
+			status: allowedStatuses.has(subIssue.status) ? subIssue.status : 'todo'
+		}));
+
+		return {
+			issue: normalizedFullIssue,
+			subIssues: normalizedFullSubIssues,
+			assignee: fullAssignee
+		};
+	})();
 
 	return {
 		issue: normalizedIssue,
@@ -117,6 +161,8 @@ export const load = async ({ locals, params, parent }) => {
 		assignee,
 		messagesByIssue,
 		emailDraftsByMessageId,
-		draftIssueIds
+		draftIssueIds,
+		userId,
+		issueDetail
 	};
 };

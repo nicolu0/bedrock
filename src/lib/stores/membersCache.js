@@ -2,8 +2,8 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
-const CACHE_KEY = 'issues-cache-v1';
-const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_KEY = 'members-cache-v1';
+const CACHE_TTL = 10 * 60 * 1000;
 
 const initialState = {
 	workspace: null,
@@ -13,7 +13,7 @@ const initialState = {
 	fetchedAt: 0
 };
 
-export const issuesCache = writable(initialState);
+export const membersCache = writable(initialState);
 
 let inFlight = null;
 
@@ -48,14 +48,14 @@ const clearSessionCache = () => {
 	}
 };
 
-export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
+export const ensureMembersCache = async (workspaceSlug, options = {}) => {
 	if (!workspaceSlug) return null;
 	if (!browser) return null;
 	const fetcher = options.fetch ?? fetch;
 
 	const now = Date.now();
 	let currentState;
-	issuesCache.update((state) => {
+	membersCache.update((state) => {
 		currentState = state;
 		return state;
 	});
@@ -69,16 +69,14 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 	}
 
 	const sessionCached = readSessionCache();
-	const sessionSections = sessionCached?.data?.sections?.length ?? 0;
-	const sessionIssues = sessionCached?.data?.issues?.length ?? 0;
-	const sessionValid = sessionSections > 0 || sessionIssues > 0;
+	const sessionValid = Array.isArray(sessionCached?.data);
 	if (
 		sessionCached?.data &&
 		sessionCached.workspace === workspaceSlug &&
 		now - sessionCached.fetchedAt < CACHE_TTL &&
 		sessionValid
 	) {
-		issuesCache.set({
+		membersCache.set({
 			workspace: workspaceSlug,
 			data: sessionCached.data,
 			loading: false,
@@ -93,7 +91,7 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 
 	if (inFlight) return inFlight;
 
-	issuesCache.set({
+	membersCache.set({
 		workspace: workspaceSlug,
 		data: currentState?.data ?? null,
 		loading: true,
@@ -103,9 +101,9 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 
 	inFlight = (async () => {
 		try {
-			const response = await fetcher(`/api/issues-cache?workspace=${workspaceSlug}`);
+			const response = await fetcher(`/api/members-cache?workspace=${workspaceSlug}`);
 			if (!response.ok) {
-				throw new Error('Issues cache fetch failed');
+				throw new Error('Members cache fetch failed');
 			}
 			const data = await response.json();
 			const payload = {
@@ -113,11 +111,8 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 				data,
 				fetchedAt: Date.now()
 			};
-			const nextSections = data?.sections?.length ?? 0;
-			const nextIssues = data?.issues?.length ?? 0;
-			const shouldOverwrite = nextSections > 0 || nextIssues > 0;
-			if (shouldOverwrite) {
-				issuesCache.set({
+			if (Array.isArray(data)) {
+				membersCache.set({
 					workspace: workspaceSlug,
 					data,
 					loading: false,
@@ -127,14 +122,10 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 				writeSessionCache(payload);
 				return data;
 			}
-			issuesCache.update((state) => ({
-				...state,
-				loading: false,
-				error: null
-			}));
+			membersCache.update((state) => ({ ...state, loading: false, error: null }));
 			return currentState?.data;
 		} catch (error) {
-			issuesCache.set({
+			membersCache.set({
 				workspace: workspaceSlug,
 				data: null,
 				loading: false,
@@ -150,15 +141,15 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 	return inFlight;
 };
 
-export const primeIssuesCache = (workspaceSlug, data) => {
+export const primeMembersCache = (workspaceSlug, data) => {
 	if (!browser) return;
-	if (!workspaceSlug || !data) return;
+	if (!workspaceSlug || !Array.isArray(data)) return;
 	const payload = {
 		workspace: workspaceSlug,
 		data,
 		fetchedAt: Date.now()
 	};
-	issuesCache.set({
+	membersCache.set({
 		workspace: workspaceSlug,
 		data,
 		loading: false,

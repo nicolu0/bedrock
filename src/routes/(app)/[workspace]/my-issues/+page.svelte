@@ -2,6 +2,7 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
+	import { get } from 'svelte/store';
 	import { issuesCache, primeIssuesCache } from '$lib/stores/issuesCache';
 	import { goto } from '$app/navigation';
 
@@ -9,8 +10,8 @@
 
 	const tabs = ['Assigned', 'Subscribed', 'Activity'];
 
-	$: sections = $issuesCache.data?.sections ?? data?.sections ?? [];
-	$: isLoading = $issuesCache.loading && sections.length === 0;
+	$: sections = $issuesCache.data?.sections ?? [];
+	$: isLoading = sections.length === 0 && $issuesCache.loading;
 	$: expandedSections = sections.map((section) => {
 		const rows = section.items.flatMap((item) => {
 			const subRows = (item.subIssues ?? []).map((subIssue) => ({
@@ -29,12 +30,24 @@
 
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
-	$: if (
-		browser &&
-		data?.sections?.length &&
-		(!$issuesCache.data || $issuesCache.workspace !== workspaceSlug)
-	) {
-		primeIssuesCache(workspaceSlug, { sections: data.sections });
+
+	// Prime cache from streaming server data (handles both resolved value and client Promise)
+	// _primedForWorkspace guards against re-registering .then() on every $issuesCache store change
+	let _primedForWorkspace = null;
+	$: if (browser && data.sections && _primedForWorkspace !== workspaceSlug) {
+		_primedForWorkspace = workspaceSlug;
+		const _ws = workspaceSlug;
+		const prime = (s) => {
+			const cache = get(issuesCache); // non-reactive read — no store subscription added
+			if (s?.length && (!cache.data || cache.workspace !== _ws)) {
+				primeIssuesCache(_ws, { sections: s });
+			}
+		};
+		if (data.sections instanceof Promise) {
+			data.sections.then(prime);
+		} else {
+			prime(data.sections);
+		}
 	}
 
 	const slugify = (value) => {

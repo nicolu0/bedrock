@@ -1,9 +1,14 @@
 <script>
 	// @ts-nocheck
-	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
-	import { issuesCache } from '$lib/stores/issuesCache';
+	import { page } from '$app/stores';
+	import { get } from 'svelte/store';
+
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
+	import { getIssueDetail, primeIssueDetail } from '$lib/stores/issueDetailCache.js';
+	import { issuesCache } from '$lib/stores/issuesCache.js';
+	import { membersCache } from '$lib/stores/membersCache.js';
 
 	export let data;
 
@@ -22,16 +27,107 @@
 		}
 	};
 
-	$: issueId = data?.issue?.id ?? $page.params.issue_id ?? 'HUB-1';
-	$: issueName = data?.issue?.name ?? 'Issue';
-	$: issueDescription = data?.issue?.description ?? '';
-	$: statusKey = data?.issue?.status ?? 'todo';
+	$: issueId = $page.params.issue_id ?? data?.issue?.id ?? 'HUB-1';
+	$: issueNameSlug = $page.params.issue_name ?? '';
+
+	// Cache / seed data
+	$: cached = browser && issueId ? getIssueDetail(issueId) : null;
+
+	// Seed partial data from the issues list cache (title + status are already loaded)
+	$: listItem =
+		browser && issueId
+			? get(issuesCache)
+					?.data?.sections?.flatMap((s) => s.items)
+					?.find((item) => item.issueId === issueId) ?? null
+			: null;
+
+	// Seed assignee from members cache using the current user's ID (from layout data)
+	$: memberEntry =
+		browser && data?.userId
+			? get(membersCache)?.data?.find((m) => m.user_id === data.userId) ?? null
+			: null;
+
+	$: seedAssignee = memberEntry ? { id: data.userId, name: memberEntry.users?.name } : null;
+
+	let issue = null;
+	let subIssues = [];
+	let assignee = null;
+
+	// Reset local state when route/issue changes, preferring cache -> server data -> list seed
+	let _seededForIssueId = null;
+	$: if (issueId && issueId !== _seededForIssueId) {
+		_seededForIssueId = issueId;
+		issue =
+			cached?.issue ??
+			data?.issue ??
+			(listItem
+				? {
+						id: issueId,
+						name: listItem.title,
+						status: listItem.status,
+						description: null
+					}
+				: null);
+
+		subIssues = cached?.subIssues ?? data?.subIssues ?? [];
+		assignee = cached?.assignee ?? data?.assignee ?? seedAssignee;
+	}
+
+	// When stream resolves: update locals + prime cache
+	// Only overwrite issue if the stream returned a real value — prevents null wiping out the seed
+	let _handledPromise = null;
+	let _handledPromiseIssueId = null;
+
+	$: if (
+		browser &&
+		issueId &&
+		data?.issueDetail &&
+		(data.issueDetail !== _handledPromise || issueId !== _handledPromiseIssueId)
+	) {
+		_handledPromise = data.issueDetail;
+		_handledPromiseIssueId = issueId;
+
+		const _assignee = assignee;
+		const _issueId = issueId;
+
+		const handle = (detail) => {
+			if (!detail) return;
+
+			const { issue: i, subIssues: s, assignee: a } = detail;
+
+			if (i) issue = i;
+			subIssues = s ?? [];
+			assignee = a ?? _assignee;
+
+			if (i) {
+				primeIssueDetail(_issueId, {
+					issue: i,
+					subIssues: s ?? [],
+					assignee: a ?? _assignee
+				});
+			}
+		};
+
+		if (data.issueDetail instanceof Promise) {
+			data.issueDetail.then(handle);
+		} else {
+			handle(data.issueDetail);
+		}
+	}
+
+	$: issueName =
+		issue?.name ??
+		(issueNameSlug
+			? issueNameSlug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+			: 'Issue');
+
+	$: issueDescription = issue?.description ?? data?.issue?.description ?? '';
+	$: statusKey = issue?.status ?? data?.issue?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
-	$: assigneeName = data?.assignee?.name ?? 'Unassigned';
-	$: subIssues = data?.subIssues ?? [];
-	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${
-		subIssues.length
-	}`;
+	$: assigneeName = assignee?.name ?? data?.assignee?.name ?? 'Unassigned';
+	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
+
+	// Activity data
 	$: messagesByIssue = data?.messagesByIssue ?? {};
 	$: emailDraftsByMessageId = data?.emailDraftsByMessageId ?? {};
 	$: draftIssueIds = data?.draftIssueIds ?? [];
@@ -226,61 +322,10 @@
 										}}
 										draft={emailDraftsByMessageId[message.id]}
 									/>
-									{#if false}
-										<div class="overflow-hidden rounded-md border border-neutral-100 bg-white">
-											<div class="px-3 py-2">
-												<div class="flex items-center justify-between text-xs text-neutral-400">
-													<span>
-														{message.direction === 'outbound' ? 'Outbound' : 'Inbound'}
-														{#if message.subject}
-															· {message.subject}
-														{/if}
-													</span>
-													<span>{formatTimestamp(message.timestamp)}</span>
-												</div>
-												<div class="mt-1 text-neutral-700">{message.message}</div>
-											</div>
-											{#if emailDraftsByMessageId[message.id]}
-												<div class="border-t border-neutral-100 bg-neutral-50 px-3 py-2">
-													<div class="flex items-center justify-between text-xs text-neutral-400">
-														<span>
-															Draft reply
-															{#if emailDraftsByMessageId[message.id]?.recipient}
-																· {emailDraftsByMessageId[message.id].recipient}
-															{/if}
-														</span>
-														<span></span>
-													</div>
-													<div class="mt-2 flex items-end justify-between gap-3">
-														<div class="whitespace-pre-wrap text-neutral-700">
-															{emailDraftsByMessageId[message.id].body}
-														</div>
-														<div class="flex items-center">
-															<button
-																class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-800"
-																type="button"
-															>
-																<svg
-																	xmlns="http://www.w3.org/2000/svg"
-																	width="18"
-																	height="18"
-																	fill="currentColor"
-																	viewBox="0 0 16 16"
-																>
-																	<path
-																		d="M8 12a.5.5 0 0 0 .5-.5V4.707l2.147 2.147a.5.5 0 0 0 .707-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 1 0 .708.708L7.5 4.707V11.5A.5.5 0 0 0 8 12z"
-																	/>
-																</svg>
-															</button>
-														</div>
-													</div>
-												</div>
-											{/if}
-										</div>
-									{/if}
 								{/each}
 							</div>
 						{/if}
+
 						{#each subIssues as subIssue}
 							{#if (messagesByIssue[subIssue.id]?.length ?? 0) || draftIssueIds.includes(subIssue.id)}
 								<details class="group" open>
@@ -317,76 +362,6 @@
 												}}
 												draft={emailDraftsByMessageId[message.id]}
 											/>
-											{#if false}
-												<div class="overflow-hidden rounded-md border border-neutral-100 bg-white">
-													<div class="px-3 py-2">
-														<div class="flex items-center justify-between text-xs text-neutral-400">
-															<span>
-																{message.direction === 'outbound' ? 'Outbound' : 'Inbound'}
-																{#if message.subject}
-																	· {message.subject}
-																{/if}
-															</span>
-															<span>{formatTimestamp(message.timestamp)}</span>
-														</div>
-														<div class="mt-1 text-neutral-700">{message.message}</div>
-													</div>
-													{#if emailDraftsByMessageId[message.id]}
-														<div class="border-t border-neutral-100 bg-neutral-50 px-3 py-2">
-															<div
-																class="flex items-center justify-between text-xs text-neutral-400"
-															>
-																<span>
-																	Draft reply
-																	{#if emailDraftsByMessageId[message.id]?.recipient}
-																		· {emailDraftsByMessageId[message.id].recipient}
-																	{/if}
-																</span>
-																<span></span>
-															</div>
-															<div class="mt-2 flex items-end justify-between gap-3">
-																<div class="whitespace-pre-wrap text-neutral-700">
-																	{emailDraftsByMessageId[message.id].body}
-																</div>
-																<div class="flex items-center gap-2 text-neutral-400">
-																	<button
-																		class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 bg-white transition hover:bg-neutral-100"
-																		type="button"
-																	>
-																		<svg
-																			xmlns="http://www.w3.org/2000/svg"
-																			width="16"
-																			height="16"
-																			fill="currentColor"
-																			viewBox="0 0 16 16"
-																		>
-																			<path
-																				d="M.5 9.9a.5.5 0 0 0 .6.4l4.8-1.1 5.3 5.3c.3.3.9.1.9-.4l1.7-12c.1-.6-.5-1.1-1.1-.9l-12 1.7a.5.5 0 0 0-.4.6l1.4 5.8L.5 9.9z"
-																			/>
-																		</svg>
-																	</button>
-																	<button
-																		class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-800"
-																		type="button"
-																	>
-																		<svg
-																			xmlns="http://www.w3.org/2000/svg"
-																			width="16"
-																			height="16"
-																			fill="currentColor"
-																			viewBox="0 0 16 16"
-																		>
-																			<path
-																				d="M15.854.146a.5.5 0 0 0-.55-.11l-14 5a.5.5 0 0 0 .02.95l5.31 1.77 1.77 5.31a.5.5 0 0 0 .95.02l5-14a.5.5 0 0 0-.5-.57zm-6.9 10.69-1.31-3.94 4.94-4.94-3.63 8.88z"
-																			/>
-																		</svg>
-																	</button>
-																</div>
-															</div>
-														</div>
-													{/if}
-												</div>
-											{/if}
 										{/each}
 									</div>
 								</details>
@@ -402,11 +377,11 @@
 		<div class="flex w-full flex-col px-6 py-2">
 			<div class="space-y-4 text-sm text-neutral-600">
 				<div class="flex items-center gap-2 pb-2">
-					<span class="text-neutral-400">HUB-2</span>
+					<span class="text-neutral-400">{issueId}</span>
 				</div>
 				<div class="flex items-center gap-2">
 					<div class="h-3.5 w-3.5 rounded-full bg-neutral-200"></div>
-					<span>Andrew Chang</span>
+					<span>{assigneeName}</span>
 				</div>
 				<div class="flex items-center gap-2">
 					<span class="h-3.5 w-3.5 rounded-full border border-amber-500"></span>

@@ -137,12 +137,11 @@ export const load = async ({ locals, parent }) => {
 		throw redirect(303, '/');
 	}
 
-	const parentData = await parent();
-	const workspaceId = parentData?.workspace?.id ?? null;
-	if (!workspaceId) {
-		return { sections: [] };
-	}
+	const sections = (async () => {
+		const { workspace } = await parent();
+		if (!workspace?.id) return [];
+		return await loadSections(workspace.id);
+	})();
 
-	const sections = await loadSections(workspaceId);
-	return { sections };
+	return { sections }; // streamed — navigation doesn't wait
 };
