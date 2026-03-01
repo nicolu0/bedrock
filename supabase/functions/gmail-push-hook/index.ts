@@ -165,7 +165,7 @@ const logLlmOutput = async (userId: string, payload: unknown, runId: string, ste
 const listOpenIssues = async (unitId: string) => {
 	const { data } = await supabase
 		.from('issues')
-		.select('id, name, status, updated_at')
+		.select('id, name, status, parent_id, updated_at')
 		.eq('unit_id', unitId)
 		.in('status', ['todo', 'in_progress'])
 		.order('updated_at', { ascending: false })
@@ -231,12 +231,59 @@ const createSubissue = async ({
 	return data.id as string;
 };
 
+const upsertEmailDraft = async ({
+	issueId,
+	messageId,
+	sender,
+	recipient,
+	subject,
+	body,
+	userId
+}: {
+	issueId: string;
+	messageId: string;
+	sender: string;
+	recipient: string;
+	subject: string;
+	body: string;
+	userId: string;
+}) => {
+	const { error } = await supabase.from('email_drafts').upsert(
+		{
+			issue_id: issueId,
+			message_id: messageId,
+			sender,
+			recipient,
+			subject,
+			body,
+			updated_at: new Date().toISOString()
+		},
+		{ onConflict: 'message_id' }
+	);
+	if (error) {
+		await insertIngestionLog({
+			userId,
+			source: 'gmail-draft-error',
+			detail: JSON.stringify({
+				issue_id: issueId,
+				message_id: messageId,
+				error: error.message
+			})
+		});
+		throw new Error(error.message);
+	}
+	await insertIngestionLog({
+		userId,
+		source: 'gmail-draft',
+		detail: JSON.stringify({ issue_id: issueId, message_id: messageId })
+	});
+};
+
 const linkThreadToIssue = async ({ threadId, issueId }: { threadId: string; issueId: string }) => {
 	const { data, error } = await supabase
 		.from('threads')
 		.update({ issue_id: issueId, updated_at: new Date().toISOString() })
 		.eq('id', threadId)
-		.is('issue_id', null)
 		.select('issue_id')
 		.maybeSingle();
 	if (error) {
@@ -330,7 +377,9 @@ const runIssueAgent = async ({
 	threadId,
 	userId,
 	policyText,
-	tenantName
+	tenantName,
+	replySenderEmail,
+	replyMessageId
 }: {
 	subject: string;
 	body: string;
@@ -341,15 +390,19 @@ const runIssueAgent = async ({
 	userId: string;
 	policyText: string;
 	tenantName: string | null;
+	replySenderEmail: string | null;
+	replyMessageId: string | null;
 }) => {
 	const system = `You are Bedrock, an assistant for property management.
-Your job is to link this email thread to an existing open issue or create a new issue, then create one subissue for the next step.
+Your job is to link this email thread to the most specific issue (prefer a subissue when appropriate). If no match exists, create a new issue and then create one subissue for the next step.
 
 Process (required):
 1) Review the provided open_issues list.
-2) If a clear match exists, call link_thread_to_issue with that issue_id.
-3) If no clear match, call create_issue with a concise title, then call link_thread_to_issue.
-4) Create exactly one subissue using create_subissue with the root issue id.
+2) If no clear match, call create_issue with a concise title.
+3) Create exactly one subissue using create_subissue with the root issue id.
+4) If the email is from a tenant, choose triage when the tenant might resolve it or more info is needed; choose schedule only for clear emergencies (e.g., pests, gas smell, no power, no water, flooding, safety risks) or when workspace_policy explicitly requires immediate scheduling.
+5) If you created a triage subissue, create an email draft reply to the sender using create_email_draft (required).
+6) Finally, call link_thread_to_issue once with the most specific issue id (prefer the subissue id). This is required.
 
 Rules:
 - Use tools only.
@@ -358,7 +411,10 @@ Rules:
 - Subissue title format:
   - Triage {Issue Title} (${tenantName ?? 'Tenant'})
   - Schedule {Vendor Type} for {Issue Title}
-- Use the workspace_policy to decide triage vs schedule vendor.
+- Use the workspace_policy to decide triage vs schedule vendor. If policy is empty or unclear, triage unless it matches an emergency.
+- Drafts: When triaging, draft a short, friendly reply acknowledging the issue and asking one clarifying question.
+- Drafts: Use the subissue id for issue_id and latest_message_id for message_id when calling create_email_draft.
+- Linking: Call link_thread_to_issue exactly once and only after issue/subissue creation. This is required.
 When you believe you have completed the task, call done().
 `.trim();
 	const createIssueTool = {
@@ -406,6 +462,24 @@ When you believe you have completed the task, call done().
 			required: ['parent_issue_id', 'title', 'status', 'reasoning']
 		}
 	};
+	const createEmailDraftTool = {
+		type: 'function',
+		name: 'create_email_draft',
+		description: 'Create or update a draft email reply for an issue',
+		parameters: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				issue_id: { type: 'string' },
+				message_id: { type: 'string' },
+				sender: { type: 'string' },
+				recipient: { type: 'string' },
+				subject: { type: 'string' },
+				body: { type: 'string' }
+			},
+			required: ['issue_id', 'message_id', 'sender', 'recipient', 'subject', 'body']
+		}
+	};
 	const doneTool = {
 		type: 'function',
 		name: 'done',
@@ -420,7 +494,13 @@ When you believe you have completed the task, call done().
 		}
 	};
 
-	const tools = [createIssueTool, linkThreadTool, createSubissueTool, doneTool];
+	const tools = [
+		createIssueTool,
+		linkThreadTool,
+		createSubissueTool,
+		createEmailDraftTool,
+		doneTool
+	];
 
 	const openIssues = await listOpenIssues(unitId);
 	const messages: Array<any> = [
@@ -434,6 +514,7 @@ When you believe you have completed the task, call done().
 				unit_id: unitId,
 				workspace_id: workspaceId,
 				thread_id: threadId,
+				latest_message_id: replyMessageId,
 				open_issues: openIssues,
 				workspace_policy: policyText
 			})
@@ -443,6 +524,10 @@ When you believe you have completed the task, call done().
 	const runId = crypto.randomUUID();
 	let linkedIssueId: string | null = null;
 	let createdIssueId: string | null = null;
+	let lastSubissueId: string | null = null;
+	let lastSubissueTitle: string | null = null;
+	let draftedIssueId: string | null = null;
+	let threadLinked = false;
 
 	for (let i = 0; i < 6; i += 1) {
 		const response = await fetch('https://api.openai.com/v1/responses', {
@@ -499,19 +584,6 @@ When you believe you have completed the task, call done().
 					throw new Error('create_issue missing title');
 				}
 				const issueId = await createIssue({ name: title, unitId: unit, workspaceId: workspace });
-				const linked = await linkThreadToIssue({ threadId, issueId });
-				if (!linked) {
-					await supabase.from('issues').delete().eq('id', issueId);
-					const { data: existingThread } = await supabase
-						.from('threads')
-						.select('issue_id')
-						.eq('id', threadId)
-						.maybeSingle();
-					linkedIssueId = existingThread?.issue_id ?? null;
-					result = { issue_id: linkedIssueId, duplicate: true };
-					issuedAction = true;
-					continue;
-				}
 				linkedIssueId = issueId;
 				createdIssueId = issueId;
 				issuedAction = true;
@@ -520,7 +592,8 @@ When you believe you have completed the task, call done().
 
 			if (name === 'link_thread_to_issue') {
 				const thread = typeof args.thread_id === 'string' ? args.thread_id : threadId;
-				const issue = typeof args.issue_id === 'string' ? args.issue_id : linkedIssueId;
+				const issue =
+					typeof args.issue_id === 'string' ? args.issue_id : (lastSubissueId ?? linkedIssueId);
 				if (!thread || !issue) {
 					throw new Error('link_thread_to_issue missing thread_id or issue_id');
 				}
@@ -535,6 +608,7 @@ When you believe you have completed the task, call done().
 				} else {
 					linkedIssueId = issue;
 				}
+				threadLinked = true;
 				issuedAction = true;
 				result = { ok: true };
 			}
@@ -550,7 +624,7 @@ When you believe you have completed the task, call done().
 				if (!title || !parentIssueId) {
 					throw new Error('create_subissue missing title or parent_issue_id');
 				}
-				await createSubissue({
+				const subissueId = await createSubissue({
 					parentIssueId,
 					name: title,
 					unitId,
@@ -558,6 +632,44 @@ When you believe you have completed the task, call done().
 					status,
 					reasoning
 				});
+				lastSubissueId = subissueId;
+				lastSubissueTitle = title;
+				issuedAction = true;
+				result = { subissue_id: subissueId };
+			}
+
+			if (name === 'create_email_draft') {
+				const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
+				const messageId = typeof args.message_id === 'string' ? args.message_id : replyMessageId;
+				const sender = typeof args.sender === 'string' ? args.sender : '';
+				const recipient = typeof args.recipient === 'string' ? args.recipient : '';
+				const subject = typeof args.subject === 'string' ? args.subject : '';
+				const bodyText = typeof args.body === 'string' ? args.body : '';
+				if (!issue || !messageId || !sender || !recipient || !subject || !bodyText) {
+					throw new Error('create_email_draft missing required fields');
+				}
+				try {
+					await upsertEmailDraft({
+						issueId: issue,
+						messageId,
+						sender,
+						recipient,
+						subject,
+						body: bodyText,
+						userId
+					});
+				} catch (err) {
+					await insertIngestionLog({
+						userId,
+						source: 'gmail-draft-error',
+						detail: JSON.stringify({
+							issue_id: issue,
+							message_id: messageId,
+							error: err?.message ?? 'draft insert failed'
+						})
+					});
+				}
+				draftedIssueId = issue;
 				issuedAction = true;
 				result = { ok: true };
 			}
@@ -579,7 +691,7 @@ When you believe you have completed the task, call done().
 			messages.push({
 				role: 'assistant',
 				content:
-					'You must call create_issue or link_thread_to_issue, then create_subissue, then done.'
+					'You must create an issue (if needed), create a subissue, optionally draft, then link the thread, then done.'
 			});
 			continue;
 		}
@@ -590,13 +702,29 @@ When you believe you have completed the task, call done().
 
 	// All LLM outputs logged per step above.
 
+	if (!threadLinked) {
+		await logError(userId, 'LLM did not link thread to issue.');
+	}
+
 	if (!linkedIssueId) {
-		await logError(userId, 'LLM did not create/link issue; generating title directly.');
-		const llmTitle = await generateIssueTitle({ subject, body, senderEmail, unitId, workspaceId });
-		const fallbackTitle = llmTitle || 'Maintenance Issue';
-		linkedIssueId = await createIssue({ name: fallbackTitle, unitId, workspaceId });
-		createdIssueId = linkedIssueId;
-		await linkThreadToIssue({ threadId, issueId: linkedIssueId });
+		const fallbackIssueId = lastSubissueId ?? createdIssueId;
+		if (fallbackIssueId) {
+			await linkThreadToIssue({ threadId, issueId: fallbackIssueId });
+			linkedIssueId = fallbackIssueId;
+		} else {
+			await logError(userId, 'LLM did not create/link issue; generating title directly.');
+			const llmTitle = await generateIssueTitle({
+				subject,
+				body,
+				senderEmail,
+				unitId,
+				workspaceId
+			});
+			const fallbackTitle = llmTitle || 'Maintenance Issue';
+			linkedIssueId = await createIssue({ name: fallbackTitle, unitId, workspaceId });
+			createdIssueId = linkedIssueId;
+			await linkThreadToIssue({ threadId, issueId: linkedIssueId });
+		}
 	}
 
 	return { issueId: linkedIssueId };
@@ -617,6 +745,15 @@ const processMessage = async ({
 	);
 	const senderEmail = normalizeEmail(extractEmail(messageFrom));
 	if (pmEmail && senderEmail === pmEmail) {
+		await insertIngestionLog({
+			userId: connection.user_id,
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'skip-self',
+				sender_email: senderEmail,
+				connection_email: pmEmail
+			})
+		});
 		return;
 	}
 
@@ -627,6 +764,14 @@ const processMessage = async ({
 		.maybeSingle();
 
 	if (existingMessage?.id) {
+		await insertIngestionLog({
+			userId: connection.user_id,
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'skip-duplicate-message',
+				external_id: message.id
+			})
+		});
 		return;
 	}
 
@@ -727,67 +872,116 @@ const processMessage = async ({
 		threadRow = createdThread;
 	}
 
-	const internalDate = Number(message.internalDate ?? 0);
-	const { error: inboundInsertError } = await supabase.from('messages').insert({
-		thread_id: threadRow.id,
-		external_id: message.id,
-		message: cleanedBody,
-		sender: 'tenant',
-		subject: messageSubject,
-		timestamp: new Date(internalDate || Date.now()).toISOString(),
-		channel: 'gmail',
-		direction: 'inbound',
-		delivery_status: 'received',
-		connection_id: connection.id,
-		issue_id: threadRow.issue_id ?? null,
-		thread_external_id: threadExternalId
-	});
-
-	if (inboundInsertError) {
-		if (inboundInsertError.code === '23505') {
-			return;
-		}
-		await logError(connection.user_id, `Inbound insert failed: ${inboundInsertError.message}`);
+	const lockCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+	const lockTime = new Date().toISOString();
+	const { data: lockRow } = await supabase
+		.from('threads')
+		.update({ processing_at: lockTime })
+		.eq('id', threadRow.id)
+		.is('processing_at', null)
+		.select('id')
+		.maybeSingle();
+	let lockAcquired = Boolean(lockRow?.id);
+	if (!lockAcquired) {
+		const { data: staleLockRow } = await supabase
+			.from('threads')
+			.update({ processing_at: lockTime })
+			.eq('id', threadRow.id)
+			.lt('processing_at', lockCutoff)
+			.select('id')
+			.maybeSingle();
+		lockAcquired = Boolean(staleLockRow?.id);
+	}
+	if (!lockAcquired) {
+		await insertIngestionLog({
+			userId: connection.user_id,
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'lock-skip',
+				thread_id: threadRow.id,
+				external_thread_id: threadExternalId
+			})
+		});
 		return;
 	}
 
-	const { data: refreshedThread } = await supabase
-		.from('threads')
-		.select('issue_id')
-		.eq('id', threadRow.id)
-		.maybeSingle();
-
-	let issueId = refreshedThread?.issue_id ?? threadRow.issue_id ?? null;
-
-	if (!issueId) {
-		const { data: policyRow } = await supabase
-			.from('workspace_policies')
-			.select('policy_text')
-			.eq('workspace_id', propertyRow.workspace_id)
-			.maybeSingle();
-		const policyText = policyRow?.policy_text ?? '';
-		const created = await runIssueAgent({
-			subject: messageSubject,
-			body: cleanedBody,
-			senderEmail,
-			unitId: unitRow.id,
-			workspaceId: propertyRow.workspace_id,
-			threadId: threadRow.id,
-			userId: connection.user_id,
-			policyText,
-			tenantName: tenant.name ?? null
-		});
-		issueId = created.issueId ?? null;
-	}
-
-	if (issueId) {
-		await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
-
-		await supabase
+	try {
+		const internalDate = Number(message.internalDate ?? 0);
+		const { data: inboundMessage, error: inboundInsertError } = await supabase
 			.from('messages')
-			.update({ issue_id: issueId })
-			.eq('thread_id', threadRow.id)
-			.is('issue_id', null);
+			.insert({
+				thread_id: threadRow.id,
+				external_id: message.id,
+				message: cleanedBody,
+				sender: 'tenant',
+				subject: messageSubject,
+				timestamp: new Date(internalDate || Date.now()).toISOString(),
+				channel: 'gmail',
+				direction: 'inbound',
+				delivery_status: 'received',
+				connection_id: connection.id,
+				issue_id: threadRow.issue_id ?? null,
+				thread_external_id: threadExternalId
+			})
+			.select('id')
+			.maybeSingle();
+
+		let inboundMessageId = inboundMessage?.id ?? null;
+		if (inboundInsertError) {
+			if (inboundInsertError.code === '23505') {
+				const { data: existingMessage } = await supabase
+					.from('messages')
+					.select('id')
+					.eq('external_id', message.id)
+					.maybeSingle();
+				inboundMessageId = existingMessage?.id ?? null;
+				if (!inboundMessageId) {
+					return;
+				}
+			} else {
+				await logError(connection.user_id, `Inbound insert failed: ${inboundInsertError.message}`);
+				return;
+			}
+		}
+
+		const { data: refreshedThread } = await supabase
+			.from('threads')
+			.select('issue_id')
+			.eq('id', threadRow.id)
+			.maybeSingle();
+
+		let issueId = refreshedThread?.issue_id ?? threadRow.issue_id ?? null;
+
+		if (!issueId) {
+			const { data: policyRow } = await supabase
+				.from('workspace_policies')
+				.select('policy_text')
+				.eq('workspace_id', propertyRow.workspace_id)
+				.maybeSingle();
+			const policyText = policyRow?.policy_text ?? '';
+			const created = await runIssueAgent({
+				subject: messageSubject,
+				body: cleanedBody,
+				senderEmail,
+				unitId: unitRow.id,
+				workspaceId: propertyRow.workspace_id,
+				threadId: threadRow.id,
+				userId: connection.user_id,
+				policyText,
+				tenantName: tenant.name ?? null,
+				replySenderEmail: connection.email ?? null,
+				replyMessageId: inboundMessageId
+			});
+			issueId = created.issueId ?? null;
+		}
+
+		if (issueId) {
+			await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
+
+			await supabase.from('messages').update({ issue_id: issueId }).eq('thread_id', threadRow.id);
+		}
+	} finally {
+		await supabase.from('threads').update({ processing_at: null }).eq('id', threadRow.id);
 	}
 };
 
@@ -925,6 +1119,18 @@ serve(async (req) => {
 					messageIds.add(msg.message.id);
 				}
 			}
+		}
+
+		if (!messageIds.size) {
+			await insertIngestionLog({
+				userId: connection.user_id,
+				source: 'gmail-push',
+				detail: JSON.stringify({
+					phase: 'history-empty',
+					history_id: historyId,
+					stored_history_id: storedHistoryId
+				})
+			});
 		}
 
 		for (const messageId of messageIds) {
