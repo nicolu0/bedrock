@@ -173,6 +173,15 @@ const listOpenIssues = async (unitId: string) => {
 	return data ?? [];
 };
 
+const listVendors = async (workspaceId: string) => {
+	const { data } = await supabase
+		.from('vendors')
+		.select('id, name, email, trade')
+		.eq('workspace_id', workspaceId)
+		.order('name', { ascending: true });
+	return data ?? [];
+};
+
 const createIssue = async ({
 	name,
 	unitId,
@@ -379,7 +388,8 @@ const runIssueAgent = async ({
 	policyText,
 	tenantName,
 	replySenderEmail,
-	replyMessageId
+	replyMessageId,
+	existingIssueId
 }: {
 	subject: string;
 	body: string;
@@ -392,23 +402,28 @@ const runIssueAgent = async ({
 	tenantName: string | null;
 	replySenderEmail: string | null;
 	replyMessageId: string | null;
+	existingIssueId?: string | null;
 }) => {
 	const system = `You are Bedrock, an assistant for property management.
 Your job is to link this email thread to the most specific issue (prefer a subissue when appropriate). If no match exists, create a new issue and then create one subissue for the next step.
 
 Process (required):
 1) Review the provided open_issues list.
-2) If no clear match, call create_issue with a concise title.
-3) Create exactly one subissue using create_subissue with the root issue id.
-4) If the email is from a tenant, follow staged triage:
+2) If existing_issue_id is provided, do not create a new issue. Use it as the root issue id.
+3) If no existing_issue_id is provided and no clear match exists, call create_issue with a concise title.
+4) If existing_issue_id is provided, prefer reusing the most recent triage subissue from open_issues that matches the issue. Only create a new triage subissue if no suitable triage subissue exists.
+5) If the tenant indicates troubleshooting failed or the issue cannot be resolved by the tenant, create a Schedule subissue for a vendor (even if you reused the triage subissue) and shift the workflow to scheduling. This is a stopping point: do not continue triage back-and-forth.
+6) If the email is from a tenant, follow staged triage:
    - Stage 1: Identify if the tenant can resolve the issue themselves with basic steps.
    - Stage 2: Determine if a vendor is needed.
    - Stage 3: Determine if it is an emergency.
    Use the full conversation thread for context and ask clarifying questions to confirm urgency.
    Choose triage when the tenant might resolve it or more info is needed; choose schedule only for clear emergencies (e.g., pests, gas smell, no power, no water, flooding, safety risks) or when workspace_policy explicitly requires immediate scheduling.
    Example: a clogged toilet is typically triage (suggest using a plunger and ask if there is overflow/flooding). If there is flooding or safety risk, treat as emergency and schedule.
-5) If you created a triage subissue, create an email draft reply to the sender using create_email_draft (required).
-6) Finally, call link_thread_to_issue once with the most specific issue id (prefer the subissue id). This is required.
+7) If you created a triage subissue, create an email draft reply to the sender using create_email_draft (required).
+8) If you created a Schedule subissue, pick a vendor from the vendors list (prefer trade match), create a vendor email draft using create_email_draft with the vendor email as recipient. Use the latest_message_id for message_id. If no suitable vendor or no vendor email exists, draft to the PM/maintenance email (reply_sender_email) and note that no matching vendor was found.
+9) Linking: Always link the tenant thread to the triage subissue (or existing triage subissue). Do NOT link the tenant thread to the Schedule subissue; that subissue is for the vendor thread.
+10) Finally, call link_thread_to_issue once with the triage subissue id. This is required.
 
 Rules:
 - Use tools only.
@@ -419,6 +434,8 @@ Rules:
   - Schedule {Vendor Type} for {Issue Title}
 - Use the workspace_policy to decide triage vs schedule vendor. If policy is empty or unclear, triage unless it matches an emergency.
 - Drafts: When triaging, draft a short, friendly reply acknowledging the issue and asking one clarifying question about emergency indicators if relevant.
+- Drafts: When scheduling, draft a short, direct vendor email requesting availability and permission to access. Do not draft a tenant reply when creating a vendor draft (only one draft per message).
+- existing_issue_id: When present, you must not call create_issue. Reuse the latest triage subissue when possible.
 - Drafts: Use the subissue id for issue_id and latest_message_id for message_id when calling create_email_draft.
 - Linking: Call link_thread_to_issue exactly once and only after issue/subissue creation. This is required.
 When you believe you have completed the task, call done().
@@ -501,7 +518,7 @@ When you believe you have completed the task, call done().
 	};
 
 	const tools = [
-		createIssueTool,
+		...(existingIssueId ? [] : [createIssueTool]),
 		linkThreadTool,
 		createSubissueTool,
 		createEmailDraftTool,
@@ -509,6 +526,7 @@ When you believe you have completed the task, call done().
 	];
 
 	const openIssues = await listOpenIssues(unitId);
+	const vendors = await listVendors(workspaceId);
 	const messages: Array<any> = [
 		{ role: 'system', content: system },
 		{
@@ -521,7 +539,9 @@ When you believe you have completed the task, call done().
 				workspace_id: workspaceId,
 				thread_id: threadId,
 				latest_message_id: replyMessageId,
+				existing_issue_id: existingIssueId ?? null,
 				open_issues: openIssues,
+				vendors,
 				workspace_policy: policyText
 			})
 		}
@@ -568,8 +588,9 @@ When you believe you have completed the task, call done().
 		if (!toolCalls.length) {
 			messages.push({
 				role: 'assistant',
-				content:
-					'You must call create_issue or link_thread_to_issue. Use create_issue if no clear match.'
+				content: existingIssueId
+					? 'You must call create_subissue or link_thread_to_issue.'
+					: 'You must call create_issue or link_thread_to_issue. Use create_issue if no clear match.'
 			});
 			continue;
 		}
@@ -959,28 +980,27 @@ const processMessage = async ({
 
 		let issueId = refreshedThread?.issue_id ?? threadRow.issue_id ?? null;
 
-		if (!issueId) {
-			const { data: policyRow } = await supabase
-				.from('workspace_policies')
-				.select('policy_text')
-				.eq('workspace_id', propertyRow.workspace_id)
-				.maybeSingle();
-			const policyText = policyRow?.policy_text ?? '';
-			const created = await runIssueAgent({
-				subject: messageSubject,
-				body: cleanedBody,
-				senderEmail,
-				unitId: unitRow.id,
-				workspaceId: propertyRow.workspace_id,
-				threadId: threadRow.id,
-				userId: connection.user_id,
-				policyText,
-				tenantName: tenant.name ?? null,
-				replySenderEmail: connection.email ?? null,
-				replyMessageId: inboundMessageId
-			});
-			issueId = created.issueId ?? null;
-		}
+		const { data: policyRow } = await supabase
+			.from('workspace_policies')
+			.select('policy_text')
+			.eq('workspace_id', propertyRow.workspace_id)
+			.maybeSingle();
+		const policyText = policyRow?.policy_text ?? '';
+		const created = await runIssueAgent({
+			subject: messageSubject,
+			body: cleanedBody,
+			senderEmail,
+			unitId: unitRow.id,
+			workspaceId: propertyRow.workspace_id,
+			threadId: threadRow.id,
+			userId: connection.user_id,
+			policyText,
+			tenantName: tenant.name ?? null,
+			replySenderEmail: connection.email ?? null,
+			replyMessageId: inboundMessageId,
+			existingIssueId: issueId
+		});
+		issueId = created.issueId ?? issueId;
 
 		if (issueId) {
 			await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
