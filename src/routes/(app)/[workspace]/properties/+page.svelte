@@ -109,7 +109,7 @@ suggestions = Array.isArray(data) ? data : [];
 <svelte:window on:keydown={onKeydown} on:click={onWindowClick} />
 
 <div class="space-y-2">
-	<div class="flex items-center justify-between border-b border-neutral-100 px-6 py-2">
+	<div class="flex items-center justify-between border-b border-neutral-100 px-6 py-2.5">
 		<h1 class="text-sm font-normal text-neutral-700">Properties</h1>
 		<button
 			on:click={openNewPropertyModal}
