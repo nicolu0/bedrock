@@ -12,7 +12,9 @@
 		{ id: 'members', label: 'Members', href: 'members' }
 	];
 
-	const isActive = (href) => $page.url.pathname === `${basePath}/settings/${href}`;
+	$: activeHref = items.find(
+		(item) => $page.url.pathname === `${basePath}/settings/${item.href}`
+	)?.href ?? null;
 
 	// Module-level so it survives tab switches within settings
 	let returnTo = null;
@@ -60,7 +62,7 @@
 						<a
 							href={`${basePath}/settings/${item.href}`}
 							class={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition ${
-								isActive(item.href)
+								activeHref === item.href
 									? 'bg-neutral-200/50 text-neutral-900'
 									: 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
 							}`}

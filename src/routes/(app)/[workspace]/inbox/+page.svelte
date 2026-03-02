@@ -1,7 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { goto, invalidate } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import {
 		notificationsCache,
@@ -72,27 +72,29 @@
 	}
 
 	async function handleClick(n) {
+		const issue = n.issues;
 		if (!n.is_read) {
-			// Optimistic update
-			notificationsCache.update((state) => ({
-				...state,
-				data: state.data
-					? {
-							...state.data,
-							notifications: state.data.notifications.map((notif) =>
-								notif.id === n.id ? { ...notif, is_read: true } : notif
-							)
-						}
-					: state.data
-			}));
+			// Fire and forget — don't await so navigation isn't blocked
 			const fd = new FormData();
 			fd.append('id', n.id);
-			await fetch('?/markRead', { method: 'POST', body: fd });
-			invalidate('app:notifications');
+			fetch('?/markRead', { method: 'POST', body: fd });
 		}
-		const issue = n.issues;
 		if (issue?.id) {
-			goto(`/${workspaceSlug}/issue/${issue.id}/${slugify(issue.name)}`);
+			await goto(`/${workspaceSlug}/issue/${issue.id}/${slugify(issue.name)}`);
+			// Update cache after navigation so the dot disappears off-screen
+			if (!n.is_read) {
+				notificationsCache.update((state) => ({
+					...state,
+					data: state.data
+						? {
+								...state.data,
+								notifications: state.data.notifications.map((notif) =>
+									notif.id === n.id ? { ...notif, is_read: true } : notif
+								)
+							}
+						: state.data
+				}));
+			}
 		}
 	}
 
@@ -145,7 +147,7 @@
 </script>
 
 <div>
-	<div class="border-b border-neutral-100 px-6 py-2">
+	<div class="flex items-center border-b border-neutral-100 px-6 py-3">
 		<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
 	</div>
 

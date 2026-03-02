@@ -208,7 +208,26 @@
 	$: prevIssue = currentIndex > 0 ? issueRows[currentIndex - 1] : null;
 	$: nextIssue =
 		currentIndex >= 0 && currentIndex < totalIssues - 1 ? issueRows[currentIndex + 1] : null;
+
+	$: fromParam = $page.url.searchParams.get('from');
+	$: fromIssueId = $page.url.searchParams.get('fromIssueId');
+	$: fromIssueSlug = $page.url.searchParams.get('fromIssueSlug');
+	$: fromIssueTitle = $page.url.searchParams.get('fromIssueTitle');
+
+	$: backHref = fromIssueId
+		? `/${$page.params.workspace}/issue/${fromIssueId}/${fromIssueSlug}`
+		: `/${$page.params.workspace}/my-issues`;
+
+	$: backLabel = fromIssueId ? (fromIssueTitle ?? 'Parent issue') : 'My issues';
+
+	function onKeydown(e) {
+		if (e.key !== 'Escape') return;
+		if (document.querySelector('[role="dialog"]')) return;
+		goto(backHref);
+	}
 </script>
+
+<svelte:window on:keydown={onKeydown} />
 
 <div class="flex h-full">
 	<div class="flex min-w-0 flex-1 flex-col">
@@ -216,7 +235,7 @@
 			class="flex items-center justify-between border-b border-neutral-100 px-6 py-2 text-sm text-neutral-600"
 		>
 			<div class="flex items-center gap-2">
-				<span class="text-neutral-700">My issues</span>
+				<a href={backHref} class="text-neutral-700 hover:underline">{backLabel}</a>
 				<span class="text-neutral-300">›</span>
 				<span class="h-3 w-3 rounded-full border border-amber-500"></span>
 				<span class="text-neutral-500">{issueName}</span>
@@ -300,7 +319,7 @@
 					<div class="mt-3 divide-y divide-neutral-200">
 						{#each subIssues as subIssue}
 							<a
-								href={`/${$page.params.workspace}/issue/${subIssue.id}/${slugify(subIssue.name)}`}
+								href={`/${$page.params.workspace}/issue/${subIssue.id}/${slugify(subIssue.name)}?fromIssueId=${issueId}&fromIssueSlug=${issueNameSlug}&fromIssueTitle=${encodeURIComponent(issueName)}`}
 								class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
 							>
 								<div class="flex items-center gap-3">
