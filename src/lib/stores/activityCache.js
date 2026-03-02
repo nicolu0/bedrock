@@ -48,10 +48,24 @@ const clearSessionCache = () => {
 	}
 };
 
+const isHardReload = () => {
+	if (!browser || !globalThis.performance) return false;
+	try {
+		const [entry] = performance.getEntriesByType('navigation') ?? [];
+		return entry?.type === 'reload';
+	} catch {
+		return false;
+	}
+};
+
 export const ensureActivityCache = async (workspaceSlug, options = {}) => {
 	if (!workspaceSlug) return null;
 	if (!browser) return null;
 	const fetcher = options.fetch ?? fetch;
+
+	if (isHardReload()) {
+		clearSessionCache();
+	}
 
 	const now = Date.now();
 	let currentState;

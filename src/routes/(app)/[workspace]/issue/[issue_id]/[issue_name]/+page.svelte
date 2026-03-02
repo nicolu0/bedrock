@@ -4,12 +4,14 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { get } from 'svelte/store';
+	import { onDestroy } from 'svelte';
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import { getIssueDetail, primeIssueDetail } from '$lib/stores/issueDetailCache.js';
 	import { issuesCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
 	import { activityCache } from '$lib/stores/activityCache.js';
+	import { supabase } from '$lib/supabaseClient.js';
 
 	export let data;
 
@@ -30,6 +32,7 @@
 
 	$: issueId = $page.params.issue_id ?? data?.issue?.id ?? 'HUB-1';
 	$: issueNameSlug = $page.params.issue_name ?? '';
+	$: workspaceSlug = $page.params.workspace;
 
 	// Cache / seed data
 	$: cached = browser && issueId ? getIssueDetail(issueId) : null;
@@ -209,6 +212,157 @@
 	$: nextIssue =
 		currentIndex >= 0 && currentIndex < totalIssues - 1 ? issueRows[currentIndex + 1] : null;
 
+	const upsertMessage = (message) => {
+		if (!message?.issue_id) return;
+		activityCache.update((state) => {
+			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
+			const data = state.data ?? {
+				messagesByIssue: {},
+				emailDraftsByMessageId: {},
+				draftIssueIds: []
+			};
+			const nextMessagesByIssue = { ...data.messagesByIssue };
+			const list = [...(nextMessagesByIssue[message.issue_id] ?? [])];
+			const idx = list.findIndex((item) => item.id === message.id);
+			if (idx >= 0) {
+				list[idx] = { ...list[idx], ...message };
+			} else {
+				list.push(message);
+			}
+			list.sort((a, b) => {
+				const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
+				const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
+				return timeA - timeB;
+			});
+			nextMessagesByIssue[message.issue_id] = list;
+			return { ...state, data: { ...data, messagesByIssue: nextMessagesByIssue } };
+		});
+	};
+
+	const removeMessage = (message) => {
+		if (!message?.issue_id) return;
+		activityCache.update((state) => {
+			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
+			const data = state.data ?? {
+				messagesByIssue: {},
+				emailDraftsByMessageId: {},
+				draftIssueIds: []
+			};
+			const nextMessagesByIssue = { ...data.messagesByIssue };
+			const list = [...(nextMessagesByIssue[message.issue_id] ?? [])];
+			const nextList = list.filter((item) => item.id !== message.id);
+			if (nextList.length) {
+				nextMessagesByIssue[message.issue_id] = nextList;
+			} else {
+				delete nextMessagesByIssue[message.issue_id];
+			}
+			return { ...state, data: { ...data, messagesByIssue: nextMessagesByIssue } };
+		});
+	};
+
+	const upsertDraft = (draft) => {
+		if (!draft?.message_id) return;
+		activityCache.update((state) => {
+			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
+			const data = state.data ?? {
+				messagesByIssue: {},
+				emailDraftsByMessageId: {},
+				draftIssueIds: []
+			};
+			const nextDrafts = { ...data.emailDraftsByMessageId, [draft.message_id]: draft };
+			const nextIssueIds = [
+				...new Set(
+					Object.values(nextDrafts)
+						.map((item) => item.issue_id)
+						.filter(Boolean)
+				)
+			];
+			return {
+				...state,
+				data: { ...data, emailDraftsByMessageId: nextDrafts, draftIssueIds: nextIssueIds }
+			};
+		});
+	};
+
+	const removeDraft = (draft) => {
+		if (!draft?.message_id) return;
+		activityCache.update((state) => {
+			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
+			const data = state.data ?? {
+				messagesByIssue: {},
+				emailDraftsByMessageId: {},
+				draftIssueIds: []
+			};
+			const nextDrafts = { ...data.emailDraftsByMessageId };
+			delete nextDrafts[draft.message_id];
+			const nextIssueIds = [
+				...new Set(
+					Object.values(nextDrafts)
+						.map((item) => item.issue_id)
+						.filter(Boolean)
+				)
+			];
+			return {
+				...state,
+				data: { ...data, emailDraftsByMessageId: nextDrafts, draftIssueIds: nextIssueIds }
+			};
+		});
+	};
+
+	const channelMap = new Map();
+
+	const syncRealtimeChannels = (issueIds) => {
+		const nextIds = new Set(issueIds.filter(Boolean));
+		for (const [id, channel] of channelMap.entries()) {
+			if (!nextIds.has(id)) {
+				supabase.removeChannel(channel);
+				channelMap.delete(id);
+			}
+		}
+
+		for (const id of nextIds) {
+			if (channelMap.has(id)) continue;
+			const channel = supabase
+				.channel(`issue-activity-${id}`)
+				.on(
+					'postgres_changes',
+					{ event: '*', schema: 'public', table: 'messages', filter: `issue_id=eq.${id}` },
+					(payload) => {
+						if (payload.eventType === 'DELETE') {
+							removeMessage(payload.old);
+						} else {
+							upsertMessage(payload.new);
+						}
+					}
+				)
+				.on(
+					'postgres_changes',
+					{ event: '*', schema: 'public', table: 'email_drafts', filter: `issue_id=eq.${id}` },
+					(payload) => {
+						if (payload.eventType === 'DELETE') {
+							removeDraft(payload.old);
+						} else {
+							upsertDraft(payload.new);
+						}
+					}
+				)
+				.subscribe();
+
+			channelMap.set(id, channel);
+		}
+	};
+
+	$: if (browser && issueId) {
+		const ids = [issueId, ...subIssues.map((item) => item.id)];
+		syncRealtimeChannels(ids);
+	}
+
+	onDestroy(() => {
+		for (const channel of channelMap.values()) {
+			supabase.removeChannel(channel);
+		}
+		channelMap.clear();
+	});
 	$: fromParam = $page.url.searchParams.get('from');
 	$: fromIssueId = $page.url.searchParams.get('fromIssueId');
 	$: fromIssueSlug = $page.url.searchParams.get('fromIssueSlug');
