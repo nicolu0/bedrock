@@ -400,7 +400,13 @@ Process (required):
 1) Review the provided open_issues list.
 2) If no clear match, call create_issue with a concise title.
 3) Create exactly one subissue using create_subissue with the root issue id.
-4) If the email is from a tenant, choose triage when the tenant might resolve it or more info is needed; choose schedule only for clear emergencies (e.g., pests, gas smell, no power, no water, flooding, safety risks) or when workspace_policy explicitly requires immediate scheduling.
+4) If the email is from a tenant, follow staged triage:
+   - Stage 1: Identify if the tenant can resolve the issue themselves with basic steps.
+   - Stage 2: Determine if a vendor is needed.
+   - Stage 3: Determine if it is an emergency.
+   Use the full conversation thread for context and ask clarifying questions to confirm urgency.
+   Choose triage when the tenant might resolve it or more info is needed; choose schedule only for clear emergencies (e.g., pests, gas smell, no power, no water, flooding, safety risks) or when workspace_policy explicitly requires immediate scheduling.
+   Example: a clogged toilet is typically triage (suggest using a plunger and ask if there is overflow/flooding). If there is flooding or safety risk, treat as emergency and schedule.
 5) If you created a triage subissue, create an email draft reply to the sender using create_email_draft (required).
 6) Finally, call link_thread_to_issue once with the most specific issue id (prefer the subissue id). This is required.
 
@@ -412,7 +418,7 @@ Rules:
   - Triage {Issue Title} (${tenantName ?? 'Tenant'})
   - Schedule {Vendor Type} for {Issue Title}
 - Use the workspace_policy to decide triage vs schedule vendor. If policy is empty or unclear, triage unless it matches an emergency.
-- Drafts: When triaging, draft a short, friendly reply acknowledging the issue and asking one clarifying question.
+- Drafts: When triaging, draft a short, friendly reply acknowledging the issue and asking one clarifying question about emergency indicators if relevant.
 - Drafts: Use the subissue id for issue_id and latest_message_id for message_id when calling create_email_draft.
 - Linking: Call link_thread_to_issue exactly once and only after issue/subissue creation. This is required.
 When you believe you have completed the task, call done().
