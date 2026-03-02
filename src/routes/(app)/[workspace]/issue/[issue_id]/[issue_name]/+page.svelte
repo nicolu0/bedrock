@@ -84,63 +84,18 @@
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
 		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
 		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
-	}
 
-	// When stream resolves: update locals + prime cache
-	// Only overwrite issue if the stream returned a real value — prevents null wiping out the seed
-	let _handledPromise = null;
-	let _handledPromiseIssueId = null;
-	let _handledActivityRefreshIssueId = null;
-	let _forcedActivityIssueId = null;
-
-	$: if (
-		browser &&
-		issueId &&
-		data?.issueDetail &&
-		(data.issueDetail !== _handledPromise || issueId !== _handledPromiseIssueId)
-	) {
-		_handledPromise = data.issueDetail;
-		_handledPromiseIssueId = issueId;
-
-		const _assignee = assignee;
-		const _issueId = issueId;
-
-		const handle = (detail) => {
-			if (_issueId !== issueId) return;
-			if (!detail) return;
-
-			const { issue: i, subIssues: s, assignee: a } = detail;
-
-			if (i) issue = i;
-			subIssues = s ?? [];
-			assignee = a ?? _assignee;
-
-			if (i) {
-				primeIssueDetail(_issueId, {
-					issue: i,
-					subIssues: s ?? [],
-					assignee: a ?? _assignee
-				});
-			}
-		};
-
-		const refreshActivity = () => {
-			if (browser && workspaceSlug && issueId !== _handledActivityRefreshIssueId) {
-				_handledActivityRefreshIssueId = issueId;
-				ensureActivityCache(workspaceSlug, { force: true });
-			}
-		};
-
-		if (data.issueDetail instanceof Promise) {
-			data.issueDetail.then((detail) => {
-				handle(detail);
-				refreshActivity();
+		// Prime detail cache from server data if not already cached
+		if (!cached && data?.issue && browser) {
+			primeIssueDetail(issueId, {
+				issue: data.issue,
+				subIssues: data.subIssues ?? [],
+				assignee: data.assignee ?? null
 			});
-		} else {
-			handle(data.issueDetail);
-			refreshActivity();
 		}
 	}
+
+	let _forcedActivityIssueId = null;
 
 	$: if (browser && issueId) {
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
@@ -153,11 +108,7 @@
 		ensureActivityCache(workspaceSlug, { force: true });
 	}
 
-	$: issueName =
-		issue?.name ??
-		(issueNameSlug
-			? issueNameSlug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-			: 'Issue');
+	$: issueName = issue?.name ?? '';
 
 	$: issueDescription = issue?.description ?? data?.issue?.description ?? '';
 	$: statusKey = issue?.status ?? data?.issue?.status ?? 'todo';
