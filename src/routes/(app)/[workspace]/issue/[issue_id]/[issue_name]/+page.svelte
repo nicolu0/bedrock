@@ -408,7 +408,7 @@
 
 <div class="flex h-full">
 	<div class="flex min-w-0 flex-1 flex-col">
-		<div class="flex items-center justify-between border-b border-neutral-100 px-6 py-2 text-sm text-neutral-600">
+		<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2 text-sm text-neutral-600">
 			<div
 				class="flex items-center gap-2 transition-opacity duration-150"
 				class:opacity-0={!$pageReady}
