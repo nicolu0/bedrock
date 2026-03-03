@@ -65,7 +65,7 @@
 					<div
 						class="grid gap-4 border-t border-neutral-100 px-5 py-3 text-sm hover:bg-neutral-50 cursor-pointer"
 						style="grid-template-columns: 2fr 1fr 1.5fr"
-						on:click={() => (editingVendor = vendor)}
+						on:click={(e) => { e.currentTarget.blur(); editingVendor = vendor; }}
 						role="button"
 						tabindex="0"
 						on:keydown={(e) => e.key === 'Enter' && (editingVendor = vendor)}
