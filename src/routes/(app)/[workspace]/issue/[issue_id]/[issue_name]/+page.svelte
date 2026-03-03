@@ -1,7 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { browser } from '$app/environment';
-	import { goto } from '$app/navigation';
+	import { goto, preloadData } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { get } from 'svelte/store';
 	import { onDestroy } from 'svelte';
@@ -37,13 +37,20 @@
 	// Cache / seed data
 	$: cached = browser && issueId ? getIssueDetail(issueId) : null;
 
-	// Seed partial data from the issues list cache (title + status are already loaded)
+	// Seed partial data from the flat issues list (includes sub-issues)
 	$: listItem =
 		browser && issueId
-			? (get(issuesCache)
-					?.data?.sections?.flatMap((s) => s.items)
-					?.find((item) => item.issueId === issueId) ?? null)
+			? ($issuesCache.data?.issues?.find((item) => item.id === issueId) ?? null)
 			: null;
+
+	// Derive sub-issues from flat issues list as fallback for cold start
+	$: listSubIssues =
+		browser && issueId
+			? ($issuesCache.data?.issues
+					?.filter((item) => item.parent_id === issueId)
+					?.map((s) => ({ id: s.id, name: s.name ?? s.title, status: s.status, parent_id: issueId })) ??
+				[])
+			: [];
 
 	// Seed assignee from members cache using the current user's ID (from layout data)
 	$: memberEntry =
@@ -60,7 +67,7 @@
 	let emailDraftsByMessageId = {};
 	let draftIssueIds = [];
 
-	// Reset local state when route/issue changes, preferring cache -> server data -> list seed
+	// Reset local state when route/issue changes, preferring cache -> list seed
 	let _seededForIssueId = null;
 	$: if (issueId && issueId !== _seededForIssueId) {
 		_seededForIssueId = issueId;
@@ -69,30 +76,20 @@
 		assignee = seedAssignee;
 		issue =
 			cached?.issue ??
-			data?.issue ??
 			(listItem
 				? {
 						id: issueId,
-						name: listItem.title,
+						name: listItem.title ?? listItem.name,
 						status: listItem.status,
 						description: null
 					}
 				: null);
 
-		subIssues = cached?.subIssues ?? data?.subIssues ?? [];
-		assignee = cached?.assignee ?? data?.assignee ?? seedAssignee;
+		subIssues = cached?.subIssues ?? listSubIssues;
+		assignee = cached?.assignee ?? seedAssignee;
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
 		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
 		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
-
-		// Prime detail cache from server data if not already cached
-		if (!cached && data?.issue && browser) {
-			primeIssueDetail(issueId, {
-				issue: data.issue,
-				subIssues: data.subIssues ?? [],
-				assignee: data.assignee ?? null
-			});
-		}
 	}
 
 	let _forcedActivityIssueId = null;
@@ -110,10 +107,10 @@
 
 	$: issueName = issue?.name ?? '';
 
-	$: issueDescription = issue?.description ?? data?.issue?.description ?? '';
-	$: statusKey = issue?.status ?? data?.issue?.status ?? 'todo';
+	$: issueDescription = issue?.description ?? '';
+	$: statusKey = issue?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
-	$: assigneeName = assignee?.name ?? data?.assignee?.name ?? 'Unassigned';
+	$: assigneeName = assignee?.name ?? 'Unassigned';
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
 
 	$: draftsByIssue = Object.values(emailDraftsByMessageId ?? {}).reduce((acc, draft) => {
@@ -378,6 +375,10 @@
 		? (fromIssueTitle ?? 'Parent issue')
 		: fromParam === 'inbox' ? 'Inbox' : 'My issues';
 
+	$: if (browser && fromIssueId && backHref) {
+		preloadData(backHref);
+	}
+
 	function onKeydown(e) {
 		if (e.key !== 'Escape') return;
 		if (document.querySelector('[role="dialog"]')) return;
@@ -402,11 +403,12 @@
 				{#if totalIssues > 0 && currentIndex >= 0}
 					<span class="text-xs text-neutral-500">{currentIndex + 1} / {totalIssues}</span>
 				{/if}
-				<button
-					class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 disabled:opacity-40"
-					type="button"
-					disabled={!nextIssue}
-					on:click={() => nextIssue && goto(getIssueHref(nextIssue.issueId, nextIssue.title))}
+				<a
+					href={nextIssue ? getIssueHref(nextIssue.issueId, nextIssue.title) : undefined}
+					class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100"
+					class:pointer-events-none={!nextIssue}
+					class:opacity-40={!nextIssue}
+					aria-disabled={!nextIssue}
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -419,12 +421,13 @@
 							d="M8 11.5a.5.5 0 0 1-.354-.146l-4-4a.5.5 0 1 1 .708-.708L8 10.293l3.646-3.647a.5.5 0 0 1 .708.708l-4 4A.5.5 0 0 1 8 11.5"
 						/>
 					</svg>
-				</button>
-				<button
-					class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 disabled:opacity-40"
-					type="button"
-					disabled={!prevIssue}
-					on:click={() => prevIssue && goto(getIssueHref(prevIssue.issueId, prevIssue.title))}
+				</a>
+				<a
+					href={prevIssue ? getIssueHref(prevIssue.issueId, prevIssue.title) : undefined}
+					class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100"
+					class:pointer-events-none={!prevIssue}
+					class:opacity-40={!prevIssue}
+					aria-disabled={!prevIssue}
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -437,7 +440,7 @@
 							d="M8 4.5a.5.5 0 0 1 .354.146l4 4a.5.5 0 1 1-.708.708L8 5.707l-3.646 3.647a.5.5 0 0 1-.708-.708l4-4A.5.5 0 0 1 8 4.5"
 						/>
 					</svg>
-				</button>
+				</a>
 			</div>
 		</div>
 
