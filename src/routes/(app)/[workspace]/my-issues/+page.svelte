@@ -66,7 +66,7 @@
 </script>
 
 <div>
-	<div class="flex items-center border-b border-neutral-100 px-6 py-3">
+	<div class="flex items-center border-b border-neutral-200 px-6 py-3">
 		<h1 class="text-sm font-normal text-neutral-700">My issues</h1>
 	</div>
 	<div class="flex items-center justify-between px-6 py-2">

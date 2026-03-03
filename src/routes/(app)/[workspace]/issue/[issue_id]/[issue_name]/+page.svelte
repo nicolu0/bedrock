@@ -7,7 +7,11 @@
 	import { onDestroy } from 'svelte';
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
-	import { getIssueDetail, primeIssueDetail, updateIssueStatusInDetailCache } from '$lib/stores/issueDetailCache.js';
+	import {
+		getIssueDetail,
+		primeIssueDetail,
+		updateIssueStatusInDetailCache
+	} from '$lib/stores/issueDetailCache.js';
 	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
 	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
@@ -169,10 +173,7 @@
 		updateIssueStatusInListCache(issueId, newStatus);
 		issue = { ...issue, status: newStatus };
 
-		const { error } = await supabase
-			.from('issues')
-			.update({ status: newStatus })
-			.eq('id', issueId);
+		const { error } = await supabase.from('issues').update({ status: newStatus }).eq('id', issueId);
 
 		if (error) {
 			updateIssueStatusInDetailCache(issueId, prevStatus);
@@ -376,7 +377,9 @@
 
 	$: backLabel = fromIssueId
 		? (fromIssueTitle ?? 'Parent issue')
-		: fromParam === 'inbox' ? 'Inbox' : 'My issues';
+		: fromParam === 'inbox'
+			? 'Inbox'
+			: 'My issues';
 
 	function onKeydown(e) {
 		if (e.key !== 'Escape') return;
@@ -390,7 +393,7 @@
 <div class="flex h-full">
 	<div class="flex min-w-0 flex-1 flex-col">
 		<div
-			class="flex items-center justify-between border-b border-neutral-100 px-6 py-2 text-sm text-neutral-600"
+			class="flex items-center justify-between border-b border-neutral-200 px-6 py-2 text-sm text-neutral-600"
 		>
 			<div class="flex items-center gap-2">
 				<a href={backHref} class="text-neutral-700 hover:underline">{backLabel}</a>
@@ -607,7 +610,7 @@
 				</div>
 				<button
 					type="button"
-					class="flex items-center gap-2 hover:opacity-75 transition"
+					class="flex items-center gap-2 transition hover:opacity-75"
 					on:click={() => {
 						const idx = statusCycle.indexOf(statusKey);
 						handleStatusChange(statusCycle[(idx + 1) % statusCycle.length]);
