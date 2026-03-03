@@ -80,7 +80,7 @@
 			fetch('?/markRead', { method: 'POST', body: fd });
 		}
 		if (issue?.id) {
-			await goto(`/${workspaceSlug}/issue/${issue.id}/${slugify(issue.name)}`);
+			await goto(`/${workspaceSlug}/issue/${issue.id}/${slugify(issue.name)}?from=inbox`);
 			// Update cache after navigation so the dot disappears off-screen
 			if (!n.is_read) {
 				notificationsCache.update((state) => ({

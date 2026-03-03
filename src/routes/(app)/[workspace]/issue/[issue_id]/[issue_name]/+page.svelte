@@ -370,9 +370,13 @@
 
 	$: backHref = fromIssueId
 		? `/${$page.params.workspace}/issue/${fromIssueId}/${fromIssueSlug}`
-		: `/${$page.params.workspace}/my-issues`;
+		: fromParam === 'inbox'
+			? `/${$page.params.workspace}/inbox`
+			: `/${$page.params.workspace}/my-issues`;
 
-	$: backLabel = fromIssueId ? (fromIssueTitle ?? 'Parent issue') : 'My issues';
+	$: backLabel = fromIssueId
+		? (fromIssueTitle ?? 'Parent issue')
+		: fromParam === 'inbox' ? 'Inbox' : 'My issues';
 
 	function onKeydown(e) {
 		if (e.key !== 'Escape') return;
