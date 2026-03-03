@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
+import { primeDetailCacheFromIssuesList } from './issueDetailCache.js';
 
 const CACHE_KEY = 'issues-cache-v1';
 const CACHE_TTL = 5 * 60 * 1000;
@@ -139,6 +140,7 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 					fetchedAt: payload.fetchedAt
 				});
 				writeSessionCache(payload);
+				primeDetailCacheFromIssuesList(data.issues);
 				return data;
 			}
 			issuesCache.update((state) => ({
@@ -180,4 +182,23 @@ export const primeIssuesCache = (workspaceSlug, data) => {
 		fetchedAt: payload.fetchedAt
 	});
 	writeSessionCache(payload);
+};
+
+export const updateIssueStatusInListCache = (issueId, newStatus) => {
+	issuesCache.update((state) => {
+		if (!state.data?.sections) return state;
+		const sections = state.data.sections.map((section) => ({
+			...section,
+			items: section.items.map((item) => {
+				if (item.issueId === issueId) return { ...item, status: newStatus };
+				return {
+					...item,
+					subIssues: (item.subIssues ?? []).map((s) =>
+						s.issueId === issueId ? { ...s, status: newStatus } : s
+					)
+				};
+			})
+		}));
+		return { ...state, data: { ...state.data, sections } };
+	});
 };

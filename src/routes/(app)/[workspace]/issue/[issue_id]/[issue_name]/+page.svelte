@@ -7,8 +7,8 @@
 	import { onDestroy } from 'svelte';
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
-	import { getIssueDetail, primeIssueDetail } from '$lib/stores/issueDetailCache.js';
-	import { issuesCache } from '$lib/stores/issuesCache.js';
+	import { getIssueDetail, primeIssueDetail, updateIssueStatusInDetailCache } from '$lib/stores/issueDetailCache.js';
+	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
 	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
 	import { supabase } from '$lib/supabaseClient.js';
@@ -160,6 +160,26 @@
 			.toLowerCase()
 			.replace(/[^a-z0-9]+/g, '-')
 			.replace(/^-+|-+$/g, '');
+
+	const statusCycle = ['in_progress', 'todo', 'done'];
+
+	const handleStatusChange = async (newStatus) => {
+		const prevStatus = statusKey;
+		updateIssueStatusInDetailCache(issueId, newStatus);
+		updateIssueStatusInListCache(issueId, newStatus);
+		issue = { ...issue, status: newStatus };
+
+		const { error } = await supabase
+			.from('issues')
+			.update({ status: newStatus })
+			.eq('id', issueId);
+
+		if (error) {
+			updateIssueStatusInDetailCache(issueId, prevStatus);
+			updateIssueStatusInListCache(issueId, prevStatus);
+			issue = { ...issue, status: prevStatus };
+		}
+	};
 
 	const buildIssueRows = (sections = []) =>
 		sections.flatMap((section) =>
@@ -581,10 +601,17 @@
 					<div class="h-3.5 w-3.5 rounded-full bg-neutral-200"></div>
 					<span>{assigneeName}</span>
 				</div>
-				<div class="flex items-center gap-2">
-					<span class="h-3.5 w-3.5 rounded-full border border-amber-500"></span>
+				<button
+					type="button"
+					class="flex items-center gap-2 hover:opacity-75 transition"
+					on:click={() => {
+						const idx = statusCycle.indexOf(statusKey);
+						handleStatusChange(statusCycle[(idx + 1) % statusCycle.length]);
+					}}
+				>
+					<span class={`h-3.5 w-3.5 rounded-full border ${statusMeta.statusClass}`}></span>
 					<span>{statusMeta.label}</span>
-				</div>
+				</button>
 			</div>
 		</div>
 	</aside>
