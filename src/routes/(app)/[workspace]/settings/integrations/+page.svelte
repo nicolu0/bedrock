@@ -1,6 +1,17 @@
 <script>
 	// @ts-nocheck
+	import { browser } from '$app/environment';
+	import { gmailConnectionCache, primeGmailConnectionCache } from '$lib/stores/gmailConnectionCache.js';
+
 	export let data;
+
+	$: connection = $gmailConnectionCache;
+
+	$: if (browser && data.gmailConnection) {
+		data.gmailConnection.then((c) => {
+			primeGmailConnectionCache(c);
+		});
+	}
 
 	const formatDate = (value) => {
 		if (!value) return 'Unknown';
@@ -17,9 +28,9 @@
 	</div>
 
 	<section class="rounded-2xl border border-neutral-200 bg-white p-6">
-		{#await data.gmailConnection}
+		{#if connection === undefined}
 			<div class="animate-pulse h-10 w-48 rounded bg-neutral-100"></div>
-		{:then connection}
+		{:else}
 			<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 				<div>
 					<div class="flex items-center gap-3">
@@ -91,6 +102,6 @@
 					</a>
 				</div>
 			</div>
-		{/await}
+		{/if}
 	</section>
 </div>

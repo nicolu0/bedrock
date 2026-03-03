@@ -1,6 +1,7 @@
 <script>
 	import { fade, scale } from 'svelte/transition';
 	import { createEventDispatcher } from 'svelte';
+	import { invalidate } from '$app/navigation';
 
 	const dispatch = createEventDispatcher();
 
@@ -54,6 +55,7 @@
 			} else {
 				success = `Invite${json.invited.length > 1 ? 's' : ''} sent to ${json.invited.join(', ')}.`;
 				rows = [{ email: '', role: 'member' }];
+				await invalidate('app:members');
 			}
 		} catch (e) {
 			error = 'Something went wrong.';

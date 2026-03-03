@@ -7,8 +7,8 @@
 	import { onDestroy } from 'svelte';
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
-	import { getIssueDetail, primeIssueDetail } from '$lib/stores/issueDetailCache.js';
-	import { issuesCache } from '$lib/stores/issuesCache.js';
+	import { getIssueDetail, primeIssueDetail, updateIssueStatusInDetailCache } from '$lib/stores/issueDetailCache.js';
+	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
 	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
 	import { supabase } from '$lib/supabaseClient.js';
@@ -84,63 +84,18 @@
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
 		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
 		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
-	}
 
-	// When stream resolves: update locals + prime cache
-	// Only overwrite issue if the stream returned a real value — prevents null wiping out the seed
-	let _handledPromise = null;
-	let _handledPromiseIssueId = null;
-	let _handledActivityRefreshIssueId = null;
-	let _forcedActivityIssueId = null;
-
-	$: if (
-		browser &&
-		issueId &&
-		data?.issueDetail &&
-		(data.issueDetail !== _handledPromise || issueId !== _handledPromiseIssueId)
-	) {
-		_handledPromise = data.issueDetail;
-		_handledPromiseIssueId = issueId;
-
-		const _assignee = assignee;
-		const _issueId = issueId;
-
-		const handle = (detail) => {
-			if (_issueId !== issueId) return;
-			if (!detail) return;
-
-			const { issue: i, subIssues: s, assignee: a } = detail;
-
-			if (i) issue = i;
-			subIssues = s ?? [];
-			assignee = a ?? _assignee;
-
-			if (i) {
-				primeIssueDetail(_issueId, {
-					issue: i,
-					subIssues: s ?? [],
-					assignee: a ?? _assignee
-				});
-			}
-		};
-
-		const refreshActivity = () => {
-			if (browser && workspaceSlug && issueId !== _handledActivityRefreshIssueId) {
-				_handledActivityRefreshIssueId = issueId;
-				ensureActivityCache(workspaceSlug, { force: true });
-			}
-		};
-
-		if (data.issueDetail instanceof Promise) {
-			data.issueDetail.then((detail) => {
-				handle(detail);
-				refreshActivity();
+		// Prime detail cache from server data if not already cached
+		if (!cached && data?.issue && browser) {
+			primeIssueDetail(issueId, {
+				issue: data.issue,
+				subIssues: data.subIssues ?? [],
+				assignee: data.assignee ?? null
 			});
-		} else {
-			handle(data.issueDetail);
-			refreshActivity();
 		}
 	}
+
+	let _forcedActivityIssueId = null;
 
 	$: if (browser && issueId) {
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
@@ -153,11 +108,7 @@
 		ensureActivityCache(workspaceSlug, { force: true });
 	}
 
-	$: issueName =
-		issue?.name ??
-		(issueNameSlug
-			? issueNameSlug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-			: 'Issue');
+	$: issueName = issue?.name ?? '';
 
 	$: issueDescription = issue?.description ?? data?.issue?.description ?? '';
 	$: statusKey = issue?.status ?? data?.issue?.status ?? 'todo';
@@ -209,6 +160,26 @@
 			.toLowerCase()
 			.replace(/[^a-z0-9]+/g, '-')
 			.replace(/^-+|-+$/g, '');
+
+	const statusCycle = ['in_progress', 'todo', 'done'];
+
+	const handleStatusChange = async (newStatus) => {
+		const prevStatus = statusKey;
+		updateIssueStatusInDetailCache(issueId, newStatus);
+		updateIssueStatusInListCache(issueId, newStatus);
+		issue = { ...issue, status: newStatus };
+
+		const { error } = await supabase
+			.from('issues')
+			.update({ status: newStatus })
+			.eq('id', issueId);
+
+		if (error) {
+			updateIssueStatusInDetailCache(issueId, prevStatus);
+			updateIssueStatusInListCache(issueId, prevStatus);
+			issue = { ...issue, status: prevStatus };
+		}
+	};
 
 	const buildIssueRows = (sections = []) =>
 		sections.flatMap((section) =>
@@ -399,9 +370,13 @@
 
 	$: backHref = fromIssueId
 		? `/${$page.params.workspace}/issue/${fromIssueId}/${fromIssueSlug}`
-		: `/${$page.params.workspace}/my-issues`;
+		: fromParam === 'inbox'
+			? `/${$page.params.workspace}/inbox`
+			: `/${$page.params.workspace}/my-issues`;
 
-	$: backLabel = fromIssueId ? (fromIssueTitle ?? 'Parent issue') : 'My issues';
+	$: backLabel = fromIssueId
+		? (fromIssueTitle ?? 'Parent issue')
+		: fromParam === 'inbox' ? 'Inbox' : 'My issues';
 
 	function onKeydown(e) {
 		if (e.key !== 'Escape') return;
@@ -630,10 +605,17 @@
 					<div class="h-3.5 w-3.5 rounded-full bg-neutral-200"></div>
 					<span>{assigneeName}</span>
 				</div>
-				<div class="flex items-center gap-2">
-					<span class="h-3.5 w-3.5 rounded-full border border-amber-500"></span>
+				<button
+					type="button"
+					class="flex items-center gap-2 hover:opacity-75 transition"
+					on:click={() => {
+						const idx = statusCycle.indexOf(statusKey);
+						handleStatusChange(statusCycle[(idx + 1) % statusCycle.length]);
+					}}
+				>
+					<span class={`h-3.5 w-3.5 rounded-full border ${statusMeta.statusClass}`}></span>
 					<span>{statusMeta.label}</span>
-				</div>
+				</button>
 			</div>
 		</div>
 	</aside>

@@ -60,3 +60,54 @@ export const primeIssueDetail = (issueId, data) => {
 	memoryCache.set(issueId, { ...data, fetchedAt: Date.now() });
 	saveToSession();
 };
+
+/**
+ * Pre-populates the detail cache from the flat issues list returned by /api/issues-cache.
+ * Skips entries that are already fresh in the cache.
+ * @param {any[]} issuesList
+ */
+export const primeDetailCacheFromIssuesList = (issuesList) => {
+	if (!issuesList?.length) return;
+	if (!sessionLoaded) {
+		loadFromSession();
+		sessionLoaded = true;
+	}
+
+	const childrenByParentId = new Map();
+	for (const issue of issuesList) {
+		if (!issue.parent_id) continue;
+		if (!childrenByParentId.has(issue.parent_id)) childrenByParentId.set(issue.parent_id, []);
+		childrenByParentId.get(issue.parent_id).push(issue);
+	}
+
+	const now = Date.now();
+	for (const issue of issuesList) {
+		const existing = memoryCache.get(issue.id);
+		if (existing && now - existing.fetchedAt < CACHE_TTL) continue;
+		const subIssues = (childrenByParentId.get(issue.id) ?? []).map((s) => ({
+			id: s.id,
+			name: s.name ?? s.title,
+			status: s.status,
+			parent_id: issue.id
+		}));
+		memoryCache.set(issue.id, {
+			issue: { id: issue.id, name: issue.name ?? issue.title, status: issue.status, description: null },
+			subIssues,
+			assignee: null,
+			fetchedAt: now
+		});
+	}
+	saveToSession();
+};
+
+/**
+ * Optimistically updates the status of an issue in the detail cache.
+ * @param {string} issueId
+ * @param {string} newStatus
+ */
+export const updateIssueStatusInDetailCache = (issueId, newStatus) => {
+	const entry = memoryCache.get(issueId);
+	if (!entry) return;
+	memoryCache.set(issueId, { ...entry, issue: { ...entry.issue, status: newStatus } });
+	saveToSession();
+};
