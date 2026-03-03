@@ -440,7 +440,10 @@ Process (required):
    Choose triage when the tenant might resolve it or more info is needed; choose schedule only for clear emergencies (e.g., pests, gas smell, no power, no water, flooding, safety risks) or when workspace_policy explicitly requires immediate scheduling.
    Example: a clogged toilet is typically triage (suggest using a plunger and ask if there is overflow/flooding). If there is flooding or safety risk, treat as emergency and schedule.
 7) If you created a triage subissue, create an email draft reply to the sender using create_email_draft (required).
-8) If you created a Schedule subissue, pick a vendor from the vendors list (prefer trade match), create a vendor email draft using create_email_draft with the vendor email as recipient. Omit message_id unless a vendor thread exists. If no suitable vendor or no vendor email exists, draft to the PM/maintenance email (reply_sender_email) and note that no matching vendor was found.
+8) When you determine the tenant cannot resolve the issue and you create a Schedule subissue, you should create two drafts in the same run:
+   - Tenant reply: acknowledge, confirm availability/entry permission, and keep the tenant informed. Use latest_message_id for message_id.
+   - Vendor request: pick a vendor from the vendors list (prefer trade match) and draft a vendor email. Omit message_id unless a vendor thread exists. If no suitable vendor or no vendor email exists, draft to the PM/maintenance email (reply_sender_email) and note that no matching vendor was found.
+   This is a stopping point for triage: do not keep asking tenant troubleshooting questions in the same run.
 9) Linking: Always link the tenant thread to the triage subissue (or existing triage subissue). Do NOT link the tenant thread to the Schedule subissue; that subissue is for the vendor thread.
 10) Finally, call link_thread_to_issue once with the triage subissue id. This is required.
 
@@ -453,7 +456,8 @@ Rules:
   - Schedule {Vendor Type} for {Issue Title}
 - Use the workspace_policy to decide triage vs schedule vendor. If policy is empty or unclear, triage unless it matches an emergency.
 - Drafts: When triaging, draft a short, friendly reply acknowledging the issue and asking one clarifying question about emergency indicators if relevant.
-- Drafts: When scheduling, draft a short, direct vendor email requesting availability and permission to access. Do not draft a tenant reply when creating a vendor draft (only one draft per message).
+- Drafts: When scheduling, draft a short, direct vendor email requesting availability and permission to access.
+- Drafts: You may call create_email_draft multiple times in one run. Use latest_message_id for the tenant reply draft, and omit message_id for the vendor draft when starting a new vendor thread.
 - Drafts: For Schedule subissues, the draft recipient must be a vendor email or reply_sender_email; never send to sender_email.
 - existing_issue_id: When present, you must not call create_issue. Reuse the latest triage subissue when possible.
 - Drafts: Use the subissue id for issue_id. For tenant replies, use latest_message_id for message_id. For vendor scheduling drafts, include message_id when replying in an existing vendor thread; otherwise omit message_id entirely (do not send empty string).
