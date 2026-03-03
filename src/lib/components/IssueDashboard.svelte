@@ -1688,7 +1688,7 @@
 		<section class="flex w-full flex-col overflow-y-auto bg-white md:w-4/5">
 			<div class="mx-auto w-full">
 				<div
-					class="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-100 bg-white/95 px-6 py-4 backdrop-blur"
+					class="sticky top-0 z-20 flex items-center justify-between border-b border-neutral-200 bg-white/95 px-6 py-4 backdrop-blur"
 				>
 					<div class="text-sm font-normal text-neutral-800">{sectionTitle}</div>
 				</div>

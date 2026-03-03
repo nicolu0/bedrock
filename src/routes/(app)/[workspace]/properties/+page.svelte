@@ -62,7 +62,7 @@
 		debounceTimer = setTimeout(async () => {
 			const res = await fetch(`/api/places?input=${encodeURIComponent(val)}`);
 			const data = await res.json();
-suggestions = Array.isArray(data) ? data : [];
+			suggestions = Array.isArray(data) ? data : [];
 			showSuggestions = suggestions.length > 0;
 		}, 300);
 	}
@@ -80,7 +80,11 @@ suggestions = Array.isArray(data) ? data : [];
 	}
 
 	function onWindowClick(e) {
-		if (showSuggestions && addressInputEl && !addressInputEl.closest('.address-wrapper')?.contains(e.target)) {
+		if (
+			showSuggestions &&
+			addressInputEl &&
+			!addressInputEl.closest('.address-wrapper')?.contains(e.target)
+		) {
 			showSuggestions = false;
 			suggestions = [];
 		}
@@ -109,7 +113,7 @@ suggestions = Array.isArray(data) ? data : [];
 <svelte:window on:keydown={onKeydown} on:click={onWindowClick} />
 
 <div class="space-y-2">
-	<div class="flex items-center justify-between border-b border-neutral-100 px-6 py-2.5">
+	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
 		<h1 class="text-sm font-normal text-neutral-700">Properties</h1>
 		<button
 			on:click={openNewPropertyModal}
@@ -153,7 +157,9 @@ suggestions = Array.isArray(data) ? data : [];
 							<div class="text-neutral-500">--</div>
 							<div class="text-neutral-500">--</div>
 							<div class="flex items-center">
-								<div class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600">
+								<div
+									class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600"
+								>
 									{getInitials(property.owner?.name)}
 								</div>
 							</div>
@@ -187,19 +193,29 @@ suggestions = Array.isArray(data) ? data : [];
 				<div class="flex items-center justify-between">
 					<div class="text-lg font-medium text-neutral-800">New property</div>
 					<button
-						class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
+						class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
 						on:click={closeNewPropertyModal}
 						type="button"
 						aria-label="Close"
 					>
-						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-							<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708" />
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="24"
+							height="24"
+							fill="currentColor"
+							viewBox="0 0 16 16"
+						>
+							<path
+								d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"
+							/>
 						</svg>
 					</button>
 				</div>
 				<div class="mt-5 flex flex-col gap-3">
 					{#if createPropertyError}
-						<p class="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-600">{createPropertyError}</p>
+						<p class="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-600">
+							{createPropertyError}
+						</p>
 					{/if}
 					<input
 						class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
@@ -222,11 +238,16 @@ suggestions = Array.isArray(data) ? data : [];
 							required
 						/>
 						{#if showSuggestions}
-							<ul class="absolute z-10 mt-1 w-full rounded-xl border border-stone-200 bg-white shadow-lg">
+							<ul
+								class="absolute z-10 mt-1 w-full rounded-xl border border-stone-200 bg-white shadow-lg"
+							>
 								{#each suggestions as s}
 									<li>
-										<button type="button" on:click={() => selectSuggestion(s)}
-											class="w-full px-3.5 py-2.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 first:rounded-t-xl last:rounded-b-xl">
+										<button
+											type="button"
+											on:click={() => selectSuggestion(s)}
+											class="w-full px-3.5 py-2.5 text-left text-sm text-neutral-700 first:rounded-t-xl last:rounded-b-xl hover:bg-neutral-50"
+										>
 											{s.description}
 										</button>
 									</li>
@@ -271,15 +292,20 @@ suggestions = Array.isArray(data) ? data : [];
 				</div>
 				<div class="mt-5 flex items-center justify-end gap-2">
 					<button
-						class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
+						class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
 						on:click={closeNewPropertyModal}
 						type="button"
 					>
 						Cancel
 					</button>
 					<button
-						class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-stone-400"
-						disabled={!newPropertyName.trim() || !newPropertyAddress.trim() || !newPropertyCity.trim() || !newPropertyState.trim() || !newPropertyPostalCode.trim() || !newPropertyCountry.trim()}
+						class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+						disabled={!newPropertyName.trim() ||
+							!newPropertyAddress.trim() ||
+							!newPropertyCity.trim() ||
+							!newPropertyState.trim() ||
+							!newPropertyPostalCode.trim() ||
+							!newPropertyCountry.trim()}
 						type="submit"
 					>
 						Create property

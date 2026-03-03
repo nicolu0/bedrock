@@ -184,10 +184,7 @@
 		updateIssueStatusInListCache(issueId, newStatus);
 		issue = { ...issue, status: newStatus };
 
-		const { error } = await supabase
-			.from('issues')
-			.update({ status: newStatus })
-			.eq('id', issueId);
+		const { error } = await supabase.from('issues').update({ status: newStatus }).eq('id', issueId);
 
 		if (error) {
 			updateIssueStatusInDetailCache(issueId, prevStatus);
@@ -392,7 +389,13 @@
 
 	$: backLabel = fromIssueId
 		? (fromIssueTitle ?? 'Parent issue')
-		: fromParam === 'inbox' ? 'Inbox' : 'My issues';
+		: fromParam === 'inbox'
+			? 'Inbox'
+			: 'My issues';
+
+	$: if (browser && fromIssueId && backHref) {
+		preloadData(backHref);
+	}
 
 	$: if (browser && fromIssueId && backHref) {
 		preloadData(backHref);
@@ -409,7 +412,7 @@
 
 <div class="flex h-full">
 	<div class="flex min-w-0 flex-1 flex-col">
-		<div class="flex items-center justify-between border-b border-neutral-100 px-6 py-2 text-sm text-neutral-600">
+		<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2 text-sm text-neutral-600">
 			<div
 				class="flex items-center gap-2 transition-opacity duration-150"
 				class:opacity-0={!$pageReady}
@@ -633,7 +636,7 @@
 				</div>
 				<button
 					type="button"
-					class="flex items-center gap-2 hover:opacity-75 transition"
+					class="flex items-center gap-2 transition hover:opacity-75"
 					on:click={() => {
 						const idx = statusCycle.indexOf(statusKey);
 						handleStatusChange(statusCycle[(idx + 1) % statusCycle.length]);

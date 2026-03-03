@@ -3,10 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
-	import {
-		notificationsCache,
-		primeNotificationsCache
-	} from '$lib/stores/notificationsCache.js';
+	import { notificationsCache, primeNotificationsCache } from '$lib/stores/notificationsCache.js';
 	import { membersCache, primeMembersCache } from '$lib/stores/membersCache.js';
 
 	export let data;
@@ -31,7 +28,7 @@
 			: [];
 
 	$: filtered =
-		filter === 'Unread' ? (notifications ?? []).filter((n) => !n.is_read) : notifications ?? [];
+		filter === 'Unread' ? (notifications ?? []).filter((n) => !n.is_read) : (notifications ?? []);
 
 	// Prime cache from server data — re-runs after invalidate() triggers a fresh load
 	$: if (browser && data.notifications && data.members) {
@@ -147,7 +144,7 @@
 </script>
 
 <div>
-	<div class="flex items-center border-b border-neutral-100 px-6 py-3">
+	<div class="flex items-center border-b border-neutral-200 px-6 py-3">
 		<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
 	</div>
 
@@ -179,7 +176,7 @@
 						<!-- Assignment suggestion — actionable card -->
 						<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 						<div
-							class="w-full cursor-pointer border-b border-neutral-100 px-6 py-3 text-left transition hover:bg-stone-50 last:border-b-0"
+							class="w-full cursor-pointer border-b border-neutral-100 px-6 py-3 text-left transition last:border-b-0 hover:bg-stone-50"
 							on:click={() => handleClick(n)}
 						>
 							<div class="flex items-start gap-3">
@@ -217,7 +214,9 @@
 									</div>
 									<div class="mt-0.5 flex items-center justify-between gap-3">
 										<p class="truncate text-xs text-neutral-500">{n.body}</p>
-										<span class="flex-shrink-0 text-xs text-neutral-400">{timeAgo(n.created_at)}</span>
+										<span class="flex-shrink-0 text-xs text-neutral-400"
+											>{timeAgo(n.created_at)}</span
+										>
 									</div>
 									<div class="mt-2 flex items-center gap-2">
 										<button
@@ -269,7 +268,7 @@
 					{:else}
 						<!-- Standard notification row -->
 						<button
-							class="w-full border-b border-neutral-100 px-6 py-3 text-left transition hover:bg-stone-50 last:border-b-0"
+							class="w-full border-b border-neutral-100 px-6 py-3 text-left transition last:border-b-0 hover:bg-stone-50"
 							type="button"
 							on:click={() => handleClick(n)}
 						>
@@ -326,7 +325,7 @@
 		<div class="divide-y divide-neutral-100">
 			{#each Array(5) as _, i}
 				<div class="flex items-start gap-3 px-6 py-3">
-					<div class="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full shimmer"></div>
+					<div class="shimmer mt-1.5 h-2 w-2 flex-shrink-0 rounded-full"></div>
 					<div class="flex-1 space-y-2">
 						<div class="flex items-center justify-between gap-3">
 							<div class="shimmer h-3 rounded" style="width: {i % 2 === 0 ? '45%' : '55%'}"></div>
@@ -342,8 +341,12 @@
 
 <style>
 	@keyframes shimmer {
-		0% { background-position: -200% 0; }
-		100% { background-position: 200% 0; }
+		0% {
+			background-position: -200% 0;
+		}
+		100% {
+			background-position: 200% 0;
+		}
 	}
 	.shimmer {
 		background: linear-gradient(90deg, #f5f5f4 25%, #e8e5e3 50%, #f5f5f4 75%);
