@@ -1,5 +1,6 @@
 <script>
 	// @ts-nocheck
+	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
@@ -7,8 +8,14 @@
 	import { ensureNotificationsCache } from '$lib/stores/notificationsCache';
 	import { ensureMembersCache } from '$lib/stores/membersCache';
 	import { ensureActivityCache } from '$lib/stores/activityCache';
+	import { pageReady } from '$lib/stores/pageReady';
 	export let data;
+
+	let appMounted = false;
+	onMount(() => { appMounted = true; });
+	$: pageVisible = appMounted && $pageReady;
 	$: workspaceSlug = $page.params.workspace;
+	$: isIssueRoute = $page.url.pathname.includes('/issue/');
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: isSettingsRoute = $page.url.pathname.startsWith(`${basePath}/settings`);
 	$: currentPath = $page.url.pathname;
@@ -49,7 +56,7 @@
 	<div class="h-screen bg-white text-neutral-900">
 		<div class="flex h-screen flex-col md:flex-row">
 			<aside class="flex h-screen w-1/6 flex-col border-r border-neutral-200 bg-neutral-50/80">
-				<div class="flex h-full min-h-0 flex-col">
+				<div class="flex h-full min-h-0 flex-col transition-opacity duration-150" class:opacity-0={!pageVisible}>
 					<div class="flex flex-1 flex-col space-y-6 px-2 pt-4">
 						<div class="flex items-center justify-between px-2 text-neutral-700">
 							<div class="flex items-center gap-2">
@@ -166,7 +173,12 @@
 				</div>
 			</aside>
 			<section class="flex-1 overflow-y-auto">
-				<div class="h-full w-full">
+				<div
+					class="h-full w-full"
+					class:transition-opacity={!isIssueRoute}
+					class:duration-150={!isIssueRoute}
+					class:opacity-0={!isIssueRoute && !pageVisible}
+				>
 					<slot />
 				</div>
 			</section>

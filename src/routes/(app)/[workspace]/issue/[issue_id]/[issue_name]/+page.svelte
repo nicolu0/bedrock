@@ -7,6 +7,7 @@
 	import { onDestroy } from 'svelte';
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
+	import { pageReady } from '$lib/stores/pageReady';
 	import { getIssueDetail, primeIssueDetail, updateIssueStatusInDetailCache } from '$lib/stores/issueDetailCache.js';
 	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
@@ -90,6 +91,23 @@
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
 		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
 		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
+		if (!issue) pageReady.set(false);
+	}
+
+	// Fill in blank issue when issuesCache loads after cold start
+	$: if (browser && _seededForIssueId === issueId && !issue && listItem) {
+		issue = {
+			id: issueId,
+			name: listItem.title ?? listItem.name,
+			status: listItem.status,
+			description: null
+		};
+		pageReady.set(true);
+	}
+
+	// Fill in blank subIssues when issuesCache loads after cold start
+	$: if (browser && _seededForIssueId === issueId && !subIssues.length && listSubIssues.length) {
+		subIssues = listSubIssues;
 	}
 
 	let _forcedActivityIssueId = null;
@@ -359,6 +377,7 @@
 			supabase.removeChannel(channel);
 		}
 		channelMap.clear();
+		pageReady.set(true);
 	});
 	$: fromParam = $page.url.searchParams.get('from');
 	$: fromIssueId = $page.url.searchParams.get('fromIssueId');
@@ -390,16 +409,20 @@
 
 <div class="flex h-full">
 	<div class="flex min-w-0 flex-1 flex-col">
-		<div
-			class="flex items-center justify-between border-b border-neutral-100 px-6 py-2 text-sm text-neutral-600"
-		>
-			<div class="flex items-center gap-2">
+		<div class="flex items-center justify-between border-b border-neutral-100 px-6 py-2 text-sm text-neutral-600">
+			<div
+				class="flex items-center gap-2 transition-opacity duration-150"
+				class:opacity-0={!$pageReady}
+			>
 				<a href={backHref} class="text-neutral-700 hover:underline">{backLabel}</a>
 				<span class="text-neutral-300">›</span>
 				<span class="h-3 w-3 rounded-full border border-amber-500"></span>
 				<span class="text-neutral-500">{issueName}</span>
 			</div>
-			<div class="flex items-center gap-2">
+			<div
+				class="flex items-center gap-2 transition-opacity duration-150"
+				class:opacity-0={!$pageReady}
+			>
 				{#if totalIssues > 0 && currentIndex >= 0}
 					<span class="text-xs text-neutral-500">{currentIndex + 1} / {totalIssues}</span>
 				{/if}
@@ -444,7 +467,7 @@
 			</div>
 		</div>
 
-		<div class="flex-1 px-10 py-8">
+		<div class="flex-1 px-10 py-8 transition-opacity duration-150" class:opacity-0={!$pageReady}>
 			<div class="flex flex-wrap items-start justify-between gap-6">
 				<div class="min-w-0">
 					<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
@@ -599,7 +622,7 @@
 	</div>
 
 	<aside class="flex w-1/5 border-l border-neutral-200">
-		<div class="flex w-full flex-col px-6 py-2">
+		<div class="flex w-full flex-col px-6 py-2 transition-opacity duration-150" class:opacity-0={!$pageReady}>
 			<div class="space-y-4 text-sm text-neutral-600">
 				<div class="flex items-center gap-2 pb-2">
 					<span class="text-neutral-400">{issueId}</span>
