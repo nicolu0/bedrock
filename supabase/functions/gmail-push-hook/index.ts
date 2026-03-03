@@ -250,25 +250,44 @@ const upsertEmailDraft = async ({
 	userId
 }: {
 	issueId: string;
-	messageId: string;
+	messageId: string | null;
 	sender: string;
 	recipient: string;
 	subject: string;
 	body: string;
 	userId: string;
 }) => {
-	const { error } = await supabase.from('email_drafts').upsert(
-		{
-			issue_id: issueId,
-			message_id: messageId,
-			sender,
-			recipient,
-			subject,
-			body,
-			updated_at: new Date().toISOString()
-		},
-		{ onConflict: 'message_id' }
-	);
+	const payload = {
+		issue_id: issueId,
+		message_id: messageId,
+		sender,
+		recipient,
+		subject,
+		body,
+		updated_at: new Date().toISOString()
+	};
+
+	let error = null;
+	if (messageId) {
+		const result = await supabase
+			.from('email_drafts')
+			.upsert(payload, { onConflict: 'message_id' });
+		error = result.error;
+	} else {
+		const { data: existingDraft } = await supabase
+			.from('email_drafts')
+			.select('id')
+			.eq('issue_id', issueId)
+			.is('message_id', null)
+			.maybeSingle();
+		if (existingDraft?.id) {
+			const result = await supabase.from('email_drafts').update(payload).eq('id', existingDraft.id);
+			error = result.error;
+		} else {
+			const result = await supabase.from('email_drafts').insert(payload);
+			error = result.error;
+		}
+	}
 	if (error) {
 		await insertIngestionLog({
 			userId,
@@ -421,7 +440,7 @@ Process (required):
    Choose triage when the tenant might resolve it or more info is needed; choose schedule only for clear emergencies (e.g., pests, gas smell, no power, no water, flooding, safety risks) or when workspace_policy explicitly requires immediate scheduling.
    Example: a clogged toilet is typically triage (suggest using a plunger and ask if there is overflow/flooding). If there is flooding or safety risk, treat as emergency and schedule.
 7) If you created a triage subissue, create an email draft reply to the sender using create_email_draft (required).
-8) If you created a Schedule subissue, pick a vendor from the vendors list (prefer trade match), create a vendor email draft using create_email_draft with the vendor email as recipient. Use the latest_message_id for message_id. If no suitable vendor or no vendor email exists, draft to the PM/maintenance email (reply_sender_email) and note that no matching vendor was found.
+8) If you created a Schedule subissue, pick a vendor from the vendors list (prefer trade match), create a vendor email draft using create_email_draft with the vendor email as recipient. Omit message_id unless a vendor thread exists. If no suitable vendor or no vendor email exists, draft to the PM/maintenance email (reply_sender_email) and note that no matching vendor was found.
 9) Linking: Always link the tenant thread to the triage subissue (or existing triage subissue). Do NOT link the tenant thread to the Schedule subissue; that subissue is for the vendor thread.
 10) Finally, call link_thread_to_issue once with the triage subissue id. This is required.
 
@@ -435,8 +454,9 @@ Rules:
 - Use the workspace_policy to decide triage vs schedule vendor. If policy is empty or unclear, triage unless it matches an emergency.
 - Drafts: When triaging, draft a short, friendly reply acknowledging the issue and asking one clarifying question about emergency indicators if relevant.
 - Drafts: When scheduling, draft a short, direct vendor email requesting availability and permission to access. Do not draft a tenant reply when creating a vendor draft (only one draft per message).
+- Drafts: For Schedule subissues, the draft recipient must be a vendor email or reply_sender_email; never send to sender_email.
 - existing_issue_id: When present, you must not call create_issue. Reuse the latest triage subissue when possible.
-- Drafts: Use the subissue id for issue_id and latest_message_id for message_id when calling create_email_draft.
+- Drafts: Use the subissue id for issue_id. For tenant replies, use latest_message_id for message_id. For vendor scheduling drafts, include message_id when replying in an existing vendor thread; otherwise omit message_id entirely (do not send empty string).
 - Linking: Call link_thread_to_issue exactly once and only after issue/subissue creation. This is required.
 When you believe you have completed the task, call done().
 `.trim();
@@ -500,7 +520,7 @@ When you believe you have completed the task, call done().
 				subject: { type: 'string' },
 				body: { type: 'string' }
 			},
-			required: ['issue_id', 'message_id', 'sender', 'recipient', 'subject', 'body']
+			required: ['issue_id', 'sender', 'recipient', 'subject', 'body']
 		}
 	};
 	const doneTool = {
@@ -554,6 +574,7 @@ When you believe you have completed the task, call done().
 	let lastSubissueTitle: string | null = null;
 	let draftedIssueId: string | null = null;
 	let threadLinked = false;
+	const issueNameCache = new Map<string, string>();
 
 	for (let i = 0; i < 6; i += 1) {
 		const response = await fetch('https://api.openai.com/v1/responses', {
@@ -668,13 +689,50 @@ When you believe you have completed the task, call done().
 
 			if (name === 'create_email_draft') {
 				const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
-				const messageId = typeof args.message_id === 'string' ? args.message_id : replyMessageId;
 				const sender = typeof args.sender === 'string' ? args.sender : '';
-				const recipient = typeof args.recipient === 'string' ? args.recipient : '';
+				let recipient = typeof args.recipient === 'string' ? args.recipient : '';
 				const subject = typeof args.subject === 'string' ? args.subject : '';
 				const bodyText = typeof args.body === 'string' ? args.body : '';
-				if (!issue || !messageId || !sender || !recipient || !subject || !bodyText) {
+				if (!issue || !sender || !recipient || !subject || !bodyText) {
 					throw new Error('create_email_draft missing required fields');
+				}
+
+				let issueName = issueNameCache.get(issue) ?? '';
+				if (!issueName) {
+					const { data: issueRow } = await supabase
+						.from('issues')
+						.select('name')
+						.eq('id', issue)
+						.maybeSingle();
+					issueName = issueRow?.name ?? '';
+					if (issueName) issueNameCache.set(issue, issueName);
+				}
+				const isScheduleSubissue = issueName.startsWith('Schedule ');
+				const rawMessageId = typeof args.message_id === 'string' ? args.message_id.trim() : '';
+				const messageId = rawMessageId ? rawMessageId : isScheduleSubissue ? null : replyMessageId;
+				if (!messageId && !isScheduleSubissue) {
+					throw new Error('create_email_draft missing message_id');
+				}
+				const normalizedRecipient = normalizeEmail(recipient);
+				const normalizedSenderEmail = senderEmail ? normalizeEmail(senderEmail) : null;
+				if (
+					isScheduleSubissue &&
+					normalizedSenderEmail &&
+					normalizedRecipient === normalizedSenderEmail
+				) {
+					if (replySenderEmail) {
+						recipient = replySenderEmail;
+					} else {
+						await insertIngestionLog({
+							userId,
+							source: 'gmail-draft-error',
+							detail: JSON.stringify({
+								issue_id: issue,
+								message_id: messageId,
+								reason: 'schedule draft recipient matched sender and no reply_sender_email'
+							})
+						});
+					}
 				}
 				try {
 					await upsertEmailDraft({

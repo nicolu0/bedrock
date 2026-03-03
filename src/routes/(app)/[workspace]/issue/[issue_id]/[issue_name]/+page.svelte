@@ -10,7 +10,7 @@
 	import { getIssueDetail, primeIssueDetail } from '$lib/stores/issueDetailCache.js';
 	import { issuesCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
-	import { activityCache } from '$lib/stores/activityCache.js';
+	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
 	import { supabase } from '$lib/supabaseClient.js';
 
 	export let data;
@@ -90,6 +90,8 @@
 	// Only overwrite issue if the stream returned a real value — prevents null wiping out the seed
 	let _handledPromise = null;
 	let _handledPromiseIssueId = null;
+	let _handledActivityRefreshIssueId = null;
+	let _forcedActivityIssueId = null;
 
 	$: if (
 		browser &&
@@ -122,10 +124,21 @@
 			}
 		};
 
+		const refreshActivity = () => {
+			if (browser && workspaceSlug && issueId !== _handledActivityRefreshIssueId) {
+				_handledActivityRefreshIssueId = issueId;
+				ensureActivityCache(workspaceSlug, { force: true });
+			}
+		};
+
 		if (data.issueDetail instanceof Promise) {
-			data.issueDetail.then(handle);
+			data.issueDetail.then((detail) => {
+				handle(detail);
+				refreshActivity();
+			});
 		} else {
 			handle(data.issueDetail);
+			refreshActivity();
 		}
 	}
 
@@ -133,6 +146,11 @@
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
 		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
 		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
+	}
+
+	$: if (browser && workspaceSlug && issueId && issueId !== _forcedActivityIssueId) {
+		_forcedActivityIssueId = issueId;
+		ensureActivityCache(workspaceSlug, { force: true });
 	}
 
 	$: issueName =
@@ -146,6 +164,13 @@
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
 	$: assigneeName = assignee?.name ?? data?.assignee?.name ?? 'Unassigned';
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
+
+	$: draftsByIssue = Object.values(emailDraftsByMessageId ?? {}).reduce((acc, draft) => {
+		if (!draft?.issue_id) return acc;
+		if (!acc[draft.issue_id]) acc[draft.issue_id] = [];
+		acc[draft.issue_id].push(draft);
+		return acc;
+	}, {});
 
 	const collectMessagesForIssue = (issueId) => {
 		const messages = messagesByIssue[issueId] ?? [];
@@ -173,7 +198,9 @@
 			const messages = messagesByIssue[item.id] ?? [];
 			const hasDraft = draftIssueIds.includes(item.id);
 			return messages.length || hasDraft;
-		}) || (messagesByIssue[issueId]?.length ?? 0) > 0;
+		}) ||
+		(messagesByIssue[issueId]?.length ?? 0) > 0 ||
+		(draftsByIssue[issueId]?.length ?? 0) > 0;
 
 	const slugify = (value) =>
 		(value ?? '')
@@ -261,7 +288,8 @@
 	};
 
 	const upsertDraft = (draft) => {
-		if (!draft?.message_id) return;
+		const key = draft?.message_id ?? draft?.id;
+		if (!key) return;
 		activityCache.update((state) => {
 			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
 			const data = state.data ?? {
@@ -269,7 +297,7 @@
 				emailDraftsByMessageId: {},
 				draftIssueIds: []
 			};
-			const nextDrafts = { ...data.emailDraftsByMessageId, [draft.message_id]: draft };
+			const nextDrafts = { ...data.emailDraftsByMessageId, [key]: draft };
 			const nextIssueIds = [
 				...new Set(
 					Object.values(nextDrafts)
@@ -285,7 +313,8 @@
 	};
 
 	const removeDraft = (draft) => {
-		if (!draft?.message_id) return;
+		const key = draft?.message_id ?? draft?.id;
+		if (!key) return;
 		activityCache.update((state) => {
 			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
 			const data = state.data ?? {
@@ -294,7 +323,7 @@
 				draftIssueIds: []
 			};
 			const nextDrafts = { ...data.emailDraftsByMessageId };
-			delete nextDrafts[draft.message_id];
+			delete nextDrafts[key];
 			const nextIssueIds = [
 				...new Set(
 					Object.values(nextDrafts)
@@ -499,15 +528,32 @@
 						{#if messagesByIssue[issueId]?.length ?? 0}
 							<div class="space-y-3">
 								{#each collectMessagesForIssue(issueId) as message}
-									<EmailMessageWithDraft
-										message={{
-											...message,
-											timestampLabel: formatTimestamp(message.timestamp)
-										}}
-										draft={emailDraftsByMessageId[message.id]}
-									/>
+									{#if !emailDraftsByMessageId[message.id] || emailDraftsByMessageId[message.id]?.issue_id === issueId}
+										<EmailMessageWithDraft
+											message={{
+												...message,
+												timestampLabel: formatTimestamp(message.timestamp)
+											}}
+											draft={emailDraftsByMessageId[message.id] ?? null}
+										/>
+									{/if}
 								{/each}
 							</div>
+						{/if}
+
+						{#if draftsByIssue[issueId]?.length}
+							{#each draftsByIssue[issueId].filter((draft) => !(messagesByIssue[issueId] ?? []).some((message) => message.id === draft.message_id)) as draft}
+								<EmailMessageWithDraft
+									message={{
+										id: draft.message_id,
+										subject: draft.subject,
+										message: '',
+										direction: 'outbound',
+										timestampLabel: formatTimestamp(draft.updated_at)
+									}}
+									{draft}
+								/>
+							{/each}
 						{/if}
 
 						{#each subIssues as subIssue}
@@ -539,14 +585,31 @@
 									</summary>
 									<div class="space-y-3 py-2">
 										{#each collectMessagesForIssue(subIssue.id) as message}
-											<EmailMessageWithDraft
-												message={{
-													...message,
-													timestampLabel: formatTimestamp(message.timestamp)
-												}}
-												draft={emailDraftsByMessageId[message.id]}
-											/>
+											{#if !emailDraftsByMessageId[message.id] || emailDraftsByMessageId[message.id]?.issue_id === subIssue.id}
+												<EmailMessageWithDraft
+													message={{
+														...message,
+														timestampLabel: formatTimestamp(message.timestamp)
+													}}
+													draft={emailDraftsByMessageId[message.id] ?? null}
+												/>
+											{/if}
 										{/each}
+
+										{#if draftsByIssue[subIssue.id]?.length}
+											{#each draftsByIssue[subIssue.id].filter((draft) => !(messagesByIssue[subIssue.id] ?? []).some((message) => message.id === draft.message_id)) as draft}
+												<EmailMessageWithDraft
+													message={{
+														id: draft.message_id,
+														subject: draft.subject,
+														message: '',
+														direction: 'outbound',
+														timestampLabel: formatTimestamp(draft.updated_at)
+													}}
+													{draft}
+												/>
+											{/each}
+										{/if}
 									</div>
 								</details>
 							{/if}

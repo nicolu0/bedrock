@@ -51,8 +51,9 @@ export const GET = async ({ locals, url }) => {
 	}, {});
 
 	const emailDraftsByMessageId = (draftsResult?.data ?? []).reduce((acc, draft) => {
-		if (!draft.message_id || acc[draft.message_id]) return acc;
-		acc[draft.message_id] = draft;
+		const key = draft.message_id ?? draft.id;
+		if (!key || acc[key]) return acc;
+		acc[key] = draft;
 		return acc;
 	}, {});
 
