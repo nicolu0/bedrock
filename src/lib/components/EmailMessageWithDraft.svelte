@@ -10,6 +10,8 @@
 	let isSending = false;
 	let isSent = false;
 	let sentMessage = null;
+	let toastMessage = '';
+	let toastTimeout;
 
 	$: if (draft && (draft.message_id ?? draft.id) !== lastMessageKey) {
 		lastMessageKey = draft.message_id ?? draft.id;
@@ -24,6 +26,14 @@
 		textareaEl.style.height = 'auto';
 		textareaEl.style.height = `${textareaEl.scrollHeight}px`;
 	}
+
+	const showToast = (message) => {
+		toastMessage = message;
+		if (toastTimeout) clearTimeout(toastTimeout);
+		toastTimeout = setTimeout(() => {
+			toastMessage = '';
+		}, 2400);
+	};
 
 	const saveDraft = async () => {
 		if (!draft?.message_id && !draft?.issue_id) return;
@@ -48,6 +58,10 @@
 
 	const sendDraft = async () => {
 		if (!draft?.message_id && !draft?.issue_id) return;
+		if (!draft?.sender_email || !draft?.recipient_email) {
+			showToast('Draft needs sender and recipient email.');
+			return;
+		}
 		if (isSending || isSent) return;
 		try {
 			isSending = true;
@@ -82,6 +96,14 @@
 	};
 </script>
 
+{#if toastMessage}
+	<div
+		class="fixed right-4 bottom-4 z-50 rounded-md bg-neutral-900 px-3 py-2 text-xs text-white shadow-lg"
+	>
+		{toastMessage}
+	</div>
+{/if}
+
 <div class="overflow-hidden rounded-md border border-neutral-100 bg-white">
 	<div class="px-3 py-2">
 		<div class="flex items-center justify-between text-xs text-neutral-400">
@@ -99,7 +121,7 @@
 		<div class="border-t border-neutral-100 bg-white px-3 py-2">
 			<div class="flex items-center gap-2 text-xs text-neutral-400">
 				<span class="text-neutral-500">To</span>
-				<span>{draft.recipient}</span>
+				<span>{draft.recipient_email ?? ''}</span>
 			</div>
 			<div class="mt-3">
 				<textarea
