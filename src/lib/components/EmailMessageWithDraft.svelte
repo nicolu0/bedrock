@@ -5,14 +5,14 @@
 
 	let draftBody = draft?.body ?? '';
 	let saveTimeout;
-	let lastMessageId = draft?.message_id ?? null;
+	let lastMessageKey = draft?.message_id ?? draft?.id ?? null;
 	let textareaEl;
 	let isSending = false;
 	let isSent = false;
 	let sentMessage = null;
 
-	$: if (draft?.message_id && draft.message_id !== lastMessageId) {
-		lastMessageId = draft.message_id;
+	$: if (draft && (draft.message_id ?? draft.id) !== lastMessageKey) {
+		lastMessageKey = draft.message_id ?? draft.id;
 		draftBody = draft.body ?? '';
 		if (textareaEl) {
 			textareaEl.style.height = 'auto';
@@ -20,19 +20,23 @@
 		}
 	}
 
-	$: if (textareaEl && draft?.message_id) {
+	$: if (textareaEl && draft) {
 		textareaEl.style.height = 'auto';
 		textareaEl.style.height = `${textareaEl.scrollHeight}px`;
 	}
 
 	const saveDraft = async () => {
-		if (!draft?.message_id) return;
+		if (!draft?.message_id && !draft?.issue_id) return;
 		if (draftBody === draft?.body) return;
 		try {
 			const response = await fetch('/api/email-drafts', {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ message_id: draft.message_id, body: draftBody })
+				body: JSON.stringify(
+					draft.message_id
+						? { message_id: draft.message_id, body: draftBody }
+						: { issue_id: draft.issue_id, body: draftBody }
+				)
 			});
 			if (response.ok) {
 				draft.body = draftBody;
@@ -43,14 +47,16 @@
 	};
 
 	const sendDraft = async () => {
-		if (!draft?.message_id) return;
+		if (!draft?.message_id && !draft?.issue_id) return;
 		if (isSending || isSent) return;
 		try {
 			isSending = true;
 			const response = await fetch('/api/email-drafts/send', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ message_id: draft.message_id })
+				body: JSON.stringify(
+					draft.message_id ? { message_id: draft.message_id } : { issue_id: draft.issue_id }
+				)
 			});
 			if (response.ok) {
 				const payload = await response.json().catch(() => null);

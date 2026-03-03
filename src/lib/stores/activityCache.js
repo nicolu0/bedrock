@@ -62,6 +62,7 @@ export const ensureActivityCache = async (workspaceSlug, options = {}) => {
 	if (!workspaceSlug) return null;
 	if (!browser) return null;
 	const fetcher = options.fetch ?? fetch;
+	const force = Boolean(options.force);
 
 	if (isHardReload()) {
 		clearSessionCache();
@@ -77,7 +78,8 @@ export const ensureActivityCache = async (workspaceSlug, options = {}) => {
 	if (
 		currentState?.data &&
 		currentState.workspace === workspaceSlug &&
-		now - currentState.fetchedAt < CACHE_TTL
+		now - currentState.fetchedAt < CACHE_TTL &&
+		!force
 	) {
 		return currentState.data;
 	}
@@ -94,7 +96,8 @@ export const ensureActivityCache = async (workspaceSlug, options = {}) => {
 		sessionCached?.data &&
 		sessionCached.workspace === workspaceSlug &&
 		now - sessionCached.fetchedAt < CACHE_TTL &&
-		sessionValid
+		sessionValid &&
+		!force
 	) {
 		activityCache.set({
 			workspace: workspaceSlug,
@@ -104,6 +107,9 @@ export const ensureActivityCache = async (workspaceSlug, options = {}) => {
 			fetchedAt: sessionCached.fetchedAt
 		});
 		return sessionCached.data;
+	}
+	if (force) {
+		clearSessionCache();
 	}
 	if (sessionCached && !sessionValid) {
 		clearSessionCache();

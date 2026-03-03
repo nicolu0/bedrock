@@ -7,17 +7,17 @@ export const PATCH = async ({ locals, request }) => {
 
 	const body = await request.json().catch(() => null);
 	const messageId = body?.message_id;
+	const issueId = body?.issue_id;
 	const draftBody = body?.body;
 
-	if (!messageId || typeof draftBody !== 'string') {
+	if ((!messageId && !issueId) || typeof draftBody !== 'string') {
 		return json({ error: 'Invalid payload' }, { status: 400 });
 	}
 
-	const { data: draft } = await supabaseAdmin
-		.from('email_drafts')
-		.select('id, issue_id')
-		.eq('message_id', messageId)
-		.maybeSingle();
+	const draftQuery = supabaseAdmin.from('email_drafts').select('id, issue_id');
+	const { data: draft } = messageId
+		? await draftQuery.eq('message_id', messageId).maybeSingle()
+		: await draftQuery.eq('issue_id', issueId).is('message_id', null).maybeSingle();
 
 	if (!draft?.id || !draft.issue_id) {
 		return json({ error: 'Not found' }, { status: 404 });

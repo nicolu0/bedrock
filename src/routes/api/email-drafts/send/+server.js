@@ -47,13 +47,15 @@ export const POST = async ({ locals, request }) => {
 
 	const body = await request.json().catch(() => null);
 	const messageId = body?.message_id;
-	if (!messageId) return json({ error: 'Invalid payload' }, { status: 400 });
+	const issueId = body?.issue_id;
+	if (!messageId && !issueId) return json({ error: 'Invalid payload' }, { status: 400 });
 
-	const { data: draft } = await supabaseAdmin
+	const draftQuery = supabaseAdmin
 		.from('email_drafts')
-		.select('id, issue_id, recipient, subject, body, message_id')
-		.eq('message_id', messageId)
-		.maybeSingle();
+		.select('id, issue_id, recipient, subject, body, message_id, sender');
+	const { data: draft } = messageId
+		? await draftQuery.eq('message_id', messageId).maybeSingle()
+		: await draftQuery.eq('issue_id', issueId).is('message_id', null).maybeSingle();
 
 	if (!draft?.id || !draft.issue_id) {
 		return json({ error: 'Not found' }, { status: 404 });
@@ -85,27 +87,37 @@ export const POST = async ({ locals, request }) => {
 		if (!workspace?.id) return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
-	const { data: message } = await supabaseAdmin
-		.from('messages')
-		.select('thread_id, external_id')
-		.eq('id', messageId)
-		.maybeSingle();
+	let message = null;
+	let thread = null;
+	if (messageId) {
+		const { data: foundMessage } = await supabaseAdmin
+			.from('messages')
+			.select('thread_id, external_id')
+			.eq('id', messageId)
+			.maybeSingle();
+		message = foundMessage ?? null;
+		if (!message?.thread_id) return json({ error: 'Thread not found' }, { status: 404 });
+		const { data: foundThread } = await supabaseAdmin
+			.from('threads')
+			.select('connection_id, external_id')
+			.eq('id', message.thread_id)
+			.maybeSingle();
+		thread = foundThread ?? null;
+		if (!thread?.connection_id) return json({ error: 'Connection not found' }, { status: 404 });
+	}
 
-	if (!message?.thread_id) return json({ error: 'Thread not found' }, { status: 404 });
-
-	const { data: thread } = await supabaseAdmin
-		.from('threads')
-		.select('connection_id, external_id')
-		.eq('id', message.thread_id)
-		.maybeSingle();
-
-	if (!thread?.connection_id) return json({ error: 'Connection not found' }, { status: 404 });
-
-	const { data: connection } = await supabaseAdmin
-		.from('gmail_connections')
-		.select('*')
-		.eq('id', thread.connection_id)
-		.maybeSingle();
+	const { data: connection } = messageId
+		? await supabaseAdmin
+				.from('gmail_connections')
+				.select('*')
+				.eq('id', thread.connection_id)
+				.maybeSingle()
+		: await supabaseAdmin
+				.from('gmail_connections')
+				.select('*')
+				.eq('email', draft.sender)
+				.order('updated_at', { ascending: false })
+				.maybeSingle();
 
 	if (!connection?.access_token || !connection.email) {
 		return json({ error: 'Connection not found' }, { status: 404 });
@@ -120,9 +132,11 @@ export const POST = async ({ locals, request }) => {
 		accessToken = refreshed;
 	}
 
-	const subjectLine = draft.subject?.toLowerCase().startsWith('re:')
-		? draft.subject
-		: `Re: ${draft.subject}`;
+	const subjectLine = messageId
+		? draft.subject?.toLowerCase().startsWith('re:')
+			? draft.subject
+			: `Re: ${draft.subject}`
+		: draft.subject;
 
 	let replyHeaders = [];
 	if (message?.external_id) {
@@ -169,7 +183,7 @@ export const POST = async ({ locals, request }) => {
 		},
 		body: JSON.stringify({
 			raw: encodeBase64Url(rawEmail),
-			threadId: thread.external_id ?? undefined
+			threadId: messageId ? (thread.external_id ?? undefined) : undefined
 		})
 	});
 
@@ -181,10 +195,35 @@ export const POST = async ({ locals, request }) => {
 	const sendPayload = await sendResponse.json().catch(() => null);
 	const sentExternalId = sendPayload?.id ?? null;
 
+	let outboundThreadId = message?.thread_id ?? null;
+	if (!messageId) {
+		const { data: vendorRow } = await supabaseAdmin
+			.from('vendors')
+			.select('id')
+			.eq('workspace_id', workspaceId)
+			.ilike('email', draft.recipient)
+			.maybeSingle();
+		const { data: createdThread } = await supabaseAdmin
+			.from('threads')
+			.insert({
+				tenant_id: null,
+				participant_type: 'vendor',
+				participant_id: vendorRow?.id ?? null,
+				issue_id: draft.issue_id,
+				name: draft.subject,
+				external_id: sendPayload?.threadId ?? null,
+				connection_id: connection.id,
+				workspace_id: workspaceId
+			})
+			.select('id')
+			.maybeSingle();
+		outboundThreadId = createdThread?.id ?? null;
+	}
+
 	const { data: outboundMessage } = await supabaseAdmin
 		.from('messages')
 		.insert({
-			thread_id: message.thread_id,
+			thread_id: outboundThreadId,
 			issue_id: draft.issue_id,
 			message: draft.body,
 			sender: 'outbound',
