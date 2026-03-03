@@ -397,6 +397,10 @@
 		preloadData(backHref);
 	}
 
+	$: if (browser && fromIssueId && backHref) {
+		preloadData(backHref);
+	}
+
 	function onKeydown(e) {
 		if (e.key !== 'Escape') return;
 		if (document.querySelector('[role="dialog"]')) return;
