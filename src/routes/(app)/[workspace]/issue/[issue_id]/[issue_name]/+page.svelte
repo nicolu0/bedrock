@@ -105,8 +105,8 @@
 		pageReady.set(true);
 	}
 
-	// Fill in blank subIssues when issuesCache loads after cold start
-	$: if (browser && _seededForIssueId === issueId && !subIssues.length && listSubIssues.length) {
+	// Sync subIssues from issuesCache on cold start or when cache grows (e.g. new subissue created)
+	$: if (browser && _seededForIssueId === issueId && listSubIssues.length > subIssues.length) {
 		subIssues = listSubIssues;
 	}
 
@@ -121,6 +121,29 @@
 	$: if (browser && workspaceSlug && issueId && issueId !== _forcedActivityIssueId) {
 		_forcedActivityIssueId = issueId;
 		ensureActivityCache(workspaceSlug, { force: true });
+	}
+
+	let _loadedSubIssuesForId = null;
+	$: if (browser && issueId && issueId !== _loadedSubIssuesForId) {
+		_loadedSubIssuesForId = issueId;
+		supabase
+			.from('issues')
+			.select('id, name, status, parent_id')
+			.eq('parent_id', issueId)
+			.then(({ data: freshSubIssues }) => {
+				if (freshSubIssues?.length && _seededForIssueId === issueId) {
+					subIssues = freshSubIssues.map((s) => ({
+						id: s.id,
+						name: s.name,
+						status: s.status,
+						parent_id: issueId
+					}));
+					const current = getIssueDetail(issueId);
+					if (current) {
+						primeIssueDetail(issueId, { ...current, subIssues });
+					}
+				}
+			});
 	}
 
 	$: issueName = issue?.name ?? '';
