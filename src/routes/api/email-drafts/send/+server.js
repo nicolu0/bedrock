@@ -52,13 +52,19 @@ export const POST = async ({ locals, request }) => {
 
 	const draftQuery = supabaseAdmin
 		.from('email_drafts')
-		.select('id, issue_id, recipient, subject, body, message_id, sender');
+		.select('id, issue_id, recipient_email, subject, body, message_id, sender_email');
 	const { data: draft } = messageId
 		? await draftQuery.eq('message_id', messageId).maybeSingle()
 		: await draftQuery.eq('issue_id', issueId).is('message_id', null).maybeSingle();
 
 	if (!draft?.id || !draft.issue_id) {
 		return json({ error: 'Not found' }, { status: 404 });
+	}
+	if (!draft.sender_email) {
+		return json({ error: 'Sender email required' }, { status: 400 });
+	}
+	if (!draft.recipient_email) {
+		return json({ error: 'Recipient email required' }, { status: 400 });
 	}
 
 	const { data: issue } = await supabaseAdmin
@@ -115,7 +121,7 @@ export const POST = async ({ locals, request }) => {
 		: await supabaseAdmin
 				.from('gmail_connections')
 				.select('*')
-				.eq('email', draft.sender)
+				.eq('email', draft.sender_email)
 				.order('updated_at', { ascending: false })
 				.maybeSingle();
 
@@ -166,7 +172,7 @@ export const POST = async ({ locals, request }) => {
 
 	const rawEmail = [
 		`From: ${connection.email}`,
-		`To: ${draft.recipient}`,
+		`To: ${draft.recipient_email}`,
 		`Subject: ${subjectLine}`,
 		...replyHeaders,
 		'MIME-Version: 1.0',
@@ -201,7 +207,7 @@ export const POST = async ({ locals, request }) => {
 			.from('vendors')
 			.select('id')
 			.eq('workspace_id', workspaceId)
-			.ilike('email', draft.recipient)
+			.ilike('email', draft.recipient_email)
 			.maybeSingle();
 		const { data: createdThread } = await supabaseAdmin
 			.from('threads')

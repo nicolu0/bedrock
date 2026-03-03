@@ -37,7 +37,7 @@ export const GET = async ({ locals, url }) => {
 			.order('timestamp', { ascending: true }),
 		supabaseAdmin
 			.from('email_drafts')
-			.select('id, issue_id, message_id, sender, recipient, subject, body, updated_at')
+			.select('id, issue_id, message_id, sender_email, recipient_email, subject, body, updated_at')
 			.in('issue_id', issueIds)
 			.gte('updated_at', cutoff)
 			.order('updated_at', { ascending: false })
