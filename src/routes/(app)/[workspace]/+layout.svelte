@@ -1,14 +1,17 @@
 <script>
 	// @ts-nocheck
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
-	import { ensureIssuesCache } from '$lib/stores/issuesCache';
-	import { ensureNotificationsCache } from '$lib/stores/notificationsCache';
+	import { ensureIssuesCache, issuesCache, applyIssueInsert, applyIssueDelete, updateIssueStatusInListCache } from '$lib/stores/issuesCache';
+	import { ensureNotificationsCache, addNotificationToCache } from '$lib/stores/notificationsCache';
 	import { ensureMembersCache } from '$lib/stores/membersCache';
-	import { ensureActivityCache } from '$lib/stores/activityCache';
+	import { ensureActivityCache, applyMessageDelta, applyDraftDelta, removeMessageFromCache, removeDraftFromCache } from '$lib/stores/activityCache';
+	import { updateIssueStatusInDetailCache } from '$lib/stores/issueDetailCache.js';
 	import { pageReady } from '$lib/stores/pageReady';
+	import { supabase } from '$lib/supabaseClient.js';
 	export let data;
 
 	let appMounted = false;
@@ -48,6 +51,91 @@
 		ensureMembersCache(workspaceSlug);
 		ensureActivityCache(workspaceSlug);
 	}
+
+	$: workspaceId = data?.workspace?.id;
+	$: userId = data?.userId;
+
+	let _workspaceChannel = null;
+	let _channelWorkspaceId = null;
+
+	$: if (browser && workspaceId && workspaceSlug && workspaceId !== _channelWorkspaceId) {
+		_channelWorkspaceId = workspaceId;
+		if (_workspaceChannel) supabase.removeChannel(_workspaceChannel);
+
+		_workspaceChannel = supabase
+			.channel(`workspace-delta-${workspaceId}`)
+
+			// issues INSERT — apply delta, resolve unit/property names for root issues
+			.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'issues',
+					filter: `workspace_id=eq.${workspaceId}` },
+				async ({ new: issue }) => {
+					if (issue.parent_id) {
+						const parent = get(issuesCache).data?.issues?.find((i) => i.id === issue.parent_id);
+						applyIssueInsert(issue, {
+							unitName: parent?.unit, propertyName: parent?.property, parentTitle: parent?.title
+						});
+					} else {
+						const { data: unit } = await supabase
+							.from('units').select('name, properties(name)').eq('id', issue.unit_id).maybeSingle();
+						applyIssueInsert(issue, {
+							unitName: unit?.name ?? 'Unknown',
+							propertyName: unit?.properties?.name ?? 'Unknown'
+						});
+					}
+				})
+
+			// issues UPDATE — sync status to all open caches
+			.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'issues',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ new: issue }) => {
+					updateIssueStatusInListCache(issue.id, issue.status);
+					updateIssueStatusInDetailCache(issue.id, issue.status);
+				})
+
+			// issues DELETE
+			.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'issues',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ old: issue }) => applyIssueDelete(issue.id))
+
+			// notifications INSERT — fetch full row with joins, add to cache
+			.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications',
+					filter: `user_id=eq.${userId}` },
+				async ({ new: notification }) => {
+					const { data: full } = await supabase
+						.from('notifications')
+						.select('*, issues(id, name, unit_id, units(id, name, properties(id, name)))')
+						.eq('id', notification.id).maybeSingle();
+					if (full) addNotificationToCache(full);
+				})
+
+			// messages INSERT/UPDATE/DELETE — apply delta to activityCache workspace-wide
+			.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ new: msg }) => applyMessageDelta(msg))
+			.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ new: msg }) => applyMessageDelta(msg))
+			.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ old: msg }) => removeMessageFromCache(msg))
+
+			// email_drafts INSERT/UPDATE/DELETE — apply delta to activityCache workspace-wide
+			.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'email_drafts',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ new: draft }) => applyDraftDelta(draft))
+			.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'email_drafts',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ new: draft }) => applyDraftDelta(draft))
+			.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'email_drafts',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ old: draft }) => removeDraftFromCache(draft))
+
+			.subscribe();
+	}
+
+	onDestroy(() => {
+		if (_workspaceChannel) supabase.removeChannel(_workspaceChannel);
+	});
 </script>
 
 {#if isSettingsRoute}
