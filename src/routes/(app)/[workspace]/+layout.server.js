@@ -24,26 +24,30 @@ const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, 
 const loadUnitsList = async (supabase, adminClient, workspaceId) => {
 	const { data: units, error: unitsError } = await supabase
 		.from('units')
-		.select('id, name, tenant_name, property_id, properties!inner(workspace_id)')
+		.select(
+			'id, name, property_id, tenants(id, name, email, unit_id), properties!inner(workspace_id)'
+		)
 		.eq('properties.workspace_id', workspaceId)
 		.order('name', { ascending: true });
 	if (!unitsError) {
 		return (units ?? []).map((unit) => ({
 			id: unit.id,
 			name: unit.name,
-			tenant_name: unit.tenant_name,
+			tenant: (unit.tenants ?? [])[0] ?? null,
 			property_id: unit.property_id
 		}));
 	}
 	const { data: adminUnits } = await adminClient
 		.from('units')
-		.select('id, name, tenant_name, property_id, properties!inner(workspace_id)')
+		.select(
+			'id, name, property_id, tenants(id, name, email, unit_id), properties!inner(workspace_id)'
+		)
 		.eq('properties.workspace_id', workspaceId)
 		.order('name', { ascending: true });
 	return (adminUnits ?? []).map((unit) => ({
 		id: unit.id,
 		name: unit.name,
-		tenant_name: unit.tenant_name,
+		tenant: (unit.tenants ?? [])[0] ?? null,
 		property_id: unit.property_id
 	}));
 };
@@ -68,7 +72,13 @@ export const load = async ({ locals, params }) => {
 				{ workspace_id: adminWorkspace.id, user_id: locals.user.id, role: 'admin' },
 				{ onConflict: 'workspace_id,user_id' }
 			);
-		const properties = loadPropertiesList(locals.supabase, supabaseAdmin, adminWorkspace.id, 'admin', locals.user.id);
+		const properties = loadPropertiesList(
+			locals.supabase,
+			supabaseAdmin,
+			adminWorkspace.id,
+			'admin',
+			locals.user.id
+		);
 		const units = loadUnitsList(locals.supabase, supabaseAdmin, adminWorkspace.id);
 		return { workspace: adminWorkspace, properties, units, userId: locals.user.id };
 	}
