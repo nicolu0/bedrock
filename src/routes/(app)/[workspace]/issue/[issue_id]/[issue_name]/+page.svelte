@@ -15,7 +15,7 @@
 	} from '$lib/stores/issueDetailCache.js';
 	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
-	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
+	import { activityCache, ensureActivityCache, applyMessageDelta, applyDraftDelta, removeMessageFromCache, removeDraftFromCache } from '$lib/stores/activityCache.js';
 	import { supabase } from '$lib/supabaseClient.js';
 
 	export let data;
@@ -269,104 +269,41 @@
 	$: nextIssue =
 		currentIndex >= 0 && currentIndex < totalIssues - 1 ? issueRows[currentIndex + 1] : null;
 
-	const upsertMessage = (message) => {
-		if (!message?.issue_id) return;
-		activityCache.update((state) => {
-			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
-			const data = state.data ?? {
-				messagesByIssue: {},
-				emailDraftsByMessageId: {},
-				draftIssueIds: []
-			};
-			const nextMessagesByIssue = { ...data.messagesByIssue };
-			const list = [...(nextMessagesByIssue[message.issue_id] ?? [])];
-			const idx = list.findIndex((item) => item.id === message.id);
-			if (idx >= 0) {
-				list[idx] = { ...list[idx], ...message };
-			} else {
-				list.push(message);
-			}
-			list.sort((a, b) => {
-				const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
-				const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
-				return timeA - timeB;
-			});
-			nextMessagesByIssue[message.issue_id] = list;
-			return { ...state, data: { ...data, messagesByIssue: nextMessagesByIssue } };
-		});
-	};
+	const upsertMessage = applyMessageDelta;
+	const removeMessage = removeMessageFromCache;
+	const upsertDraft = applyDraftDelta;
+	const removeDraft = removeDraftFromCache;
 
-	const removeMessage = (message) => {
-		if (!message?.issue_id) return;
-		activityCache.update((state) => {
-			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
-			const data = state.data ?? {
-				messagesByIssue: {},
-				emailDraftsByMessageId: {},
-				draftIssueIds: []
-			};
-			const nextMessagesByIssue = { ...data.messagesByIssue };
-			const list = [...(nextMessagesByIssue[message.issue_id] ?? [])];
-			const nextList = list.filter((item) => item.id !== message.id);
-			if (nextList.length) {
-				nextMessagesByIssue[message.issue_id] = nextList;
-			} else {
-				delete nextMessagesByIssue[message.issue_id];
-			}
-			return { ...state, data: { ...data, messagesByIssue: nextMessagesByIssue } };
-		});
-	};
+	let _subIssueChannel = null;
 
-	const upsertDraft = (draft) => {
-		const key = draft?.message_id ?? draft?.id;
-		if (!key) return;
-		activityCache.update((state) => {
-			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
-			const data = state.data ?? {
-				messagesByIssue: {},
-				emailDraftsByMessageId: {},
-				draftIssueIds: []
-			};
-			const nextDrafts = { ...data.emailDraftsByMessageId, [key]: draft };
-			const nextIssueIds = [
-				...new Set(
-					Object.values(nextDrafts)
-						.map((item) => item.issue_id)
-						.filter(Boolean)
-				)
-			];
-			return {
-				...state,
-				data: { ...data, emailDraftsByMessageId: nextDrafts, draftIssueIds: nextIssueIds }
-			};
-		});
-	};
+	$: if (browser && issueId) {
+		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
+		_subIssueChannel = supabase
+			.channel(`subissues-${issueId}`)
+			.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'issues',
+					filter: `parent_id=eq.${issueId}` },
+				async ({ new: newSub }) => {
+					const sub = { id: newSub.id, name: newSub.name, status: newSub.status, parent_id: issueId };
+					if (!subIssues.some((s) => s.id === sub.id)) {
+						subIssues = [...subIssues, sub];
+						const current = getIssueDetail(issueId);
+						if (current) primeIssueDetail(issueId, { ...current, subIssues });
 
-	const removeDraft = (draft) => {
-		const key = draft?.message_id ?? draft?.id;
-		if (!key) return;
-		activityCache.update((state) => {
-			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
-			const data = state.data ?? {
-				messagesByIssue: {},
-				emailDraftsByMessageId: {},
-				draftIssueIds: []
-			};
-			const nextDrafts = { ...data.emailDraftsByMessageId };
-			delete nextDrafts[key];
-			const nextIssueIds = [
-				...new Set(
-					Object.values(nextDrafts)
-						.map((item) => item.issue_id)
-						.filter(Boolean)
-				)
-			];
-			return {
-				...state,
-				data: { ...data, emailDraftsByMessageId: nextDrafts, draftIssueIds: nextIssueIds }
-			};
-		});
-	};
+						// Catch-up: fetch any messages/drafts written before the per-issue channel subscribes
+						const [{ data: msgs }, { data: drafts }] = await Promise.all([
+							supabase.from('messages')
+								.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
+								.eq('issue_id', newSub.id),
+							supabase.from('email_drafts')
+								.select('id, issue_id, message_id, sender, recipient, subject, body, updated_at')
+								.eq('issue_id', newSub.id)
+						]);
+						for (const msg of msgs ?? []) applyMessageDelta(msg);
+						for (const draft of drafts ?? []) applyDraftDelta(draft);
+					}
+				})
+			.subscribe();
+	}
 
 	const channelMap = new Map();
 
@@ -417,10 +354,9 @@
 	}
 
 	onDestroy(() => {
-		for (const channel of channelMap.values()) {
-			supabase.removeChannel(channel);
-		}
+		for (const channel of channelMap.values()) supabase.removeChannel(channel);
 		channelMap.clear();
+		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
 		pageReady.set(true);
 	});
 	$: fromParam = $page.url.searchParams.get('from');

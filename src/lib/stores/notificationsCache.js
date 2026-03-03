@@ -141,6 +141,18 @@ export const ensureNotificationsCache = async (workspaceSlug, options = {}) => {
 	return inFlight;
 };
 
+export const addNotificationToCache = (notification) => {
+	notificationsCache.update((state) => {
+		if (!state.data?.notifications) return state;
+		// Idempotency guard
+		if (state.data.notifications.some((n) => n.id === notification.id)) return state;
+		const notifications = [notification, ...state.data.notifications];
+		const data = { ...state.data, notifications };
+		try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ...state, data, fetchedAt: state.fetchedAt })); } catch {}
+		return { ...state, data };
+	});
+};
+
 export const primeNotificationsCache = (workspaceSlug, data) => {
 	if (!browser) return;
 	if (!workspaceSlug || !data) return;
