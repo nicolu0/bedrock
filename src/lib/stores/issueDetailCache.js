@@ -114,3 +114,10 @@ export const updateIssueStatusInDetailCache = (issueId, newStatus) => {
 	memoryCache.set(issueId, { ...entry, issue: { ...entry.issue, status: newStatus } });
 	saveToSession();
 };
+
+export const updateIssueFieldsInDetailCache = (issueId, fields) => {
+	const entry = memoryCache.get(issueId);
+	if (!entry) return;
+	memoryCache.set(issueId, { ...entry, issue: { ...entry.issue, ...fields } });
+	saveToSession();
+};

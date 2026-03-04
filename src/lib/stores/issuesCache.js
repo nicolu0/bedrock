@@ -63,6 +63,9 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 	if (!workspaceSlug) return null;
 	if (!browser) return null;
 	const fetcher = options.fetch ?? fetch;
+	const force = options.force ?? false;
+
+	console.log('[issuesCache] ensureIssuesCache called', { workspaceSlug, force });
 
 	if (isHardReload()) {
 		clearSessionCache();
@@ -76,10 +79,12 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 	});
 
 	if (
+		!force &&
 		currentState?.data &&
 		currentState.workspace === workspaceSlug &&
 		now - currentState.fetchedAt < CACHE_TTL
 	) {
+		console.log('[issuesCache] returning from in-memory cache (TTL valid)', { issueCount: currentState.data?.issues?.length });
 		return currentState.data;
 	}
 
@@ -88,11 +93,13 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 	const sessionIssues = sessionCached?.data?.issues?.length ?? 0;
 	const sessionValid = sessionSections > 0 || sessionIssues > 0;
 	if (
+		!force &&
 		sessionCached?.data &&
 		sessionCached.workspace === workspaceSlug &&
 		now - sessionCached.fetchedAt < CACHE_TTL &&
 		sessionValid
 	) {
+		console.log('[issuesCache] returning from sessionStorage cache', { issueCount: sessionCached.data?.issues?.length });
 		issuesCache.set({
 			workspace: workspaceSlug,
 			data: sessionCached.data,
@@ -106,7 +113,13 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 		clearSessionCache();
 	}
 
-	if (inFlight) return inFlight;
+	if (!force && inFlight) {
+		console.log('[issuesCache] reusing in-flight request');
+		return inFlight;
+	}
+	if (force && inFlight) {
+		console.log('[issuesCache] force=true, ignoring in-flight and starting fresh fetch');
+	}
 
 	issuesCache.set({
 		workspace: workspaceSlug,
@@ -131,6 +144,10 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 			const nextSections = data?.sections?.length ?? 0;
 			const nextIssues = data?.issues?.length ?? 0;
 			const shouldOverwrite = nextSections > 0 || nextIssues > 0;
+			console.log('[issuesCache] fetch complete', { force, nextSections, nextIssues, shouldOverwrite, workspace: workspaceSlug });
+			if (!shouldOverwrite) {
+				console.warn('[issuesCache] shouldOverwrite=false — API returned empty data', { force, workspaceSlug });
+			}
 			if (shouldOverwrite) {
 				issuesCache.set({
 					workspace: workspaceSlug,
@@ -150,13 +167,12 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 			}));
 			return currentState?.data;
 		} catch (error) {
-			issuesCache.set({
-				workspace: workspaceSlug,
-				data: null,
+			console.error('[issuesCache] fetch error', { force, error });
+			issuesCache.update((state) => ({
+				...state,
 				loading: false,
-				error,
-				fetchedAt: 0
-			});
+				error
+			}));
 			return null;
 		} finally {
 			inFlight = null;
@@ -277,5 +293,27 @@ export const updateIssueStatusInListCache = (issueId, newStatus) => {
 			})
 		}));
 		return { ...state, data: { ...state.data, sections } };
+	});
+};
+
+export const updateIssueFieldsInListCache = (issueId, fields) => {
+	issuesCache.update((state) => {
+		if (!state.data?.sections) return state;
+		const issues = (state.data.issues ?? []).map((i) =>
+			i.id === issueId ? { ...i, ...fields, title: fields.name ?? i.title } : i
+		);
+		const sections = state.data.sections.map((section) => ({
+			...section,
+			items: section.items.map((item) => {
+				if (item.issueId === issueId) return { ...item, ...fields, title: fields.name ?? item.title };
+				return {
+					...item,
+					subIssues: (item.subIssues ?? []).map((s) =>
+						s.issueId === issueId ? { ...s, ...fields, title: fields.name ?? s.title } : s
+					)
+				};
+			})
+		}));
+		return { ...state, data: { ...state.data, issues, sections } };
 	});
 };

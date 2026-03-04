@@ -5,11 +5,12 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
-	import { ensureIssuesCache, issuesCache, applyIssueInsert, applyIssueDelete, updateIssueStatusInListCache } from '$lib/stores/issuesCache';
-	import { ensureNotificationsCache, addNotificationToCache } from '$lib/stores/notificationsCache';
+	import { ensureIssuesCache, issuesCache, applyIssueInsert, applyIssueDelete, updateIssueStatusInListCache, updateIssueFieldsInListCache } from '$lib/stores/issuesCache';
+	import { ensureNotificationsCache, addNotificationToCache, updateNotificationInCache } from '$lib/stores/notificationsCache';
 	import { ensureMembersCache } from '$lib/stores/membersCache';
 	import { ensureActivityCache, applyMessageDelta, applyDraftDelta, removeMessageFromCache, removeDraftFromCache } from '$lib/stores/activityCache';
-	import { updateIssueStatusInDetailCache } from '$lib/stores/issueDetailCache.js';
+	import { updateIssueStatusInDetailCache, updateIssueFieldsInDetailCache } from '$lib/stores/issueDetailCache.js';
+	import { ensureActivityLogsCache, applyActivityLogDelta, removeActivityLogFromCache } from '$lib/stores/activityLogsCache';
 	import { pageReady } from '$lib/stores/pageReady';
 	import { supabase } from '$lib/supabaseClient.js';
 	export let data;
@@ -50,6 +51,7 @@
 		ensureNotificationsCache(workspaceSlug);
 		ensureMembersCache(workspaceSlug);
 		ensureActivityCache(workspaceSlug);
+		ensureActivityLogsCache(workspaceSlug);
 	}
 
 	$: workspaceId = data?.workspace?.id;
@@ -69,6 +71,13 @@
 			.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'issues',
 					filter: `workspace_id=eq.${workspaceId}` },
 				async ({ new: issue }) => {
+					const cacheStateOnInsert = get(issuesCache);
+					console.log('[RT INSERT] received issue', issue.id, issue.name, {
+						workspaceSlug,
+						cacheDataNull: cacheStateOnInsert.data === null,
+						cacheLoading: cacheStateOnInsert.loading,
+						cacheIssueCount: cacheStateOnInsert.data?.issues?.length ?? 'N/A'
+					});
 					if (issue.parent_id) {
 						const parent = get(issuesCache).data?.issues?.find((i) => i.id === issue.parent_id);
 						applyIssueInsert(issue, {
@@ -82,14 +91,38 @@
 							propertyName: unit?.properties?.name ?? 'Unknown'
 						});
 					}
+					const afterApply = get(issuesCache);
+					const issueInCacheAfterApply = (afterApply.data?.issues ?? []).some((i) => i.id === issue.id);
+					console.log('[RT INSERT] after applyIssueInsert', {
+						issueInCache: issueInCacheAfterApply,
+						cacheDataNull: afterApply.data === null,
+						cacheLoading: afterApply.loading
+					});
+					// Fallback: if the cache wasn't ready, applyIssueInsert was a no-op.
+					// Wait for any in-flight fetch, then force-refresh if the issue is still missing.
+					if (!issueInCacheAfterApply) {
+						console.log('[RT INSERT] issue missing after apply — awaiting ensureIssuesCache...');
+						await ensureIssuesCache(workspaceSlug);
+						const afterEnsure = get(issuesCache);
+						const issueInCacheAfterEnsure = (afterEnsure.data?.issues ?? []).some((i) => i.id === issue.id);
+						console.log('[RT INSERT] after ensureIssuesCache', {
+							issueInCache: issueInCacheAfterEnsure,
+							cacheIssueCount: afterEnsure.data?.issues?.length ?? 'N/A',
+							fetchedAt: afterEnsure.fetchedAt
+						});
+						if (!issueInCacheAfterEnsure) {
+							console.log('[RT INSERT] still missing — calling ensureIssuesCache({ force: true })');
+							ensureIssuesCache(workspaceSlug, { force: true });
+						}
+					}
 				})
 
-			// issues UPDATE — sync status to all open caches
+			// issues UPDATE — sync status and name to all open caches
 			.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'issues',
 					filter: `workspace_id=eq.${workspaceId}` },
 				({ new: issue }) => {
-					updateIssueStatusInListCache(issue.id, issue.status);
-					updateIssueStatusInDetailCache(issue.id, issue.status);
+					updateIssueFieldsInListCache(issue.id, { name: issue.name, status: issue.status });
+					updateIssueFieldsInDetailCache(issue.id, { name: issue.name, status: issue.status });
 				})
 
 			// issues DELETE
@@ -129,6 +162,22 @@
 			.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'email_drafts',
 					filter: `workspace_id=eq.${workspaceId}` },
 				({ old: draft }) => removeDraftFromCache(draft))
+
+			// activity_logs INSERT/UPDATE/DELETE — apply delta to activityLogsCache workspace-wide
+			.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_logs',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ new: log }) => applyActivityLogDelta(log))
+			.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'activity_logs',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ new: log }) => applyActivityLogDelta(log))
+			.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'activity_logs',
+					filter: `workspace_id=eq.${workspaceId}` },
+				({ old: log }) => removeActivityLogFromCache(log))
+
+			// notifications UPDATE — sync is_read changes
+			.on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications',
+					filter: `user_id=eq.${userId}` },
+				({ new: notification }) => updateNotificationInCache(notification))
 
 			.subscribe();
 	}
