@@ -196,6 +196,10 @@
 		});
 	};
 
+	let subIssuesOpen = true;
+	let activityOpen = {};
+	const toggleActivity = (id) => { activityOpen = { ...activityOpen, [id]: !(activityOpen[id] ?? true) }; };
+
 	$: hasActivity =
 		subIssues.some((item) => {
 			const messages = messagesByIssue[item.id] ?? [];
@@ -357,6 +361,7 @@
 		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
 		pageReady.set(true);
 	});
+
 	$: fromParam = $page.url.searchParams.get('from');
 	$: fromIssueId = $page.url.searchParams.get('fromIssueId');
 	$: fromIssueSlug = $page.url.searchParams.get('fromIssueSlug');
@@ -373,10 +378,6 @@
 		: fromParam === 'inbox'
 			? 'Inbox'
 			: 'My issues';
-
-	$: if (browser && fromIssueId && backHref) {
-		preloadData(backHref);
-	}
 
 	$: if (browser && fromIssueId && backHref) {
 		preloadData(backHref);
@@ -451,7 +452,7 @@
 			</div>
 		</div>
 
-		<div class="flex-1 px-10 py-8 transition-opacity duration-150" class:opacity-0={!$pageReady}>
+		<div class="flex-1 px-10 py-8 transition-opacity duration-200" class:opacity-0={!$pageReady}>
 			<div class="flex flex-wrap items-start justify-between gap-6">
 				<div class="min-w-0">
 					<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
@@ -465,14 +466,19 @@
 
 			{#if subIssues.length}
 				<div class="mt-8">
-					<div class="flex items-center justify-between text-sm text-neutral-600">
-						<div class="flex items-center gap-2">
+					<div class="flex items-center gap-2 text-sm text-neutral-600">
+						<button
+							type="button"
+							class="flex items-center gap-2 rounded-md px-1.5 py-1 transition hover:bg-neutral-100"
+							on:click={() => (subIssuesOpen = !subIssuesOpen)}
+						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								width="14"
 								height="14"
 								fill="currentColor"
-								class="text-neutral-400"
+								class="text-neutral-400 transition-transform duration-200"
+								class:rotate-[-90deg]={!subIssuesOpen}
 								viewBox="0 0 16 16"
 							>
 								<path
@@ -480,24 +486,30 @@
 								/>
 							</svg>
 							<span class="text-neutral-700">Sub-issues</span>
-							<span class="text-neutral-400">{subIssueProgress}</span>
+						</button>
+						<span class="text-neutral-400">{subIssueProgress}</span>
+					</div>
+					<div
+					class="grid transition-[grid-template-rows] duration-150 ease-in-out"
+					style:grid-template-rows={subIssuesOpen ? '1fr' : '0fr'}
+				>
+					<div class="overflow-hidden">
+						<div class="mt-3 divide-y divide-neutral-200">
+							{#each subIssues as subIssue}
+								<a
+									href={`/${$page.params.workspace}/issue/${subIssue.id}/${slugify(subIssue.name)}?fromIssueId=${issueId}&fromIssueSlug=${issueNameSlug}&fromIssueTitle=${encodeURIComponent(issueName)}`}
+									class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
+								>
+									<div class="flex items-center gap-3">
+										<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
+										<span class="text-neutral-800">{subIssue.name}</span>
+									</div>
+									<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
+								</a>
+							{/each}
 						</div>
-						<div class="flex items-center gap-2 text-neutral-400"></div>
 					</div>
-					<div class="mt-3 divide-y divide-neutral-200">
-						{#each subIssues as subIssue}
-							<a
-								href={`/${$page.params.workspace}/issue/${subIssue.id}/${slugify(subIssue.name)}?fromIssueId=${issueId}&fromIssueSlug=${issueNameSlug}&fromIssueTitle=${encodeURIComponent(issueName)}`}
-								class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
-							>
-								<div class="flex items-center gap-3">
-									<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
-									<span class="text-neutral-800">{subIssue.name}</span>
-								</div>
-								<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-							</a>
-						{/each}
-					</div>
+				</div>
 				</div>
 			{/if}
 
@@ -559,9 +571,11 @@
 
 						{#each subIssues as subIssue}
 							{#if (messagesByIssue[subIssue.id]?.length ?? 0) || draftIssueIds.includes(subIssue.id) || (logsByIssue[subIssue.id]?.length ?? 0) > 0}
-								<details class="group" open>
-									<summary
-										class="flex cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
+								<div>
+									<button
+										type="button"
+										class="flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
+										on:click={() => toggleActivity(subIssue.id)}
 									>
 										<div
 											class="flex items-center gap-2 rounded-md px-3 py-1.5 transition select-none hover:bg-neutral-100"
@@ -571,7 +585,8 @@
 												width="12"
 												height="12"
 												fill="currentColor"
-												class="rotate-[-90deg] transition-transform duration-200 ease-out group-open:rotate-0"
+												class="transition-transform duration-150 ease-in-out"
+												class:rotate-[-90deg]={!(activityOpen[subIssue.id] ?? true)}
 												viewBox="0 0 16 16"
 											>
 												<path
@@ -583,8 +598,16 @@
 										<span class="text-neutral-300">
 											{messagesByIssue[subIssue.id]?.length ?? 0}
 										</span>
-									</summary>
-									<div class="space-y-3 py-2">
+									</button>
+									<div
+										class="grid transition-[grid-template-rows] duration-200 ease-in-out"
+										style:grid-template-rows={(activityOpen[subIssue.id] ?? true) ? '1fr' : '0fr'}
+									>
+									<div class="overflow-hidden">
+									<div
+										class="space-y-3 py-2 transition-opacity duration-200"
+										class:opacity-0={!(activityOpen[subIssue.id] ?? true)}
+									>
 										{#each collectMessagesForIssue(subIssue.id) as message}
 											{#if !emailDraftsByMessageId[message.id] || emailDraftsByMessageId[message.id]?.issue_id === subIssue.id}
 												<EmailMessageWithDraft
@@ -628,7 +651,9 @@
 											</div>
 										{/each}
 									</div>
-								</details>
+									</div>
+									</div>
+								</div>
 							{/if}
 						{/each}
 					</div>
