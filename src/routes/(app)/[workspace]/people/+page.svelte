@@ -2,10 +2,8 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
-	import { vendorsCache, primeVendorsCache, addVendorToCache, updateVendorInCache } from '$lib/stores/vendorsCache.js';
+	import { vendorsCache, addVendorToCache, updateVendorInCache } from '$lib/stores/vendorsCache.js';
 	import VendorModal from '$lib/components/VendorModal.svelte';
-
-	export let data;
 
 	let showAddModal = false;
 	let editingVendor = null;
@@ -16,10 +14,6 @@
 		$vendorsCache.workspace === workspaceSlug && $vendorsCache.data != null
 			? $vendorsCache.data
 			: null;
-
-	$: if (browser && data.vendors) {
-		data.vendors.then((v) => primeVendorsCache(workspaceSlug, v));
-	}
 
 	function onSaved(e) {
 		const vendor = e.detail;

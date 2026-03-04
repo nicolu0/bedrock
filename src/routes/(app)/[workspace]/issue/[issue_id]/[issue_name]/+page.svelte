@@ -8,6 +8,7 @@
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import { pageReady } from '$lib/stores/pageReady';
+	import { vendorsCache, ensureVendorsCache } from '$lib/stores/vendorsCache.js';
 	import {
 		getIssueDetail,
 		primeIssueDetail,
@@ -32,7 +33,14 @@
 
 	export let data;
 
-	$: vendors = data?.vendors ?? [];
+	$: vendors =
+		$vendorsCache.workspace === workspaceSlug && $vendorsCache.data != null
+			? $vendorsCache.data
+			: [];
+
+	$: if (browser && workspaceSlug) {
+		ensureVendorsCache(workspaceSlug);
+	}
 
 	const statusConfig = {
 		in_progress: {
@@ -639,17 +647,15 @@
 								{/if}
 								<div class="space-y-3 pl-11">
 									{#each collectMessagesForIssue(issueId) as message}
-										{#if !emailDraftsByMessageId[message.id] || emailDraftsByMessageId[message.id]?.issue_id === issueId}
-											<EmailMessageWithDraft
-												message={{
-													...message,
-													timestampLabel: formatTimestamp(message.timestamp)
-												}}
-												draft={emailDraftsByMessageId[message.id] ?? null}
-											/>
-										{/if}
+										<EmailMessageWithDraft
+											message={{
+												...message,
+												timestampLabel: formatTimestamp(message.timestamp)
+											}}
+											draft={null}
+										/>
 									{/each}
-									{#each (draftsByIssue[issueId] ?? []).filter((d) => !(messagesByIssue[issueId] ?? []).some((m) => m.id === d.message_id)) as draft}
+									{#each (draftsByIssue[issueId] ?? []) as draft}
 										<EmailMessageWithDraft
 											message={{
 												id: draft.message_id,
@@ -775,17 +781,15 @@
 												{/if}
 												<div class="space-y-3 pl-11">
 													{#each collectMessagesForIssue(subIssue.id) as message}
-														{#if !emailDraftsByMessageId[message.id] || emailDraftsByMessageId[message.id]?.issue_id === subIssue.id}
-															<EmailMessageWithDraft
-																message={{
-																	...message,
-																	timestampLabel: formatTimestamp(message.timestamp)
-																}}
-																draft={emailDraftsByMessageId[message.id] ?? null}
-															/>
-														{/if}
+														<EmailMessageWithDraft
+															message={{
+																...message,
+																timestampLabel: formatTimestamp(message.timestamp)
+															}}
+															draft={null}
+														/>
 													{/each}
-													{#each (draftsByIssue[subIssue.id] ?? []).filter((d) => !(messagesByIssue[subIssue.id] ?? []).some((m) => m.id === d.message_id)) as draft}
+													{#each (draftsByIssue[subIssue.id] ?? []) as draft}
 														<EmailMessageWithDraft
 															message={{
 																id: draft.message_id,

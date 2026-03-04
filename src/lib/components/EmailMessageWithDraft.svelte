@@ -203,57 +203,59 @@
 {/if}
 
 <div class="overflow-hidden rounded-md border border-neutral-100 bg-white">
-	<button
-		type="button"
-		class={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition ${
-			!isExpanded ? 'hover:bg-neutral-50' : ''
-		}`}
-		on:click={() => (isExpanded = !isExpanded)}
-		aria-expanded={isExpanded}
-	>
-		<div class="min-w-0">
-			<div class="flex min-w-0 items-baseline gap-3">
-				<span class="shrink-0 font-semibold text-neutral-900">
-					{formatSenderLabel(message?.sender)}
-				</span>
-				{#if !isExpanded}
-					<span class="truncate text-sm text-neutral-600">
-						{toPreview(messageParts.main || message?.message)}
+	{#if !draft}
+		<button
+			type="button"
+			class={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition ${
+				!isExpanded ? 'hover:bg-neutral-50' : ''
+			}`}
+			on:click={() => (isExpanded = !isExpanded)}
+			aria-expanded={isExpanded}
+		>
+			<div class="min-w-0">
+				<div class="flex min-w-0 items-baseline gap-3">
+					<span class="shrink-0 font-semibold text-neutral-900">
+						{formatSenderLabel(message?.sender)}
 					</span>
-				{/if}
-			</div>
-		</div>
-		<span class="shrink-0 text-xs text-neutral-400">{message.timestampLabel}</span>
-	</button>
-	{#if isExpanded}
-		<div class="px-4 pb-4 text-sm text-neutral-700">
-			<div class="break-words whitespace-pre-wrap">{messageParts.main}</div>
-			{#if messageParts.quoted}
-				<div class="mt-4">
-					<button
-						type="button"
-						class="inline-flex h-4 w-4 items-center justify-center rounded-sm text-neutral-500 transition hover:bg-neutral-100"
-						on:click={() => (isQuotedExpanded = !isQuotedExpanded)}
-						aria-expanded={isQuotedExpanded}
-						aria-label={isQuotedExpanded ? 'Hide quoted text' : 'Show quoted text'}
-					>
-						<span class="flex items-center gap-0.5" aria-hidden="true">
-							<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
-							<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
-							<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
+					{#if !isExpanded}
+						<span class="truncate text-sm text-neutral-600">
+							{toPreview(messageParts.main || message?.message)}
 						</span>
-					</button>
-					{#if isQuotedExpanded}
-						<div class="mt-3 border-l-2 border-neutral-200 pl-4 text-neutral-600">
-							<div class="break-words whitespace-pre-wrap">{messageParts.quoted}</div>
-						</div>
 					{/if}
 				</div>
-			{/if}
-		</div>
+			</div>
+			<span class="shrink-0 text-xs text-neutral-400">{message.timestampLabel}</span>
+		</button>
+		{#if isExpanded}
+			<div class="px-4 pb-4 text-sm text-neutral-700">
+				<div class="break-words whitespace-pre-wrap">{messageParts.main}</div>
+				{#if messageParts.quoted}
+					<div class="mt-4">
+						<button
+							type="button"
+							class="inline-flex h-4 w-4 items-center justify-center rounded-sm text-neutral-500 transition hover:bg-neutral-100"
+							on:click={() => (isQuotedExpanded = !isQuotedExpanded)}
+							aria-expanded={isQuotedExpanded}
+							aria-label={isQuotedExpanded ? 'Hide quoted text' : 'Show quoted text'}
+						>
+							<span class="flex items-center gap-0.5" aria-hidden="true">
+								<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
+								<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
+								<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
+							</span>
+						</button>
+						{#if isQuotedExpanded}
+							<div class="mt-3 border-l-2 border-neutral-200 pl-4 text-neutral-600">
+								<div class="break-words whitespace-pre-wrap">{messageParts.quoted}</div>
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		{/if}
 	{/if}
 	{#if draft && !isSent}
-		<div class="border-t border-neutral-100 bg-white px-4 py-3">
+		<div class="bg-white px-4 py-3">
 			<div class="flex flex-wrap items-center gap-1.5 text-xs">
 				<span class="shrink-0 font-semibold text-neutral-700">To</span>
 				{#if draft.message_id}
@@ -345,7 +347,7 @@
 		</div>
 	{/if}
 	{#if sentMessage}
-		<div class="border-t border-neutral-100 bg-white">
+		<div class="bg-white">
 			<button
 				type="button"
 				class={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition ${
