@@ -5,9 +5,10 @@ export const load = async ({ parent, locals }) => {
 	const members = (async () => {
 		const { workspace } = await parent();
 		const { data } = await supabaseAdmin
-			.from('members')
+			.from('people')
 			.select('user_id, role, users(name, id)')
 			.eq('workspace_id', workspace.id)
+			.in('role', ['admin', 'member', 'owner'])
 			.order('role', { ascending: true }); // 'admin' sorts before 'member' alphabetically
 		return data ?? [];
 	})();

@@ -15,7 +15,7 @@
 		updateIssueStatusInDetailCache
 	} from '$lib/stores/issueDetailCache.js';
 	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
-	import { membersCache } from '$lib/stores/membersCache.js';
+	import { peopleMembersCache } from '$lib/stores/peopleMembersCache.js';
 	import {
 		activityCache,
 		ensureActivityCache,
@@ -102,7 +102,7 @@
 	// Seed assignee from members cache using the current user's ID (from layout data)
 	$: memberEntry =
 		browser && data?.userId
-			? (get(membersCache)?.data?.find((m) => m.user_id === data.userId) ?? null)
+			? (get(peopleMembersCache)?.data?.find((m) => m.user_id === data.userId) ?? null)
 			: null;
 
 	$: seedAssignee = memberEntry ? { id: data.userId, name: memberEntry.users?.name } : null;

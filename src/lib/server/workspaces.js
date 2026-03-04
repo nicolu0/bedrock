@@ -49,7 +49,7 @@ const ensureWorkspace = async (supabase, user) => {
 		// If the user is already a member somewhere (e.g. accepted an invite),
 		// don't create a new workspace for them.
 		const { data: existingMember } = await supabaseAdmin
-			.from('members')
+			.from('people')
 			.select('workspace_id, workspaces(id, slug)')
 			.eq('user_id', user.id)
 			.limit(1)
@@ -69,12 +69,6 @@ const ensureWorkspace = async (supabase, user) => {
 		workspace = newWorkspace ?? null;
 	}
 	if (workspace?.id) {
-		await supabaseAdmin
-			.from('members')
-			.upsert(
-				{ workspace_id: workspace.id, user_id: user.id, role: 'admin' },
-				{ onConflict: 'workspace_id,user_id' }
-			);
 	}
 	return workspace;
 };
@@ -84,7 +78,7 @@ const getWorkspaceForUser = async (supabase, user, slug = null) => {
 	if (!user) return null;
 	if (slug) {
 		const { data } = await supabase
-			.from('members')
+			.from('people')
 			.select('workspace_id, workspaces!inner(id, name, slug, admin_user_id)')
 			.eq('user_id', user.id)
 			.eq('workspaces.slug', slug)
@@ -92,7 +86,7 @@ const getWorkspaceForUser = async (supabase, user, slug = null) => {
 		return data?.workspaces ?? null;
 	}
 	const { data } = await supabase
-		.from('members')
+		.from('people')
 		.select('workspace_id, workspaces(id, name, slug, admin_user_id)')
 		.eq('user_id', user.id)
 		.limit(1)
@@ -112,7 +106,7 @@ const resolveWorkspace = async (workspaceSlug, userId) => {
 		.maybeSingle();
 	if (adminWorkspace?.id) return adminWorkspace;
 	const { data: memberWorkspace } = await supabaseAdmin
-		.from('members')
+		.from('people')
 		.select('workspaces:workspaces(id, slug)')
 		.eq('user_id', userId)
 		.eq('workspaces.slug', workspaceSlug)

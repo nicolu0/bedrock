@@ -30,9 +30,10 @@ export const load = async ({ parent, locals }) => {
 		const { workspace } = await _parent;
 		if (!workspace?.id) return [];
 		const { data } = await supabaseAdmin
-			.from('members')
+			.from('people')
 			.select('user_id, users(name)')
-			.eq('workspace_id', workspace.id);
+			.eq('workspace_id', workspace.id)
+			.in('role', ['admin', 'member', 'owner']);
 		return data ?? [];
 	})();
 
@@ -87,7 +88,7 @@ export const actions = {
 			title,
 			body: `${adminName} assigned you to this issue.`,
 			type: 'info',
-			is_read: false,
+			is_read: false
 		});
 
 		return { success: true };

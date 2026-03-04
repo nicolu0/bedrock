@@ -1,7 +1,10 @@
 <script>
 	// @ts-nocheck
 	import { browser } from '$app/environment';
-	import { gmailConnectionCache, primeGmailConnectionCache } from '$lib/stores/gmailConnectionCache.js';
+	import {
+		gmailConnectionCache,
+		primeGmailConnectionCache
+	} from '$lib/stores/gmailConnectionCache.js';
 
 	export let data;
 
@@ -29,7 +32,7 @@
 
 	<section class="rounded-2xl border border-neutral-200 bg-white p-6">
 		{#if connection === undefined}
-			<div class="animate-pulse h-10 w-48 rounded bg-neutral-100"></div>
+			<div class="h-10 w-48 animate-pulse rounded bg-neutral-100"></div>
 		{:else}
 			<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 				<div>
@@ -58,7 +61,10 @@
 									d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
 									fill="#34A853"
 								/>
-								<path d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z" fill="#C5221F" />
+								<path
+									d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+									fill="#C5221F"
+								/>
 								<path
 									d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
 									fill="#C5221F"
@@ -100,6 +106,19 @@
 					>
 						{connection?.id ? 'Reconnect Gmail' : 'Connect Gmail'}
 					</a>
+					{#if connection?.id}
+						<form
+							method="POST"
+							action={`/${data.workspace.slug}/settings/integrations/gmail/disconnect`}
+						>
+							<button
+								type="submit"
+								class="inline-flex items-center justify-center rounded-xl border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-50"
+							>
+								Disconnect Gmail
+							</button>
+						</form>
+					{/if}
 				</div>
 			</div>
 		{/if}

@@ -48,7 +48,8 @@ export const POST = async ({ locals, request }) => {
 	const body = await request.json().catch(() => null);
 	const messageId = body?.message_id;
 	const issueId = body?.issue_id;
-	const recipientOverride = typeof body?.recipient_email === 'string' ? body.recipient_email.trim() : null;
+	const recipientOverride =
+		typeof body?.recipient_email === 'string' ? body.recipient_email.trim() : null;
 	if (!messageId && !issueId) return json({ error: 'Invalid payload' }, { status: 400 });
 
 	const draftQuery = supabaseAdmin
@@ -79,10 +80,11 @@ export const POST = async ({ locals, request }) => {
 	if (!workspaceId) return json({ error: 'Not found' }, { status: 404 });
 
 	const { data: member } = await supabaseAdmin
-		.from('members')
+		.from('people')
 		.select('id')
 		.eq('workspace_id', workspaceId)
 		.eq('user_id', locals.user.id)
+		.in('role', ['admin', 'member', 'owner'])
 		.maybeSingle();
 
 	if (!member?.id) {
@@ -214,9 +216,10 @@ export const POST = async ({ locals, request }) => {
 	if (!messageId) {
 		const primaryRecipient = effectiveRecipient.split(',')[0].trim();
 		const { data: vendorRow } = await supabaseAdmin
-			.from('vendors')
+			.from('people')
 			.select('id')
 			.eq('workspace_id', workspaceId)
+			.eq('role', 'vendor')
 			.ilike('email', primaryRecipient)
 			.maybeSingle();
 		const { data: createdThread } = await supabaseAdmin

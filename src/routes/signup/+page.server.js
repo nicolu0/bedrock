@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { fail, redirect } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 import { env } from '$env/dynamic/private';
@@ -12,7 +13,7 @@ const bootstrap = async (user) => {
 	const name = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User';
 
 	const { data: existingMember } = await supabaseAdmin
-		.from('members')
+		.from('people')
 		.select('workspace_id')
 		.eq('user_id', user.id)
 		.maybeSingle();
@@ -30,7 +31,13 @@ const bootstrap = async (user) => {
 
 	if (workspaceError) throw new Error(workspaceError.message);
 
-	await supabaseAdmin.from('members').insert({ workspace_id: workspace.id, user_id: user.id, role: 'admin' });
+	await supabaseAdmin.from('people').insert({
+		workspace_id: workspace.id,
+		user_id: user.id,
+		role: 'admin',
+		name,
+		email: user.email ?? null
+	});
 };
 
 /** @returns {Promise<string|null>} workspace slug, or null if invite invalid */
@@ -46,8 +53,17 @@ const acceptInvite = async (user, token) => {
 
 	const name = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User';
 	await supabaseAdmin.from('users').upsert({ id: user.id, name });
-	await supabaseAdmin.from('members').insert({ workspace_id: invite.workspace_id, user_id: user.id, role: invite.role });
-	await supabaseAdmin.from('invites').update({ accepted_at: new Date().toISOString() }).eq('token', token);
+	await supabaseAdmin.from('people').insert({
+		workspace_id: invite.workspace_id,
+		user_id: user.id,
+		role: invite.role,
+		name,
+		email: user.email ?? null
+	});
+	await supabaseAdmin
+		.from('invites')
+		.update({ accepted_at: new Date().toISOString() })
+		.eq('token', token);
 
 	return invite.workspaces?.slug ?? null;
 };
@@ -72,10 +88,15 @@ export const actions = {
 				body.append('from', env.MAILGUN_FROM ?? `Bedrock <noreply@${mailgunDomain}>`);
 				body.append('to', 'nicoluo@gmail.com');
 				body.append('subject', `New Bedrock interest — ${name}`);
-				body.append('text', `Name: ${name}\nEmail: ${email}\nRole: ${role}\nUnits managed: ${units}\nCurrent software: ${currentSoftware}\nBiggest pain point:\n\n${painPoint}`);
+				body.append(
+					'text',
+					`Name: ${name}\nEmail: ${email}\nRole: ${role}\nUnits managed: ${units}\nCurrent software: ${currentSoftware}\nBiggest pain point:\n\n${painPoint}`
+				);
 				const mailRes = await fetch(`https://api.mailgun.net/v3/${mailgunDomain}/messages`, {
 					method: 'POST',
-					headers: { Authorization: `Basic ${Buffer.from(`api:${mailgunApiKey}`).toString('base64')}` },
+					headers: {
+						Authorization: `Basic ${Buffer.from(`api:${mailgunApiKey}`).toString('base64')}`
+					},
 					body
 				});
 				if (!mailRes.ok) {

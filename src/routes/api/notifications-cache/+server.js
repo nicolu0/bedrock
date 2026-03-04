@@ -25,9 +25,10 @@ export const GET = async ({ locals, url }) => {
 			.eq('user_id', locals.user.id)
 			.order('created_at', { ascending: false }),
 		supabaseAdmin
-			.from('members')
+			.from('people')
 			.select('user_id, users(name)')
 			.eq('workspace_id', workspace.id)
+			.in('role', ['admin', 'member', 'owner'])
 	]);
 
 	return json({ notifications: notifications ?? [], members: members ?? [] });
