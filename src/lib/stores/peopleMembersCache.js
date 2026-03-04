@@ -2,7 +2,7 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
-const CACHE_KEY = 'vendors-cache-v1';
+const CACHE_KEY = 'people-members-cache-v1';
 const CACHE_TTL = 10 * 60 * 1000;
 
 const initialState = {
@@ -13,7 +13,7 @@ const initialState = {
 	fetchedAt: 0
 };
 
-export const vendorsCache = writable(initialState);
+export const peopleMembersCache = writable(initialState);
 
 let inFlight = null;
 
@@ -48,14 +48,14 @@ const clearSessionCache = () => {
 	}
 };
 
-export const ensureVendorsCache = async (workspaceSlug, options = {}) => {
+export const ensurePeopleMembersCache = async (workspaceSlug, options = {}) => {
 	if (!workspaceSlug) return null;
 	if (!browser) return null;
 	const fetcher = options.fetch ?? fetch;
 
 	const now = Date.now();
 	let currentState;
-	vendorsCache.update((state) => {
+	peopleMembersCache.update((state) => {
 		currentState = state;
 		return state;
 	});
@@ -76,7 +76,7 @@ export const ensureVendorsCache = async (workspaceSlug, options = {}) => {
 		now - sessionCached.fetchedAt < CACHE_TTL &&
 		sessionValid
 	) {
-		vendorsCache.set({
+		peopleMembersCache.set({
 			workspace: workspaceSlug,
 			data: sessionCached.data,
 			loading: false,
@@ -91,7 +91,7 @@ export const ensureVendorsCache = async (workspaceSlug, options = {}) => {
 
 	if (inFlight) return inFlight;
 
-	vendorsCache.set({
+	peopleMembersCache.set({
 		workspace: workspaceSlug,
 		data: currentState?.data ?? null,
 		loading: true,
@@ -101,9 +101,9 @@ export const ensureVendorsCache = async (workspaceSlug, options = {}) => {
 
 	inFlight = (async () => {
 		try {
-			const response = await fetcher(`/api/vendors?workspace=${workspaceSlug}`);
+			const response = await fetcher(`/api/people-cache?workspace=${workspaceSlug}`);
 			if (!response.ok) {
-				throw new Error('Vendors cache fetch failed');
+				throw new Error('People members cache fetch failed');
 			}
 			const data = await response.json();
 			const payload = {
@@ -112,7 +112,7 @@ export const ensureVendorsCache = async (workspaceSlug, options = {}) => {
 				fetchedAt: Date.now()
 			};
 			if (Array.isArray(data)) {
-				vendorsCache.set({
+				peopleMembersCache.set({
 					workspace: workspaceSlug,
 					data,
 					loading: false,
@@ -122,10 +122,10 @@ export const ensureVendorsCache = async (workspaceSlug, options = {}) => {
 				writeSessionCache(payload);
 				return data;
 			}
-			vendorsCache.update((state) => ({ ...state, loading: false, error: null }));
+			peopleMembersCache.update((state) => ({ ...state, loading: false, error: null }));
 			return currentState?.data;
 		} catch (error) {
-			vendorsCache.set({
+			peopleMembersCache.set({
 				workspace: workspaceSlug,
 				data: null,
 				loading: false,
@@ -141,7 +141,7 @@ export const ensureVendorsCache = async (workspaceSlug, options = {}) => {
 	return inFlight;
 };
 
-export const primeVendorsCache = (workspaceSlug, data) => {
+export const primePeopleMembersCache = (workspaceSlug, data) => {
 	if (!browser) return;
 	if (!workspaceSlug || !Array.isArray(data)) return;
 	const payload = {
@@ -149,7 +149,7 @@ export const primeVendorsCache = (workspaceSlug, data) => {
 		data,
 		fetchedAt: Date.now()
 	};
-	vendorsCache.set({
+	peopleMembersCache.set({
 		workspace: workspaceSlug,
 		data,
 		loading: false,
@@ -157,30 +157,4 @@ export const primeVendorsCache = (workspaceSlug, data) => {
 		fetchedAt: payload.fetchedAt
 	});
 	writeSessionCache(payload);
-};
-
-export const addVendorToCache = (vendor) => {
-	if (!browser) return;
-	vendorsCache.update((state) => {
-		if (!Array.isArray(state.data)) return state;
-		const data = [...state.data, vendor].sort((a, b) =>
-			(a.name ?? '').localeCompare(b.name ?? '')
-		);
-		const payload = { workspace: state.workspace, data, fetchedAt: state.fetchedAt };
-		writeSessionCache(payload);
-		return { ...state, data };
-	});
-};
-
-export const updateVendorInCache = (vendor) => {
-	if (!browser) return;
-	vendorsCache.update((state) => {
-		if (!Array.isArray(state.data)) return state;
-		const data = state.data
-			.map((v) => (v.id === vendor.id ? vendor : v))
-			.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
-		const payload = { workspace: state.workspace, data, fetchedAt: state.fetchedAt };
-		writeSessionCache(payload);
-		return { ...state, data };
-	});
 };

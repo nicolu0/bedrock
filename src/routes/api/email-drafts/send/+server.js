@@ -77,10 +77,11 @@ export const POST = async ({ locals, request }) => {
 	if (!workspaceId) return json({ error: 'Not found' }, { status: 404 });
 
 	const { data: member } = await supabaseAdmin
-		.from('members')
+		.from('people')
 		.select('id')
 		.eq('workspace_id', workspaceId)
 		.eq('user_id', locals.user.id)
+		.in('role', ['admin', 'member', 'owner'])
 		.maybeSingle();
 
 	if (!member?.id) {
@@ -204,9 +205,10 @@ export const POST = async ({ locals, request }) => {
 	let outboundThreadId = message?.thread_id ?? null;
 	if (!messageId) {
 		const { data: vendorRow } = await supabaseAdmin
-			.from('vendors')
+			.from('people')
 			.select('id')
 			.eq('workspace_id', workspaceId)
+			.eq('role', 'vendor')
 			.ilike('email', draft.recipient_email)
 			.maybeSingle();
 		const { data: createdThread } = await supabaseAdmin

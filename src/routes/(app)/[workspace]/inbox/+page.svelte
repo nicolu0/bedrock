@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { notificationsCache, primeNotificationsCache } from '$lib/stores/notificationsCache.js';
-	import { membersCache, primeMembersCache } from '$lib/stores/membersCache.js';
+	import { peopleMembersCache, primePeopleMembersCache } from '$lib/stores/peopleMembersCache.js';
 
 	export let data;
 
@@ -23,8 +23,8 @@
 			? $notificationsCache.data.notifications
 			: null;
 	$: members =
-		$membersCache.workspace === workspaceSlug && $membersCache.data != null
-			? $membersCache.data
+		$peopleMembersCache.workspace === workspaceSlug && $peopleMembersCache.data != null
+			? $peopleMembersCache.data
 			: [];
 
 	$: filtered =
@@ -35,7 +35,7 @@
 		Promise.all([data.notifications, data.members])
 			.then(([n, m]) => {
 				primeNotificationsCache(workspaceSlug, { notifications: n, members: m });
-				primeMembersCache(workspaceSlug, m);
+				primePeopleMembersCache(workspaceSlug, m);
 			})
 			.catch(() => {
 				loadError = true;

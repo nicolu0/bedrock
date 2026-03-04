@@ -13,7 +13,7 @@ const resolveWorkspace = async (userId, workspaceSlug) => {
 		return adminWorkspace;
 	}
 	const { data: member } = await supabaseAdmin
-		.from('members')
+		.from('people')
 		.select('id')
 		.eq('workspace_id', adminWorkspace.id)
 		.eq('user_id', userId)

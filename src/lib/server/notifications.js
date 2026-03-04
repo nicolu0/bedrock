@@ -9,9 +9,11 @@ import { supabaseAdmin } from '$lib/supabaseAdmin';
  */
 export async function notifyWorkspace(workspaceId, issueId, title, body) {
 	const { data: members } = await supabaseAdmin
-		.from('members')
+		.from('people')
 		.select('user_id')
-		.eq('workspace_id', workspaceId);
+		.eq('workspace_id', workspaceId)
+		.in('role', ['admin', 'member', 'owner'])
+		.not('user_id', 'is', null);
 
 	if (!members?.length) return;
 
@@ -41,6 +43,6 @@ export async function notifyUser(userId, workspaceId, issueId, title, body) {
 		issue_id: issueId,
 		title,
 		body,
-		type: 'info',
+		type: 'info'
 	});
 }

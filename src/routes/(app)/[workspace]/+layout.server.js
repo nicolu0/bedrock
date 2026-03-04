@@ -10,7 +10,7 @@ const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, 
 			.select('id, name, owner:users(name)')
 			.eq('workspace_id', workspaceId)
 			.order('name', { ascending: true });
-		if (userRole === 'property_owner') {
+		if (userRole === 'owner') {
 			q = q.eq('owner_id', userId);
 		}
 		return q;
@@ -66,12 +66,6 @@ export const load = async ({ locals, params }) => {
 			.maybeSingle()
 	]);
 	if (adminWorkspace?.slug) {
-		supabaseAdmin
-			.from('members')
-			.upsert(
-				{ workspace_id: adminWorkspace.id, user_id: locals.user.id, role: 'admin' },
-				{ onConflict: 'workspace_id,user_id' }
-			);
 		const properties = loadPropertiesList(
 			locals.supabase,
 			supabaseAdmin,
@@ -83,7 +77,7 @@ export const load = async ({ locals, params }) => {
 		return { workspace: adminWorkspace, properties, units, userId: locals.user.id };
 	}
 	const { data: memberWorkspace } = await supabaseAdmin
-		.from('members')
+		.from('people')
 		.select('role, workspaces:workspaces(id, name, slug)')
 		.eq('user_id', locals.user.id)
 		.eq('workspaces.slug', params.workspace)

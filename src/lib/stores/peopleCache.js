@@ -2,7 +2,7 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
-const CACHE_KEY = 'members-cache-v1';
+const CACHE_KEY = 'people-cache-v1';
 const CACHE_TTL = 10 * 60 * 1000;
 
 const initialState = {
@@ -13,7 +13,7 @@ const initialState = {
 	fetchedAt: 0
 };
 
-export const membersCache = writable(initialState);
+export const peopleCache = writable(initialState);
 
 let inFlight = null;
 
@@ -48,14 +48,14 @@ const clearSessionCache = () => {
 	}
 };
 
-export const ensureMembersCache = async (workspaceSlug, options = {}) => {
+export const ensurePeopleCache = async (workspaceSlug, options = {}) => {
 	if (!workspaceSlug) return null;
 	if (!browser) return null;
 	const fetcher = options.fetch ?? fetch;
 
 	const now = Date.now();
 	let currentState;
-	membersCache.update((state) => {
+	peopleCache.update((state) => {
 		currentState = state;
 		return state;
 	});
@@ -76,7 +76,7 @@ export const ensureMembersCache = async (workspaceSlug, options = {}) => {
 		now - sessionCached.fetchedAt < CACHE_TTL &&
 		sessionValid
 	) {
-		membersCache.set({
+		peopleCache.set({
 			workspace: workspaceSlug,
 			data: sessionCached.data,
 			loading: false,
@@ -91,7 +91,7 @@ export const ensureMembersCache = async (workspaceSlug, options = {}) => {
 
 	if (inFlight) return inFlight;
 
-	membersCache.set({
+	peopleCache.set({
 		workspace: workspaceSlug,
 		data: currentState?.data ?? null,
 		loading: true,
@@ -101,9 +101,9 @@ export const ensureMembersCache = async (workspaceSlug, options = {}) => {
 
 	inFlight = (async () => {
 		try {
-			const response = await fetcher(`/api/members-cache?workspace=${workspaceSlug}`);
+			const response = await fetcher(`/api/people?workspace=${workspaceSlug}`);
 			if (!response.ok) {
-				throw new Error('Members cache fetch failed');
+				throw new Error('People cache fetch failed');
 			}
 			const data = await response.json();
 			const payload = {
@@ -112,7 +112,7 @@ export const ensureMembersCache = async (workspaceSlug, options = {}) => {
 				fetchedAt: Date.now()
 			};
 			if (Array.isArray(data)) {
-				membersCache.set({
+				peopleCache.set({
 					workspace: workspaceSlug,
 					data,
 					loading: false,
@@ -122,10 +122,10 @@ export const ensureMembersCache = async (workspaceSlug, options = {}) => {
 				writeSessionCache(payload);
 				return data;
 			}
-			membersCache.update((state) => ({ ...state, loading: false, error: null }));
+			peopleCache.update((state) => ({ ...state, loading: false, error: null }));
 			return currentState?.data;
 		} catch (error) {
-			membersCache.set({
+			peopleCache.set({
 				workspace: workspaceSlug,
 				data: null,
 				loading: false,
@@ -141,7 +141,7 @@ export const ensureMembersCache = async (workspaceSlug, options = {}) => {
 	return inFlight;
 };
 
-export const primeMembersCache = (workspaceSlug, data) => {
+export const primePeopleCache = (workspaceSlug, data) => {
 	if (!browser) return;
 	if (!workspaceSlug || !Array.isArray(data)) return;
 	const payload = {
@@ -149,7 +149,7 @@ export const primeMembersCache = (workspaceSlug, data) => {
 		data,
 		fetchedAt: Date.now()
 	};
-	membersCache.set({
+	peopleCache.set({
 		workspace: workspaceSlug,
 		data,
 		loading: false,
@@ -157,4 +157,41 @@ export const primeMembersCache = (workspaceSlug, data) => {
 		fetchedAt: payload.fetchedAt
 	});
 	writeSessionCache(payload);
+};
+
+export const addPersonToCache = (person, workspaceSlug) => {
+	if (!browser) return;
+	peopleCache.update((state) => {
+		const nextWorkspace = workspaceSlug ?? state.workspace;
+		const existing = Array.isArray(state.data) ? state.data : [];
+		const data = [...existing, person].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+		const fetchedAt = state.fetchedAt || Date.now();
+		const payload = { workspace: nextWorkspace, data, fetchedAt };
+		writeSessionCache(payload);
+		return { ...state, workspace: nextWorkspace, data, fetchedAt };
+	});
+};
+
+export const updatePersonInCache = (person) => {
+	if (!browser) return;
+	peopleCache.update((state) => {
+		if (!Array.isArray(state.data)) return state;
+		const data = state.data
+			.map((p) => (p.id === person.id ? person : p))
+			.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+		const payload = { workspace: state.workspace, data, fetchedAt: state.fetchedAt };
+		writeSessionCache(payload);
+		return { ...state, data };
+	});
+};
+
+export const removePersonFromCache = (personId) => {
+	if (!browser) return;
+	peopleCache.update((state) => {
+		if (!Array.isArray(state.data)) return state;
+		const data = state.data.filter((p) => p.id !== personId);
+		const payload = { workspace: state.workspace, data, fetchedAt: state.fetchedAt };
+		writeSessionCache(payload);
+		return { ...state, data };
+	});
 };

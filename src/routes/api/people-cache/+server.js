@@ -15,9 +15,10 @@ export const GET = async ({ locals, url }) => {
 	}
 
 	const { data: members } = await supabaseAdmin
-		.from('members')
+		.from('people')
 		.select('user_id, role, users(name, id)')
 		.eq('workspace_id', workspace.id)
+		.in('role', ['admin', 'member', 'owner'])
 		.order('role', { ascending: true });
 
 	return json(members ?? []);

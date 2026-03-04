@@ -63,6 +63,10 @@ const registerWatch = async (accessToken) => {
 
 	if (!response.ok) {
 		const detail = await response.text();
+		console.error('gmail-watch registerWatch failed', {
+			status: response.status,
+			detail
+		});
 		throw new Error(`Watch registration failed: ${detail}`);
 	}
 
@@ -73,6 +77,11 @@ export const GET = async ({ url }) => {
 	const code = url.searchParams.get('code');
 	const state = url.searchParams.get('state');
 	const error = url.searchParams.get('error');
+	console.log('gmail-callback invoked', {
+		hasCode: Boolean(code),
+		hasState: Boolean(state),
+		error
+	});
 
 	if (error) {
 		return new Response(`OAuth error: ${error}`, { status: 400 });
@@ -85,6 +94,7 @@ export const GET = async ({ url }) => {
 	const redirectUri = `${url.origin}/api/gmail/callback`;
 	const tokenData = await fetchTokens({ code, redirectUri });
 	const profile = await fetchGmailProfile(tokenData.access_token);
+	console.log('gmail-callback profile fetched', { email: profile?.emailAddress });
 	const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 	const [userId, workspaceSlug] = state.split(':');
 
@@ -114,7 +124,12 @@ export const GET = async ({ url }) => {
 	let watch = null;
 	try {
 		watch = await registerWatch(tokenData.access_token);
+		console.log('gmail-callback watch registered', {
+			historyId: watch?.historyId,
+			expiration: watch?.expiration
+		});
 	} catch (watchError) {
+		console.error('gmail-callback watch error', watchError);
 		await supabaseAdmin
 			.schema('errors')
 			.from('ingestion_errors')

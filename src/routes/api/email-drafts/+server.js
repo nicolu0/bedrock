@@ -35,10 +35,11 @@ export const PATCH = async ({ locals, request }) => {
 	}
 
 	const { data: member } = await supabaseAdmin
-		.from('members')
+		.from('people')
 		.select('id')
 		.eq('workspace_id', workspaceId)
 		.eq('user_id', locals.user.id)
+		.in('role', ['admin', 'member', 'owner'])
 		.maybeSingle();
 
 	if (!member?.id) {

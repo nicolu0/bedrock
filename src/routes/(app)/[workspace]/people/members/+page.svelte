@@ -24,6 +24,8 @@
 			? $peopleCache.data
 			: null;
 
+	$: members = people ? people.filter((person) => person.role === 'member') : null;
+
 	$: if (browser && data.people) {
 		if ($peopleCache.workspace !== workspaceSlug || $peopleCache.data == null) {
 			data.people.then((v) => primePeopleCache(workspaceSlug, v));
@@ -93,8 +95,8 @@
 
 <div class="space-y-2">
 	<div>
-		{#if people !== null}
-			{#if people?.length}
+		{#if members !== null}
+			{#if members?.length}
 				<div
 					class="grid grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
 				>
@@ -106,36 +108,36 @@
 				</div>
 				<div class="border-t border-neutral-200"></div>
 				<div>
-					{#each people as person}
+					{#each members as member}
 						<div
 							class="group grid cursor-pointer grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
-							on:mouseenter={() => (hoveredRow = person.id)}
+							on:mouseenter={() => (hoveredRow = member.id)}
 							on:mouseleave={() => (hoveredRow = null)}
 							on:click={(e) => {
 								e.currentTarget.blur();
 								openRowMenu = null;
-								editingPerson = person;
+								editingPerson = member;
 							}}
 							role="button"
 							tabindex="0"
-							on:keydown={(e) => e.key === 'Enter' && (editingPerson = person)}
+							on:keydown={(e) => e.key === 'Enter' && (editingPerson = member)}
 						>
 							<div class="flex items-center">
 								<span
-									class={`rounded-sm px-2 py-1 text-xs font-medium ${roleBadgeClass(person.role)}`}
+									class={`rounded-sm px-2 py-1 text-xs font-medium ${roleBadgeClass(member.role)}`}
 								>
-									{formatRole(person.role)}
+									{formatRole(member.role)}
 								</span>
 							</div>
-							<div class="truncate">{person.name}</div>
-							<div class="truncate text-neutral-500">{person.trade ?? '—'}</div>
-							<div class="truncate text-neutral-500">{person.email ?? '—'}</div>
+							<div class="truncate">{member.name}</div>
+							<div class="truncate text-neutral-500">{member.trade ?? '—'}</div>
+							<div class="truncate text-neutral-500">{member.email ?? '—'}</div>
 							<div class="relative flex items-center">
 								<button
 									data-row-menu-toggle="true"
-									class={`rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 ${hoveredRow === person.id || openRowMenu === person.id ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100`}
+									class={`rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 ${hoveredRow === member.id || openRowMenu === member.id ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100`}
 									on:click|stopPropagation={() =>
-										(openRowMenu = openRowMenu === person.id ? null : person.id)}
+										(openRowMenu = openRowMenu === member.id ? null : member.id)}
 									type="button"
 								>
 									<svg
@@ -151,7 +153,7 @@
 										/>
 									</svg>
 								</button>
-								{#if openRowMenu === person.id}
+								{#if openRowMenu === member.id}
 									<div
 										data-row-menu="true"
 										class="absolute top-full right-0 z-20 mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
@@ -159,7 +161,7 @@
 									>
 										<button
 											class="flex w-full px-3 py-2 text-left text-rose-600 hover:bg-neutral-50"
-											on:click={() => deletePerson(person)}
+											on:click={() => deletePerson(member)}
 											type="button"
 										>
 											Delete
@@ -171,7 +173,7 @@
 					{/each}
 				</div>
 			{:else}
-				<div class="px-6 py-3 text-sm text-neutral-400">No people yet.</div>
+				<div class="px-6 py-3 text-sm text-neutral-400">No members yet.</div>
 			{/if}
 		{:else}
 			<div

@@ -49,9 +49,10 @@ export const load = async ({ locals }) => {
 	const realtimeAccessToken = sessionData?.session?.access_token ?? null;
 
 	const { data: memberRow } = await supabaseAdmin
-		.from('members')
+		.from('people')
 		.select('workspace_id, workspaces(name)')
 		.eq('user_id', locals.user.id)
+		.in('role', ['admin', 'member', 'owner'])
 		.maybeSingle();
 	const workspaceName = memberRow?.workspaces?.name ?? null;
 
@@ -65,13 +66,15 @@ export const load = async ({ locals }) => {
 		.select('id, name')
 		.order('name', { ascending: true });
 	const { data: sidebarVendors, error: sidebarVendorsError } = await locals.supabase
-		.from('vendors')
-		.select('id, name, email, phone, trade, note')
+		.from('people')
+		.select('id, name, email, phone, trade, notes')
+		.eq('role', 'vendor')
 		.order('name', { ascending: true });
 	const { data: sidebarVendorsFallback } = sidebarVendorsError
 		? await locals.supabase
-				.from('vendors')
+				.from('people')
 				.select('id, name, email, phone, trade')
+				.eq('role', 'vendor')
 				.order('name', { ascending: true })
 		: { data: null };
 	const vendorsData = sidebarVendorsError ? sidebarVendorsFallback : sidebarVendors;
@@ -133,7 +136,11 @@ export const load = async ({ locals }) => {
 		: { data: [] };
 
 	const { data: vendors } = vendorIds.length
-		? await locals.supabase.from('vendors').select('id, name, email').in('id', vendorIds)
+		? await locals.supabase
+				.from('people')
+				.select('id, name, email')
+				.eq('role', 'vendor')
+				.in('id', vendorIds)
 		: { data: [] };
 
 	const unitMap = new Map((normalizedUnits ?? []).map((unit) => [unit.id, unit]));
@@ -859,7 +866,9 @@ export const actions = {
 
 		const { data: issueRow, error: issueError } = await locals.supabase
 			.from('issues')
-			.select('id, name, description, tenant_id, unit_id, vendor_id, suggested_vendor_id, workspace_id, issue_number')
+			.select(
+				'id, name, description, tenant_id, unit_id, vendor_id, suggested_vendor_id, workspace_id, issue_number'
+			)
 			.eq('id', actionRow.issue_id)
 			.maybeSingle();
 		if (issueError || !issueRow?.id) {

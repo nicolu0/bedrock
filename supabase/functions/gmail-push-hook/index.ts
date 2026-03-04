@@ -175,9 +175,10 @@ const listOpenIssues = async (unitId: string) => {
 
 const listVendors = async (workspaceId: string) => {
 	const { data } = await supabase
-		.from('vendors')
+		.from('people')
 		.select('id, name, email, trade')
 		.eq('workspace_id', workspaceId)
+		.eq('role', 'vendor')
 		.order('name', { ascending: true });
 	return data ?? [];
 };
@@ -790,9 +791,10 @@ When you believe you have completed the task, call done().
 						throw new Error('draft_reply missing vendor_id');
 					}
 					const { data: vendorRow } = await supabase
-						.from('vendors')
+						.from('people')
 						.select('email')
 						.eq('id', vendorId)
+						.eq('role', 'vendor')
 						.maybeSingle();
 					recipientEmail = vendorRow?.email ?? '';
 				} else {
@@ -1284,6 +1286,17 @@ serve(async (req) => {
 				headers: { 'Content-Type': 'application/json' }
 			});
 		}
+
+		await insertIngestionLog({
+			userId: connection.user_id,
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'invoke',
+				payload_email: normalizedEmail,
+				connection_email: connection.email,
+				history_id: historyId
+			})
+		});
 
 		if (connection.mode === 'write') {
 			return new Response(JSON.stringify({ status: 'skip' }), {
