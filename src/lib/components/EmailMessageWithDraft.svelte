@@ -12,9 +12,6 @@
 	let sentMessage = null;
 	let toastMessage = '';
 	let toastTimeout;
-	let isExpanded = Boolean(draft);
-	let messageParts = { main: '', quoted: '' };
-	let sentParts = { main: '', quoted: '' };
 
 	$: if (draft && (draft.message_id ?? draft.id) !== lastMessageKey) {
 		lastMessageKey = draft.message_id ?? draft.id;
@@ -28,10 +25,6 @@
 	$: if (textareaEl && draft) {
 		textareaEl.style.height = 'auto';
 		textareaEl.style.height = `${textareaEl.scrollHeight}px`;
-	}
-
-	$: if (draft) {
-		isExpanded = true;
 	}
 
 	const showToast = (message) => {
@@ -101,46 +94,6 @@
 			textareaEl.style.height = `${textareaEl.scrollHeight}px`;
 		}
 	};
-
-	const splitEmailBody = (body) => {
-		if (!body) return { main: '', quoted: '' };
-		const text = String(body);
-		const separators = [
-			/^On\s.+wrote:\s*$/m,
-			/^From:\s.+$/m,
-			/^Sent:\s.+$/m,
-			/^To:\s.+$/m,
-			/^Subject:\s.+$/m,
-			/^-----Original Message-----$/m,
-			/^_{2,}$/m
-		];
-		const quotedLineMatch = text.match(/^(>.*)$/m);
-		const separatorMatch = separators.map((regex) => text.match(regex)).find(Boolean);
-		const firstCut = [quotedLineMatch, separatorMatch]
-			.filter(Boolean)
-			.map((match) => match.index)
-			.reduce((min, idx) => Math.min(min, idx), text.length);
-		const main = text.slice(0, firstCut).trimEnd();
-		const quoted = text.slice(firstCut).trim();
-		if (!quoted || quoted === main) return { main: text.trimEnd(), quoted: '' };
-		return { main: main || text.trimEnd(), quoted };
-	};
-
-	const toPreview = (body) => {
-		if (!body) return '';
-		return String(body).replace(/\s+/g, ' ').trim();
-	};
-
-	const formatSenderLabel = (sender) => {
-		if (!sender) return 'Unknown';
-		if (sender === 'tenant') return 'Tenant';
-		if (sender === 'agent') return 'Bedrock Ops';
-		if (sender === 'outbound') return 'You';
-		return sender;
-	};
-
-	$: messageParts = splitEmailBody(message?.message ?? '');
-	$: sentParts = splitEmailBody(sentMessage?.message ?? '');
 </script>
 
 {#if toastMessage}
@@ -152,47 +105,18 @@
 {/if}
 
 <div class="overflow-hidden rounded-md border border-neutral-100 bg-white">
-	<button
-		type="button"
-		class={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition ${
-			!isExpanded ? 'hover:bg-neutral-50' : ''
-		}`}
-		on:click={() => (isExpanded = !isExpanded)}
-		aria-expanded={isExpanded}
-	>
-		<div class="min-w-0">
-			<div class="flex min-w-0 items-baseline gap-3">
-				<span class="shrink-0 font-semibold text-neutral-900">
-					{formatSenderLabel(message?.sender)}
-				</span>
-				{#if !isExpanded}
-					<span class="truncate text-sm text-neutral-600">
-						{toPreview(messageParts.main || message?.message)}
-					</span>
+	<div class="px-3 py-2">
+		<div class="flex items-center justify-between text-xs text-neutral-400">
+			<span>
+				{message.direction === 'outbound' ? 'Outbound' : 'Inbound'}
+				{#if message.subject}
+					· {message.subject}
 				{/if}
-			</div>
+			</span>
+			<span>{message.timestampLabel}</span>
 		</div>
-		<span class="shrink-0 text-xs text-neutral-400">{message.timestampLabel}</span>
-	</button>
-	{#if isExpanded}
-		<div class="px-4 pb-4 text-sm text-neutral-700">
-			<div class="break-words whitespace-pre-wrap">{messageParts.main}</div>
-			{#if messageParts.quoted}
-				<details class="mt-4">
-					<summary
-						class="inline-flex items-center justify-center gap-0.5 rounded-md px-1 py-2 transition hover:bg-neutral-100"
-					>
-						<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-						<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-						<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-					</summary>
-					<div class="mt-3 border-l-2 border-neutral-200 pl-4 text-neutral-600">
-						<div class="break-words whitespace-pre-wrap">{messageParts.quoted}</div>
-					</div>
-				</details>
-			{/if}
-		</div>
-	{/if}
+		<div class="mt-1 text-neutral-700">{message.message}</div>
+	</div>
 	{#if draft && !isSent}
 		<div class="border-t border-neutral-100 bg-white px-3 py-2">
 			<div class="flex items-center gap-2 text-xs text-neutral-400">
@@ -235,48 +159,17 @@
 		</div>
 	{/if}
 	{#if sentMessage}
-		<div class="border-t border-neutral-100 bg-white">
-			<button
-				type="button"
-				class={`flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition ${
-					!isExpanded ? 'hover:bg-neutral-50' : ''
-				}`}
-				on:click={() => (isExpanded = !isExpanded)}
-				aria-expanded={isExpanded}
-			>
-				<div class="min-w-0">
-					<div class="flex min-w-0 items-baseline gap-3">
-						<span class="shrink-0 font-semibold text-neutral-900">
-							{formatSenderLabel(sentMessage?.sender ?? message?.sender)}
-						</span>
-						{#if !isExpanded}
-							<span class="truncate text-sm text-neutral-600">
-								{toPreview(sentParts.main || sentMessage?.message)}
-							</span>
-						{/if}
-					</div>
-				</div>
-				<span class="shrink-0 text-xs text-neutral-400">{message.timestampLabel}</span>
-			</button>
-			{#if isExpanded}
-				<div class="px-4 pb-4 text-sm text-neutral-700">
-					<div class="break-words whitespace-pre-wrap">{sentParts.main}</div>
-					{#if sentParts.quoted}
-						<details class="mt-4">
-							<summary
-								class="inline-flex items-center justify-center gap-0.5 rounded-md px-1 py-2 transition hover:bg-neutral-100"
-							>
-								<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-								<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-								<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-							</summary>
-							<div class="mt-3 border-l-2 border-neutral-200 pl-4 text-neutral-600">
-								<div class="break-words whitespace-pre-wrap">{sentParts.quoted}</div>
-							</div>
-						</details>
+		<div class="border-t border-neutral-100 bg-white px-3 py-2">
+			<div class="flex items-center justify-between text-xs text-neutral-400">
+				<span>
+					{sentMessage.direction === 'outbound' ? 'Outbound' : 'Inbound'}
+					{#if sentMessage.subject}
+						· {sentMessage.subject}
 					{/if}
-				</div>
-			{/if}
+				</span>
+				<span>{message.timestampLabel}</span>
+			</div>
+			<div class="mt-1 text-neutral-700">{sentMessage.message}</div>
 		</div>
 	{/if}
 </div>
