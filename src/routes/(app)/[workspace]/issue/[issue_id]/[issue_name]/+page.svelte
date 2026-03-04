@@ -12,6 +12,7 @@
 	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
 	import { activityCache, ensureActivityCache, applyMessageDelta, applyDraftDelta, removeMessageFromCache, removeDraftFromCache } from '$lib/stores/activityCache.js';
+	import { activityLogsCache, ensureActivityLogsCache, applyActivityLogDelta } from '$lib/stores/activityLogsCache.js';
 	import { supabase } from '$lib/supabaseClient.js';
 
 	export let data;
@@ -67,6 +68,7 @@
 	let messagesByIssue = {};
 	let emailDraftsByMessageId = {};
 	let draftIssueIds = [];
+	let logsByIssue = {};
 
 	// Reset local state when route/issue changes, preferring cache -> list seed
 	let _seededForIssueId = null;
@@ -91,6 +93,7 @@
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
 		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
 		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
+		logsByIssue = $activityLogsCache.data?.logsByIssue ?? {};
 		if (!issue) pageReady.set(false);
 	}
 
@@ -116,11 +119,18 @@
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
 		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
 		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
+		logsByIssue = $activityLogsCache.data?.logsByIssue ?? {};
 	}
 
 	$: if (browser && workspaceSlug && issueId && issueId !== _forcedActivityIssueId) {
 		_forcedActivityIssueId = issueId;
 		ensureActivityCache(workspaceSlug, { force: true });
+	}
+
+	let _forcedLogsIssueId = null;
+	$: if (browser && workspaceSlug && issueId && issueId !== _forcedLogsIssueId) {
+		_forcedLogsIssueId = issueId;
+		ensureActivityLogsCache(workspaceSlug, { force: true });
 	}
 
 	let _loadedSubIssuesForId = null;
@@ -130,7 +140,11 @@
 			.from('issues')
 			.select('id, name, status, parent_id')
 			.eq('parent_id', issueId)
-			.then(({ data: freshSubIssues }) => {
+			.then(({ data: freshSubIssues, error: subErr }) => {
+				if (subErr) {
+					console.error('[subIssues] fetch error:', subErr);
+					return;
+				}
 				if (freshSubIssues?.length && _seededForIssueId === issueId) {
 					subIssues = freshSubIssues.map((s) => ({
 						id: s.id,
@@ -186,10 +200,12 @@
 		subIssues.some((item) => {
 			const messages = messagesByIssue[item.id] ?? [];
 			const hasDraft = draftIssueIds.includes(item.id);
-			return messages.length || hasDraft;
+			const hasLogs = (logsByIssue[item.id] ?? []).length > 0;
+			return messages.length || hasDraft || hasLogs;
 		}) ||
 		(messagesByIssue[issueId]?.length ?? 0) > 0 ||
-		(draftsByIssue[issueId]?.length ?? 0) > 0;
+		(draftsByIssue[issueId]?.length ?? 0) > 0 ||
+		(logsByIssue[issueId]?.length ?? 0) > 0;
 
 	const slugify = (value) =>
 		(value ?? '')
@@ -276,6 +292,12 @@
 						]);
 						for (const msg of msgs ?? []) applyMessageDelta(msg);
 						for (const draft of drafts ?? []) applyDraftDelta(draft);
+
+						const { data: logs } = await supabase
+							.from('activity_logs')
+							.select('id, issue_id, type, from_email, to_emails, subject, body, data, created_by, created_at')
+							.eq('issue_id', newSub.id);
+						for (const log of logs ?? []) applyActivityLogDelta(log);
 					}
 				})
 			.subscribe();
@@ -519,8 +541,24 @@
 							{/each}
 						{/if}
 
+						{#each (logsByIssue[issueId] ?? []).filter(l => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+							<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
+								<span class="mt-0.5 h-1.5 w-1.5 rounded-full bg-neutral-300 shrink-0"></span>
+								<div>
+									{#if log.type === 'status_change'}
+										Status changed · {formatTimestamp(log.created_at)}
+									{:else if log.type === 'assignee_change'}
+										Assignee changed · {formatTimestamp(log.created_at)}
+									{:else if log.type === 'comment'}
+										<p class="text-neutral-700">{log.body}</p>
+										<span>{formatTimestamp(log.created_at)}</span>
+									{/if}
+								</div>
+							</div>
+						{/each}
+
 						{#each subIssues as subIssue}
-							{#if (messagesByIssue[subIssue.id]?.length ?? 0) || draftIssueIds.includes(subIssue.id)}
+							{#if (messagesByIssue[subIssue.id]?.length ?? 0) || draftIssueIds.includes(subIssue.id) || (logsByIssue[subIssue.id]?.length ?? 0) > 0}
 								<details class="group" open>
 									<summary
 										class="flex cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
@@ -573,6 +611,22 @@
 												/>
 											{/each}
 										{/if}
+
+										{#each (logsByIssue[subIssue.id] ?? []).filter(l => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+											<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
+												<span class="mt-0.5 h-1.5 w-1.5 rounded-full bg-neutral-300 shrink-0"></span>
+												<div>
+													{#if log.type === 'status_change'}
+														Status changed · {formatTimestamp(log.created_at)}
+													{:else if log.type === 'assignee_change'}
+														Assignee changed · {formatTimestamp(log.created_at)}
+													{:else if log.type === 'comment'}
+														<p class="text-neutral-700">{log.body}</p>
+														<span>{formatTimestamp(log.created_at)}</span>
+													{/if}
+												</div>
+											</div>
+										{/each}
 									</div>
 								</details>
 							{/if}

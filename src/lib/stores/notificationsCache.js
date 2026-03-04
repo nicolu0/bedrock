@@ -153,6 +153,16 @@ export const addNotificationToCache = (notification) => {
 	});
 };
 
+export const updateNotificationInCache = (notification) => {
+	notificationsCache.update((state) => {
+		if (!state.data?.notifications) return state;
+		const notifications = state.data.notifications.map((n) =>
+			n.id === notification.id ? { ...n, ...notification } : n
+		);
+		return { ...state, data: { ...state.data, notifications } };
+	});
+};
+
 export const primeNotificationsCache = (workspaceSlug, data) => {
 	if (!browser) return;
 	if (!workspaceSlug || !data) return;
