@@ -8,7 +8,7 @@
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import { pageReady } from '$lib/stores/pageReady';
-	import { vendorsCache, ensureVendorsCache } from '$lib/stores/vendorsCache.js';
+	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
 	import {
 		getIssueDetail,
 		primeIssueDetail,
@@ -34,12 +34,12 @@
 	export let data;
 
 	$: vendors =
-		$vendorsCache.workspace === workspaceSlug && $vendorsCache.data != null
-			? $vendorsCache.data
+		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
+			? $peopleCache.data.filter((person) => person?.role === 'vendor')
 			: [];
 
 	$: if (browser && workspaceSlug) {
-		ensureVendorsCache(workspaceSlug);
+		ensurePeopleCache(workspaceSlug);
 	}
 
 	const statusConfig = {
@@ -484,6 +484,7 @@
 					class:pointer-events-none={!nextIssue}
 					class:opacity-40={!nextIssue}
 					aria-disabled={!nextIssue}
+					aria-label="Next issue"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -503,6 +504,7 @@
 					class:pointer-events-none={!prevIssue}
 					class:opacity-40={!prevIssue}
 					aria-disabled={!prevIssue}
+					aria-label="Previous issue"
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -655,7 +657,7 @@
 											draft={null}
 										/>
 									{/each}
-									{#each (draftsByIssue[issueId] ?? []) as draft}
+									{#each draftsByIssue[issueId] ?? [] as draft}
 										<EmailMessageWithDraft
 											message={{
 												id: draft.message_id,
@@ -789,7 +791,7 @@
 															draft={null}
 														/>
 													{/each}
-													{#each (draftsByIssue[subIssue.id] ?? []) as draft}
+													{#each draftsByIssue[subIssue.id] ?? [] as draft}
 														<EmailMessageWithDraft
 															message={{
 																id: draft.message_id,
