@@ -393,7 +393,7 @@
 <svelte:window on:keydown={onKeydown} />
 
 <div class="flex h-full">
-	<div class="flex min-w-0 flex-1 flex-col">
+	<div class="flex min-w-0 flex-1 flex-col min-h-0">
 		<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2 text-sm text-neutral-600">
 			<div
 				class="flex items-center gap-2 transition-opacity duration-150"
@@ -452,7 +452,7 @@
 			</div>
 		</div>
 
-		<div class="flex-1 px-10 py-8 transition-opacity duration-200" class:opacity-0={!$pageReady}>
+		<div class="flex-1 overflow-y-auto px-10 py-8 transition-opacity duration-200" class:opacity-0={!$pageReady}>
 			<div class="flex flex-wrap items-start justify-between gap-6">
 				<div class="min-w-0">
 					<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
