@@ -8,7 +8,11 @@
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import { pageReady } from '$lib/stores/pageReady';
-	import { getIssueDetail, primeIssueDetail, updateIssueStatusInDetailCache } from '$lib/stores/issueDetailCache.js';
+	import {
+		getIssueDetail,
+		primeIssueDetail,
+		updateIssueStatusInDetailCache
+	} from '$lib/stores/issueDetailCache.js';
 	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
 	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
@@ -44,13 +48,33 @@
 			? ($issuesCache.data?.issues?.find((item) => item.id === issueId) ?? null)
 			: null;
 
-	// Derive sub-issues from flat issues list as fallback for cold start
+	// Derive sub-issues (including descendants) from flat issues list as fallback for cold start
 	$: listSubIssues =
 		browser && issueId
-			? ($issuesCache.data?.issues
-					?.filter((item) => item.parent_id === issueId)
-					?.map((s) => ({ id: s.id, name: s.name ?? s.title, status: s.status, parent_id: issueId })) ??
-				[])
+			? (() => {
+					const issues = $issuesCache.data?.issues ?? [];
+					const childrenByParent = new Map();
+					for (const item of issues) {
+						if (!item.parent_id) continue;
+						if (!childrenByParent.has(item.parent_id)) {
+							childrenByParent.set(item.parent_id, []);
+						}
+						childrenByParent.get(item.parent_id).push(item);
+					}
+					const collect = (parentId) => {
+						const children = childrenByParent.get(parentId) ?? [];
+						return children.flatMap((child) => {
+							const entry = {
+								id: child.id,
+								name: child.name ?? child.title,
+								status: child.status,
+								parent_id: parentId
+							};
+							return [entry, ...collect(child.id)];
+						});
+					};
+					return collect(issueId);
+				})()
 			: [];
 
 	// Seed assignee from members cache using the current user's ID (from layout data)
@@ -412,7 +436,9 @@
 
 <div class="flex h-full">
 	<div class="flex min-w-0 flex-1 flex-col">
-		<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2 text-sm text-neutral-600">
+		<div
+			class="flex items-center justify-between border-b border-neutral-200 px-6 py-2 text-sm text-neutral-600"
+		>
 			<div
 				class="flex items-center gap-2 transition-opacity duration-150"
 				class:opacity-0={!$pageReady}
@@ -625,7 +651,10 @@
 	</div>
 
 	<aside class="flex w-1/5 border-l border-neutral-200">
-		<div class="flex w-full flex-col px-6 py-2 transition-opacity duration-150" class:opacity-0={!$pageReady}>
+		<div
+			class="flex w-full flex-col px-6 py-2 transition-opacity duration-150"
+			class:opacity-0={!$pageReady}
+		>
 			<div class="space-y-4 text-sm text-neutral-600">
 				<div class="flex items-center gap-2 pb-2">
 					<span class="text-neutral-400">{issueId}</span>

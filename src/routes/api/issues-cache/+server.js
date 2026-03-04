@@ -24,7 +24,6 @@ const statusConfig = {
 const statusOrder = ['in_progress', 'todo', 'done'];
 const allowedStatuses = new Set(statusOrder);
 
-
 export const GET = async ({ locals, url }) => {
 	if (!locals.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
@@ -102,6 +101,21 @@ export const GET = async ({ locals, url }) => {
 		}
 		childrenByParent.get(issue.parentId).push(issue);
 	}
+	const collectDescendants = (parentId, parentTitle) => {
+		const children = childrenByParent.get(parentId) ?? [];
+		return children.flatMap((child) => {
+			const item = {
+				id: child.id,
+				issueId: child.issueId,
+				title: child.title,
+				parentTitle,
+				property: child.property,
+				unit: child.unit,
+				assignees: child.assignees
+			};
+			return [item, ...collectDescendants(child.id, child.title)];
+		});
+	};
 
 	const topLevelIssues = normalizedIssues.filter(
 		(issue) => !issue.parentId || !issuesById.has(issue.parentId)
@@ -116,15 +130,7 @@ export const GET = async ({ locals, url }) => {
 		const items = topLevelIssues
 			.filter((issue) => (issue.status ?? 'todo') === status)
 			.map((issue) => {
-				const subIssues = (childrenByParent.get(issue.id) ?? []).map((subIssue) => ({
-					id: subIssue.id,
-					issueId: subIssue.issueId,
-					title: subIssue.title,
-					parentTitle: issue.title,
-					property: subIssue.property,
-					unit: subIssue.unit,
-					assignees: subIssue.assignees
-				}));
+				const subIssues = collectDescendants(issue.id, issue.title);
 				return {
 					id: issue.id,
 					issueId: issue.issueId,
