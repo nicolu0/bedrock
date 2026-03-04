@@ -3,7 +3,7 @@ import { supabaseAdmin } from '$lib/supabaseAdmin';
 import { env } from '$env/dynamic/private';
 
 export const load = async ({ locals, url }) => {
-	if (locals.user) throw redirect(303, '/agentmvp');
+	if (locals.user) throw redirect(303, '/');
 	const inviteToken = url.searchParams.get('invite');
 	return { inviteToken, isInvite: !!inviteToken };
 };
@@ -114,10 +114,10 @@ export const actions = {
 
 		if (inviteToken) {
 			const workspaceSlug = await acceptInvite(data.user, inviteToken);
-			throw redirect(303, workspaceSlug ? `/${workspaceSlug}` : '/agentmvp');
+			throw redirect(303, workspaceSlug ? `/${workspaceSlug}` : '/');
 		}
 
 		await bootstrap(data.user);
-		throw redirect(303, '/agentmvp');
+		throw redirect(303, '/');
 	}
 };

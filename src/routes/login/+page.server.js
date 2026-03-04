@@ -12,7 +12,7 @@ export const load = async ({ locals, url }) => {
 	if (workspace?.slug) {
 		throw redirect(303, `/${workspace.slug}`);
 	}
-	throw redirect(303, '/agentmvp');
+	throw redirect(303, '/');
 };
 
 /** @type {import('./$types').Actions} */
@@ -38,6 +38,6 @@ export const actions = {
 		if (workspace?.slug) {
 			throw redirect(303, `/${workspace.slug}`);
 		}
-		throw redirect(303, '/agentmvp');
+		throw redirect(303, '/');
 	}
 };

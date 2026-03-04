@@ -629,13 +629,13 @@
 	const handleSignOut = async (event) => {
 		event.preventDefault();
 		await postAction('?/signOut', new FormData());
-		window.location.href = '/agentmvp';
+		window.location.href = '/';
 	};
 
 	const handleDeleteAccount = async (event) => {
 		event.preventDefault();
 		await postAction('?/deleteAccount', new FormData());
-		window.location.href = '/agentmvp';
+		window.location.href = '/';
 	};
 
 	const handleResetIssues = async (event) => {

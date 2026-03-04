@@ -24,7 +24,7 @@
 				return;
 			}
 			status = 'success';
-			goto('/agentmvp');
+			goto('/');
 		} catch {
 			status = 'error';
 			errorMsg = 'Something went wrong. Please try again.';
@@ -63,7 +63,7 @@
 			<p class="text-sm text-neutral-500">Invite accepted! Redirecting…</p>
 		{:else if status === 'error'}
 			<p class="mb-4 text-sm font-medium text-red-600">{errorMsg}</p>
-			<a href="/agentmvp" class="text-sm text-neutral-800 hover:underline">Go to app</a>
+			<a href="/" class="text-sm text-neutral-800 hover:underline">Go to app</a>
 		{/if}
 	</div>
 </div>

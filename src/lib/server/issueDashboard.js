@@ -50,7 +50,7 @@ const resolveWorkspace = async ({ locals, params }) => {
 };
 
 const getWorkspaceRedirect = async ({ locals, params, user }) => {
-	if (!user) return '/agentmvp';
+	if (!user) return '/';
 	await ensureWorkspace(locals.supabase, user);
 	const { supabaseAdmin } = await import('$lib/supabaseAdmin');
 	const { data: adminWorkspace } = await supabaseAdmin
@@ -69,7 +69,7 @@ const getWorkspaceRedirect = async ({ locals, params, user }) => {
 	if (fallback?.slug) {
 		return `/${fallback.slug}`;
 	}
-	return '/agentmvp';
+	return '/';
 };
 
 export const load = async ({ locals, params }) => {
@@ -380,14 +380,14 @@ export const actions = {
 	},
 	signOut: async ({ locals, params }) => {
 		await locals.supabase.auth.signOut();
-		const redirectTarget = params?.workspace ? `/${params.workspace}` : '/agentmvp';
+		const redirectTarget = params?.workspace ? `/${params.workspace}` : '/';
 		throw redirect(303, redirectTarget);
 	},
 
 	deleteAccount: async ({ locals, params }) => {
 		const user = locals.user;
 		if (!user) {
-			throw redirect(303, params?.workspace ? `/${params.workspace}` : '/agentmvp');
+			throw redirect(303, params?.workspace ? `/${params.workspace}` : '/');
 		}
 		const { supabaseAdmin } = await import('$lib/supabaseAdmin');
 		const deleteData = async (table) => {
@@ -444,11 +444,11 @@ export const actions = {
 		} catch {
 			// best effort
 		}
-		throw redirect(303, params?.workspace ? `/${params.workspace}` : '/agentmvp');
+		throw redirect(303, params?.workspace ? `/${params.workspace}` : '/');
 	},
 	updateConnection: async ({ request, locals, params }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const connectionId = form.get('connection_id');
 		const mode = form.get('mode');
@@ -468,12 +468,12 @@ export const actions = {
 			.update({ mode })
 			.eq('id', connectionId)
 			.eq('user_id', user.id);
-		throw redirect(303, params?.workspace ? `/${params.workspace}` : '/agentmvp');
+		throw redirect(303, params?.workspace ? `/${params.workspace}` : '/');
 	},
 
 	disconnectConnection: async ({ request, locals, params }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const connectionId = form.get('connection_id');
 		if (!connectionId) {
@@ -555,12 +555,12 @@ export const actions = {
 			.delete()
 			.eq('connection_id', connectionId)
 			.eq('user_id', user.id);
-		throw redirect(303, params?.workspace ? `/${params.workspace}` : '/agentmvp');
+		throw redirect(303, params?.workspace ? `/${params.workspace}` : '/');
 	},
 
 	createBuilding: async ({ request, locals, params }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const workspace = await getWorkspaceForUser(locals.supabase, user, params?.workspace ?? null);
 		if (!workspace?.id) {
 			return fail(400, { error: 'Workspace not found for user.' });
@@ -588,7 +588,7 @@ export const actions = {
 
 	createUnit: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const name = form.get('name');
 		const buildingId = form.get('building_id');
@@ -614,7 +614,7 @@ export const actions = {
 
 	createTenant: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const name = form.get('name');
 		const email = form.get('email');
@@ -646,7 +646,7 @@ export const actions = {
 
 	updateTenant: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const tenantId = form.get('tenant_id');
 		const name = form.get('name');
@@ -678,7 +678,7 @@ export const actions = {
 
 	deleteTenant: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const tenantId = form.get('tenant_id');
 		if (!tenantId || typeof tenantId !== 'string') {
@@ -693,7 +693,7 @@ export const actions = {
 
 	createVendor: async ({ request, locals, params }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const workspace = await getWorkspaceForUser(locals.supabase, user, params?.workspace ?? null);
 		if (!workspace?.id) {
 			return fail(400, { error: 'Workspace not found for user.' });
@@ -721,7 +721,7 @@ export const actions = {
 
 	updateVendorNote: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const note = form.get('note');
@@ -742,7 +742,7 @@ export const actions = {
 
 	updateVendorProfile: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const email = form.get('email');
@@ -769,7 +769,7 @@ export const actions = {
 
 	updateVendorDetails: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const email = form.get('email');
@@ -798,7 +798,7 @@ export const actions = {
 
 	renameIssue: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const issueId = form.get('issue_id');
 		const name = form.get('name');
@@ -822,7 +822,7 @@ export const actions = {
 
 	deleteIssue: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const issueId = form.get('issue_id');
 		if (!issueId || typeof issueId !== 'string') {
@@ -837,7 +837,7 @@ export const actions = {
 
 	resetIssues: async ({ locals, params }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const workspace = await getWorkspaceForUser(locals.supabase, user, params?.workspace ?? null);
 		if (!workspace?.id) {
 			return fail(400, { error: 'Workspace not found for user.' });
@@ -854,7 +854,7 @@ export const actions = {
 
 	renameBuilding: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const buildingId = form.get('building_id');
 		const name = form.get('name');
@@ -878,7 +878,7 @@ export const actions = {
 
 	deleteBuilding: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const buildingId = form.get('building_id');
 		if (!buildingId || typeof buildingId !== 'string') {
@@ -893,7 +893,7 @@ export const actions = {
 
 	renameVendor: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		const name = form.get('name');
@@ -917,7 +917,7 @@ export const actions = {
 
 	deleteVendor: async ({ request, locals }) => {
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const vendorId = form.get('vendor_id');
 		if (!vendorId || typeof vendorId !== 'string') {
@@ -933,7 +933,7 @@ export const actions = {
 	approveAction: async ({ request, locals }) => {
 		return fail(400, { error: 'Actions are disabled.' });
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const actionId = form.get('action_id');
 		const emailBodyOverride = form.get('email_body');
@@ -1359,7 +1359,7 @@ export const actions = {
 	denyAction: async ({ request, locals }) => {
 		return fail(400, { error: 'Actions are disabled.' });
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const actionId = form.get('action_id');
 		if (!actionId || typeof actionId !== 'string') {
@@ -1378,7 +1378,7 @@ export const actions = {
 	updateActionDraft: async ({ request, locals }) => {
 		return fail(400, { error: 'Actions are disabled.' });
 		const user = locals.user;
-		if (!user) throw redirect(303, '/agentmvp');
+		if (!user) throw redirect(303, '/');
 		const form = await request.formData();
 		const actionId = form.get('action_id');
 		const emailBody = form.get('email_body');
