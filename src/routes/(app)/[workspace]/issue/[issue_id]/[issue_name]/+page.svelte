@@ -240,7 +240,9 @@
 	};
 	let subIssuesOpen = true;
 	let activityOpen = {};
-	const toggleActivity = (id) => { activityOpen = { ...activityOpen, [id]: !(activityOpen[id] ?? true) }; };
+	const toggleActivity = (id) => {
+		activityOpen = { ...activityOpen, [id]: !(activityOpen[id] ?? true) };
+	};
 
 	$: hasActivity =
 		subIssues.some((item) => {
@@ -446,8 +448,10 @@
 <svelte:window on:keydown={onKeydown} />
 
 <div class="flex h-full">
-	<div class="flex min-w-0 flex-1 flex-col min-h-0">
-		<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2 text-sm text-neutral-600">
+	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
+		<div
+			class="flex items-center justify-between border-b border-neutral-200 px-6 py-2 text-sm text-neutral-600"
+		>
 			<div
 				class="flex items-center gap-2 transition-opacity duration-150"
 				class:opacity-0={!$pageReady}
@@ -505,7 +509,10 @@
 			</div>
 		</div>
 
-		<div class="flex-1 overflow-y-auto px-10 py-8 transition-opacity duration-200" class:opacity-0={!$pageReady}>
+		<div
+			class="flex-1 overflow-y-auto px-10 py-8 transition-opacity duration-200"
+			class:opacity-0={!$pageReady}
+		>
 			<div class="flex flex-wrap items-start justify-between gap-6">
 				<div class="min-w-0">
 					<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
@@ -542,27 +549,27 @@
 						</button>
 						<span class="text-neutral-400">{subIssueProgress}</span>
 					</div>
-				  <div
-					  class="grid transition-[grid-template-rows] duration-150 ease-in-out"
-					  style:grid-template-rows={subIssuesOpen ? '1fr' : '0fr'}
-				  >
-					<div class="overflow-hidden">
-						<div class="mt-3">
-							{#each subIssues as subIssue}
-								<a
-									href={`/${$page.params.workspace}/issue/${subIssue.id}/${slugify(subIssue.name)}?fromIssueId=${issueId}&fromIssueSlug=${issueNameSlug}&fromIssueTitle=${encodeURIComponent(issueName)}`}
-									class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
-								>
-									<div class="flex items-center gap-3">
-										<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
-										<span class="text-neutral-800">{subIssue.name}</span>
-									</div>
-									<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-								</a>
-							{/each}
+					<div
+						class="grid transition-[grid-template-rows] duration-150 ease-in-out"
+						style:grid-template-rows={subIssuesOpen ? '1fr' : '0fr'}
+					>
+						<div class="overflow-hidden">
+							<div class="mt-3">
+								{#each subIssues as subIssue}
+									<a
+										href={`/${$page.params.workspace}/issue/${subIssue.id}/${slugify(subIssue.name)}?fromIssueId=${issueId}&fromIssueSlug=${issueNameSlug}&fromIssueTitle=${encodeURIComponent(issueName)}`}
+										class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
+									>
+										<div class="flex items-center gap-3">
+											<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
+											<span class="text-neutral-800">{subIssue.name}</span>
+										</div>
+										<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
+									</a>
+								{/each}
+							</div>
 						</div>
 					</div>
-				</div>
 				</div>
 			{/if}
 
@@ -757,168 +764,167 @@
 										<span class="text-neutral-300">
 											{messagesByIssue[subIssue.id]?.length ?? 0}
 										</span>
-                  </button>
-                  <div
-                    class="grid transition-[grid-template-rows] duration-200 ease-in-out"
-                    style:grid-template-rows={(activityOpen[subIssue.id] ?? true) ? '1fr' : '0fr'}
-                  >
-                    <div class="overflow-hidden">
-                      <div
-                        class="space-y-3 py-2 transition-opacity duration-200"
-                        class:opacity-0={!(activityOpen[subIssue.id] ?? true)}
-                      >
-                        {#if getThreadSubject(subIssue.id)}
-                          <div class="flex items-center gap-3 px-1">
-                            <div class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white">
-                              <svg
-                                width="18"
-                                height="18"
-                                viewBox="0 0 32 32"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                              >
-                                <path
-                                  d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
-                                  fill="white"
-                                />
-                                <path
-                                  d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
-                                  fill="#EA4335"
-                                />
-                                <path
-                                  d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
-                                  fill="#FBBC05"
-                                />
-                                <path
-                                  d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
-                                  fill="#34A853"
-                                />
-                                <path
-                                  d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
-                                  fill="#C5221F"
-                                />
-                                <path
-                                  d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
-                                  fill="#C5221F"
-                                />
-                                <path
-                                  d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
-                                  fill="#C5221F"
-                                />
-                                <path
-                                  d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
-                                  fill="#4285F4"
-                                />
-                              </svg>
-                            </div>
-                            <h3 class="text-base font-semibold text-neutral-900">
-                              {getThreadSubject(subIssue.id)}
-                            </h3>
-                          </div>
-                        {/if}
-                        <div class="space-y-3 pl-11">
-                          {#each collectMessagesForIssue(subIssue.id) as message}
-                            {#if !emailDraftsByMessageId[message.id] || emailDraftsByMessageId[message.id]?.issue_id === subIssue.id}
-                              <EmailMessageWithDraft
-                                message={{
-                                  ...message,
-                                  timestampLabel: formatTimestamp(message.timestamp)
-                                }}
-                                draft={emailDraftsByMessageId[message.id] ?? null}
-                              />
-                            {/if}
-                          {/each}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-										{#if draftsByIssue[subIssue.id]?.length}
-											{#if !(messagesByIssue[subIssue.id]?.length ?? 0) && getThreadSubject(subIssue.id)}
-												<div class="flex items-center gap-3 px-1">
-													<div
-														class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-													>
-														<svg
-															width="18"
-															height="18"
-															viewBox="0 0 32 32"
-															fill="none"
-															xmlns="http://www.w3.org/2000/svg"
+									</button>
+									<div
+										class="grid transition-[grid-template-rows] duration-200 ease-in-out"
+										style:grid-template-rows={(activityOpen[subIssue.id] ?? true) ? '1fr' : '0fr'}
+									>
+										<div class="overflow-hidden">
+											<div
+												class="space-y-3 py-2 transition-opacity duration-200"
+												class:opacity-0={!(activityOpen[subIssue.id] ?? true)}
+											>
+												{#if getThreadSubject(subIssue.id)}
+													<div class="flex items-center gap-3 px-1">
+														<div
+															class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
 														>
-															<path
-																d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
-																fill="white"
-															/>
-															<path
-																d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
-																fill="#EA4335"
-															/>
-															<path
-																d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
-																fill="#FBBC05"
-															/>
-															<path
-																d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
-																fill="#34A853"
-															/>
-															<path
-																d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
-																fill="#C5221F"
-															/>
-															<path
-																d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
-																fill="#C5221F"
-															/>
-															<path
-																d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
-																fill="#C5221F"
-															/>
-															<path
-																d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
-																fill="#4285F4"
-															/>
-														</svg>
+															<svg
+																width="18"
+																height="18"
+																viewBox="0 0 32 32"
+																fill="none"
+																xmlns="http://www.w3.org/2000/svg"
+															>
+																<path
+																	d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
+																	fill="white"
+																/>
+																<path
+																	d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+																	fill="#EA4335"
+																/>
+																<path
+																	d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+																	fill="#FBBC05"
+																/>
+																<path
+																	d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+																	fill="#34A853"
+																/>
+																<path
+																	d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+																	fill="#C5221F"
+																/>
+																<path
+																	d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+																	fill="#C5221F"
+																/>
+																<path
+																	d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+																	fill="#C5221F"
+																/>
+																<path
+																	d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+																	fill="#4285F4"
+																/>
+															</svg>
+														</div>
+														<h3 class="text-base font-semibold text-neutral-900">
+															{getThreadSubject(subIssue.id)}
+														</h3>
 													</div>
-													<h3 class="text-base font-semibold text-neutral-900">
-														{getThreadSubject(subIssue.id)}
-													</h3>
+												{/if}
+												<div class="space-y-3 pl-11">
+													{#each collectMessagesForIssue(subIssue.id) as message}
+														{#if !emailDraftsByMessageId[message.id] || emailDraftsByMessageId[message.id]?.issue_id === subIssue.id}
+															<EmailMessageWithDraft
+																message={{
+																	...message,
+																	timestampLabel: formatTimestamp(message.timestamp)
+																}}
+																draft={emailDraftsByMessageId[message.id] ?? null}
+															/>
+														{/if}
+													{/each}
 												</div>
-											{/if}
-											<div class="space-y-3 pl-11">
-												{#each draftsByIssue[subIssue.id].filter((draft) => !(messagesByIssue[subIssue.id] ?? []).some((message) => message.id === draft.message_id)) as draft}
-													<EmailMessageWithDraft
-														message={{
-															id: draft.message_id,
-															subject: draft.subject,
-															message: '',
-															direction: 'outbound',
-															timestampLabel: formatTimestamp(draft.updated_at)
-														}}
-														{draft}
-													/>
+
+												{#if draftsByIssue[subIssue.id]?.length}
+													{#if !(messagesByIssue[subIssue.id]?.length ?? 0) && getThreadSubject(subIssue.id)}
+														<div class="flex items-center gap-3 px-1">
+															<div
+																class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
+															>
+																<svg
+																	width="18"
+																	height="18"
+																	viewBox="0 0 32 32"
+																	fill="none"
+																	xmlns="http://www.w3.org/2000/svg"
+																>
+																	<path
+																		d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
+																		fill="white"
+																	/>
+																	<path
+																		d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+																		fill="#EA4335"
+																	/>
+																	<path
+																		d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+																		fill="#FBBC05"
+																	/>
+																	<path
+																		d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+																		fill="#34A853"
+																	/>
+																	<path
+																		d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+																		fill="#C5221F"
+																	/>
+																	<path
+																		d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+																		fill="#C5221F"
+																	/>
+																	<path
+																		d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+																		fill="#C5221F"
+																	/>
+																	<path
+																		d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+																		fill="#4285F4"
+																	/>
+																</svg>
+															</div>
+															<h3 class="text-base font-semibold text-neutral-900">
+																{getThreadSubject(subIssue.id)}
+															</h3>
+														</div>
+													{/if}
+													<div class="space-y-3 pl-11">
+														{#each draftsByIssue[subIssue.id].filter((draft) => !(messagesByIssue[subIssue.id] ?? []).some((message) => message.id === draft.message_id)) as draft}
+															<EmailMessageWithDraft
+																message={{
+																	id: draft.message_id,
+																	subject: draft.subject,
+																	message: '',
+																	direction: 'outbound',
+																	timestampLabel: formatTimestamp(draft.updated_at)
+																}}
+																{draft}
+															/>
+														{/each}
+													</div>
+												{/if}
+
+												{#each (logsByIssue[subIssue.id] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+													<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
+														<span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"
+														></span>
+														<div>
+															{#if log.type === 'status_change'}
+																Status changed · {formatTimestamp(log.created_at)}
+															{:else if log.type === 'assignee_change'}
+																Assignee changed · {formatTimestamp(log.created_at)}
+															{:else if log.type === 'comment'}
+																<p class="text-neutral-700">{log.body}</p>
+																<span>{formatTimestamp(log.created_at)}</span>
+															{/if}
+														</div>
+													</div>
 												{/each}
 											</div>
-										{/if}
-
-										{#each (logsByIssue[subIssue.id] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
-											<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
-												<span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"
-												></span>
-												<div>
-													{#if log.type === 'status_change'}
-														Status changed · {formatTimestamp(log.created_at)}
-													{:else if log.type === 'assignee_change'}
-														Assignee changed · {formatTimestamp(log.created_at)}
-													{:else if log.type === 'comment'}
-														<p class="text-neutral-700">{log.body}</p>
-														<span>{formatTimestamp(log.created_at)}</span>
-													{/if}
-												</div>
-											</div>
-										{/each}
-									</div>
-									</div>
+										</div>
 									</div>
 								</div>
 							{/if}
