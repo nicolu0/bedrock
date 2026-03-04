@@ -203,6 +203,7 @@
 		<div class="w-1/2 overflow-y-auto">
 			<IssuePanel
 				issueId={selectedNotification.issues?.id}
+				seedIssue={selectedNotification.issues}
 				activityData={$activityCache.data}
 				activityLogsData={$activityLogsCache.data}
 				{vendors}

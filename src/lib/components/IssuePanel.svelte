@@ -6,6 +6,7 @@
 	import EmailMessageWithDraft from './EmailMessageWithDraft.svelte';
 
 	export let issueId;
+	export let seedIssue = null;
 	export let activityData;
 	export let activityLogsData;
 	export let vendors = [];
@@ -27,8 +28,12 @@
 	$: if (issueId) loadIssue(issueId);
 
 	async function loadIssue(id) {
-		issue = null;
+		issue =
+			seedIssue && seedIssue.id === id
+				? { id: seedIssue.id, name: seedIssue.name, status: seedIssue.status, description: null, parent_id: null }
+				: null;
 		subIssues = [];
+
 		const [{ data: iss }, { data: subs }] = await Promise.all([
 			supabase
 				.from('issues')
@@ -37,7 +42,8 @@
 				.single(),
 			supabase.from('issues').select('id, name, status, parent_id').eq('parent_id', id)
 		]);
-		issue = iss;
+
+		if (iss) issue = iss;
 		subIssues = subs ?? [];
 	}
 
