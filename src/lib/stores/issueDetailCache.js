@@ -82,14 +82,17 @@ export const primeDetailCacheFromIssuesList = (issuesList) => {
 
 	const now = Date.now();
 	for (const issue of issuesList) {
-		const existing = memoryCache.get(issue.id);
-		if (existing && now - existing.fetchedAt < CACHE_TTL) continue;
 		const subIssues = (childrenByParentId.get(issue.id) ?? []).map((s) => ({
 			id: s.id,
 			name: s.name ?? s.title,
 			status: s.status,
 			parent_id: issue.id
 		}));
+		const existing = memoryCache.get(issue.id);
+		if (existing && now - existing.fetchedAt < CACHE_TTL) {
+			memoryCache.set(issue.id, { ...existing, subIssues });
+			continue;
+		}
 		memoryCache.set(issue.id, {
 			issue: { id: issue.id, name: issue.name ?? issue.title, status: issue.status, description: null },
 			subIssues,
@@ -109,5 +112,12 @@ export const updateIssueStatusInDetailCache = (issueId, newStatus) => {
 	const entry = memoryCache.get(issueId);
 	if (!entry) return;
 	memoryCache.set(issueId, { ...entry, issue: { ...entry.issue, status: newStatus } });
+	saveToSession();
+};
+
+export const updateIssueFieldsInDetailCache = (issueId, fields) => {
+	const entry = memoryCache.get(issueId);
+	if (!entry) return;
+	memoryCache.set(issueId, { ...entry, issue: { ...entry.issue, ...fields } });
 	saveToSession();
 };

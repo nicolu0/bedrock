@@ -11,7 +11,8 @@
 	import { getIssueDetail, primeIssueDetail, updateIssueStatusInDetailCache } from '$lib/stores/issueDetailCache.js';
 	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
 	import { membersCache } from '$lib/stores/membersCache.js';
-	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
+	import { activityCache, ensureActivityCache, applyMessageDelta, applyDraftDelta, removeMessageFromCache, removeDraftFromCache } from '$lib/stores/activityCache.js';
+	import { activityLogsCache, ensureActivityLogsCache, applyActivityLogDelta } from '$lib/stores/activityLogsCache.js';
 	import { supabase } from '$lib/supabaseClient.js';
 
 	export let data;
@@ -67,6 +68,7 @@
 	let messagesByIssue = {};
 	let emailDraftsByMessageId = {};
 	let draftIssueIds = [];
+	let logsByIssue = {};
 
 	// Reset local state when route/issue changes, preferring cache -> list seed
 	let _seededForIssueId = null;
@@ -91,6 +93,7 @@
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
 		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
 		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
+		logsByIssue = $activityLogsCache.data?.logsByIssue ?? {};
 		if (!issue) pageReady.set(false);
 	}
 
@@ -105,8 +108,8 @@
 		pageReady.set(true);
 	}
 
-	// Fill in blank subIssues when issuesCache loads after cold start
-	$: if (browser && _seededForIssueId === issueId && !subIssues.length && listSubIssues.length) {
+	// Sync subIssues from issuesCache on cold start or when cache grows (e.g. new subissue created)
+	$: if (browser && _seededForIssueId === issueId && listSubIssues.length > subIssues.length) {
 		subIssues = listSubIssues;
 	}
 
@@ -116,11 +119,45 @@
 		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
 		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
 		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
+		logsByIssue = $activityLogsCache.data?.logsByIssue ?? {};
 	}
 
 	$: if (browser && workspaceSlug && issueId && issueId !== _forcedActivityIssueId) {
 		_forcedActivityIssueId = issueId;
 		ensureActivityCache(workspaceSlug, { force: true });
+	}
+
+	let _forcedLogsIssueId = null;
+	$: if (browser && workspaceSlug && issueId && issueId !== _forcedLogsIssueId) {
+		_forcedLogsIssueId = issueId;
+		ensureActivityLogsCache(workspaceSlug, { force: true });
+	}
+
+	let _loadedSubIssuesForId = null;
+	$: if (browser && issueId && issueId !== _loadedSubIssuesForId) {
+		_loadedSubIssuesForId = issueId;
+		supabase
+			.from('issues')
+			.select('id, name, status, parent_id')
+			.eq('parent_id', issueId)
+			.then(({ data: freshSubIssues, error: subErr }) => {
+				if (subErr) {
+					console.error('[subIssues] fetch error:', subErr);
+					return;
+				}
+				if (freshSubIssues?.length && _seededForIssueId === issueId) {
+					subIssues = freshSubIssues.map((s) => ({
+						id: s.id,
+						name: s.name,
+						status: s.status,
+						parent_id: issueId
+					}));
+					const current = getIssueDetail(issueId);
+					if (current) {
+						primeIssueDetail(issueId, { ...current, subIssues });
+					}
+				}
+			});
 	}
 
 	$: issueName = issue?.name ?? '';
@@ -163,10 +200,12 @@
 		subIssues.some((item) => {
 			const messages = messagesByIssue[item.id] ?? [];
 			const hasDraft = draftIssueIds.includes(item.id);
-			return messages.length || hasDraft;
+			const hasLogs = (logsByIssue[item.id] ?? []).length > 0;
+			return messages.length || hasDraft || hasLogs;
 		}) ||
 		(messagesByIssue[issueId]?.length ?? 0) > 0 ||
-		(draftsByIssue[issueId]?.length ?? 0) > 0;
+		(draftsByIssue[issueId]?.length ?? 0) > 0 ||
+		(logsByIssue[issueId]?.length ?? 0) > 0;
 
 	const slugify = (value) =>
 		(value ?? '')
@@ -222,104 +261,47 @@
 	$: nextIssue =
 		currentIndex >= 0 && currentIndex < totalIssues - 1 ? issueRows[currentIndex + 1] : null;
 
-	const upsertMessage = (message) => {
-		if (!message?.issue_id) return;
-		activityCache.update((state) => {
-			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
-			const data = state.data ?? {
-				messagesByIssue: {},
-				emailDraftsByMessageId: {},
-				draftIssueIds: []
-			};
-			const nextMessagesByIssue = { ...data.messagesByIssue };
-			const list = [...(nextMessagesByIssue[message.issue_id] ?? [])];
-			const idx = list.findIndex((item) => item.id === message.id);
-			if (idx >= 0) {
-				list[idx] = { ...list[idx], ...message };
-			} else {
-				list.push(message);
-			}
-			list.sort((a, b) => {
-				const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
-				const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
-				return timeA - timeB;
-			});
-			nextMessagesByIssue[message.issue_id] = list;
-			return { ...state, data: { ...data, messagesByIssue: nextMessagesByIssue } };
-		});
-	};
+	const upsertMessage = applyMessageDelta;
+	const removeMessage = removeMessageFromCache;
+	const upsertDraft = applyDraftDelta;
+	const removeDraft = removeDraftFromCache;
 
-	const removeMessage = (message) => {
-		if (!message?.issue_id) return;
-		activityCache.update((state) => {
-			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
-			const data = state.data ?? {
-				messagesByIssue: {},
-				emailDraftsByMessageId: {},
-				draftIssueIds: []
-			};
-			const nextMessagesByIssue = { ...data.messagesByIssue };
-			const list = [...(nextMessagesByIssue[message.issue_id] ?? [])];
-			const nextList = list.filter((item) => item.id !== message.id);
-			if (nextList.length) {
-				nextMessagesByIssue[message.issue_id] = nextList;
-			} else {
-				delete nextMessagesByIssue[message.issue_id];
-			}
-			return { ...state, data: { ...data, messagesByIssue: nextMessagesByIssue } };
-		});
-	};
+	let _subIssueChannel = null;
 
-	const upsertDraft = (draft) => {
-		const key = draft?.message_id ?? draft?.id;
-		if (!key) return;
-		activityCache.update((state) => {
-			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
-			const data = state.data ?? {
-				messagesByIssue: {},
-				emailDraftsByMessageId: {},
-				draftIssueIds: []
-			};
-			const nextDrafts = { ...data.emailDraftsByMessageId, [key]: draft };
-			const nextIssueIds = [
-				...new Set(
-					Object.values(nextDrafts)
-						.map((item) => item.issue_id)
-						.filter(Boolean)
-				)
-			];
-			return {
-				...state,
-				data: { ...data, emailDraftsByMessageId: nextDrafts, draftIssueIds: nextIssueIds }
-			};
-		});
-	};
+	$: if (browser && issueId) {
+		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
+		_subIssueChannel = supabase
+			.channel(`subissues-${issueId}`)
+			.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'issues',
+					filter: `parent_id=eq.${issueId}` },
+				async ({ new: newSub }) => {
+					const sub = { id: newSub.id, name: newSub.name, status: newSub.status, parent_id: issueId };
+					if (!subIssues.some((s) => s.id === sub.id)) {
+						subIssues = [...subIssues, sub];
+						const current = getIssueDetail(issueId);
+						if (current) primeIssueDetail(issueId, { ...current, subIssues });
 
-	const removeDraft = (draft) => {
-		const key = draft?.message_id ?? draft?.id;
-		if (!key) return;
-		activityCache.update((state) => {
-			if (state.workspace && workspaceSlug && state.workspace !== workspaceSlug) return state;
-			const data = state.data ?? {
-				messagesByIssue: {},
-				emailDraftsByMessageId: {},
-				draftIssueIds: []
-			};
-			const nextDrafts = { ...data.emailDraftsByMessageId };
-			delete nextDrafts[key];
-			const nextIssueIds = [
-				...new Set(
-					Object.values(nextDrafts)
-						.map((item) => item.issue_id)
-						.filter(Boolean)
-				)
-			];
-			return {
-				...state,
-				data: { ...data, emailDraftsByMessageId: nextDrafts, draftIssueIds: nextIssueIds }
-			};
-		});
-	};
+						// Catch-up: fetch any messages/drafts written before the per-issue channel subscribes
+						const [{ data: msgs }, { data: drafts }] = await Promise.all([
+							supabase.from('messages')
+								.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
+								.eq('issue_id', newSub.id),
+							supabase.from('email_drafts')
+								.select('id, issue_id, message_id, sender, recipient, subject, body, updated_at')
+								.eq('issue_id', newSub.id)
+						]);
+						for (const msg of msgs ?? []) applyMessageDelta(msg);
+						for (const draft of drafts ?? []) applyDraftDelta(draft);
+
+						const { data: logs } = await supabase
+							.from('activity_logs')
+							.select('id, issue_id, type, from_email, to_emails, subject, body, data, created_by, created_at')
+							.eq('issue_id', newSub.id);
+						for (const log of logs ?? []) applyActivityLogDelta(log);
+					}
+				})
+			.subscribe();
+	}
 
 	const channelMap = new Map();
 
@@ -370,10 +352,9 @@
 	}
 
 	onDestroy(() => {
-		for (const channel of channelMap.values()) {
-			supabase.removeChannel(channel);
-		}
+		for (const channel of channelMap.values()) supabase.removeChannel(channel);
 		channelMap.clear();
+		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
 		pageReady.set(true);
 	});
 	$: fromParam = $page.url.searchParams.get('from');
@@ -560,8 +541,24 @@
 							{/each}
 						{/if}
 
+						{#each (logsByIssue[issueId] ?? []).filter(l => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+							<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
+								<span class="mt-0.5 h-1.5 w-1.5 rounded-full bg-neutral-300 shrink-0"></span>
+								<div>
+									{#if log.type === 'status_change'}
+										Status changed · {formatTimestamp(log.created_at)}
+									{:else if log.type === 'assignee_change'}
+										Assignee changed · {formatTimestamp(log.created_at)}
+									{:else if log.type === 'comment'}
+										<p class="text-neutral-700">{log.body}</p>
+										<span>{formatTimestamp(log.created_at)}</span>
+									{/if}
+								</div>
+							</div>
+						{/each}
+
 						{#each subIssues as subIssue}
-							{#if (messagesByIssue[subIssue.id]?.length ?? 0) || draftIssueIds.includes(subIssue.id)}
+							{#if (messagesByIssue[subIssue.id]?.length ?? 0) || draftIssueIds.includes(subIssue.id) || (logsByIssue[subIssue.id]?.length ?? 0) > 0}
 								<details class="group" open>
 									<summary
 										class="flex cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
@@ -614,6 +611,22 @@
 												/>
 											{/each}
 										{/if}
+
+										{#each (logsByIssue[subIssue.id] ?? []).filter(l => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+											<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
+												<span class="mt-0.5 h-1.5 w-1.5 rounded-full bg-neutral-300 shrink-0"></span>
+												<div>
+													{#if log.type === 'status_change'}
+														Status changed · {formatTimestamp(log.created_at)}
+													{:else if log.type === 'assignee_change'}
+														Assignee changed · {formatTimestamp(log.created_at)}
+													{:else if log.type === 'comment'}
+														<p class="text-neutral-700">{log.body}</p>
+														<span>{formatTimestamp(log.created_at)}</span>
+													{/if}
+												</div>
+											</div>
+										{/each}
 									</div>
 								</details>
 							{/if}
