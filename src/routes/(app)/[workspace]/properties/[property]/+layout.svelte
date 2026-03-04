@@ -38,8 +38,12 @@
 </script>
 
 <div class="space-y-0">
-	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-3">
-		<div class="text-sm font-normal text-neutral-700">{propertyTitle}</div>
+	<div
+		class={`flex items-center justify-between border-b border-neutral-200 px-6 ${
+			currentPath === `${basePath}/properties/${propertySlug}/units` ? 'py-2.5' : 'py-3'
+		}`}
+	>
+		<h1 class="text-sm font-normal text-neutral-700">{propertyTitle}</h1>
 		{#if currentPath === `${basePath}/properties/${propertySlug}/units`}
 			<button
 				type="button"
@@ -50,6 +54,7 @@
 			</button>
 		{/if}
 	</div>
+
 	<div class="px-6 py-2">
 		<div class="flex items-center gap-2">
 			{#each tabs as tab}

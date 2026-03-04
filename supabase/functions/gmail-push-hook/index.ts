@@ -252,7 +252,7 @@ const upsertEmailDraft = async ({
 	issueId: string;
 	messageId: string | null;
 	senderEmail: string;
-	recipientEmail: string;
+	recipientEmail: string | null;
 	subject: string;
 	body: string;
 	userId: string;
@@ -406,9 +406,13 @@ const runIssueAgent = async ({
 	userId,
 	policyText,
 	tenantName,
+	tenantEmail,
+	userName,
 	defaultSenderEmail,
 	replyMessageId,
-	existingIssueId
+	rootIssueId,
+	threadIssueId,
+	relatedIssues
 }: {
 	subject: string;
 	body: string;
@@ -419,16 +423,25 @@ const runIssueAgent = async ({
 	userId: string;
 	policyText: string;
 	tenantName: string | null;
+	tenantEmail: string | null;
+	userName: string | null;
 	defaultSenderEmail: string | null;
 	replyMessageId: string | null;
-	existingIssueId?: string | null;
+	rootIssueId?: string | null;
+	threadIssueId?: string | null;
+	relatedIssues?: Array<{
+		id: string;
+		name: string | null;
+		status: string | null;
+		parent_id: string | null;
+	}>;
 }) => {
 	const system = `You are Bedrock, an assistant for property management.
 Your job is to link this email thread to the most specific issue (prefer a subissue when appropriate). If no match exists, create a new issue and then create one subissue for the next step.
 
 Process (required):
 1) Review the provided open_issues list.
-2) If existing_issue_id is provided, do not create a new issue. Use it as the root issue id.
+2) If root_issue_id is provided, do not create a new issue. Use it as the root issue id.
 3) If no existing_issue_id is provided and no clear match exists, call create_issue with a concise title.
 4) If existing_issue_id is provided, prefer reusing the most recent triage subissue from open_issues that matches the issue. Only create a new triage subissue if no suitable triage subissue exists.
 5) If the tenant indicates troubleshooting failed or the issue cannot be resolved by the tenant, create a Schedule subissue for a vendor (even if you reused the triage subissue) and shift the workflow to scheduling. This is a stopping point: do not continue triage back-and-forth.
@@ -439,10 +452,10 @@ Process (required):
    Use the full conversation thread for context and ask clarifying questions to confirm urgency.
    Choose triage when the tenant might resolve it or more info is needed; choose schedule only for clear emergencies (e.g., pests, gas smell, no power, no water, flooding, safety risks) or when workspace_policy explicitly requires immediate scheduling.
    Example: a clogged toilet is typically triage (suggest using a plunger and ask if there is overflow/flooding). If there is flooding or safety risk, treat as emergency and schedule.
-7) If you created a triage subissue, create an email draft reply to the sender using create_email_draft (required).
+7) If you created a triage subissue, create an email draft reply to the tenant using draft_reply (required).
 8) When you determine the tenant cannot resolve the issue and you create a Schedule subissue, you should create two drafts in the same run:
    - Tenant reply: acknowledge, confirm availability/entry permission, and keep the tenant informed. Use latest_message_id for message_id.
-   - Vendor request: pick a vendor from the vendors list (prefer trade match) and draft a vendor email. Omit message_id unless a vendor thread exists. If no suitable vendor or no vendor email exists, draft to the PM/maintenance email (default_sender_email) and note that no matching vendor was found.
+   - Vendor request: pick a vendor from the vendors list (prefer trade match) and draft a vendor email. Omit message_id unless a vendor thread exists. If no suitable vendor or no vendor email exists, draft with recipient_email null and note that no matching vendor was found.
    This is a stopping point for triage: do not keep asking tenant troubleshooting questions in the same run.
 9) Linking: Always link the tenant thread to the triage subissue (or existing triage subissue). Do NOT link the tenant thread to the Schedule subissue; that subissue is for the vendor thread.
 10) Finally, call link_thread_to_issue once with the triage subissue id. This is required.
@@ -454,16 +467,29 @@ Rules:
 - Subissue title format:
   - Triage {Issue Title} (${tenantName ?? 'Tenant'})
   - Schedule {Vendor Type} for {Issue Title}
+- Subissue parent rules: Triage and Schedule subissues must use root_issue_id as parent. Never use thread_issue_id as the parent for Schedule.
 - Use the workspace_policy to decide triage vs schedule vendor. If policy is empty or unclear, triage unless it matches an emergency.
+- Drafts: Always write from the property manager POV (the user). Never write from the tenant POV.
+- Drafts: For tenant replies, address the tenant by tenant_name only. Never infer a name from the email address.
+- Drafts: End with the user_name as the signature. Never use an email address as the signature.
+- Drafts: Never use default_sender_email in the email body.
 - Drafts: When triaging, draft a short, friendly reply acknowledging the issue and asking one clarifying question about emergency indicators if relevant.
 - Drafts: When scheduling, draft a short, direct vendor email requesting availability and permission to access.
-- Drafts: You may call create_email_draft multiple times in one run. Use latest_message_id for the tenant reply draft, and omit message_id for the vendor draft when starting a new vendor thread.
-- Drafts: For Schedule subissues, the draft recipient must be a vendor email or default_sender_email; never send to sender_email.
+- Drafts: Use draft_reply for replies and draft_email for new outbound emails.
+- Drafts: For Schedule subissues, the draft recipient must be a vendor email or null; never send to sender_email.
 - Drafts: sender_email should not be provided by the agent. The system will use default_sender_email.
-- Drafts: Always pass recipient_email as a plain email address (no display name).
-- existing_issue_id: When present, you must not call create_issue. Reuse the latest triage subissue when possible.
-- Drafts: Use the subissue id for issue_id. For tenant replies, use latest_message_id for message_id. For vendor scheduling drafts, include message_id when replying in an existing vendor thread; otherwise omit message_id entirely (do not send empty string).
+- Drafts: When provided, pass recipient_email as a plain email address (no display name).
+- root_issue_id: When present, you must not call create_issue. Reuse existing subissues when possible.
+- Drafts: Use the subissue id for issue_id. For replies, use latest_message_id for message_id. For vendor scheduling drafts, use draft_email for new outreach and draft_reply for replies; include message_id only when replying in an existing vendor thread, otherwise omit it entirely (do not send empty string).
 - Linking: Call link_thread_to_issue exactly once and only after issue/subissue creation. This is required.
+Tenant identity:
+- tenant_name and tenant_email come from the tenants table lookup by sender email. These are authoritative.
+User identity:
+- user_name is the property manager name. You are drafting on behalf of user_name.
+Issue context:
+- root_issue_id is the root issue for this thread.
+- thread_issue_id is the issue currently linked to the email thread (often triage).
+- related_issues are the root issue and its subissues; use them to reason about structure.
 When you believe you have completed the task, call done().
 `.trim();
 	const createIssueTool = {
@@ -511,22 +537,37 @@ When you believe you have completed the task, call done().
 			required: ['parent_issue_id', 'title', 'status', 'reasoning']
 		}
 	};
-	const createEmailDraftTool = {
+	const draftEmailTool = {
 		type: 'function',
-		name: 'create_email_draft',
-		description: 'Create or update a draft email reply for an issue',
+		name: 'draft_email',
+		description: 'Create or update a draft email (new outbound)',
 		parameters: {
 			type: 'object',
 			additionalProperties: false,
 			properties: {
 				issue_id: { type: 'string' },
 				message_id: { type: 'string' },
-				sender_email: { type: 'string' },
 				recipient_email: { type: 'string' },
 				subject: { type: 'string' },
 				body: { type: 'string' }
 			},
-			required: ['issue_id', 'recipient_email', 'subject', 'body']
+			required: ['issue_id', 'subject', 'body']
+		}
+	};
+	const draftReplyTool = {
+		type: 'function',
+		name: 'draft_reply',
+		description: 'Create or update a draft reply to an existing email',
+		parameters: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				issue_id: { type: 'string' },
+				message_id: { type: 'string' },
+				subject: { type: 'string' },
+				body: { type: 'string' }
+			},
+			required: ['issue_id', 'message_id', 'subject', 'body']
 		}
 	};
 	const doneTool = {
@@ -544,10 +585,11 @@ When you believe you have completed the task, call done().
 	};
 
 	const tools = [
-		...(existingIssueId ? [] : [createIssueTool]),
+		...(rootIssueId ? [] : [createIssueTool]),
 		linkThreadTool,
 		createSubissueTool,
-		createEmailDraftTool,
+		draftEmailTool,
+		draftReplyTool,
 		doneTool
 	];
 
@@ -565,10 +607,15 @@ When you believe you have completed the task, call done().
 				workspace_id: workspaceId,
 				thread_id: threadId,
 				latest_message_id: replyMessageId,
-				existing_issue_id: existingIssueId ?? null,
+				root_issue_id: rootIssueId ?? null,
+				thread_issue_id: threadIssueId ?? null,
+				related_issues: relatedIssues ?? [],
 				open_issues: openIssues,
 				vendors,
 				workspace_policy: policyText,
+				tenant_name: tenantName,
+				tenant_email: tenantEmail,
+				user_name: userName,
 				default_sender_email: defaultSenderEmail
 			})
 		}
@@ -616,7 +663,7 @@ When you believe you have completed the task, call done().
 		if (!toolCalls.length) {
 			messages.push({
 				role: 'assistant',
-				content: existingIssueId
+				content: rootIssueId
 					? 'You must call create_subissue or link_thread_to_issue.'
 					: 'You must call create_issue or link_thread_to_issue. Use create_issue if no clear match.'
 			});
@@ -673,10 +720,9 @@ When you believe you have completed the task, call done().
 				const statusValue = typeof args.status === 'string' ? args.status : 'todo';
 				const status = ['todo', 'in_progress', 'done'].includes(statusValue) ? statusValue : 'todo';
 				const reasoning = typeof args.reasoning === 'string' ? args.reasoning : '';
-				const parentIssueId =
-					typeof args.parent_issue_id === 'string'
-						? args.parent_issue_id
-						: (linkedIssueId ?? createdIssueId);
+				const requestedParent =
+					typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
+				const parentIssueId = requestedParent ?? linkedIssueId ?? createdIssueId;
 				if (!title || !parentIssueId) {
 					throw new Error('create_subissue missing title or parent_issue_id');
 				}
@@ -694,7 +740,99 @@ When you believe you have completed the task, call done().
 				result = { subissue_id: subissueId };
 			}
 
-			if (name === 'create_email_draft') {
+			if (name === 'draft_reply') {
+				const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
+				const messageId = typeof args.message_id === 'string' ? args.message_id.trim() : '';
+				const subject = typeof args.subject === 'string' ? args.subject : '';
+				const bodyText = typeof args.body === 'string' ? args.body : '';
+				const senderEmailToUse = defaultSenderEmail ? normalizeEmail(defaultSenderEmail) : '';
+				if (!issue || !messageId || !subject || !bodyText) {
+					throw new Error('draft_reply missing required fields');
+				}
+				if (!senderEmailToUse) {
+					throw new Error('draft_reply missing default_sender_email');
+				}
+
+				const { data: messageRow } = await supabase
+					.from('messages')
+					.select('id, thread_id')
+					.eq('id', messageId)
+					.maybeSingle();
+				if (!messageRow?.thread_id) {
+					throw new Error('draft_reply message not found');
+				}
+
+				const { data: threadRow } = await supabase
+					.from('threads')
+					.select('id, issue_id, participant_type, participant_id, tenant_id')
+					.eq('id', messageRow.thread_id)
+					.maybeSingle();
+				if (!threadRow?.id) {
+					throw new Error('draft_reply thread not found');
+				}
+				const issueIdForReply = threadRow.issue_id ?? issue;
+
+				let recipientEmail = '';
+				if (threadRow.participant_type === 'tenant') {
+					const tenantId = threadRow.tenant_id ?? threadRow.participant_id;
+					if (!tenantId) {
+						throw new Error('draft_reply missing tenant_id');
+					}
+					const { data: tenantRow } = await supabase
+						.from('tenants')
+						.select('email')
+						.eq('id', tenantId)
+						.maybeSingle();
+					recipientEmail = tenantRow?.email ?? '';
+				} else if (threadRow.participant_type === 'vendor') {
+					const vendorId = threadRow.participant_id;
+					if (!vendorId) {
+						throw new Error('draft_reply missing vendor_id');
+					}
+					const { data: vendorRow } = await supabase
+						.from('vendors')
+						.select('email')
+						.eq('id', vendorId)
+						.maybeSingle();
+					recipientEmail = vendorRow?.email ?? '';
+				} else {
+					throw new Error('draft_reply unsupported participant type');
+				}
+
+				const normalizedRecipient = recipientEmail
+					? normalizeEmail(extractEmail(recipientEmail))
+					: null;
+				if (!normalizedRecipient || !normalizedRecipient.includes('@')) {
+					throw new Error('draft_reply recipient invalid');
+				}
+
+				try {
+					await upsertEmailDraft({
+						issueId: issueIdForReply,
+						messageId,
+						senderEmail: senderEmailToUse,
+						recipientEmail: normalizedRecipient,
+						subject,
+						body: bodyText,
+						userId
+					});
+				} catch (err) {
+					await insertIngestionLog({
+						userId,
+						source: 'gmail-draft-error',
+						detail: JSON.stringify({
+							issue_id: issueIdForReply,
+							message_id: messageId,
+							error: err?.message ?? 'draft insert failed'
+						})
+					});
+				}
+				draftedIssueId = issueIdForReply;
+				issuedAction = true;
+				result = { ok: true };
+			}
+
+			if (name === 'draft_email') {
 				const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
 				const senderEmailToUse = defaultSenderEmail ? normalizeEmail(defaultSenderEmail) : '';
 				let recipient =
@@ -706,10 +844,10 @@ When you believe you have completed the task, call done().
 				const subject = typeof args.subject === 'string' ? args.subject : '';
 				const bodyText = typeof args.body === 'string' ? args.body : '';
 				if (!issue || !subject || !bodyText) {
-					throw new Error('create_email_draft missing required fields');
+					throw new Error('draft_email missing required fields');
 				}
 				if (!senderEmailToUse) {
-					throw new Error('create_email_draft missing default_sender_email');
+					throw new Error('draft_email missing default_sender_email');
 				}
 
 				let issueName = issueNameCache.get(issue) ?? '';
@@ -724,13 +862,10 @@ When you believe you have completed the task, call done().
 				}
 				const isScheduleSubissue = issueName.startsWith('Schedule ');
 				const rawMessageId = typeof args.message_id === 'string' ? args.message_id.trim() : '';
-				const messageId = rawMessageId ? rawMessageId : isScheduleSubissue ? null : replyMessageId;
-				if (!messageId && !isScheduleSubissue) {
-					throw new Error('create_email_draft missing message_id');
-				}
-				let normalizedRecipient = normalizeEmail(extractEmail(recipient));
+				const messageId = rawMessageId || null;
+				let normalizedRecipient = recipient ? normalizeEmail(extractEmail(recipient)) : null;
 				const normalizedSenderEmail = senderEmail ? normalizeEmail(senderEmail) : null;
-				if (!normalizedRecipient.includes('@')) {
+				if (normalizedRecipient && !normalizedRecipient.includes('@')) {
 					normalizedRecipient = null;
 				}
 				if (
@@ -739,20 +874,19 @@ When you believe you have completed the task, call done().
 					normalizedRecipient &&
 					normalizedRecipient === normalizedSenderEmail
 				) {
-					if (defaultSenderEmail) {
-						recipient = defaultSenderEmail;
-						normalizedRecipient = normalizeEmail(defaultSenderEmail);
-					} else {
-						await insertIngestionLog({
-							userId,
-							source: 'gmail-draft-error',
-							detail: JSON.stringify({
-								issue_id: issue,
-								message_id: messageId,
-								reason: 'schedule draft recipient matched sender and no default_sender_email'
-							})
-						});
-					}
+					normalizedRecipient = null;
+					await insertIngestionLog({
+						userId,
+						source: 'gmail-draft-error',
+						detail: JSON.stringify({
+							issue_id: issue,
+							message_id: messageId,
+							reason: 'schedule draft recipient matched sender'
+						})
+					});
+				}
+				if (!normalizedRecipient && !isScheduleSubissue) {
+					throw new Error('draft_email missing recipient_email');
 				}
 				try {
 					await upsertEmailDraft({
@@ -1057,6 +1191,23 @@ const processMessage = async ({
 			.maybeSingle();
 
 		let issueId = refreshedThread?.issue_id ?? threadRow.issue_id ?? null;
+		let rootIssueIdForAgent = issueId;
+		let relatedIssues = [];
+		if (issueId) {
+			const { data: issueRow } = await supabase
+				.from('issues')
+				.select('id, name, status, parent_id')
+				.eq('id', issueId)
+				.maybeSingle();
+			rootIssueIdForAgent = issueRow?.parent_id ?? issueRow?.id ?? issueId;
+			if (rootIssueIdForAgent) {
+				const { data: related } = await supabase
+					.from('issues')
+					.select('id, name, status, parent_id')
+					.or(`id.eq.${rootIssueIdForAgent},parent_id.eq.${rootIssueIdForAgent}`);
+				relatedIssues = related ?? [];
+			}
+		}
 
 		const { data: policyRow } = await supabase
 			.from('workspace_policies')
@@ -1064,6 +1215,12 @@ const processMessage = async ({
 			.eq('workspace_id', propertyRow.workspace_id)
 			.maybeSingle();
 		const policyText = policyRow?.policy_text ?? '';
+		const { data: userProfile } = await supabase
+			.from('users')
+			.select('name')
+			.eq('id', connection.user_id)
+			.maybeSingle();
+		const userName = userProfile?.name ?? 'Bedrock';
 		const created = await runIssueAgent({
 			subject: messageSubject,
 			body: cleanedBody,
@@ -1074,9 +1231,13 @@ const processMessage = async ({
 			userId: connection.user_id,
 			policyText,
 			tenantName: tenant.name ?? null,
+			tenantEmail: tenant.email ?? null,
+			userName,
 			defaultSenderEmail: connection.email ?? null,
 			replyMessageId: inboundMessageId,
-			existingIssueId: issueId
+			rootIssueId: rootIssueIdForAgent,
+			threadIssueId: issueId,
+			relatedIssues
 		});
 		issueId = created.issueId ?? issueId;
 

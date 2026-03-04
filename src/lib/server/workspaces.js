@@ -27,8 +27,17 @@ const getAvailableSlug = async (supabaseAdmin, baseSlug) => {
 /** @param {any} supabase @param {any} user */
 const ensureWorkspace = async (supabase, user) => {
 	if (!user) return null;
-	const name = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User';
-	await supabase.from('users').upsert({ id: user.id, name });
+	const fallbackName = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User';
+	const { data: existingUser } = await supabase
+		.from('users')
+		.select('name')
+		.eq('id', user.id)
+		.maybeSingle();
+	const resolvedName =
+		existingUser?.name && existingUser.name.trim() ? existingUser.name : fallbackName;
+	if (!existingUser?.name || !existingUser.name.trim()) {
+		await supabase.from('users').upsert({ id: user.id, name: resolvedName });
+	}
 	const { supabaseAdmin } = await import('$lib/supabaseAdmin');
 	const { data: existingWorkspace } = await supabaseAdmin
 		.from('workspaces')
@@ -49,7 +58,7 @@ const ensureWorkspace = async (supabase, user) => {
 			return existingMember.workspaces;
 		}
 
-		const workspaceName = `${name} Workspace`;
+		const workspaceName = `${resolvedName} Workspace`;
 		const baseSlug = slugify(workspaceName);
 		const slug = await getAvailableSlug(supabaseAdmin, baseSlug);
 		const { data: newWorkspace } = await supabaseAdmin
