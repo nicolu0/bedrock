@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { onDestroy } from 'svelte';
+	import { fade } from 'svelte/transition';
 
 	export let message;
 	export let draft = null;
@@ -83,7 +84,7 @@
 		if (toastTimeout) clearTimeout(toastTimeout);
 		toastTimeout = setTimeout(() => {
 			toastMessage = '';
-		}, 2400);
+		}, 3000);
 	};
 
 	const saveDraft = async () => {
@@ -194,7 +195,8 @@
 
 {#if toastMessage}
 	<div
-		class="fixed right-4 bottom-4 z-50 rounded-md bg-neutral-900 px-3 py-2 text-xs text-white shadow-lg"
+		transition:fade={{ duration: 100 }}
+		class="fixed right-4 bottom-4 z-50 rounded-md bg-neutral-900 px-3 py-2 text-xs text-white shadow-[0_2px_12px_rgba(0,0,0,0.18)]"
 	>
 		{toastMessage}
 	</div>
