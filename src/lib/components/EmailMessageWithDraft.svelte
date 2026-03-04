@@ -13,6 +13,8 @@
 	let toastMessage = '';
 	let toastTimeout;
 	let isExpanded = Boolean(draft);
+	let isQuotedExpanded = false;
+	let isSentQuotedExpanded = false;
 	let messageParts = { main: '', quoted: '' };
 	let sentParts = { main: '', quoted: '' };
 
@@ -32,6 +34,11 @@
 
 	$: if (draft) {
 		isExpanded = true;
+	}
+
+	$: if (!isExpanded) {
+		isQuotedExpanded = false;
+		isSentQuotedExpanded = false;
 	}
 
 	const showToast = (message) => {
@@ -178,18 +185,26 @@
 		<div class="px-4 pb-4 text-sm text-neutral-700">
 			<div class="break-words whitespace-pre-wrap">{messageParts.main}</div>
 			{#if messageParts.quoted}
-				<details class="mt-4">
-					<summary
-						class="inline-flex items-center justify-center gap-0.5 rounded-md px-1 py-2 transition hover:bg-neutral-100"
+				<div class="mt-4">
+					<button
+						type="button"
+						class="inline-flex h-4 w-4 items-center justify-center rounded-sm text-neutral-500 transition hover:bg-neutral-100"
+						on:click={() => (isQuotedExpanded = !isQuotedExpanded)}
+						aria-expanded={isQuotedExpanded}
+						aria-label={isQuotedExpanded ? 'Hide quoted text' : 'Show quoted text'}
 					>
-						<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-						<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-						<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-					</summary>
-					<div class="mt-3 border-l-2 border-neutral-200 pl-4 text-neutral-600">
-						<div class="break-words whitespace-pre-wrap">{messageParts.quoted}</div>
-					</div>
-				</details>
+						<span class="flex items-center gap-0.5" aria-hidden="true">
+							<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
+							<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
+							<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
+						</span>
+					</button>
+					{#if isQuotedExpanded}
+						<div class="mt-3 border-l-2 border-neutral-200 pl-4 text-neutral-600">
+							<div class="break-words whitespace-pre-wrap">{messageParts.quoted}</div>
+						</div>
+					{/if}
+				</div>
 			{/if}
 		</div>
 	{/if}
@@ -262,18 +277,26 @@
 				<div class="px-4 pb-4 text-sm text-neutral-700">
 					<div class="break-words whitespace-pre-wrap">{sentParts.main}</div>
 					{#if sentParts.quoted}
-						<details class="mt-4">
-							<summary
-								class="inline-flex items-center justify-center gap-0.5 rounded-md px-1 py-2 transition hover:bg-neutral-100"
+						<div class="mt-4">
+							<button
+								type="button"
+								class="inline-flex h-4 w-4 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100"
+								on:click={() => (isSentQuotedExpanded = !isSentQuotedExpanded)}
+								aria-expanded={isSentQuotedExpanded}
+								aria-label={isSentQuotedExpanded ? 'Hide quoted text' : 'Show quoted text'}
 							>
-								<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-								<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-								<span class="h-[3px] w-[3px] rounded-full bg-neutral-400"></span>
-							</summary>
-							<div class="mt-3 border-l-2 border-neutral-200 pl-4 text-neutral-600">
-								<div class="break-words whitespace-pre-wrap">{sentParts.quoted}</div>
-							</div>
-						</details>
+								<span class="flex items-center gap-1" aria-hidden="true">
+									<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
+									<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
+									<span class="h-0.5 w-0.5 rounded-full bg-neutral-400"></span>
+								</span>
+							</button>
+							{#if isSentQuotedExpanded}
+								<div class="mt-3 border-l-2 border-neutral-200 pl-4 text-neutral-600">
+									<div class="break-words whitespace-pre-wrap">{sentParts.quoted}</div>
+								</div>
+							{/if}
+						</div>
 					{/if}
 				</div>
 			{/if}
