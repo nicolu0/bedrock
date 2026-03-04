@@ -1,7 +1,10 @@
 <script>
 	// @ts-nocheck
+	import { onDestroy } from 'svelte';
+
 	export let message;
 	export let draft = null;
+	export let vendors = [];
 
 	let draftBody = draft?.body ?? '';
 	let saveTimeout;
@@ -17,6 +20,40 @@
 	let isSentQuotedExpanded = false;
 	let messageParts = { main: '', quoted: '' };
 	let sentParts = { main: '', quoted: '' };
+	let showVendorDropdown = false;
+	let vendorSearch = '';
+
+	$: recipients = draft?.recipient_email
+		? draft.recipient_email.split(',').map((e) => ({ email: e.trim() })).filter((r) => r.email)
+		: [];
+
+	$: recipientString = recipients.map((r) => r.email).join(', ');
+
+	$: filteredVendors = (vendors ?? []).filter(
+		(v) =>
+			!recipients.some((r) => r.email === v.email) &&
+			(v.name.toLowerCase().includes(vendorSearch.toLowerCase()) ||
+				v.email.toLowerCase().includes(vendorSearch.toLowerCase()))
+	);
+
+	const handleWindowClick = () => {
+		showVendorDropdown = false;
+	};
+
+	onDestroy(() => {});
+
+	const addVendor = (vendor) => {
+		if (!recipients.some((r) => r.email === vendor.email)) {
+			draft = { ...draft, recipient_email: recipientString ? `${recipientString}, ${vendor.email}` : vendor.email };
+		}
+		showVendorDropdown = false;
+		vendorSearch = '';
+	};
+
+	const removeRecipient = (idx) => {
+		const updated = recipients.filter((_, i) => i !== idx);
+		draft = { ...draft, recipient_email: updated.map((r) => r.email).join(', ') };
+	};
 
 	$: if (draft && (draft.message_id ?? draft.id) !== lastMessageKey) {
 		lastMessageKey = draft.message_id ?? draft.id;
@@ -27,7 +64,7 @@
 		}
 	}
 
-	$: if (textareaEl && draft) {
+	$: if (textareaEl) {
 		textareaEl.style.height = 'auto';
 		textareaEl.style.height = `${textareaEl.scrollHeight}px`;
 	}
@@ -72,7 +109,8 @@
 
 	const sendDraft = async () => {
 		if (!draft?.message_id && !draft?.issue_id) return;
-		if (!draft?.sender_email || !draft?.recipient_email) {
+		const effectiveRecipient = draft.message_id ? (draft.recipient_email ?? '') : recipientString;
+		if (!draft?.sender_email || !effectiveRecipient) {
 			showToast('Draft needs sender and recipient email.');
 			return;
 		}
@@ -83,7 +121,9 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(
-					draft.message_id ? { message_id: draft.message_id } : { issue_id: draft.issue_id }
+					draft.message_id
+						? { message_id: draft.message_id }
+						: { issue_id: draft.issue_id, recipient_email: recipientString }
 				)
 			});
 			if (response.ok) {
@@ -150,6 +190,8 @@
 	$: sentParts = splitEmailBody(sentMessage?.message ?? '');
 </script>
 
+<svelte:window on:click={handleWindowClick} />
+
 {#if toastMessage}
 	<div
 		class="fixed right-4 bottom-4 z-50 rounded-md bg-neutral-900 px-3 py-2 text-xs text-white shadow-lg"
@@ -209,12 +251,63 @@
 		</div>
 	{/if}
 	{#if draft && !isSent}
-		<div class="border-t border-neutral-100 bg-white px-3 py-2">
-			<div class="flex items-center gap-2 text-xs text-neutral-400">
-				<span class="text-neutral-500">To</span>
-				<span>{draft.recipient_email ?? ''}</span>
+		<div class="border-t border-neutral-100 bg-white px-4 py-3">
+			<div class="flex flex-wrap items-center gap-1.5 text-xs">
+				<span class="shrink-0 font-semibold text-neutral-700">To</span>
+				{#if draft.message_id}
+					<span class="text-neutral-500">{draft.recipient_email ?? ''}</span>
+				{:else}
+					{#each recipients as recipient, i}
+						<span class="inline-flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 text-neutral-700">
+							{recipient.email}
+							<button type="button" class="text-neutral-400 hover:text-neutral-600" on:click={() => removeRecipient(i)}>
+								<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+									<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+								</svg>
+							</button>
+						</span>
+					{/each}
+					<div class="relative">
+						<button
+							type="button"
+							class="inline-flex h-5 w-5 items-center justify-center rounded bg-neutral-100 text-neutral-500 hover:bg-neutral-200 transition"
+							on:click|stopPropagation={() => { showVendorDropdown = !showVendorDropdown; vendorSearch = ''; }}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+								<path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+							</svg>
+						</button>
+						{#if showVendorDropdown}
+							<div class="absolute left-0 top-full z-20 mt-1 w-56 rounded-md border border-neutral-200 bg-white shadow-md">
+								<div class="border-b border-neutral-100 px-2 py-1.5">
+									<input
+										type="text"
+										class="w-full bg-transparent text-xs outline-none placeholder:text-neutral-400"
+										placeholder="Search vendors..."
+										bind:value={vendorSearch}
+										on:click|stopPropagation
+									/>
+								</div>
+								<div class="max-h-40 overflow-y-auto">
+									{#each filteredVendors as vendor}
+										<button
+											type="button"
+											class="flex w-full flex-col items-start px-3 py-2 text-left text-xs hover:bg-neutral-50"
+											on:click={() => addVendor(vendor)}
+										>
+											<span class="font-medium text-neutral-800">{vendor.name}</span>
+											<span class="text-neutral-400">{vendor.email}</span>
+										</button>
+									{:else}
+										<p class="px-3 py-2 text-xs text-neutral-400">No vendors found</p>
+									{/each}
+								</div>
+							</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
-			<div class="mt-3">
+			<div class="mt-3 border-t border-neutral-100 pt-3">
 				<textarea
 					class="w-full resize-none border-0 bg-transparent p-0 text-sm text-neutral-700 ring-0 outline-none focus:ring-0 focus:outline-none"
 					rows="2"
