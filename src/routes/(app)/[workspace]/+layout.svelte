@@ -8,6 +8,7 @@
 	import { ensureIssuesCache, issuesCache, applyIssueInsert, applyIssueDelete, updateIssueStatusInListCache, updateIssueFieldsInListCache } from '$lib/stores/issuesCache';
 	import { ensureNotificationsCache, addNotificationToCache, updateNotificationInCache } from '$lib/stores/notificationsCache';
 	import { ensureMembersCache } from '$lib/stores/membersCache';
+	import { ensureVendorsCache } from '$lib/stores/vendorsCache';
 	import { ensureActivityCache, applyMessageDelta, applyDraftDelta, removeMessageFromCache, removeDraftFromCache } from '$lib/stores/activityCache';
 	import { updateIssueStatusInDetailCache, updateIssueFieldsInDetailCache } from '$lib/stores/issueDetailCache.js';
 	import { ensureActivityLogsCache, applyActivityLogDelta, removeActivityLogFromCache } from '$lib/stores/activityLogsCache';
@@ -50,6 +51,7 @@
 		ensureIssuesCache(workspaceSlug);
 		ensureNotificationsCache(workspaceSlug);
 		ensureMembersCache(workspaceSlug);
+		ensureVendorsCache(workspaceSlug);
 		ensureActivityCache(workspaceSlug);
 		ensureActivityLogsCache(workspaceSlug);
 	}

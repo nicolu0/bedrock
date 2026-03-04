@@ -1091,10 +1091,10 @@ export const actions = {
 			return { actionId };
 		}
 
+		const vendorEmailToForm = form.get('vendor_email_to');
 		const vendorEmailTo =
-			actionRow.vendor_email_to && actionRow.vendor_email_to.trim()
-				? actionRow.vendor_email_to.trim()
-				: null;
+			(vendorEmailToForm != null ? vendorEmailToForm : (actionRow.vendor_email_to ?? '')).trim() ||
+			null;
 		if (vendorEmailTo) {
 			if (!effectiveEmailBody) {
 				return fail(400, { error: 'Action has no email body.' });

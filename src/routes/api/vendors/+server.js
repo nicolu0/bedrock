@@ -15,9 +15,10 @@ export const GET = async ({ locals, url }) => {
 	}
 
 	const { data: vendors } = await supabaseAdmin
-		.from('vendors')
-		.select('id, name, email, trade, note, created_at')
+		.from('people')
+		.select('id, name, email, trade, notes, created_at')
 		.eq('workspace_id', workspace.id)
+		.eq('role', 'vendor')
 		.order('name', { ascending: true });
 
 	return json(vendors ?? []);
@@ -37,9 +38,9 @@ export const POST = async ({ locals, request }) => {
 	}
 
 	const { data, error } = await supabaseAdmin
-		.from('vendors')
-		.insert({ workspace_id: workspace.id, name, email, trade, note })
-		.select('id, name, email, trade, note, created_at')
+		.from('people')
+		.insert({ workspace_id: workspace.id, name, email, trade, notes: note, role: 'vendor' })
+		.select('id, name, email, trade, notes, created_at')
 		.single();
 
 	if (error) {
@@ -63,11 +64,11 @@ export const PATCH = async ({ locals, request }) => {
 	}
 
 	const { data, error } = await supabaseAdmin
-		.from('vendors')
-		.update({ name, email, trade, note, updated_at: new Date().toISOString() })
+		.from('people')
+		.update({ name, email, trade, notes: note, updated_at: new Date().toISOString() })
 		.eq('id', id)
 		.eq('workspace_id', workspace.id)
-		.select('id, name, email, trade, note, created_at')
+		.select('id, name, email, trade, notes, created_at')
 		.single();
 
 	if (error) {

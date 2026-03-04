@@ -48,6 +48,7 @@ export const POST = async ({ locals, request }) => {
 	const body = await request.json().catch(() => null);
 	const messageId = body?.message_id;
 	const issueId = body?.issue_id;
+	const recipientOverride = typeof body?.recipient_email === 'string' ? body.recipient_email.trim() : null;
 	if (!messageId && !issueId) return json({ error: 'Invalid payload' }, { status: 400 });
 
 	const draftQuery = supabaseAdmin
@@ -63,7 +64,8 @@ export const POST = async ({ locals, request }) => {
 	if (!draft.sender_email) {
 		return json({ error: 'Sender email required' }, { status: 400 });
 	}
-	if (!draft.recipient_email) {
+	const effectiveRecipient = recipientOverride || draft.recipient_email || null;
+	if (!effectiveRecipient) {
 		return json({ error: 'Recipient email required' }, { status: 400 });
 	}
 
@@ -170,9 +172,16 @@ export const POST = async ({ locals, request }) => {
 		}
 	}
 
+	if (recipientOverride && recipientOverride !== draft.recipient_email) {
+		await supabaseAdmin
+			.from('email_drafts')
+			.update({ recipient_email: recipientOverride })
+			.eq('id', draft.id);
+	}
+
 	const rawEmail = [
 		`From: ${connection.email}`,
-		`To: ${draft.recipient_email}`,
+		`To: ${effectiveRecipient}`,
 		`Subject: ${subjectLine}`,
 		...replyHeaders,
 		'MIME-Version: 1.0',
@@ -203,11 +212,12 @@ export const POST = async ({ locals, request }) => {
 
 	let outboundThreadId = message?.thread_id ?? null;
 	if (!messageId) {
+		const primaryRecipient = effectiveRecipient.split(',')[0].trim();
 		const { data: vendorRow } = await supabaseAdmin
 			.from('vendors')
 			.select('id')
 			.eq('workspace_id', workspaceId)
-			.ilike('email', draft.recipient_email)
+			.ilike('email', primaryRecipient)
 			.maybeSingle();
 		const { data: createdThread } = await supabaseAdmin
 			.from('threads')
