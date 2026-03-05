@@ -3,55 +3,6 @@ import { redirect, error } from '@sveltejs/kit';
 import { ensureWorkspace } from '$lib/server/workspaces';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
-const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, userId) => {
-	const buildQuery = (client) => {
-		let q = client
-			.from('properties')
-			.select('id, name, address, city, state, postal_code, country, owner_id')
-			.eq('workspace_id', workspaceId)
-			.order('name', { ascending: true });
-		if (userRole === 'owner') {
-			q = q.eq('owner_id', userId);
-		}
-		return q;
-	};
-	const { data: properties, error: propertiesError } = await buildQuery(supabase);
-	if (!propertiesError) return properties ?? [];
-	const { data: adminProperties } = await buildQuery(adminClient);
-	return adminProperties ?? [];
-};
-
-const loadUnitsList = async (supabase, adminClient, workspaceId) => {
-	const { data: units, error: unitsError } = await supabase
-		.from('units')
-		.select(
-			'id, name, property_id, tenants(id, name, email, unit_id), properties!inner(workspace_id)'
-		)
-		.eq('properties.workspace_id', workspaceId)
-		.order('name', { ascending: true });
-	if (!unitsError) {
-		return (units ?? []).map((unit) => ({
-			id: unit.id,
-			name: unit.name,
-			tenant: (unit.tenants ?? [])[0] ?? null,
-			property_id: unit.property_id
-		}));
-	}
-	const { data: adminUnits } = await adminClient
-		.from('units')
-		.select(
-			'id, name, property_id, tenants(id, name, email, unit_id), properties!inner(workspace_id)'
-		)
-		.eq('properties.workspace_id', workspaceId)
-		.order('name', { ascending: true });
-	return (adminUnits ?? []).map((unit) => ({
-		id: unit.id,
-		name: unit.name,
-		tenant: (unit.tenants ?? [])[0] ?? null,
-		property_id: unit.property_id
-	}));
-};
-
 export const load = async ({ locals, params }) => {
 	if (!locals.user) {
 		throw redirect(303, '/');
@@ -117,4 +68,52 @@ export const load = async ({ locals, params }) => {
 		throw error(404, "This workspace doesn't exist.");
 	}
 	throw error(403, "You don't have access to this workspace.");
+};
+const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, userId) => {
+	const buildQuery = (client) => {
+		let q = client
+			.from('properties')
+			.select('id, name, address, city, state, postal_code, country, owner_id')
+			.eq('workspace_id', workspaceId)
+			.order('name', { ascending: true });
+		if (userRole === 'owner') {
+			q = q.eq('owner_id', userId);
+		}
+		return q;
+	};
+	const { data: properties, error: propertiesError } = await buildQuery(supabase);
+	if (!propertiesError) return properties ?? [];
+	const { data: adminProperties } = await buildQuery(adminClient);
+	return adminProperties ?? [];
+};
+
+const loadUnitsList = async (supabase, adminClient, workspaceId) => {
+	const { data: units, error: unitsError } = await supabase
+		.from('units')
+		.select(
+			'id, name, property_id, tenants(id, name, email, unit_id), properties!inner(workspace_id)'
+		)
+		.eq('properties.workspace_id', workspaceId)
+		.order('name', { ascending: true });
+	if (!unitsError) {
+		return (units ?? []).map((unit) => ({
+			id: unit.id,
+			name: unit.name,
+			tenant: (unit.tenants ?? [])[0] ?? null,
+			property_id: unit.property_id
+		}));
+	}
+	const { data: adminUnits } = await adminClient
+		.from('units')
+		.select(
+			'id, name, property_id, tenants(id, name, email, unit_id), properties!inner(workspace_id)'
+		)
+		.eq('properties.workspace_id', workspaceId)
+		.order('name', { ascending: true });
+	return (adminUnits ?? []).map((unit) => ({
+		id: unit.id,
+		name: unit.name,
+		tenant: (unit.tenants ?? [])[0] ?? null,
+		property_id: unit.property_id
+	}));
 };

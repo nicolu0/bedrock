@@ -48,7 +48,6 @@
 			{#each tabs as tab}
 				<a
 					href={`${basePath}/people${tab.href ? `/${tab.href}` : ''}`}
-					data-sveltekit-preload-data="hover"
 					class={`rounded-md border border-neutral-200 px-2 py-1 text-xs transition ${
 						(currentPath === `${basePath}/people` && tab.id === 'all') ||
 						currentPath === `${basePath}/people/${tab.href}`

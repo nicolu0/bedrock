@@ -6,18 +6,18 @@
 	import { fade, scale } from 'svelte/transition';
 	import {
 		propertiesCache,
-		mergePropertiesIntoCache,
 		addPropertyToCache,
 		updatePropertyInCache,
 		replacePropertyInCache,
 		removePropertyFromCache
 	} from '$lib/stores/propertiesCache.js';
-
-	export let data;
-	$: propertiesPromise = data?.properties ?? Promise.resolve([]);
-	$: ownersPromise = data?.owners ?? Promise.resolve([]);
+	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
 
 	$: workspaceSlug = $page.params.workspace;
+
+	$: if (browser && workspaceSlug) {
+		ensurePeopleCache(workspaceSlug);
+	}
 
 	$: properties =
 		$propertiesCache.workspace === workspaceSlug && $propertiesCache.data != null
@@ -25,16 +25,10 @@
 			: null;
 
 	let owners = null;
-
-	$: if (browser && data.properties) {
-		data.properties.then((v) => mergePropertiesIntoCache(workspaceSlug, v));
-	}
-
-	$: if (browser && data.owners) {
-		data.owners.then((v) => {
-			owners = v ?? [];
-		});
-	}
+	$: owners =
+		$peopleCache.workspace === workspaceSlug && Array.isArray($peopleCache.data)
+			? $peopleCache.data.filter((person) => person?.role === 'owner')
+			: null;
 
 	let showNewPropertyModal = false;
 	let newPropertyName = '';
@@ -188,28 +182,68 @@
 		}
 	}
 
-	const enhanceCreateProperty = () => {
+	const enhanceCreateProperty = ({ formData }) => {
+		createPropertyError = '';
+		const tempId = `temp-${Date.now()}`;
+		const optimistic = {
+			id: tempId,
+			name: newPropertyName.trim(),
+			address: newPropertyAddress.trim(),
+			city: newPropertyCity.trim(),
+			state: newPropertyState.trim(),
+			postal_code: newPropertyPostalCode.trim(),
+			country: newPropertyCountry.trim(),
+			owner_id: newPropertyOwnerId?.trim() ? newPropertyOwnerId.trim() : null
+		};
+		addPropertyToCache(optimistic);
 		return async ({ result }) => {
 			if (result?.type === 'success') {
+				const created = result.data?.property;
+				if (created?.id) {
+					replacePropertyInCache(tempId, { ...optimistic, ...created });
+				}
 				closeNewPropertyModal();
-				await invalidateAll();
 				return;
 			}
-			if (result?.type === 'failure') {
-				createPropertyError = result.data?.error ?? 'Unable to create property.';
-			}
+			removePropertyFromCache(tempId);
+			createPropertyError = result?.data?.error ?? 'Unable to create property.';
 		};
 	};
-	const enhanceUpdateProperty = () => {
+	const enhanceUpdateProperty = ({ formData }) => {
+		updatePropertyError = '';
+		if (!editingProperty?.id) {
+			return async ({ result }) => {
+				if (result?.type === 'failure') {
+					updatePropertyError = result.data?.error ?? 'Unable to update property.';
+				}
+			};
+		}
+		const previous = { ...editingProperty };
+		const optimistic = {
+			...editingProperty,
+			name: editPropertyName.trim(),
+			address: editPropertyAddress.trim(),
+			city: editPropertyCity.trim(),
+			state: editPropertyState.trim(),
+			postal_code: editPropertyPostalCode.trim(),
+			country: editPropertyCountry.trim(),
+			owner_id: editPropertyOwnerId?.trim() ? editPropertyOwnerId.trim() : null
+		};
+		updatePropertyInCache(optimistic);
+		closeEditPropertyModal();
 		return async ({ result }) => {
 			if (result?.type === 'success') {
-				closeEditPropertyModal();
-				await invalidateAll();
+				const updated = result.data?.property;
+				if (updated?.id) {
+					updatePropertyInCache({ ...optimistic, ...updated });
+				}
 				return;
 			}
-			if (result?.type === 'failure') {
-				updatePropertyError = result.data?.error ?? 'Unable to update property.';
+			if (previous?.id) {
+				updatePropertyInCache(previous);
 			}
+			openEditPropertyModal(previous);
+			updatePropertyError = result?.data?.error ?? 'Unable to update property.';
 		};
 	};
 	function getInitials(name) {
@@ -247,48 +281,55 @@
 		<button class="rounded-md px-2 py-1 text-xs text-neutral-400">+ New view</button>
 	</div>
 	<div>
-		<div class="grid grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr] gap-4 px-6 pb-2 text-xs text-neutral-500">
-			<div>Name</div>
-			<div>Units</div>
-			<div>Issues</div>
-			<div>Owner</div>
-		</div>
-		<div class="border-t border-neutral-200"></div>
-		<div>
-			{#await Promise.all([propertiesPromise, ownersPromise])}
-				<div class="px-6 py-3 text-xs text-neutral-400">Loading properties...</div>
-			{:then [properties, owners]}
-				{#if properties?.length}
-					{#each properties as property}
-						<div
-							class="grid cursor-pointer grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
-							on:click={(e) => {
-								e.currentTarget.blur();
-								openEditPropertyModal(property);
-							}}
-							role="button"
-							tabindex="0"
-							on:keydown={(e) => e.key === 'Enter' && openEditPropertyModal(property)}
-						>
-							<div class="truncate">{property.name}</div>
-							<div class="text-neutral-500">--</div>
-							<div class="text-neutral-500">--</div>
-							<div class="flex items-center">
-								<div
-									class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600"
-								>
-									{getInitials(getOwnerLabel(owners, property.owner_id))}
-								</div>
+		{#if properties !== null}
+			{#if properties?.length}
+				<div
+					class="grid grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr] gap-4 px-6 pb-2 text-xs text-neutral-500"
+				>
+					<div>Name</div>
+					<div>Units</div>
+					<div>Issues</div>
+					<div>Owner</div>
+				</div>
+				<div class="border-t border-neutral-200"></div>
+				{#each properties as property}
+					<div
+						class="grid cursor-pointer grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
+						on:click={(e) => {
+							e.currentTarget.blur();
+							openEditPropertyModal(property);
+						}}
+						role="button"
+						tabindex="0"
+						on:keydown={(e) => e.key === 'Enter' && openEditPropertyModal(property)}
+					>
+						<div class="truncate">{property.name}</div>
+						<div class="text-neutral-500">--</div>
+						<div class="text-neutral-500">--</div>
+						<div class="flex items-center">
+							<div
+								class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600"
+							>
+								{getInitials(getOwnerLabel(owners, property.owner_id, property.owner?.name))}
 							</div>
 						</div>
-					{/each}
-				{:else}
-					<div class="px-6 py-3 text-sm text-neutral-400">No properties yet.</div>
-				{/if}
-			{:catch}
-				<div class="px-6 py-3 text-sm text-neutral-400">Unable to load properties.</div>
-			{/await}
-		</div>
+					</div>
+				{/each}
+			{:else}
+				<div class="px-6 py-3 text-sm text-neutral-400">No properties yet.</div>
+			{/if}
+		{:else}
+			<div
+				class="grid grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr] gap-4 px-6 pb-2 text-xs text-neutral-500"
+			>
+				<div>Name</div>
+				<div>Units</div>
+				<div>Issues</div>
+				<div>Owner</div>
+			</div>
+			<div class="border-t border-neutral-200"></div>
+			<div class="px-6 py-3 text-xs text-neutral-400">Loading properties...</div>
+		{/if}
 	</div>
 </div>
 
@@ -342,13 +383,7 @@
 						required
 						type="text"
 					/>
-					{#await ownersPromise}
-						<div
-							class="rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-400"
-						>
-							Loading owners...
-						</div>
-					{:then owners}
+					{#if owners !== null}
 						<div class="owner-dropdown relative">
 							<label class="text-xs text-neutral-500">Owner</label>
 							<button
@@ -416,13 +451,19 @@
 								</div>
 							{/if}
 						</div>
-					{:catch}
+					{:else if $peopleCache.error}
 						<div
 							class="rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-400"
 						>
 							Unable to load owners.
 						</div>
-					{/await}
+					{:else}
+						<div
+							class="rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-400"
+						>
+							Loading owners...
+						</div>
+					{/if}
 					<div class="mt-2 text-xs text-neutral-500">Address</div>
 					<div class="address-wrapper relative">
 						<input
@@ -567,13 +608,7 @@
 						required
 						type="text"
 					/>
-					{#await ownersPromise}
-						<div
-							class="rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-400"
-						>
-							Loading owners...
-						</div>
-					{:then owners}
+					{#if owners !== null}
 						<div class="owner-dropdown relative">
 							<label class="text-xs text-neutral-500">Owner</label>
 							<button
@@ -643,13 +678,19 @@
 								</div>
 							{/if}
 						</div>
-					{:catch}
+					{:else if $peopleCache.error}
 						<div
 							class="rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-400"
 						>
 							Unable to load owners.
 						</div>
-					{/await}
+					{:else}
+						<div
+							class="rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-400"
+						>
+							Loading owners...
+						</div>
+					{/if}
 					<div class="mt-2 text-xs text-neutral-500">Address</div>
 					<div class="address-wrapper relative">
 						<input

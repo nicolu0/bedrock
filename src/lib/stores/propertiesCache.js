@@ -15,6 +15,8 @@ const initialState = {
 
 export const propertiesCache = writable(initialState);
 
+let inFlight = null;
+
 const readSessionCache = () => {
 	if (!browser) return null;
 	try {
@@ -69,6 +71,103 @@ export const primePropertiesCache = (workspaceSlug, list) => {
 	const payload = { workspace: workspaceSlug, data, fetchedAt: Date.now() };
 	writeSessionCache(payload);
 	propertiesCache.set({ ...initialState, ...payload });
+};
+
+export const ensurePropertiesCache = async (workspaceSlug, options = {}) => {
+	if (!workspaceSlug) return null;
+	if (!browser) return null;
+	const fetcher = options.fetch ?? fetch;
+
+	if (isHardReload()) {
+		clearSessionCache();
+	}
+
+	const now = Date.now();
+	let currentState;
+	propertiesCache.update((state) => {
+		currentState = state;
+		return state;
+	});
+
+	if (
+		currentState?.data &&
+		currentState.workspace === workspaceSlug &&
+		now - currentState.fetchedAt < CACHE_TTL
+	) {
+		return currentState.data;
+	}
+
+	const sessionCached = readSessionCache();
+	const sessionValid = Array.isArray(sessionCached?.data);
+	if (
+		sessionCached?.data &&
+		sessionCached.workspace === workspaceSlug &&
+		now - sessionCached.fetchedAt < CACHE_TTL &&
+		sessionValid
+	) {
+		propertiesCache.set({
+			workspace: workspaceSlug,
+			data: sessionCached.data,
+			loading: false,
+			error: null,
+			fetchedAt: sessionCached.fetchedAt
+		});
+		return sessionCached.data;
+	}
+	if (sessionCached && !sessionValid) {
+		clearSessionCache();
+	}
+
+	if (inFlight) return inFlight;
+
+	propertiesCache.set({
+		workspace: workspaceSlug,
+		data: currentState?.data ?? null,
+		loading: true,
+		error: null,
+		fetchedAt: currentState?.fetchedAt ?? 0
+	});
+
+	inFlight = (async () => {
+		try {
+			const response = await fetcher(`/api/properties-cache?workspace=${workspaceSlug}`);
+			if (!response.ok) {
+				throw new Error('Properties cache fetch failed');
+			}
+			const data = await response.json();
+			const payload = {
+				workspace: workspaceSlug,
+				data,
+				fetchedAt: Date.now()
+			};
+			if (Array.isArray(data)) {
+				propertiesCache.set({
+					workspace: workspaceSlug,
+					data,
+					loading: false,
+					error: null,
+					fetchedAt: payload.fetchedAt
+				});
+				writeSessionCache(payload);
+				return data;
+			}
+			propertiesCache.update((state) => ({ ...state, loading: false, error: null }));
+			return currentState?.data;
+		} catch (error) {
+			propertiesCache.set({
+				workspace: workspaceSlug,
+				data: null,
+				loading: false,
+				error,
+				fetchedAt: 0
+			});
+			return null;
+		} finally {
+			inFlight = null;
+		}
+	})();
+
+	return inFlight;
 };
 
 export const mergePropertiesIntoCache = (workspaceSlug, serverList) => {

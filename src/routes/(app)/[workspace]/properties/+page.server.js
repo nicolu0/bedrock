@@ -157,18 +157,3 @@ export const actions = {
 		return { property: data };
 	}
 };
-
-export const load = async ({ locals, params }) => {
-	if (!locals.user) throw redirect(303, '/');
-	const workspace = await resolveWorkspace(locals.user.id, params.workspace);
-	if (!workspace?.id) {
-		return { owners: [] };
-	}
-	const { data: owners } = await supabaseAdmin
-		.from('people')
-		.select('id, name, user_id')
-		.eq('workspace_id', workspace.id)
-		.eq('role', 'owner')
-		.order('name', { ascending: true });
-	return { owners: owners ?? [] };
-};

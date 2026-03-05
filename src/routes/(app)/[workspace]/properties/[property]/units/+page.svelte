@@ -1,18 +1,24 @@
 <script>
 	// @ts-nocheck
-	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
+	import { page } from '$app/stores';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { fade, scale } from 'svelte/transition';
+	import { unitsCache } from '$lib/stores/unitsCache.js';
+	import { propertiesCache } from '$lib/stores/propertiesCache.js';
 
 	export let data;
-	$: propertiesPromise = data?.properties ?? Promise.resolve([]);
-	$: unitsPromise = data?.units ?? Promise.resolve([]);
+	$: workspaceSlug = $page.params.workspace;
 	$: propertySlug = $page.params.property;
-	$: propertyUnitsPromise = (async () => {
-		const properties = await propertiesPromise;
-		const units = await unitsPromise;
+	$: units =
+		$unitsCache.workspace === workspaceSlug && $unitsCache.data != null ? $unitsCache.data : null;
+	$: properties =
+		$propertiesCache.workspace === workspaceSlug && $propertiesCache.data != null
+			? $propertiesCache.data
+			: null;
+	$: propertyUnits = (() => {
+		if (!units || !properties) return null;
 		const match = (properties ?? []).find((property) => {
 			const slug = property.name
 				.toLowerCase()
@@ -104,19 +110,18 @@
 
 <div class="space-y-2">
 	<div>
-		{#await propertyUnitsPromise}
-			<div class="border-t border-neutral-200"></div>
-			<div class="px-6 py-3 text-xs text-neutral-400">Loading units...</div>
-		{:then units}
-			{#if units?.length}
-				<div class="grid grid-cols-[1.6fr_0.6fr_0.4fr] gap-4 px-6 py-2 text-xs text-neutral-500 border-t border-neutral-200">
+		{#if propertyUnits !== null}
+			{#if propertyUnits?.length}
+				<div
+					class="grid grid-cols-[1.6fr_0.6fr_0.4fr] gap-4 border-t border-neutral-200 px-6 py-2 text-xs text-neutral-500"
+				>
 					<div>Name</div>
 					<div>Issues</div>
 					<div>Tenant</div>
 				</div>
 				<div class="border-t border-neutral-200"></div>
 				<div>
-					{#each units as unit}
+					{#each propertyUnits as unit}
 						<div
 							class="grid cursor-pointer grid-cols-[1.6fr_0.6fr_0.4fr] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
 							on:click={(e) => {
@@ -139,10 +144,10 @@
 				<div class="border-t border-neutral-200"></div>
 				<div class="px-6 py-3 text-sm text-neutral-400">No units yet.</div>
 			{/if}
-		{:catch}
+		{:else}
 			<div class="border-t border-neutral-200"></div>
-			<div class="px-6 py-3 text-sm text-neutral-400">Unable to load units.</div>
-		{/await}
+			<div class="px-6 py-3 text-xs text-neutral-400">Loading units...</div>
+		{/if}
 	</div>
 </div>
 
