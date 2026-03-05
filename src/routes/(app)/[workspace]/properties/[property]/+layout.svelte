@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
+	import { propertiesCache } from '$lib/stores/propertiesCache.js';
 	import { setContext } from 'svelte';
 	import { writable } from 'svelte/store';
 
@@ -12,24 +13,25 @@
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: propertySlug = $page.params.property;
 	$: currentPath = $page.url.pathname;
-	$: propertiesPromise = data?.properties ?? Promise.resolve([]);
+	$: properties =
+		$propertiesCache.workspace === workspaceSlug && $propertiesCache.data != null
+			? $propertiesCache.data
+			: null;
 	$: propertyTitle = propertySlug
 		? propertySlug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 		: 'Property';
-	$: if (propertiesPromise && propertySlug) {
-		propertiesPromise.then((properties) => {
-			const match = (properties ?? []).find((property) => {
-				const slug = property.name
-					.toLowerCase()
-					.trim()
-					.replace(/[^a-z0-9]+/g, '-')
-					.replace(/(^-|-$)+/g, '');
-				return slug === propertySlug;
-			});
-			if (match?.name) {
-				propertyTitle = match.name;
-			}
+	$: if (properties && propertySlug) {
+		const match = (properties ?? []).find((property) => {
+			const slug = property.name
+				.toLowerCase()
+				.trim()
+				.replace(/[^a-z0-9]+/g, '-')
+				.replace(/(^-|-$)+/g, '');
+			return slug === propertySlug;
 		});
+		if (match?.name) {
+			propertyTitle = match.name;
+		}
 	}
 	const tabs = [
 		{ id: 'issues', label: 'All issues', href: '' },
@@ -60,7 +62,6 @@
 			{#each tabs as tab}
 				<a
 					href={`${basePath}/properties/${propertySlug}${tab.href ? `/${tab.href}` : ''}`}
-					data-sveltekit-preload-data="hover"
 					class={`rounded-md border border-neutral-200 px-2 py-1 text-xs transition ${
 						(currentPath === `${basePath}/properties/${propertySlug}` && tab.id === 'issues') ||
 						currentPath === `${basePath}/properties/${propertySlug}/${tab.href}`

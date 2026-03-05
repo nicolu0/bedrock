@@ -31,7 +31,7 @@ export const load = async ({ parent, locals }) => {
 		if (!workspace?.id) return [];
 		const { data } = await supabaseAdmin
 			.from('people')
-			.select('user_id, users(name)')
+			.select('user_id, name, role, users(name, id)')
 			.eq('workspace_id', workspace.id)
 			.in('role', ['admin', 'member', 'owner']);
 		return data ?? [];

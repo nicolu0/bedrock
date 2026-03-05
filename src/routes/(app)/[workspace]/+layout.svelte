@@ -3,8 +3,10 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import { propertiesCache, primePropertiesCache } from '$lib/stores/propertiesCache.js';
+	import { unitsCache, primeUnitsCache } from '$lib/stores/unitsCache.js';
+	import { goto } from '$app/navigation';
 	import {
 		ensureIssuesCache,
 		issuesCache,
@@ -54,7 +56,44 @@
 			currentPath === `${basePath}/${item.href}` ||
 			currentPath.startsWith(`${basePath}/${item.href}/`)
 	);
-	$: propertiesPromise = data?.properties ?? Promise.resolve([]);
+	$: properties =
+		$propertiesCache.workspace === workspaceSlug && $propertiesCache.data != null
+			? $propertiesCache.data
+			: null;
+
+	let _primedPropertiesForWorkspace = null;
+	$: if (browser && data.properties && _primedPropertiesForWorkspace !== workspaceSlug) {
+		_primedPropertiesForWorkspace = workspaceSlug;
+		const _ws = workspaceSlug;
+		const prime = (list) => {
+			const cache = get(propertiesCache);
+			if (!cache.data || cache.workspace !== _ws) {
+				primePropertiesCache(_ws, Array.isArray(list) ? list : []);
+			}
+		};
+		if (data.properties instanceof Promise) {
+			data.properties.then(prime);
+		} else {
+			prime(data.properties);
+		}
+	}
+
+	let _primedUnitsForWorkspace = null;
+	$: if (browser && data.units && _primedUnitsForWorkspace !== workspaceSlug) {
+		_primedUnitsForWorkspace = workspaceSlug;
+		const _ws = workspaceSlug;
+		const prime = (list) => {
+			const cache = get(unitsCache);
+			if (!cache.data || cache.workspace !== _ws) {
+				primeUnitsCache(_ws, Array.isArray(list) ? list : []);
+			}
+		};
+		if (data.units instanceof Promise) {
+			data.units.then(prime);
+		} else {
+			prime(data.units);
+		}
+	}
 	const navItems = [
 		{ id: 'inbox', label: 'Inbox', href: 'inbox' },
 		{ id: 'my-issues', label: 'My issues', href: 'my-issues' },
@@ -345,7 +384,6 @@
 							</div>
 							<a
 								href={`${basePath}/search`}
-								data-sveltekit-preload-data="hover"
 								class="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
 							>
 								<svg
@@ -395,30 +433,24 @@
 									<div class="mt-1 space-y-1">
 										<a
 											href={`${basePath}/${propertiesItem.href}`}
-											data-sveltekit-preload-data="hover"
 											class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm font-normal transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
 										>
 											<span>All properties</span>
 										</a>
-										{#await propertiesPromise}
-											<div class="px-2 py-1.5 text-xs text-neutral-400">Loading properties...</div>
-										{:then properties}
+										{#if properties !== null}
 											{#if properties?.length}
 												{#each properties as property}
 													<a
 														href={`${basePath}/${propertiesItem.href}/${slugify(property.name)}`}
-														data-sveltekit-preload-data="hover"
 														class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm font-normal transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
 													>
 														<span class="truncate">{property.name}</span>
 													</a>
 												{/each}
 											{/if}
-										{:catch}
-											<div class="px-2 py-1.5 text-xs text-neutral-400">
-												Unable to load properties.
-											</div>
-										{/await}
+										{:else}
+											<div class="px-2 py-1.5 text-xs text-neutral-400">Loading properties...</div>
+										{/if}
 									</div>
 								{/if}
 							</div>

@@ -469,7 +469,7 @@
 			.replace(/[^a-z0-9]+/g, '-')
 			.replace(/^-+|-+$/g, '');
 
-	const statusCycle = ['in_progress', 'todo', 'done'];
+	const statusCycle = ['todo', 'in_progress', 'done'];
 
 	const handleStatusChange = async (newStatus) => {
 		const prevStatus = statusKey;
@@ -491,6 +491,7 @@
 		primeIssueDetail(issueId, { issue, subIssues, assignee: nextAssignee });
 	};
 
+	let statusOpen = false;
 	let assigneeOpen = false;
 	$: if (browser && assigneeOpen && workspaceSlug && !membersReady && !membersLoading) {
 		ensurePeopleMembersCache(workspaceSlug);
@@ -723,6 +724,7 @@
 	}
 
 	function onWindowClick() {
+		if (statusOpen) statusOpen = false;
 		if (assigneeOpen) assigneeOpen = false;
 	}
 </script>
@@ -1139,17 +1141,43 @@
 					</button>
 				</div>
 				<div class="space-y-2 py-4 text-sm text-neutral-600">
-					<button
-						type="button"
-						class="-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition hover:bg-stone-100"
-						on:click={() => {
-							const idx = statusCycle.indexOf(statusKey);
-							handleStatusChange(statusCycle[(idx + 1) % statusCycle.length]);
-						}}
-					>
-						<span class={`h-3.5 w-3.5 rounded-full border ${statusMeta.statusClass}`}></span>
-						<span>{statusMeta.label}</span>
-					</button>
+					<div class="relative">
+						<button
+							type="button"
+							class="-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition hover:bg-stone-100"
+							on:click|stopPropagation={() => (statusOpen = !statusOpen)}
+						>
+							<span class={`h-3.5 w-3.5 rounded-full border ${statusMeta.statusClass}`}></span>
+							<span>{statusMeta.label}</span>
+							<span class="ml-auto text-xs text-neutral-400">▾</span>
+						</button>
+						{#if statusOpen}
+							<div
+								class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+								on:click|stopPropagation
+							>
+								{#each statusCycle as status}
+									<button
+										type="button"
+										class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+											statusKey === status ? 'bg-neutral-50' : ''
+										}`}
+										on:click={() => {
+											statusOpen = false;
+											handleStatusChange(status);
+										}}
+									>
+										<span
+											class={`h-3.5 w-3.5 rounded-full border ${
+												(statusConfig[status] ?? statusConfig.todo).statusClass
+											}`}
+										></span>
+										<span>{(statusConfig[status] ?? statusConfig.todo).label}</span>
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
 					<div class="relative">
 						<button
 							type="button"
