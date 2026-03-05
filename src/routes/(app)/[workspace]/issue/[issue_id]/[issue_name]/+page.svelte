@@ -299,15 +299,21 @@
 		!$activityCache.loading &&
 		$activityLogsCache.workspace === workspaceSlug &&
 		!$activityLogsCache.loading;
-	$: if (browser && issue && _fadeIssueId !== issueId) {
+	$: if (browser && issue && listItem) {
+		pageReady.set(true);
+	}
+
+	$: if (
+		browser &&
+		issue &&
+		!listItem &&
+		subIssuesReady &&
+		activityReady &&
+		_fadeIssueId !== issueId
+	) {
 		_fadeIssueId = issueId;
-		const shouldAnimate = !listItem;
-		if (shouldAnimate && subIssuesReady && activityReady) {
-			pageReady.set(false);
-			setTimeout(() => pageReady.set(true), 50);
-		} else if (!shouldAnimate) {
-			pageReady.set(true);
-		}
+		pageReady.set(false);
+		setTimeout(() => pageReady.set(true), 50);
 	}
 
 	// Sync subIssues from issuesCache on cold start or when cache grows (e.g. new subissue created)
