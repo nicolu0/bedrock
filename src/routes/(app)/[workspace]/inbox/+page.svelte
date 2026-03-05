@@ -9,6 +9,8 @@
 	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
 	import { issuesCache } from '$lib/stores/issuesCache.js';
 	import IssuePanel from '$lib/components/IssuePanel.svelte';
+	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 
 	export let data;
 
@@ -94,9 +96,8 @@
 <div class="flex h-full overflow-hidden">
 	<!-- Notification list -->
 	<div
-		class="{selectedNotification
-			? 'w-1/2 border-r border-neutral-200'
-			: 'w-full'} flex flex-col overflow-y-auto"
+		class="flex-none flex flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out
+			{selectedNotification ? 'w-1/2 border-r border-neutral-200' : 'w-full'}"
 	>
 		<div class="flex items-center border-b border-neutral-200 px-6 py-3">
 			<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
@@ -202,7 +203,11 @@
 
 	<!-- Issue detail panel -->
 	{#if selectedNotification}
-		<div class="w-1/2 overflow-y-auto">
+		<div
+			class="flex-none w-1/2 overflow-y-auto"
+			in:fly={{ x: 400, duration: 280, easing: cubicOut }}
+			out:fly={{ x: 400, duration: 220, easing: cubicOut }}
+		>
 			<IssuePanel
 				issueId={selectedNotification.issues?.id}
 				seedIssue={selectedNotification.issues}
