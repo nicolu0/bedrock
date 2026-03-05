@@ -1030,20 +1030,16 @@
 
 		<aside class="flex w-1/5 border-l border-neutral-200">
 			<div
-				class="flex w-full flex-col px-6 py-2 transition-opacity duration-150"
+				class="flex w-full flex-col px-4 transition-opacity duration-150"
 				class:opacity-0={!$pageReady}
 			>
-				<div class="space-y-4 text-sm text-neutral-600">
-					<div class="flex items-center gap-2 pb-2">
-						<span class="text-neutral-400">{issueReadableId ?? issueKey}</span>
-					</div>
-					<div class="flex items-center gap-2">
-						<div class="h-3.5 w-3.5 rounded-full bg-neutral-200"></div>
-						<span>{assigneeName}</span>
-					</div>
+				<div class="flex items-center gap-2 py-3">
+					<span class="text-sm text-neutral-600">{issueReadableId ?? issueKey}</span>
+				</div>
+				<div class="py-4 space-y-2 text-sm text-neutral-600">
 					<button
 						type="button"
-						class="flex items-center gap-2 transition hover:opacity-75"
+						class="flex items-center gap-2 transition p-1 px-2 -ml-2 w-40 rounded-sm hover:bg-stone-100"
 						on:click={() => {
 							const idx = statusCycle.indexOf(statusKey);
 							handleStatusChange(statusCycle[(idx + 1) % statusCycle.length]);
@@ -1051,6 +1047,10 @@
 					>
 						<span class={`h-3.5 w-3.5 rounded-full border ${statusMeta.statusClass}`}></span>
 						<span>{statusMeta.label}</span>
+					</button>
+					<button class="flex items-center gap-2 p-1 px-2 -ml-2 w-40 rounded-sm hover:bg-stone-100">
+						<div class="h-3.5 w-3.5 rounded-full bg-neutral-200"></div>
+						<span>{assigneeName}</span>
 					</button>
 				</div>
 			</div>
