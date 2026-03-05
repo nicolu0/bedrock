@@ -146,6 +146,79 @@ const insertIngestionLog = async ({
 	}
 };
 
+const createDraftNotification = async ({
+	workspaceId,
+	issueId,
+	issueName,
+	emailDraftId,
+	messageId,
+	userId
+}: {
+	workspaceId: string;
+	issueId: string;
+	issueName?: string | null;
+	emailDraftId: string;
+	messageId: string | null;
+	userId: string;
+}) => {
+	let resolvedIssueName = issueName?.trim() ?? '';
+	if (!resolvedIssueName) {
+		const { data: issueRow } = await supabase
+			.from('issues')
+			.select('name')
+			.eq('id', issueId)
+			.maybeSingle();
+		resolvedIssueName = issueRow?.name?.trim() ?? '';
+	}
+
+	const { data: workspaceRow } = await supabase
+		.from('workspaces')
+		.select('admin_user_id')
+		.eq('id', workspaceId)
+		.maybeSingle();
+	const adminUserId = workspaceRow?.admin_user_id ?? null;
+	if (!adminUserId) {
+		await insertIngestionLog({
+			userId,
+			source: 'notification',
+			detail: JSON.stringify({
+				reason: 'missing_workspace_admin',
+				workspace_id: workspaceId,
+				issue_id: issueId
+			})
+		});
+		return;
+	}
+
+	const safeIssueName = resolvedIssueName || 'this issue';
+	const body = `Bedrock drafted an email for ${safeIssueName}.`;
+	const { error } = await supabase.from('notifications').insert({
+		workspace_id: workspaceId,
+		issue_id: issueId,
+		user_id: adminUserId,
+		title: 'Email Drafted',
+		body,
+		type: 'email_draft_made',
+		requires_action: false,
+		meta: {
+			email_draft_id: emailDraftId,
+			message_id: messageId
+		}
+	});
+	if (error) {
+		await insertIngestionLog({
+			userId,
+			source: 'notification',
+			detail: JSON.stringify({
+				reason: 'insert_failed',
+				workspace_id: workspaceId,
+				issue_id: issueId,
+				error: error.message
+			})
+		});
+	}
+};
+
 const logError = async (userId: string, detail: string) => {
 	await insertIngestionLog({ userId, source: 'gmail-push', detail });
 };
@@ -248,7 +321,8 @@ const upsertEmailDraft = async ({
 	recipientEmail,
 	subject,
 	body,
-	userId
+	userId,
+	workspaceId
 }: {
 	issueId: string;
 	messageId: string | null;
@@ -257,6 +331,7 @@ const upsertEmailDraft = async ({
 	subject: string;
 	body: string;
 	userId: string;
+	workspaceId: string;
 }) => {
 	const payload = {
 		issue_id: issueId,
@@ -265,15 +340,29 @@ const upsertEmailDraft = async ({
 		recipient_email: recipientEmail,
 		subject,
 		body,
+		workspace_id: workspaceId,
 		updated_at: new Date().toISOString()
 	};
 
 	let error = null;
+	let draftId: string | null = null;
+	let created = false;
 	if (messageId) {
-		const result = await supabase
+		const { data: existingDraft } = await supabase
 			.from('email_drafts')
-			.upsert(payload, { onConflict: 'message_id' });
-		error = result.error;
+			.select('id')
+			.eq('message_id', messageId)
+			.maybeSingle();
+		if (existingDraft?.id) {
+			const result = await supabase.from('email_drafts').update(payload).eq('id', existingDraft.id);
+			draftId = existingDraft.id;
+			error = result.error;
+		} else {
+			const result = await supabase.from('email_drafts').insert(payload).select('id').single();
+			draftId = result.data?.id ?? null;
+			error = result.error;
+			created = true;
+		}
 	} else {
 		const { data: existingDraft } = await supabase
 			.from('email_drafts')
@@ -283,10 +372,13 @@ const upsertEmailDraft = async ({
 			.maybeSingle();
 		if (existingDraft?.id) {
 			const result = await supabase.from('email_drafts').update(payload).eq('id', existingDraft.id);
+			draftId = existingDraft.id;
 			error = result.error;
 		} else {
-			const result = await supabase.from('email_drafts').insert(payload);
+			const result = await supabase.from('email_drafts').insert(payload).select('id').single();
+			draftId = result.data?.id ?? null;
 			error = result.error;
+			created = true;
 		}
 	}
 	if (error) {
@@ -301,11 +393,15 @@ const upsertEmailDraft = async ({
 		});
 		throw new Error(error.message);
 	}
+	if (!draftId) {
+		throw new Error('Email draft id missing');
+	}
 	await insertIngestionLog({
 		userId,
 		source: 'gmail-draft',
 		detail: JSON.stringify({ issue_id: issueId, message_id: messageId })
 	});
+	return { draftId, created };
 };
 
 const linkThreadToIssue = async ({ threadId, issueId }: { threadId: string; issueId: string }) => {
@@ -773,6 +869,17 @@ When you believe you have completed the task, call done().
 				}
 				const issueIdForReply = threadRow.issue_id ?? issue;
 
+				let issueName = issueNameCache.get(issueIdForReply) ?? '';
+				if (!issueName) {
+					const { data: issueRow } = await supabase
+						.from('issues')
+						.select('name')
+						.eq('id', issueIdForReply)
+						.maybeSingle();
+					issueName = issueRow?.name ?? '';
+					if (issueName) issueNameCache.set(issueIdForReply, issueName);
+				}
+
 				let recipientEmail = '';
 				if (threadRow.participant_type === 'tenant') {
 					const tenantId = threadRow.tenant_id ?? threadRow.participant_id;
@@ -809,15 +916,26 @@ When you believe you have completed the task, call done().
 				}
 
 				try {
-					await upsertEmailDraft({
+					const result = await upsertEmailDraft({
 						issueId: issueIdForReply,
 						messageId,
 						senderEmail: senderEmailToUse,
 						recipientEmail: normalizedRecipient,
 						subject,
 						body: bodyText,
-						userId
+						userId,
+						workspaceId
 					});
+					if (result.created) {
+						await createDraftNotification({
+							workspaceId,
+							issueId: issueIdForReply,
+							issueName,
+							emailDraftId: result.draftId,
+							messageId,
+							userId
+						});
+					}
 				} catch (err) {
 					await insertIngestionLog({
 						userId,
@@ -891,15 +1009,26 @@ When you believe you have completed the task, call done().
 					throw new Error('draft_email missing recipient_email');
 				}
 				try {
-					await upsertEmailDraft({
+					const result = await upsertEmailDraft({
 						issueId: issue,
 						messageId,
 						senderEmail: senderEmailToUse,
 						recipientEmail: normalizedRecipient,
 						subject,
 						body: bodyText,
-						userId
+						userId,
+						workspaceId
 					});
+					if (result.created) {
+						await createDraftNotification({
+							workspaceId,
+							issueId: issue,
+							issueName,
+							emailDraftId: result.draftId,
+							messageId,
+							userId
+						});
+					}
 				} catch (err) {
 					await insertIngestionLog({
 						userId,
