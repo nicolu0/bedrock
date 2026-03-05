@@ -59,9 +59,12 @@
 			.replace(/(^-|-$)+/g, '');
 	};
 
-	const getIssueHref = (issueId, title) => {
-		const slug = slugify(title);
-		return `${basePath}/issue/${issueId}/${slug}?from=my-issues`;
+	const getIssueHref = (item) => {
+		if (!item) return undefined;
+		const slug = slugify(item.title);
+		const readableId = item.readableId;
+		if (!readableId) return undefined;
+		return `${basePath}/issue/${readableId}/${slug}?from=my-issues`;
 	};
 </script>
 
@@ -136,7 +139,7 @@
 						{#each section.rows as item}
 							<a
 								class="block w-full px-6 py-2 text-left transition hover:bg-stone-50"
-								href={getIssueHref(item.issueId, item.title)}
+								href={getIssueHref(item)}
 								data-sveltekit-preload-data="hover"
 							>
 								<div class="flex items-center justify-between gap-4">

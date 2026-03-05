@@ -70,14 +70,15 @@
 
 	async function handleClick(n) {
 		const issue = n.issues;
+		const readableId = issue?.readable_id ?? null;
 		if (!n.is_read) {
 			// Fire and forget — don't await so navigation isn't blocked
 			const fd = new FormData();
 			fd.append('id', n.id);
 			fetch('?/markRead', { method: 'POST', body: fd });
 		}
-		if (issue?.id) {
-			await goto(`/${workspaceSlug}/issue/${issue.id}/${slugify(issue.name)}?from=inbox`);
+		if (readableId) {
+			await goto(`/${workspaceSlug}/issue/${readableId}/${slugify(issue.name)}?from=inbox`);
 			// Update cache after navigation so the dot disappears off-screen
 			if (!n.is_read) {
 				notificationsCache.update((state) => ({

@@ -37,7 +37,7 @@ export const GET = async ({ locals, url }) => {
 
 	let { data: issues } = await supabaseAdmin
 		.from('issues')
-		.select('id, name, status, parent_id, unit_id')
+		.select('id, name, status, parent_id, unit_id, issue_number, readable_id')
 		.eq('workspace_id', workspace.id)
 		.order('updated_at', { ascending: false });
 
@@ -52,7 +52,7 @@ export const GET = async ({ locals, url }) => {
 		if (fallbackUnitIds.length) {
 			const { data: fallbackIssues } = await supabaseAdmin
 				.from('issues')
-				.select('id, name, status, parent_id, unit_id')
+				.select('id, name, status, parent_id, unit_id, issue_number, readable_id')
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
 			issues = fallbackIssues ?? [];
@@ -86,6 +86,8 @@ export const GET = async ({ locals, url }) => {
 			assignees: 0,
 			property: property?.name ?? 'Unknown',
 			unit: unit?.name ?? 'Unknown',
+			issueNumber: issue.issue_number ?? null,
+			readableId: issue.readable_id ?? null,
 			status,
 			parentId: issue.parent_id ?? null,
 			parent_id: issue.parent_id ?? null
@@ -111,6 +113,8 @@ export const GET = async ({ locals, url }) => {
 				parentTitle,
 				property: child.property,
 				unit: child.unit,
+				issueNumber: child.issueNumber,
+				readableId: child.readableId,
 				assignees: child.assignees
 			};
 			return [item, ...collectDescendants(child.id, child.title)];
@@ -138,6 +142,8 @@ export const GET = async ({ locals, url }) => {
 					assignees: issue.assignees,
 					property: issue.property,
 					unit: issue.unit,
+					issueNumber: issue.issueNumber,
+					readableId: issue.readableId,
 					subIssues
 				};
 			});

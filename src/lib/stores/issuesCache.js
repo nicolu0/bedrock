@@ -84,7 +84,9 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 		currentState.workspace === workspaceSlug &&
 		now - currentState.fetchedAt < CACHE_TTL
 	) {
-		console.log('[issuesCache] returning from in-memory cache (TTL valid)', { issueCount: currentState.data?.issues?.length });
+		console.log('[issuesCache] returning from in-memory cache (TTL valid)', {
+			issueCount: currentState.data?.issues?.length
+		});
 		return currentState.data;
 	}
 
@@ -99,7 +101,9 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 		now - sessionCached.fetchedAt < CACHE_TTL &&
 		sessionValid
 	) {
-		console.log('[issuesCache] returning from sessionStorage cache', { issueCount: sessionCached.data?.issues?.length });
+		console.log('[issuesCache] returning from sessionStorage cache', {
+			issueCount: sessionCached.data?.issues?.length
+		});
 		issuesCache.set({
 			workspace: workspaceSlug,
 			data: sessionCached.data,
@@ -144,9 +148,18 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 			const nextSections = data?.sections?.length ?? 0;
 			const nextIssues = data?.issues?.length ?? 0;
 			const shouldOverwrite = nextSections > 0 || nextIssues > 0;
-			console.log('[issuesCache] fetch complete', { force, nextSections, nextIssues, shouldOverwrite, workspace: workspaceSlug });
+			console.log('[issuesCache] fetch complete', {
+				force,
+				nextSections,
+				nextIssues,
+				shouldOverwrite,
+				workspace: workspaceSlug
+			});
 			if (!shouldOverwrite) {
-				console.warn('[issuesCache] shouldOverwrite=false — API returned empty data', { force, workspaceSlug });
+				console.warn('[issuesCache] shouldOverwrite=false — API returned empty data', {
+					force,
+					workspaceSlug
+				});
 			}
 			if (shouldOverwrite) {
 				issuesCache.set({
@@ -200,7 +213,10 @@ export const primeIssuesCache = (workspaceSlug, data) => {
 	writeSessionCache(payload);
 };
 
-export const applyIssueInsert = (rawIssue, { unitName = 'Unknown', propertyName = 'Unknown', parentTitle = '' } = {}) => {
+export const applyIssueInsert = (
+	rawIssue,
+	{ unitName = 'Unknown', propertyName = 'Unknown', parentTitle = '' } = {}
+) => {
 	issuesCache.update((state) => {
 		if (!state.data) return state;
 		// Idempotency guard
@@ -208,11 +224,19 @@ export const applyIssueInsert = (rawIssue, { unitName = 'Unknown', propertyName 
 
 		const status = rawIssue.status ?? 'todo';
 		const normalizedIssue = {
-			id: rawIssue.id, issueId: rawIssue.id,
-			title: rawIssue.name, name: rawIssue.name,
-			description: '', assignees: 0,
-			property: propertyName, unit: unitName,
-			status, parentId: rawIssue.parent_id ?? null, parent_id: rawIssue.parent_id ?? null
+			id: rawIssue.id,
+			issueId: rawIssue.id,
+			title: rawIssue.name,
+			name: rawIssue.name,
+			description: '',
+			assignees: 0,
+			property: propertyName,
+			unit: unitName,
+			issueNumber: rawIssue.issue_number ?? null,
+			readableId: rawIssue.readable_id ?? null,
+			status,
+			parentId: rawIssue.parent_id ?? null,
+			parent_id: rawIssue.parent_id ?? null
 		};
 		const issues = [...(state.data.issues ?? []), normalizedIssue];
 
@@ -220,8 +244,15 @@ export const applyIssueInsert = (rawIssue, { unitName = 'Unknown', propertyName 
 		if (rawIssue.parent_id) {
 			// Subissue: splice into parent's subIssues in the appropriate section item
 			const subItem = {
-				id: rawIssue.id, issueId: rawIssue.id, title: rawIssue.name,
-				parentTitle, property: propertyName, unit: unitName, assignees: 0
+				id: rawIssue.id,
+				issueId: rawIssue.id,
+				title: rawIssue.name,
+				parentTitle,
+				property: propertyName,
+				unit: unitName,
+				issueNumber: rawIssue.issue_number ?? null,
+				readableId: rawIssue.readable_id ?? null,
+				assignees: 0
 			};
 			sections = sections.map((section) => ({
 				...section,
@@ -235,8 +266,15 @@ export const applyIssueInsert = (rawIssue, { unitName = 'Unknown', propertyName 
 			// Root issue: add to the matching status section (create section if not yet present)
 			const sectionId = status === 'in_progress' ? 'in-progress' : status;
 			const newItem = {
-				id: rawIssue.id, issueId: rawIssue.id, title: rawIssue.name,
-				assignees: 0, property: propertyName, unit: unitName, subIssues: []
+				id: rawIssue.id,
+				issueId: rawIssue.id,
+				title: rawIssue.name,
+				assignees: 0,
+				property: propertyName,
+				unit: unitName,
+				issueNumber: rawIssue.issue_number ?? null,
+				readableId: rawIssue.readable_id ?? null,
+				subIssues: []
 			};
 			const sectionExists = sections.some((s) => s.id === sectionId);
 			if (sectionExists) {
@@ -245,15 +283,21 @@ export const applyIssueInsert = (rawIssue, { unitName = 'Unknown', propertyName 
 				);
 			} else {
 				const sectionMeta = {
-					in_progress: { id: 'in-progress', label: 'In Progress', statusClass: 'border-amber-500 text-amber-600' },
-					todo:        { id: 'todo',        label: 'Todo',         statusClass: 'border-neutral-500 text-neutral-700' },
-					done:        { id: 'done',        label: 'Done',         statusClass: 'border-emerald-500 text-emerald-700' }
+					in_progress: {
+						id: 'in-progress',
+						label: 'In Progress',
+						statusClass: 'border-amber-500 text-amber-600'
+					},
+					todo: { id: 'todo', label: 'Todo', statusClass: 'border-neutral-500 text-neutral-700' },
+					done: { id: 'done', label: 'Done', statusClass: 'border-emerald-500 text-emerald-700' }
 				};
 				const newSection = { ...sectionMeta[status], count: 1, items: [newItem] };
-				const ordered = ['in_progress', 'todo', 'done'].map((s) => {
-					const id = s === 'in_progress' ? 'in-progress' : s;
-					return sections.find((sec) => sec.id === id) ?? (s === status ? newSection : null);
-				}).filter(Boolean);
+				const ordered = ['in_progress', 'todo', 'done']
+					.map((s) => {
+						const id = s === 'in_progress' ? 'in-progress' : s;
+						return sections.find((sec) => sec.id === id) ?? (s === status ? newSection : null);
+					})
+					.filter(Boolean);
 				sections = ordered;
 			}
 		}
@@ -269,7 +313,10 @@ export const applyIssueDelete = (issueId) => {
 			.map((section) => {
 				const items = section.items
 					.filter((item) => item.issueId !== issueId)
-					.map((item) => ({ ...item, subIssues: (item.subIssues ?? []).filter((s) => s.issueId !== issueId) }));
+					.map((item) => ({
+						...item,
+						subIssues: (item.subIssues ?? []).filter((s) => s.issueId !== issueId)
+					}));
 				return { ...section, items, count: items.length };
 			})
 			.filter((s) => s.count > 0);
@@ -305,7 +352,8 @@ export const updateIssueFieldsInListCache = (issueId, fields) => {
 		const sections = state.data.sections.map((section) => ({
 			...section,
 			items: section.items.map((item) => {
-				if (item.issueId === issueId) return { ...item, ...fields, title: fields.name ?? item.title };
+				if (item.issueId === issueId)
+					return { ...item, ...fields, title: fields.name ?? item.title };
 				return {
 					...item,
 					subIssues: (item.subIssues ?? []).map((s) =>
