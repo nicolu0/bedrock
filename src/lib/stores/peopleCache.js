@@ -3,6 +3,7 @@ import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
 const CACHE_KEY = 'people-cache-v1';
+const DELETED_KEY = 'people-cache-deleted-v1';
 const CACHE_TTL = 10 * 60 * 1000;
 
 const initialState = {
@@ -48,6 +49,42 @@ const clearSessionCache = () => {
 	}
 };
 
+const readDeletedCache = () => {
+	if (!browser) return null;
+	try {
+		const raw = sessionStorage.getItem(DELETED_KEY);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw);
+		if (!parsed || !parsed.workspace || !Array.isArray(parsed.ids)) return null;
+		return parsed;
+	} catch {
+		return null;
+	}
+};
+
+const writeDeletedCache = (workspaceSlug, idsSet) => {
+	if (!browser) return;
+	try {
+		const payload = {
+			workspace: workspaceSlug,
+			ids: Array.from(idsSet),
+			updatedAt: Date.now()
+		};
+		sessionStorage.setItem(DELETED_KEY, JSON.stringify(payload));
+	} catch {
+		// ignore write failures
+	}
+};
+
+const clearDeletedCache = () => {
+	if (!browser) return;
+	try {
+		sessionStorage.removeItem(DELETED_KEY);
+	} catch {
+		// ignore remove failures
+	}
+};
+
 const isHardReload = () => {
 	if (!browser || !globalThis.performance) return false;
 	try {
@@ -58,6 +95,24 @@ const isHardReload = () => {
 	}
 };
 
+let deletedWorkspace = null;
+let deletedIds = new Set();
+
+const ensureDeletedIds = (workspaceSlug) => {
+	if (!browser) return new Set();
+	if (!workspaceSlug) return new Set();
+	if (deletedWorkspace === workspaceSlug) return deletedIds;
+	const cached = readDeletedCache();
+	if (cached?.workspace === workspaceSlug) {
+		deletedWorkspace = workspaceSlug;
+		deletedIds = new Set(cached.ids);
+		return deletedIds;
+	}
+	deletedWorkspace = workspaceSlug;
+	deletedIds = new Set();
+	return deletedIds;
+};
+
 export const ensurePeopleCache = async (workspaceSlug, options = {}) => {
 	if (!workspaceSlug) return null;
 	if (!browser) return null;
@@ -65,6 +120,7 @@ export const ensurePeopleCache = async (workspaceSlug, options = {}) => {
 
 	if (isHardReload()) {
 		clearSessionCache();
+		clearDeletedCache();
 	}
 
 	const now = Date.now();
@@ -182,6 +238,12 @@ export const addPersonToCache = (person, workspaceSlug) => {
 		const fetchedAt = state.fetchedAt || Date.now();
 		const payload = { workspace: nextWorkspace, data, fetchedAt };
 		writeSessionCache(payload);
+		if (nextWorkspace && person?.id) {
+			const ids = ensureDeletedIds(nextWorkspace);
+			if (ids.delete(person.id)) {
+				writeDeletedCache(nextWorkspace, ids);
+			}
+		}
 		return { ...state, workspace: nextWorkspace, data, fetchedAt };
 	});
 };
@@ -206,6 +268,49 @@ export const removePersonFromCache = (personId) => {
 		const data = state.data.filter((p) => p.id !== personId);
 		const payload = { workspace: state.workspace, data, fetchedAt: state.fetchedAt };
 		writeSessionCache(payload);
+		if (state.workspace && personId) {
+			const ids = ensureDeletedIds(state.workspace);
+			ids.add(personId);
+			writeDeletedCache(state.workspace, ids);
+		}
 		return { ...state, data };
+	});
+};
+
+export const mergePeopleIntoCache = (workspaceSlug, serverList) => {
+	if (!browser) return;
+	if (!workspaceSlug || !Array.isArray(serverList)) return;
+	peopleCache.update((state) => {
+		const nextWorkspace = workspaceSlug ?? state.workspace;
+		const existing = Array.isArray(state.data) ? state.data : [];
+		const map = new Map();
+		const noIdExisting = [];
+		const noIdServer = [];
+		const deleted = ensureDeletedIds(nextWorkspace);
+		existing.forEach((person) => {
+			if (!person) return;
+			if (person.id) {
+				map.set(person.id, person);
+			} else {
+				noIdExisting.push(person);
+			}
+		});
+		serverList.forEach((person) => {
+			if (!person) return;
+			if (person.id) {
+				if (deleted.has(person.id)) return;
+				if (!map.has(person.id)) {
+					map.set(person.id, person);
+				}
+			} else {
+				noIdServer.push(person);
+			}
+		});
+		const data = [...map.values(), ...noIdExisting, ...noIdServer].sort((a, b) =>
+			(a?.name ?? '').localeCompare(b?.name ?? '')
+		);
+		const payload = { workspace: nextWorkspace, data, fetchedAt: Date.now() };
+		writeSessionCache(payload);
+		return { ...state, workspace: nextWorkspace, data, fetchedAt: payload.fetchedAt };
 	});
 };

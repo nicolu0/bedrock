@@ -15,7 +15,7 @@
 		updateIssueStatusInDetailCache
 	} from '$lib/stores/issueDetailCache.js';
 	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
-	import { peopleMembersCache } from '$lib/stores/peopleMembersCache.js';
+	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache.js';
 	import {
 		activityCache,
 		ensureActivityCache,
@@ -59,6 +59,12 @@
 			label: 'Done',
 			statusClass: 'border-emerald-500 text-emerald-700'
 		}
+	};
+
+	const roleLabels = {
+		owner: 'Owner',
+		admin: 'Admin',
+		member: 'Member'
 	};
 
 	const sortSubIssues = (items) => {
@@ -195,13 +201,8 @@
 				})()
 			: [];
 
-	// Seed assignee from members cache using the current user's ID (from layout data)
-	$: memberEntry =
-		browser && data?.userId
-			? (get(peopleMembersCache)?.data?.find((m) => m.user_id === data.userId) ?? null)
-			: null;
-
-	$: seedAssignee = memberEntry ? { id: data.userId, name: memberEntry.users?.name } : null;
+	// Default assignee to null until explicitly loaded.
+	$: seedAssignee = null;
 
 	let issue = null;
 	let subIssues = [];
@@ -386,6 +387,25 @@
 	$: statusKey = issue?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
 	$: assigneeName = assignee?.name ?? 'Unassigned';
+	$: membersReady =
+		$peopleMembersCache.workspace === workspaceSlug && Array.isArray($peopleMembersCache.data);
+	$: membersLoading = $peopleMembersCache.loading && !membersReady;
+	$: members = membersReady ? $peopleMembersCache.data : [];
+	$: assignableMembers = [...members]
+		.filter((member) => {
+			const role = (member?.role ?? '').toLowerCase();
+			return (role === 'admin' || role === 'member') && Boolean(member?.user_id);
+		})
+		.sort((a, b) => {
+			const order = { admin: 0, member: 1 };
+			const roleA = (a?.role ?? '').toLowerCase();
+			const roleB = (b?.role ?? '').toLowerCase();
+			const roleDiff = (order[roleA] ?? 9) - (order[roleB] ?? 9);
+			if (roleDiff !== 0) return roleDiff;
+			const nameA = (a?.users?.name ?? '').toString();
+			const nameB = (b?.users?.name ?? '').toString();
+			return nameA.localeCompare(nameB);
+		});
 	$: issueReadableId = issue?.readableId ?? listItem?.readableId ?? issueKey;
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
 
@@ -463,6 +483,43 @@
 			updateIssueStatusInDetailCache(issueId, prevStatus);
 			updateIssueStatusInListCache(issueId, prevStatus);
 			issue = { ...issue, status: prevStatus };
+		}
+	};
+
+	const primeAssigneeCache = (nextAssignee) => {
+		if (!issueId) return;
+		primeIssueDetail(issueId, { issue, subIssues, assignee: nextAssignee });
+	};
+
+	let assigneeOpen = false;
+	$: if (browser && assigneeOpen && workspaceSlug && !membersReady && !membersLoading) {
+		ensurePeopleMembersCache(workspaceSlug);
+	}
+
+	const handleAssigneeSelect = async (member) => {
+		if (!issueId) return;
+		const nextId = member?.user_id ?? null;
+		const currentId = assignee?.id ?? null;
+		if (nextId === currentId) {
+			assigneeOpen = false;
+			return;
+		}
+		const nextAssignee = member
+			? { id: member.user_id, name: member.users?.name ?? member.user_id }
+			: null;
+		const prevAssignee = assignee;
+		assignee = nextAssignee;
+		primeAssigneeCache(nextAssignee);
+		assigneeOpen = false;
+
+		const { error } = await supabase
+			.from('issues')
+			.update({ assignee_id: nextId })
+			.eq('id', issueId);
+
+		if (error) {
+			assignee = prevAssignee;
+			primeAssigneeCache(prevAssignee);
 		}
 	};
 
@@ -664,9 +721,13 @@
 		if (document.querySelector('[role="dialog"]')) return;
 		goto(backHref);
 	}
+
+	function onWindowClick() {
+		if (assigneeOpen) assigneeOpen = false;
+	}
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window on:keydown={onKeydown} on:click={onWindowClick} />
 
 {#if issue}
 	<div class="flex h-full">
@@ -1089,10 +1150,66 @@
 						<span class={`h-3.5 w-3.5 rounded-full border ${statusMeta.statusClass}`}></span>
 						<span>{statusMeta.label}</span>
 					</button>
-					<button class="-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 hover:bg-stone-100">
-						<div class="h-3.5 w-3.5 rounded-full bg-neutral-200"></div>
-						<span>{assigneeName}</span>
-					</button>
+					<div class="relative">
+						<button
+							type="button"
+							class="-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 hover:bg-stone-100"
+							on:click|stopPropagation={() => (assigneeOpen = !assigneeOpen)}
+						>
+							<div class="h-3.5 w-3.5 rounded-full bg-neutral-200"></div>
+							<span class="truncate">{assigneeName}</span>
+							<span class="ml-auto text-xs text-neutral-400">▾</span>
+						</button>
+						{#if assigneeOpen}
+							<div
+								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+								on:click|stopPropagation
+							>
+								<button
+									type="button"
+									class="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50"
+									on:click={() => handleAssigneeSelect(null)}
+								>
+									<span
+										class="rounded-full bg-neutral-100 px-2 py-0.5 font-medium text-neutral-500"
+									>
+										Unassigned
+									</span>
+								</button>
+								<div class="my-1 h-px bg-neutral-100"></div>
+								{#if membersLoading}
+									<div class="px-3 py-2 text-neutral-400">Loading members...</div>
+								{:else if assignableMembers.length}
+									{#each assignableMembers as member}
+										<button
+											type="button"
+											class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+												assignee?.id === member.user_id ? 'bg-neutral-50' : ''
+											}`}
+											on:click={() => handleAssigneeSelect(member)}
+										>
+											<span
+												class="rounded-full bg-stone-100 px-2 py-0.5 font-medium text-neutral-600"
+											>
+												{roleLabels[member.role] ?? member.role}
+											</span>
+											<span class="truncate">
+												{member.users?.name ??
+													member.name ??
+													member.users?.id ??
+													member.user_id ??
+													'Unknown member'}
+											</span>
+										</button>
+									{/each}
+								{:else if membersReady}
+									<div class="px-3 py-2 text-neutral-400">No members found.</div>
+								{:else}
+									<div class="px-3 py-2 text-neutral-400">Unable to load members.</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
 				</div>
 			</div>
 		</aside>

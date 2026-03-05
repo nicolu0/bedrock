@@ -24,7 +24,7 @@
 	};
 
 	const onNewPersonSaved = (e) => {
-		addPersonToCache(e.detail, workspaceSlug);
+		addPersonToCache(e.detail, $page.params.workspace);
 		closeNewPersonModal();
 	};
 </script>

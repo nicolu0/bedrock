@@ -6,6 +6,7 @@
 	import {
 		peopleCache,
 		primePeopleCache,
+		mergePeopleIntoCache,
 		updatePersonInCache,
 		removePersonFromCache
 	} from '$lib/stores/peopleCache.js';
@@ -25,9 +26,7 @@
 			: null;
 
 	$: if (browser && data.people) {
-		if ($peopleCache.workspace !== workspaceSlug || $peopleCache.data == null) {
-			data.people.then((v) => primePeopleCache(workspaceSlug, v));
-		}
+		data.people.then((v) => mergePeopleIntoCache(workspaceSlug, v));
 	}
 
 	const formatRole = (role) => {

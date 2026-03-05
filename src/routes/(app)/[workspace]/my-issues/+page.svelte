@@ -23,7 +23,7 @@
 				unit: subIssue.unit ?? item.unit,
 				isSubIssue: true
 			}));
-			return [{ ...item, isSubIssue: false }, ...subRows];
+			return [{ ...item, isSubIssue: item.isSubIssue ?? false }, ...subRows];
 		});
 		return { ...section, rows };
 	});
