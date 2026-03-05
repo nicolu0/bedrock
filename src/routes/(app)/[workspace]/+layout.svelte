@@ -200,7 +200,9 @@
 				async ({ new: notification }) => {
 					const { data: full } = await supabase
 						.from('notifications')
-						.select('*, issues(id, name, unit_id, units(id, name, properties(id, name)))')
+						.select(
+							'*, issues(id, name, unit_id, issue_number, readable_id, units(id, name, properties(id, name)))'
+						)
 						.eq('id', notification.id)
 						.maybeSingle();
 					if (full) addNotificationToCache(full);

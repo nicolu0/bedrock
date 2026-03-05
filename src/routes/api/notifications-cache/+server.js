@@ -19,7 +19,7 @@ export const GET = async ({ locals, url }) => {
 			.from('notifications')
 			.select(
 				`id, title, body, is_read, created_at, type, meta, requires_action,
-        issues(id, name, status, units(name, properties(name)))`
+        issues(id, name, status, issue_number, readable_id, units(name, properties(name)))`
 			)
 			.eq('workspace_id', workspace.id)
 			.eq('user_id', locals.user.id)

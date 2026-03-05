@@ -86,7 +86,11 @@ export const primeDetailCacheFromIssuesList = (issuesList) => {
 			id: s.id,
 			name: s.name ?? s.title,
 			status: s.status,
-			parent_id: issue.id
+			parent_id: issue.id,
+			property: s.property ?? null,
+			unit: s.unit ?? null,
+			issueNumber: s.issueNumber ?? null,
+			readableId: s.readableId ?? null
 		}));
 		const existing = memoryCache.get(issue.id);
 		if (existing && now - existing.fetchedAt < CACHE_TTL) {
@@ -94,7 +98,16 @@ export const primeDetailCacheFromIssuesList = (issuesList) => {
 			continue;
 		}
 		memoryCache.set(issue.id, {
-			issue: { id: issue.id, name: issue.name ?? issue.title, status: issue.status, description: null },
+			issue: {
+				id: issue.id,
+				name: issue.name ?? issue.title,
+				status: issue.status,
+				description: null,
+				property: issue.property ?? null,
+				unit: issue.unit ?? null,
+				issueNumber: issue.issueNumber ?? null,
+				readableId: issue.readableId ?? null
+			},
 			subIssues,
 			assignee: null,
 			fetchedAt: now
