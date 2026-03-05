@@ -466,6 +466,25 @@
 		}
 	};
 
+	const copyIssueLink = async () => {
+		if (!browser) return;
+		const link = $page?.url?.href ?? '';
+		if (!link) return;
+		try {
+			await navigator.clipboard?.writeText(link);
+		} catch (err) {
+			const textarea = document.createElement('textarea');
+			textarea.value = link;
+			textarea.setAttribute('readonly', '');
+			textarea.style.position = 'absolute';
+			textarea.style.left = '-9999px';
+			document.body.appendChild(textarea);
+			textarea.select();
+			document.execCommand('copy');
+			document.body.removeChild(textarea);
+		}
+	};
+
 	const buildIssueRows = (sections = []) =>
 		sections.flatMap((section) =>
 			(section.items ?? []).flatMap((item) => {
@@ -1033,13 +1052,35 @@
 				class="flex w-full flex-col px-4 transition-opacity duration-150"
 				class:opacity-0={!$pageReady}
 			>
-				<div class="flex items-center gap-2 py-3">
+				<div class="flex items-center justify-between gap-2 py-3">
 					<span class="text-sm text-neutral-600">{issueReadableId ?? issueKey}</span>
-				</div>
-				<div class="py-4 space-y-2 text-sm text-neutral-600">
 					<button
 						type="button"
-						class="flex items-center gap-2 transition p-1 px-2 -ml-2 w-40 rounded-sm hover:bg-stone-100"
+						class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100"
+						on:click={copyIssueLink}
+						aria-label="Copy issue link"
+						title="Copy issue link"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="16"
+							height="16"
+							fill="currentColor"
+							viewBox="0 0 16 16"
+						>
+							<path
+								d="M4.715 6.542 3.343 7.914a3 3 0 1 0 4.243 4.243l1.828-1.829A3 3 0 0 0 8.586 5.5L8 6.086a1 1 0 0 0-.154.199 2 2 0 0 1 .861 3.337L6.88 11.45a2 2 0 1 1-2.83-2.83l.793-.792a4 4 0 0 1-.128-1.287z"
+							/>
+							<path
+								d="M6.586 4.672A3 3 0 0 0 7.414 9.5l.775-.776a2 2 0 0 1-.896-3.346L9.12 3.55a2 2 0 1 1 2.83 2.83l-.793.792c.112.42.155.855.128 1.287l1.372-1.372a3 3 0 1 0-4.243-4.243z"
+							/>
+						</svg>
+					</button>
+				</div>
+				<div class="space-y-2 py-4 text-sm text-neutral-600">
+					<button
+						type="button"
+						class="-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition hover:bg-stone-100"
 						on:click={() => {
 							const idx = statusCycle.indexOf(statusKey);
 							handleStatusChange(statusCycle[(idx + 1) % statusCycle.length]);
@@ -1048,7 +1089,7 @@
 						<span class={`h-3.5 w-3.5 rounded-full border ${statusMeta.statusClass}`}></span>
 						<span>{statusMeta.label}</span>
 					</button>
-					<button class="flex items-center gap-2 p-1 px-2 -ml-2 w-40 rounded-sm hover:bg-stone-100">
+					<button class="-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 hover:bg-stone-100">
 						<div class="h-3.5 w-3.5 rounded-full bg-neutral-200"></div>
 						<span>{assigneeName}</span>
 					</button>
