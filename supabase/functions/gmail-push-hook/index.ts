@@ -498,7 +498,9 @@ const runIssueAgent = async ({
 	body,
 	senderEmail,
 	unitId,
+	unitName,
 	workspaceId,
+	propertyName,
 	threadId,
 	userId,
 	policyText,
@@ -515,7 +517,9 @@ const runIssueAgent = async ({
 	body: string;
 	senderEmail: string;
 	unitId: string;
+	unitName: string | null;
 	workspaceId: string;
+	propertyName: string | null;
 	threadId: string;
 	userId: string;
 	policyText: string;
@@ -570,6 +574,7 @@ Rules:
 - Drafts: For tenant replies, address the tenant by tenant_name only. Never infer a name from the email address.
 - Drafts: End with the user_name as the signature. Never use an email address as the signature.
 - Drafts: Never use default_sender_email in the email body.
+- Drafts: When referencing location, use property_name and unit_name (e.g., "at {property_name}, unit {unit_name}"). Never include a raw UUID in the email body.
 - Drafts: When triaging, draft a short, friendly reply acknowledging the issue and asking one clarifying question about emergency indicators if relevant.
 - Drafts: When scheduling, draft a short, direct vendor email requesting availability and permission to access.
 - Drafts: Use draft_reply for replies and draft_email for new outbound emails.
@@ -701,7 +706,9 @@ When you believe you have completed the task, call done().
 				body,
 				sender_email: senderEmail,
 				unit_id: unitId,
+				unit_name: unitName,
 				workspace_id: workspaceId,
+				property_name: propertyName,
 				thread_id: threadId,
 				latest_message_id: replyMessageId,
 				root_issue_id: rootIssueId ?? null,
@@ -1177,7 +1184,7 @@ const processMessage = async ({
 
 	const { data: propertyRow } = await supabase
 		.from('properties')
-		.select('id, workspace_id')
+		.select('id, name, workspace_id')
 		.eq('id', unitRow.property_id)
 		.maybeSingle();
 
@@ -1357,7 +1364,9 @@ const processMessage = async ({
 			body: cleanedBody,
 			senderEmail,
 			unitId: unitRow.id,
+			unitName: unitRow.name ?? null,
 			workspaceId: propertyRow.workspace_id,
+			propertyName: propertyRow.name ?? null,
 			threadId: threadRow.id,
 			userId: connection.user_id,
 			policyText,
