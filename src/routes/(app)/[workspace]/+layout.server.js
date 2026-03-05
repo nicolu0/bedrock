@@ -7,7 +7,7 @@ const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, 
 	const buildQuery = (client) => {
 		let q = client
 			.from('properties')
-			.select('id, name, owner:users(name)')
+			.select('id, name, address, city, state, postal_code, country, owner_id')
 			.eq('workspace_id', workspaceId)
 			.order('name', { ascending: true });
 		if (userRole === 'owner') {
@@ -83,13 +83,27 @@ export const load = async ({ locals, params }) => {
 		.eq('workspaces.slug', params.workspace)
 		.maybeSingle();
 	if (memberWorkspace?.workspaces?.slug) {
-		const properties = loadPropertiesList(
-			locals.supabase,
-			supabaseAdmin,
-			memberWorkspace.workspaces.id,
-			memberWorkspace.role,
-			locals.user.id
-		);
+		let ownerPersonId = null;
+		if (memberWorkspace.role === 'owner') {
+			const { data: ownerPerson } = await supabaseAdmin
+				.from('people')
+				.select('id')
+				.eq('workspace_id', memberWorkspace.workspaces.id)
+				.eq('user_id', locals.user.id)
+				.eq('role', 'owner')
+				.maybeSingle();
+			ownerPersonId = ownerPerson?.id ?? null;
+		}
+		const properties =
+			memberWorkspace.role === 'owner' && !ownerPersonId
+				? Promise.resolve([])
+				: loadPropertiesList(
+						locals.supabase,
+						supabaseAdmin,
+						memberWorkspace.workspaces.id,
+						memberWorkspace.role,
+						ownerPersonId ?? locals.user.id
+					);
 		const units = loadUnitsList(locals.supabase, supabaseAdmin, memberWorkspace.workspaces.id);
 		return { workspace: memberWorkspace.workspaces, properties, units, userId: locals.user.id };
 	}
