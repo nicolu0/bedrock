@@ -89,6 +89,8 @@
 	}
 </script>
 
+<svelte:window on:keydown={(e) => { if (e.key === 'Escape' && selectedNotification) selectedNotification = null; }} />
+
 <div class="flex h-full overflow-hidden">
 	<!-- Notification list -->
 	<div
@@ -125,7 +127,7 @@
 				<div>
 					{#each filtered as n}
 						<button
-							class="w-full border-b border-neutral-100 px-6 py-3 text-left transition last:border-b-0
+							class="w-full border-b border-neutral-100 px-6 py-3 text-left transition last:border-b-0 focus:outline-none
 								{selectedNotification?.id === n.id ? 'bg-stone-100' : 'hover:bg-stone-50'}"
 							type="button"
 							on:click={() => handleClick(n)}
