@@ -69,6 +69,45 @@ export const load = async ({ locals, params }) => {
 	}
 	throw error(403, "You don't have access to this workspace.");
 };
+const addPropertyCounts = async (adminClient, properties) => {
+	if (!Array.isArray(properties) || properties.length === 0) return properties ?? [];
+	const propertyIds = properties.map((property) => property.id).filter(Boolean);
+	if (propertyIds.length === 0) return properties;
+
+	const { data: units } = await adminClient
+		.from('units')
+		.select('id, property_id')
+		.in('property_id', propertyIds);
+
+	const unitCounts = new Map();
+	const unitToProperty = new Map();
+	for (const unit of units ?? []) {
+		if (!unit?.property_id || !unit?.id) continue;
+		unitToProperty.set(unit.id, unit.property_id);
+		unitCounts.set(unit.property_id, (unitCounts.get(unit.property_id) ?? 0) + 1);
+	}
+
+	const unitIds = Array.from(unitToProperty.keys());
+	const issueCounts = new Map();
+	if (unitIds.length) {
+		const { data: issues } = await adminClient
+			.from('issues')
+			.select('id, unit_id')
+			.in('unit_id', unitIds);
+		for (const issue of issues ?? []) {
+			const propertyId = unitToProperty.get(issue?.unit_id);
+			if (!propertyId) continue;
+			issueCounts.set(propertyId, (issueCounts.get(propertyId) ?? 0) + 1);
+		}
+	}
+
+	return properties.map((property) => ({
+		...property,
+		unit_count: unitCounts.get(property.id) ?? 0,
+		issue_count: issueCounts.get(property.id) ?? 0
+	}));
+};
+
 const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, userId) => {
 	const buildQuery = (client) => {
 		let q = client
@@ -82,9 +121,9 @@ const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, 
 		return q;
 	};
 	const { data: properties, error: propertiesError } = await buildQuery(supabase);
-	if (!propertiesError) return properties ?? [];
+	if (!propertiesError) return addPropertyCounts(adminClient, properties ?? []);
 	const { data: adminProperties } = await buildQuery(adminClient);
-	return adminProperties ?? [];
+	return addPropertyCounts(adminClient, adminProperties ?? []);
 };
 
 const loadUnitsList = async (supabase, adminClient, workspaceId) => {

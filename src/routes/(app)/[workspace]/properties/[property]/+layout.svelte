@@ -2,11 +2,13 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { propertiesCache } from '$lib/stores/propertiesCache.js';
-	import { setContext } from 'svelte';
+	import { getContext, setContext } from 'svelte';
 	import { writable } from 'svelte/store';
 
 	const showNewUnitModal = writable(false);
 	setContext('showNewUnitModal', showNewUnitModal);
+	const sidebarControl = getContext('sidebarControl');
+	const openSidebar = () => sidebarControl?.open?.();
 
 	export let data;
 	$: workspaceSlug = $page.params.workspace;
@@ -45,7 +47,28 @@
 			currentPath === `${basePath}/properties/${propertySlug}/units` ? 'py-2.5' : 'py-3'
 		}`}
 	>
-		<h1 class="text-sm font-normal text-neutral-700">{propertyTitle}</h1>
+		<div class="flex items-center gap-2">
+			<button
+				type="button"
+				aria-label="Open sidebar"
+				class="rounded-md p-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 lg:hidden"
+				on:click={openSidebar}
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="12"
+					height="12"
+					fill="currentColor"
+					class="bi bi-layout-sidebar"
+					viewBox="0 0 16 16"
+				>
+					<path
+						d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm5-1v12h9a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM4 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2z"
+					/>
+				</svg>
+			</button>
+			<h1 class="text-sm font-normal text-neutral-700">{propertyTitle}</h1>
+		</div>
 		{#if currentPath === `${basePath}/properties/${propertySlug}/units`}
 			<button
 				type="button"

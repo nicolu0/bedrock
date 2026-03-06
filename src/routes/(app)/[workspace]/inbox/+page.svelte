@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
+	import { getContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { notificationsCache, primeNotificationsCache } from '$lib/stores/notificationsCache.js';
@@ -12,6 +13,8 @@
 	let reassignOpen = {};
 	let reassignValue = {};
 	let loadError = false;
+	const sidebarControl = getContext('sidebarControl');
+	const openSidebar = () => sidebarControl?.open?.();
 	$: isAdmin = data.workspace?.admin_user_id === data.currentUserId;
 
 	$: workspaceSlug = $page.params.workspace;
@@ -145,7 +148,26 @@
 </script>
 
 <div>
-	<div class="flex items-center border-b border-neutral-200 px-6 py-3">
+	<div class="flex items-center gap-2 border-b border-neutral-200 px-6 py-3">
+		<button
+			type="button"
+			aria-label="Open sidebar"
+			class="rounded-md p-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 lg:hidden"
+			on:click={openSidebar}
+		>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="12"
+				height="12"
+				fill="currentColor"
+				class="bi bi-layout-sidebar"
+				viewBox="0 0 16 16"
+			>
+				<path
+					d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm5-1v12h9a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM4 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2z"
+				/>
+			</svg>
+		</button>
 		<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
 	</div>
 
