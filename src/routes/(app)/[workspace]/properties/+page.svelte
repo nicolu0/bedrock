@@ -4,6 +4,7 @@
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 	import { fade, scale } from 'svelte/transition';
+	import { getContext } from 'svelte';
 	import {
 		propertiesCache,
 		addPropertyToCache,
@@ -38,6 +39,8 @@
 	let newPropertyPostalCode = '';
 	let newPropertyCountry = '';
 	let createPropertyError = '';
+	const sidebarControl = getContext('sidebarControl');
+	const openSidebar = () => sidebarControl?.open?.();
 	let newPropertyOwnerId = '';
 	let editingProperty = null;
 	let editPropertyName = '';
@@ -263,7 +266,28 @@
 
 <div class="space-y-2">
 	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
-		<h1 class="text-sm font-normal text-neutral-700">Properties</h1>
+		<div class="flex items-center gap-2">
+			<button
+				type="button"
+				aria-label="Open sidebar"
+				class="rounded-md p-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 lg:hidden"
+				on:click={openSidebar}
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="12"
+					height="12"
+					fill="currentColor"
+					class="bi bi-layout-sidebar"
+					viewBox="0 0 16 16"
+				>
+					<path
+						d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm5-1v12h9a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM4 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2z"
+					/>
+				</svg>
+			</button>
+			<h1 class="text-sm font-normal text-neutral-700">Properties</h1>
+		</div>
 		<button
 			on:click={openNewPropertyModal}
 			type="button"
@@ -304,8 +328,8 @@
 						on:keydown={(e) => e.key === 'Enter' && openEditPropertyModal(property)}
 					>
 						<div class="truncate">{property.name}</div>
-						<div class="text-neutral-500">--</div>
-						<div class="text-neutral-500">--</div>
+						<div class="text-neutral-500">{property.unit_count ?? 0}</div>
+						<div class="text-neutral-500">{property.issue_count ?? 0}</div>
 						<div class="flex items-center">
 							<div
 								class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600"

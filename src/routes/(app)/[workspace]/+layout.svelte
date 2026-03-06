@@ -1,6 +1,6 @@
 <script>
 	// @ts-nocheck
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, setContext } from 'svelte';
 	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
@@ -67,8 +67,19 @@
 		const _ws = workspaceSlug;
 		const prime = (list) => {
 			const cache = get(propertiesCache);
-			if (!cache.data || cache.workspace !== _ws) {
-				primePropertiesCache(_ws, Array.isArray(list) ? list : []);
+			const next = Array.isArray(list) ? list : [];
+			const nextHasCounts = next.some(
+				(item) =>
+					Object.prototype.hasOwnProperty.call(item ?? {}, 'unit_count') ||
+					Object.prototype.hasOwnProperty.call(item ?? {}, 'issue_count')
+			);
+			const cacheMissingCounts = (cache.data ?? []).some(
+				(item) =>
+					!Object.prototype.hasOwnProperty.call(item ?? {}, 'unit_count') &&
+					!Object.prototype.hasOwnProperty.call(item ?? {}, 'issue_count')
+			);
+			if (!cache.data || cache.workspace !== _ws || (nextHasCounts && cacheMissingCounts)) {
+				primePropertiesCache(_ws, next);
 			}
 		};
 		if (data.properties instanceof Promise) {
@@ -102,6 +113,12 @@
 	const propertiesItem = { id: 'properties', label: 'Properties', href: 'properties' };
 	const settingsItem = { id: 'settings', label: 'Settings', href: 'settings' };
 	let propertiesOpen = true;
+	let sidebarOpen = false;
+	const sidebarControl = {
+		open: () => (sidebarOpen = true),
+		close: () => (sidebarOpen = false)
+	};
+	setContext('sidebarControl', sidebarControl);
 
 	const slugify = (value) => {
 		if (!value) return 'property';
@@ -368,23 +385,29 @@
 	<slot />
 {:else}
 	<div class="h-screen bg-white text-neutral-900">
-		<div class="flex h-screen flex-col md:flex-row">
-			<aside class="flex h-screen w-1/6 flex-col border-r border-neutral-200 bg-neutral-50/80">
+		<div class="flex h-screen flex-row">
+			<div
+				class={`fixed inset-0 z-20 bg-neutral-900/40 transition-opacity duration-200 ease-out lg:hidden ${sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+				on:click={() => (sidebarOpen = false)}
+			></div>
+			<aside
+				class={`fixed inset-y-0 left-0 z-30 h-screen w-72 overflow-hidden border-r border-neutral-200 bg-neutral-50/95 shadow-xl transition-transform duration-100 ease-out lg:static lg:z-auto lg:w-1/6 lg:translate-x-0 lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+			>
 				<div
 					class="flex h-full min-h-0 flex-col transition-opacity duration-150"
 					class:opacity-0={!pageVisible}
 				>
 					<div class="flex flex-1 flex-col space-y-6 px-2 pt-4">
-						<div class="flex items-center justify-between px-2 text-neutral-700">
-							<div class="flex items-center gap-2">
-								<div class="h-4.5 w-4.5 rounded-sm bg-neutral-700"></div>
-								<span class="max-w-[120px] truncate text-sm text-neutral-700">
+						<div class="flex min-w-0 items-center justify-between gap-2 px-2 text-neutral-700">
+							<div class="flex min-w-0 flex-1 items-center gap-2">
+								<div class="h-4.5 w-4.5 shrink-0 rounded-sm bg-neutral-700"></div>
+								<span class="min-w-0 flex-1 truncate text-sm text-neutral-700">
 									{data?.workspace?.name ?? ''}
 								</span>
 							</div>
 							<a
 								href={`${basePath}/search`}
-								class="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+								class="shrink-0 rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
 							>
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
