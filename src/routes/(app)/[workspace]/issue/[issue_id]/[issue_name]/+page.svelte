@@ -27,7 +27,8 @@
 	import {
 		activityLogsCache,
 		ensureActivityLogsCache,
-		applyActivityLogDelta
+		applyActivityLogDelta,
+		removeActivityLogFromCache
 	} from '$lib/stores/activityLogsCache.js';
 	import { supabase } from '$lib/supabaseClient.js';
 
@@ -211,6 +212,9 @@
 	let emailDraftsByMessageId = {};
 	let draftIssueIds = [];
 	let logsByIssue = {};
+	let commentBody = '';
+	let commentTextarea;
+	let membersByUserId = {};
 	let _resolvedReadableIdKey = null;
 
 	// Reset local state when route/issue changes, preferring cache -> list seed
@@ -386,11 +390,16 @@
 	$: issueDescription = issue?.description ?? '';
 	$: statusKey = issue?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
-	$: assigneeName = assignee?.name ?? 'Unassigned';
+	$: assigneeName = assignee?.name ?? assignee?.users?.name ?? 'Unassigned';
 	$: membersReady =
 		$peopleMembersCache.workspace === workspaceSlug && Array.isArray($peopleMembersCache.data);
 	$: membersLoading = $peopleMembersCache.loading && !membersReady;
 	$: members = membersReady ? $peopleMembersCache.data : [];
+	$: membersByUserId = members.reduce((acc, member) => {
+		if (!member?.user_id) return acc;
+		acc[member.user_id] = member;
+		return acc;
+	}, {});
 	$: assignableMembers = [...members]
 		.filter((member) => {
 			const role = (member?.role ?? '').toLowerCase();
@@ -435,6 +444,102 @@
 			hour: 'numeric',
 			minute: '2-digit'
 		});
+	};
+
+	const avatarPalette = [
+		'bg-amber-200',
+		'bg-blue-200',
+		'bg-emerald-200',
+		'bg-rose-200',
+		'bg-indigo-200',
+		'bg-teal-200',
+		'bg-orange-200',
+		'bg-sky-200'
+	];
+
+	const getAvatarColor = (seed) => {
+		if (!seed) return 'bg-neutral-200';
+		const value = seed.toString();
+		let hash = 0;
+		for (let i = 0; i < value.length; i += 1) {
+			hash = (hash * 31 + value.charCodeAt(i)) % avatarPalette.length;
+		}
+		return avatarPalette[hash] ?? 'bg-neutral-200';
+	};
+
+	const getCommentAuthor = (log) => {
+		const member = log?.created_by ? membersByUserId[log.created_by] : null;
+		const name = member?.users?.name ?? member?.name ?? 'User';
+		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
+		const color = getAvatarColor(log?.created_by ?? name);
+		return { name, initial, color };
+	};
+
+	const getMemberAvatar = (member) => {
+		const name = member?.users?.name ?? member?.name ?? 'User';
+		const seed = member?.user_id ?? member?.users?.id ?? name;
+		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
+		const color = getAvatarColor(seed);
+		return { name, initial, color };
+	};
+
+	const getAssigneeAvatar = (nextAssignee) => {
+		const name = nextAssignee?.name ?? nextAssignee?.users?.name ?? 'User';
+		const seed = nextAssignee?.user_id ?? nextAssignee?.id ?? name;
+		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
+		const color = getAvatarColor(seed);
+		return { name, initial, color };
+	};
+
+	const handleCommentSend = async () => {
+		const trimmed = commentBody.trim();
+		if (!trimmed || !issueId) return;
+		const tempId = `local-${Date.now()}`;
+		const optimisticLog = {
+			id: tempId,
+			issue_id: issueId,
+			type: 'comment',
+			body: trimmed,
+			created_by: data?.userId ?? null,
+			created_at: new Date().toISOString()
+		};
+		applyActivityLogDelta(optimisticLog);
+		commentBody = '';
+		if (commentTextarea) {
+			commentTextarea.style.height = 'auto';
+		}
+
+		const workspaceId = data?.workspace?.id ?? null;
+		if (!workspaceId || !data?.userId) {
+			removeActivityLogFromCache(optimisticLog);
+			return;
+		}
+
+		const { data: created, error } = await supabase
+			.from('activity_logs')
+			.insert({
+				workspace_id: workspaceId,
+				issue_id: issueId,
+				type: 'comment',
+				body: trimmed,
+				created_by: data.userId
+			})
+			.select('id, issue_id, workspace_id, type, body, data, created_by, created_at')
+			.single();
+
+		if (error || !created?.id) {
+			removeActivityLogFromCache(optimisticLog);
+			return;
+		}
+
+		removeActivityLogFromCache(optimisticLog);
+		applyActivityLogDelta(created);
+	};
+
+	const resizeCommentTextarea = () => {
+		if (!commentTextarea) return;
+		commentTextarea.style.height = 'auto';
+		commentTextarea.style.height = `${commentTextarea.scrollHeight}px`;
 	};
 
 	const getThreadSubject = (id) => {
@@ -797,7 +902,7 @@
 			</div>
 
 			<div
-				class="flex-1 overflow-y-auto px-10 py-8 transition-opacity duration-200"
+				class="flex-1 overflow-y-auto px-10 pt-8 pb-20 transition-opacity duration-200"
 				class:opacity-0={!$pageReady}
 			>
 				<div class="flex flex-wrap items-start justify-between gap-6">
@@ -851,7 +956,20 @@
 												<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
 												<span class="text-neutral-800">{subIssue.name}</span>
 											</div>
-											<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												fill="currentColor"
+												class="text-neutral-400"
+												viewBox="0 0 16 16"
+											>
+												<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+												<path
+													fill-rule="evenodd"
+													d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+												/>
+											</svg>
 										</a>
 									{/each}
 								</div>
@@ -951,19 +1069,37 @@
 							{/if}
 
 							{#each (logsByIssue[issueId] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
-								<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
-									<span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"></span>
-									<div>
-										{#if log.type === 'status_change'}
-											Status changed · {formatTimestamp(log.created_at)}
-										{:else if log.type === 'assignee_change'}
-											Assignee changed · {formatTimestamp(log.created_at)}
-										{:else if log.type === 'comment'}
-											<p class="text-neutral-700">{log.body}</p>
-											<span>{formatTimestamp(log.created_at)}</span>
-										{/if}
+								{#if log.type === 'comment'}
+									<div class="flex items-center gap-3 px-1 py-2">
+										<div
+											class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
+											aria-label={getCommentAuthor(log).name}
+										>
+											{getCommentAuthor(log).initial}
+										</div>
+										<div class="flex-1">
+											<div class="rounded-md border-0 bg-white p-0 shadow-none">
+												<div class="flex min-w-0 items-start justify-between gap-4">
+													<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
+													<span class="shrink-0 text-xs text-neutral-400">
+														{formatTimestamp(log.created_at)}
+													</span>
+												</div>
+											</div>
+										</div>
 									</div>
-								</div>
+								{:else}
+									<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
+										<span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"></span>
+										<div>
+											{#if log.type === 'status_change'}
+												Status changed · {formatTimestamp(log.created_at)}
+											{:else if log.type === 'assignee_change'}
+												Assignee changed · {formatTimestamp(log.created_at)}
+											{/if}
+										</div>
+									</div>
+								{/if}
 							{/each}
 
 							{#each subIssues as subIssue}
@@ -1083,20 +1219,39 @@
 													</div>
 
 													{#each (logsByIssue[subIssue.id] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
-														<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
-															<span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"
-															></span>
-															<div>
-																{#if log.type === 'status_change'}
-																	Status changed · {formatTimestamp(log.created_at)}
-																{:else if log.type === 'assignee_change'}
-																	Assignee changed · {formatTimestamp(log.created_at)}
-																{:else if log.type === 'comment'}
-																	<p class="text-neutral-700">{log.body}</p>
-																	<span>{formatTimestamp(log.created_at)}</span>
-																{/if}
+														{#if log.type === 'comment'}
+															<div class="flex items-center gap-3 px-1 py-2">
+																<div
+																	class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
+																	aria-label={getCommentAuthor(log).name}
+																>
+																	{getCommentAuthor(log).initial}
+																</div>
+																<div class="flex-1">
+																	<div class="rounded-md border-0 bg-white p-0 shadow-none">
+																		<div class="flex min-w-0 items-start justify-between gap-4">
+																			<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
+																			<span class="shrink-0 text-xs text-neutral-400">
+																				{formatTimestamp(log.created_at)}
+																			</span>
+																		</div>
+																	</div>
+																</div>
 															</div>
-														</div>
+														{:else}
+															<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
+																<span
+																	class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"
+																></span>
+																<div>
+																	{#if log.type === 'status_change'}
+																		Status changed · {formatTimestamp(log.created_at)}
+																	{:else if log.type === 'assignee_change'}
+																		Assignee changed · {formatTimestamp(log.created_at)}
+																	{/if}
+																</div>
+															</div>
+														{/if}
 													{/each}
 												</div>
 											</div>
@@ -1106,6 +1261,41 @@
 							{/each}
 						</div>
 					{/if}
+					<div class="mt-6">
+						<div
+							class="rounded-md border border-neutral-100 bg-white px-4 py-3 shadow-[0_2px_6px_rgba(0,0,0,0.08)]"
+						>
+							<textarea
+								class="w-full resize-none border-0 bg-transparent p-0 text-sm text-neutral-700 outline-none placeholder:text-neutral-400 focus:shadow-none focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
+								placeholder="Leave a comment..."
+								rows="1"
+								bind:value={commentBody}
+								bind:this={commentTextarea}
+								on:input={resizeCommentTextarea}
+							></textarea>
+							<div class="mt-1 flex items-center justify-end">
+								<button
+									type="button"
+									class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-800 focus-visible:outline-none disabled:opacity-50"
+									aria-label="Send comment"
+									disabled={!commentBody.trim() || !issueId}
+									on:click={handleCommentSend}
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="18"
+										height="18"
+										viewBox="0 0 16 16"
+										fill="currentColor"
+									>
+										<path
+											d="M8 12a.5.5 0 0 0 .5-.5V4.707l2.147 2.147a.5.5 0 0 0 .707-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 1 0 .708.708L7.5 4.707V11.5A.5.5 0 0 0 8 12z"
+										/>
+									</svg>
+								</button>
+							</div>
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -1115,7 +1305,7 @@
 				class="flex w-full flex-col px-4 transition-opacity duration-150"
 				class:opacity-0={!$pageReady}
 			>
-				<div class="flex items-center justify-between gap-2 py-3">
+				<div class="flex items-center justify-between gap-2 py-2">
 					<span class="text-sm text-neutral-600">{issueReadableId ?? issueKey}</span>
 					<button
 						type="button"
@@ -1149,7 +1339,6 @@
 						>
 							<span class={`h-3.5 w-3.5 rounded-full border ${statusMeta.statusClass}`}></span>
 							<span>{statusMeta.label}</span>
-							<span class="ml-auto text-xs text-neutral-400">▾</span>
 						</button>
 						{#if statusOpen}
 							<div
@@ -1184,9 +1373,30 @@
 							class="-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 hover:bg-stone-100"
 							on:click|stopPropagation={() => (assigneeOpen = !assigneeOpen)}
 						>
-							<div class="h-3.5 w-3.5 rounded-full bg-neutral-200"></div>
+							{#if assignee}
+								<div
+									class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(assignee).color}`}
+									aria-label={getAssigneeAvatar(assignee).name}
+								>
+									{getAssigneeAvatar(assignee).initial}
+								</div>
+							{:else}
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									fill="currentColor"
+									class="text-neutral-400"
+									viewBox="0 0 16 16"
+								>
+									<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+									<path
+										fill-rule="evenodd"
+										d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+									/>
+								</svg>
+							{/if}
 							<span class="truncate">{assigneeName}</span>
-							<span class="ml-auto text-xs text-neutral-400">▾</span>
 						</button>
 						{#if assigneeOpen}
 							<div
@@ -1198,11 +1408,21 @@
 									class="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50"
 									on:click={() => handleAssigneeSelect(null)}
 								>
-									<span
-										class="rounded-full bg-neutral-100 px-2 py-0.5 font-medium text-neutral-500"
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="16"
+										height="16"
+										fill="currentColor"
+										class="text-neutral-400"
+										viewBox="0 0 16 16"
 									>
-										Unassigned
-									</span>
+										<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+										<path
+											fill-rule="evenodd"
+											d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+										/>
+									</svg>
+									<span class="font-medium text-neutral-500"> Unassigned </span>
 								</button>
 								<div class="my-1 h-px bg-neutral-100"></div>
 								{#if membersLoading}
@@ -1216,17 +1436,23 @@
 											}`}
 											on:click={() => handleAssigneeSelect(member)}
 										>
-											<span
-												class="rounded-full bg-stone-100 px-2 py-0.5 font-medium text-neutral-600"
+											<div
+												class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getMemberAvatar(member).color}`}
+												aria-label={getMemberAvatar(member).name}
 											>
-												{roleLabels[member.role] ?? member.role}
-											</span>
+												{getMemberAvatar(member).initial}
+											</div>
 											<span class="truncate">
 												{member.users?.name ??
 													member.name ??
 													member.users?.id ??
 													member.user_id ??
 													'Unknown member'}
+											</span>
+											<span
+												class="ml-auto rounded-full bg-stone-100 px-2 py-0.5 font-medium text-neutral-600"
+											>
+												{roleLabels[member.role] ?? member.role}
 											</span>
 										</button>
 									{/each}
