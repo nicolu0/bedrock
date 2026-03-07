@@ -177,7 +177,7 @@
 				class={`rounded-md border px-2.5 py-1 text-xs transition ${
 					filter === tab
 						? 'border-neutral-200 bg-neutral-100 text-neutral-700'
-						: 'border-transparent text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
+						: 'border-neutral-200 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
 				}`}
 				type="button"
 				on:click={() => (filter = tab)}
