@@ -69,6 +69,9 @@ const extractEmail = (fromValue: string) => {
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
+const isUuid = (value: string) =>
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
 const findBodyPart = (payload: any, mimeType: string): string | null => {
 	if (!payload) return null;
 	if (payload.mimeType === mimeType && payload.body?.data) {
@@ -256,14 +259,57 @@ const listVendors = async (workspaceId: string) => {
 	return data ?? [];
 };
 
+const getWorkspaceAdminId = async (workspaceId: string) => {
+	const { data } = await supabase
+		.from('workspaces')
+		.select('admin_user_id')
+		.eq('id', workspaceId)
+		.maybeSingle();
+	return data?.admin_user_id ?? null;
+};
+
+const listEligibleAssignees = async (workspaceId: string): Promise<Set<string>> => {
+	const { data } = await supabase
+		.from('members')
+		.select('user_id, role')
+		.eq('workspace_id', workspaceId)
+		.in('role', ['admin', 'member']);
+	const ids = (data ?? [])
+		.map((row) => row.user_id)
+		.filter((id): id is string => typeof id === 'string');
+	return new Set(ids);
+};
+
+const resolveAssigneeId = ({
+	requestedAssigneeId,
+	fallbackAssigneeId,
+	eligibleAssignees
+}: {
+	requestedAssigneeId?: string | null;
+	fallbackAssigneeId?: string | null;
+	eligibleAssignees: Set<string>;
+}) => {
+	if (requestedAssigneeId && isUuid(requestedAssigneeId)) {
+		if (eligibleAssignees.has(requestedAssigneeId)) {
+			return requestedAssigneeId;
+		}
+	}
+	if (fallbackAssigneeId && isUuid(fallbackAssigneeId)) {
+		return fallbackAssigneeId;
+	}
+	return null;
+};
+
 const createIssue = async ({
 	name,
 	unitId,
-	workspaceId
+	workspaceId,
+	assigneeId
 }: {
 	name: string;
 	unitId: string;
 	workspaceId: string;
+	assigneeId?: string | null;
 }) => {
 	const { data, error } = await supabase
 		.from('issues')
@@ -271,7 +317,8 @@ const createIssue = async ({
 			name,
 			unit_id: unitId,
 			workspace_id: workspaceId,
-			status: 'todo'
+			status: 'todo',
+			assignee_id: assigneeId ?? null
 		})
 		.select('id')
 		.single();
@@ -287,7 +334,8 @@ const createSubissue = async ({
 	unitId,
 	workspaceId,
 	status,
-	reasoning
+	reasoning,
+	assigneeId
 }: {
 	parentIssueId: string;
 	name: string;
@@ -295,6 +343,7 @@ const createSubissue = async ({
 	workspaceId: string;
 	status: string;
 	reasoning: string | null;
+	assigneeId?: string | null;
 }) => {
 	const { data, error } = await supabase
 		.from('issues')
@@ -304,7 +353,8 @@ const createSubissue = async ({
 			unit_id: unitId,
 			workspace_id: workspaceId,
 			status,
-			reasoning
+			reasoning,
+			assignee_id: assigneeId ?? null
 		})
 		.select('id')
 		.single();
@@ -584,6 +634,7 @@ Rules:
 - root_issue_id: When present, you must not call create_issue. Reuse existing subissues when possible.
 - Drafts: Use the subissue id for issue_id. For replies, use latest_message_id for message_id. For vendor scheduling drafts, use draft_email for new outreach and draft_reply for replies; include message_id only when replying in an existing vendor thread, otherwise omit it entirely (do not send empty string).
 - Linking: Call link_thread_to_issue exactly once and only after issue/subissue creation. This is required.
+- Assignees: When creating issues/subissues, set assignee_id to a user id from eligible_assignees. If unsure, omit it and default to admin_user_id.
 Tenant identity:
 - tenant_name and tenant_email come from the tenants table lookup by sender email. These are authoritative.
 User identity:
@@ -604,7 +655,8 @@ When you believe you have completed the task, call done().
 			properties: {
 				title: { type: 'string' },
 				unit_id: { type: 'string' },
-				workspace_id: { type: 'string' }
+				workspace_id: { type: 'string' },
+				assignee_id: { type: 'string' }
 			},
 			required: ['title', 'unit_id', 'workspace_id']
 		}
@@ -634,7 +686,8 @@ When you believe you have completed the task, call done().
 				parent_issue_id: { type: 'string' },
 				title: { type: 'string' },
 				status: { type: 'string' },
-				reasoning: { type: 'string' }
+				reasoning: { type: 'string' },
+				assignee_id: { type: 'string' }
 			},
 			required: ['parent_issue_id', 'title', 'status', 'reasoning']
 		}
@@ -697,6 +750,11 @@ When you believe you have completed the task, call done().
 
 	const openIssues = await listOpenIssues(unitId);
 	const vendors = await listVendors(workspaceId);
+	const workspaceAdminId = await getWorkspaceAdminId(workspaceId);
+	const eligibleAssignees = await listEligibleAssignees(workspaceId);
+	if (workspaceAdminId) {
+		eligibleAssignees.add(workspaceAdminId);
+	}
 	const messages: Array<any> = [
 		{ role: 'system', content: system },
 		{
@@ -720,7 +778,9 @@ When you believe you have completed the task, call done().
 				tenant_name: tenantName,
 				tenant_email: tenantEmail,
 				user_name: userName,
-				default_sender_email: defaultSenderEmail
+				default_sender_email: defaultSenderEmail,
+				eligible_assignees: Array.from(eligibleAssignees),
+				admin_user_id: workspaceAdminId
 			})
 		}
 	];
@@ -786,10 +846,20 @@ When you believe you have completed the task, call done().
 				const title = typeof args.title === 'string' ? args.title.trim() : '';
 				const unit = typeof args.unit_id === 'string' ? args.unit_id : unitId;
 				const workspace = typeof args.workspace_id === 'string' ? args.workspace_id : workspaceId;
+				const assignee = resolveAssigneeId({
+					requestedAssigneeId: typeof args.assignee_id === 'string' ? args.assignee_id : null,
+					fallbackAssigneeId: workspaceAdminId,
+					eligibleAssignees
+				});
 				if (!title) {
 					throw new Error('create_issue missing title');
 				}
-				const issueId = await createIssue({ name: title, unitId: unit, workspaceId: workspace });
+				const issueId = await createIssue({
+					name: title,
+					unitId: unit,
+					workspaceId: workspace,
+					assigneeId: assignee
+				});
 				linkedIssueId = issueId;
 				createdIssueId = issueId;
 				issuedAction = true;
@@ -826,6 +896,11 @@ When you believe you have completed the task, call done().
 				const reasoning = typeof args.reasoning === 'string' ? args.reasoning : '';
 				const requestedParent =
 					typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
+				const assignee = resolveAssigneeId({
+					requestedAssigneeId: typeof args.assignee_id === 'string' ? args.assignee_id : null,
+					fallbackAssigneeId: workspaceAdminId,
+					eligibleAssignees
+				});
 				const parentIssueId = requestedParent ?? linkedIssueId ?? createdIssueId;
 				if (!title || !parentIssueId) {
 					throw new Error('create_subissue missing title or parent_issue_id');
@@ -836,7 +911,8 @@ When you believe you have completed the task, call done().
 					unitId,
 					workspaceId,
 					status,
-					reasoning
+					reasoning,
+					assigneeId: assignee
 				});
 				lastSubissueId = subissueId;
 				lastSubissueTitle = title;
@@ -1099,7 +1175,16 @@ When you believe you have completed the task, call done().
 				workspaceId
 			});
 			const fallbackTitle = llmTitle || 'Maintenance Issue';
-			linkedIssueId = await createIssue({ name: fallbackTitle, unitId, workspaceId });
+			linkedIssueId = await createIssue({
+				name: fallbackTitle,
+				unitId,
+				workspaceId,
+				assigneeId: resolveAssigneeId({
+					requestedAssigneeId: null,
+					fallbackAssigneeId: workspaceAdminId,
+					eligibleAssignees
+				})
+			});
 			createdIssueId = linkedIssueId;
 			await linkThreadToIssue({ threadId, issueId: linkedIssueId });
 		}

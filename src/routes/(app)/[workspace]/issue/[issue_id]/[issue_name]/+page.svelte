@@ -14,7 +14,11 @@
 		primeIssueDetail,
 		updateIssueStatusInDetailCache
 	} from '$lib/stores/issueDetailCache.js';
-	import { issuesCache, updateIssueStatusInListCache } from '$lib/stores/issuesCache.js';
+	import {
+		issuesCache,
+		updateIssueFieldsInListCache,
+		updateIssueStatusInListCache
+	} from '$lib/stores/issuesCache.js';
 	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache.js';
 	import {
 		activityCache,
@@ -202,8 +206,17 @@
 				})()
 			: [];
 
-	// Default assignee to null until explicitly loaded.
-	$: seedAssignee = null;
+	const resolveAssigneeFromId = (assigneeId, memberMap) =>
+		assigneeId && memberMap[assigneeId] ? normalizeAssignee(memberMap[assigneeId]) : null;
+
+	const placeholderAssignee = (assigneeId) =>
+		assigneeId ? { id: assigneeId, user_id: assigneeId, name: 'Assigned', users: null } : null;
+
+	// Default assignee from cache/list when available.
+	$: seedAssignee =
+		cached?.assignee ??
+		resolveAssigneeFromId(listItem?.assigneeId ?? listItem?.assignee_id ?? null, membersByUserId) ??
+		placeholderAssignee(listItem?.assigneeId ?? listItem?.assignee_id ?? null);
 
 	let issue = null;
 	let subIssues = [];
@@ -215,6 +228,7 @@
 	let commentBody = '';
 	let commentTextarea;
 	let membersByUserId = {};
+	let issueAssigneeId = null;
 	let _resolvedReadableIdKey = null;
 
 	// Reset local state when route/issue changes, preferring cache -> list seed
@@ -224,6 +238,7 @@
 		if (browser && !listItem) pageReady.set(false);
 		issue = null;
 		subIssues = [];
+		issueAssigneeId = listItem?.assigneeId ?? listItem?.assignee_id ?? null;
 		assignee = seedAssignee;
 		issue =
 			cached?.issue ??
@@ -295,6 +310,51 @@
 
 	$: if (browser && issueId && !issue && !listItem) {
 		pageReady.set(false);
+	}
+
+	$: if (browser && workspaceSlug && issueAssigneeId && !membersReady && !membersLoading) {
+		ensurePeopleMembersCache(workspaceSlug);
+	}
+
+	let _loadedIssueDetailId = null;
+	$: if (browser && issueId && issueId !== _loadedIssueDetailId) {
+		_loadedIssueDetailId = issueId;
+		supabase
+			.from('issues')
+			.select(
+				'id, name, status, issue_number, readable_id, assignee_id, units(name, properties(name))'
+			)
+			.eq('id', issueId)
+			.maybeSingle()
+			.then(({ data: resolved, error: resolveErr }) => {
+				if (resolveErr) {
+					console.error('[issue] load detail error:', resolveErr);
+					return;
+				}
+				if (!resolved?.id || _seededForIssueId !== issueId) return;
+				issueAssigneeId = resolved.assignee_id ?? issueAssigneeId ?? null;
+				const nextIssue = {
+					id: resolved.id,
+					name: resolved.name,
+					status: resolved.status,
+					description: null,
+					property: resolved.units?.properties?.name ?? null,
+					unit: resolved.units?.name ?? null,
+					issueNumber: resolved.issue_number ?? null,
+					readableId: resolved.readable_id ?? null
+				};
+				issue = issue ? { ...issue, ...nextIssue } : nextIssue;
+				const nextAssignee = resolveAssigneeFromId(issueAssigneeId, membersByUserId);
+				if (nextAssignee) assignee = nextAssignee;
+				const current = getIssueDetail(issueId);
+				if (current) {
+					primeIssueDetail(issueId, {
+						...current,
+						issue: { ...current.issue, ...nextIssue },
+						assignee: nextAssignee ?? current.assignee ?? null
+					});
+				}
+			});
 	}
 
 	let _fadeIssueId = null;
@@ -400,6 +460,13 @@
 		acc[member.user_id] = member;
 		return acc;
 	}, {});
+	$: if (issueAssigneeId && membersByUserId[issueAssigneeId]) {
+		if (assignee?.id !== issueAssigneeId) {
+			assignee = normalizeAssignee(membersByUserId[issueAssigneeId]);
+		}
+	} else if (issueAssigneeId && !assignee) {
+		assignee = placeholderAssignee(issueAssigneeId);
+	}
 	$: assignableMembers = [...members]
 		.filter((member) => {
 			const role = (member?.role ?? '').toLowerCase();
@@ -475,6 +542,111 @@
 		return { name, initial, color };
 	};
 
+	const getActivityActor = (log) => getCommentAuthor(log);
+
+	const getAssigneeNameFromLog = (log) => {
+		const targetId = log?.data?.to ?? log?.data?.assignee_id ?? null;
+		if (!targetId) return 'Unassigned';
+		const member = membersByUserId[targetId];
+		return member?.users?.name ?? member?.name ?? 'Unassigned';
+	};
+
+	const getStatusLabelFromLog = (log) => {
+		const nextStatus = log?.data?.to ?? null;
+		if (!nextStatus) return 'Unknown';
+		return (statusConfig[nextStatus]?.label ?? nextStatus).toString();
+	};
+
+	const ACTIVITY_LOG_WINDOW_MS = 60 * 60 * 1000;
+
+	const getLatestLogForIssue = (id) => {
+		const list = logsByIssue[id] ?? [];
+		if (!list.length) return null;
+		return list.reduce((latest, entry) => {
+			if (!latest) return entry;
+			const latestTime = new Date(latest.created_at ?? 0).getTime();
+			const entryTime = new Date(entry.created_at ?? 0).getTime();
+			return entryTime >= latestTime ? entry : latest;
+		}, null);
+	};
+
+	const upsertIssueActivityLog = async ({ id, type, fromValue, toValue }) => {
+		if (!id) return;
+		const workspaceId = data?.workspace?.id ?? null;
+		const userId = data?.userId ?? null;
+		if (!workspaceId || !userId) return;
+
+		const lastLog = getLatestLogForIssue(id);
+		const nowIso = new Date().toISOString();
+		const lastCreatedAt = lastLog?.created_at ? new Date(lastLog.created_at).getTime() : 0;
+		const isWithinWindow = Date.now() - lastCreatedAt <= ACTIVITY_LOG_WINDOW_MS;
+		const shouldUpdate =
+			lastLog && lastLog.type === type && lastLog.created_by === userId && isWithinWindow;
+
+		const payloadData = {
+			from: fromValue ?? null,
+			to: toValue ?? null
+		};
+
+		if (shouldUpdate) {
+			const optimistic = {
+				...lastLog,
+				issue_id: id,
+				workspace_id: workspaceId,
+				type,
+				data: payloadData,
+				created_by: userId,
+				created_at: nowIso,
+				updated_at: nowIso
+			};
+			applyActivityLogDelta(optimistic);
+			const { data: updated, error } = await supabase
+				.from('activity_logs')
+				.update({ data: payloadData, created_at: nowIso, updated_at: nowIso })
+				.eq('id', lastLog.id)
+				.select('id, issue_id, workspace_id, type, body, data, created_by, created_at')
+				.single();
+			if (error || !updated?.id) {
+				applyActivityLogDelta(lastLog);
+				return;
+			}
+			applyActivityLogDelta(updated);
+			return;
+		}
+
+		const tempId = `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+		const optimistic = {
+			id: tempId,
+			issue_id: id,
+			workspace_id: workspaceId,
+			type,
+			data: payloadData,
+			created_by: userId,
+			created_at: nowIso
+		};
+		applyActivityLogDelta(optimistic);
+
+		const { data: created, error } = await supabase
+			.from('activity_logs')
+			.insert({
+				workspace_id: workspaceId,
+				issue_id: id,
+				type,
+				data: payloadData,
+				created_by: userId
+			})
+			.select('id, issue_id, workspace_id, type, body, data, created_by, created_at')
+			.single();
+
+		if (error || !created?.id) {
+			removeActivityLogFromCache(optimistic);
+			return;
+		}
+
+		removeActivityLogFromCache(optimistic);
+		applyActivityLogDelta(created);
+	};
+
 	const getMemberAvatar = (member) => {
 		const name = member?.users?.name ?? member?.name ?? 'User';
 		const seed = member?.user_id ?? member?.users?.id ?? name;
@@ -489,6 +661,17 @@
 		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
 		const color = getAvatarColor(seed);
 		return { name, initial, color };
+	};
+
+	const normalizeAssignee = (member) => {
+		if (!member) return null;
+		const id = member.user_id ?? member?.users?.id ?? null;
+		return {
+			id,
+			user_id: id,
+			name: member?.users?.name ?? member?.name ?? null,
+			users: member?.users ?? null
+		};
 	};
 
 	const handleCommentSend = async () => {
@@ -588,7 +771,15 @@
 			updateIssueStatusInDetailCache(issueId, prevStatus);
 			updateIssueStatusInListCache(issueId, prevStatus);
 			issue = { ...issue, status: prevStatus };
+			return;
 		}
+
+		upsertIssueActivityLog({
+			id: issueId,
+			type: 'status_change',
+			fromValue: prevStatus,
+			toValue: newStatus
+		});
 	};
 
 	const primeAssigneeCache = (nextAssignee) => {
@@ -610,12 +801,13 @@
 			assigneeOpen = false;
 			return;
 		}
-		const nextAssignee = member
-			? { id: member.user_id, name: member.users?.name ?? member.user_id }
-			: null;
+		const nextAssignee = normalizeAssignee(member);
 		const prevAssignee = assignee;
+		const prevAssigneeId = issueAssigneeId;
 		assignee = nextAssignee;
+		issueAssigneeId = nextId;
 		primeAssigneeCache(nextAssignee);
+		updateIssueFieldsInListCache(issueId, { assigneeId: nextId, assignee_id: nextId });
 		assigneeOpen = false;
 
 		const { error } = await supabase
@@ -625,8 +817,21 @@
 
 		if (error) {
 			assignee = prevAssignee;
+			issueAssigneeId = prevAssigneeId;
 			primeAssigneeCache(prevAssignee);
+			updateIssueFieldsInListCache(issueId, {
+				assigneeId: prevAssigneeId,
+				assignee_id: prevAssigneeId
+			});
+			return;
 		}
+
+		upsertIssueActivityLog({
+			id: issueId,
+			type: 'assignee_change',
+			fromValue: prevAssigneeId,
+			toValue: nextId
+		});
 	};
 
 	const copyIssueLink = async () => {
@@ -1089,14 +1294,32 @@
 										</div>
 									</div>
 								{:else}
-									<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
-										<span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"></span>
-										<div>
-											{#if log.type === 'status_change'}
-												Status changed · {formatTimestamp(log.created_at)}
-											{:else if log.type === 'assignee_change'}
-												Assignee changed · {formatTimestamp(log.created_at)}
-											{/if}
+									<div class="flex items-center gap-3 px-1 py-2">
+										<div
+											class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
+											aria-label={getActivityActor(log).name}
+										>
+											{getActivityActor(log).initial}
+										</div>
+										<div class="flex-1">
+											<div class="rounded-md border-0 bg-white p-0 shadow-none">
+												<div class="flex min-w-0 items-start justify-between gap-4">
+													<p class="flex-1 text-sm text-neutral-700">
+														{#if log.type === 'status_change'}
+															{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
+																log
+															)}
+														{:else if log.type === 'assignee_change'}
+															{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
+																log
+															)}
+														{/if}
+													</p>
+													<span class="shrink-0 text-xs text-neutral-400">
+														{formatTimestamp(log.created_at)}
+													</span>
+												</div>
+											</div>
 										</div>
 									</div>
 								{/if}
@@ -1239,16 +1462,32 @@
 																</div>
 															</div>
 														{:else}
-															<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
-																<span
-																	class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"
-																></span>
-																<div>
-																	{#if log.type === 'status_change'}
-																		Status changed · {formatTimestamp(log.created_at)}
-																	{:else if log.type === 'assignee_change'}
-																		Assignee changed · {formatTimestamp(log.created_at)}
-																	{/if}
+															<div class="flex items-center gap-3 px-1 py-2">
+																<div
+																	class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
+																	aria-label={getActivityActor(log).name}
+																>
+																	{getActivityActor(log).initial}
+																</div>
+																<div class="flex-1">
+																	<div class="rounded-md border-0 bg-white p-0 shadow-none">
+																		<div class="flex min-w-0 items-start justify-between gap-4">
+																			<p class="flex-1 text-sm text-neutral-700">
+																				{#if log.type === 'status_change'}
+																					{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
+																						log
+																					)}
+																				{:else if log.type === 'assignee_change'}
+																					{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
+																						log
+																					)}
+																				{/if}
+																			</p>
+																			<span class="shrink-0 text-xs text-neutral-400">
+																				{formatTimestamp(log.created_at)}
+																			</span>
+																		</div>
+																	</div>
 																</div>
 															</div>
 														{/if}

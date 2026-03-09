@@ -47,7 +47,7 @@ export const GET = async ({ locals, url }) => {
 
 	let { data: issues } = await supabaseAdmin
 		.from('issues')
-		.select('id, name, status, parent_id, unit_id, issue_number, readable_id')
+		.select('id, name, status, parent_id, unit_id, issue_number, readable_id, assignee_id')
 		.eq('workspace_id', workspace.id)
 		.order('updated_at', { ascending: false });
 
@@ -62,7 +62,7 @@ export const GET = async ({ locals, url }) => {
 		if (fallbackUnitIds.length) {
 			const { data: fallbackIssues } = await supabaseAdmin
 				.from('issues')
-				.select('id, name, status, parent_id, unit_id, issue_number, readable_id')
+				.select('id, name, status, parent_id, unit_id, issue_number, readable_id, assignee_id')
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
 			issues = fallbackIssues ?? [];
@@ -94,6 +94,8 @@ export const GET = async ({ locals, url }) => {
 			name: issue.name,
 			description: '',
 			assignees: 0,
+			assigneeId: issue.assignee_id ?? null,
+			assignee_id: issue.assignee_id ?? null,
 			property: property?.name ?? 'Unknown',
 			unit: unit?.name ?? 'Unknown',
 			issueNumber: issue.issue_number ?? null,
@@ -144,13 +146,17 @@ export const GET = async ({ locals, url }) => {
 				unit: subIssue.unit,
 				issueNumber: subIssue.issueNumber,
 				readableId: subIssue.readableId,
-				assignees: subIssue.assignees
+				assignees: subIssue.assignees,
+				assigneeId: subIssue.assigneeId ?? subIssue.assignee_id ?? null,
+				assignee_id: subIssue.assignee_id ?? subIssue.assigneeId ?? null
 			}));
 		bucket.items.push({
 			id: issue.id,
 			issueId: issue.issueId,
 			title: issue.title,
 			assignees: issue.assignees,
+			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
+			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
 			property: issue.property,
 			unit: issue.unit,
 			issueNumber: issue.issueNumber,
@@ -171,6 +177,8 @@ export const GET = async ({ locals, url }) => {
 			issueId: issue.issueId,
 			title: issue.title,
 			assignees: issue.assignees,
+			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
+			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
 			property: issue.property,
 			unit: issue.unit,
 			issueNumber: issue.issueNumber,
