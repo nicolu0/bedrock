@@ -129,6 +129,7 @@
 						title: item.title,
 						name: item.title,
 						status,
+						assigneeId: item.assigneeId ?? item.assignee_id ?? null,
 						property: item.property,
 						unit: item.unit,
 						issueNumber: item.issueNumber,
@@ -142,6 +143,7 @@
 							title: sub.title,
 							name: sub.title,
 							status,
+							assigneeId: sub.assigneeId ?? sub.assignee_id ?? null,
 							property: sub.property,
 							unit: sub.unit,
 							issueNumber: sub.issueNumber,
@@ -193,6 +195,7 @@
 								id: child.id,
 								name: child.name ?? child.title,
 								status: child.status,
+								assigneeId: child.assigneeId ?? child.assignee_id ?? null,
 								parent_id: parentId,
 								property: child.property ?? null,
 								unit: child.unit ?? null,
@@ -416,7 +419,7 @@
 		supabase
 			.from('issues')
 			.select(
-				'id, name, status, parent_id, issue_number, readable_id, units(name, properties(name))'
+				'id, name, status, parent_id, issue_number, readable_id, assignee_id, units(name, properties(name))'
 			)
 			.eq('parent_id', issueId)
 			.then(({ data: freshSubIssues, error: subErr }) => {
@@ -430,6 +433,8 @@
 							id: s.id,
 							name: s.name,
 							status: s.status,
+							assigneeId: s.assignee_id ?? null,
+							assignee_id: s.assignee_id ?? null,
 							parent_id: issueId,
 							property: s.units?.properties?.name ?? null,
 							unit: s.units?.name ?? null,
@@ -451,6 +456,12 @@
 	$: statusKey = issue?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
 	$: assigneeName = assignee?.name ?? assignee?.users?.name ?? 'Unassigned';
+	$: subIssuesWithAssignees = subIssues.map((subIssue) => {
+		const assigneeId = subIssue?.assigneeId ?? subIssue?.assignee_id ?? null;
+		const resolved =
+			resolveAssigneeFromId(assigneeId, membersByUserId) ?? placeholderAssignee(assigneeId);
+		return { ...subIssue, assignee: resolved };
+	});
 	$: membersReady =
 		$peopleMembersCache.workspace === workspaceSlug && Array.isArray($peopleMembersCache.data);
 	$: membersLoading = $peopleMembersCache.loading && !membersReady;
@@ -545,7 +556,9 @@
 	const getActivityActor = (log) => getCommentAuthor(log);
 
 	const getAssigneeNameFromLog = (log) => {
-		const targetId = log?.data?.to ?? log?.data?.assignee_id ?? null;
+		const data = log?.data ?? {};
+		const hasTo = Object.prototype.hasOwnProperty.call(data, 'to');
+		const targetId = hasTo ? data.to : (data.assignee_id ?? null);
 		if (!targetId) return 'Unassigned';
 		const member = membersByUserId[targetId];
 		return member?.users?.name ?? member?.name ?? 'Unassigned';
@@ -577,16 +590,34 @@
 		if (!workspaceId || !userId) return;
 
 		const lastLog = getLatestLogForIssue(id);
+		const lastData = lastLog?.data ?? {};
+		const lastFrom = Object.prototype.hasOwnProperty.call(lastData, 'from') ? lastData.from : null;
+		const lastTo = Object.prototype.hasOwnProperty.call(lastData, 'to') ? lastData.to : null;
 		const nowIso = new Date().toISOString();
 		const lastCreatedAt = lastLog?.created_at ? new Date(lastLog.created_at).getTime() : 0;
 		const isWithinWindow = Date.now() - lastCreatedAt <= ACTIVITY_LOG_WINDOW_MS;
 		const shouldUpdate =
 			lastLog && lastLog.type === type && lastLog.created_by === userId && isWithinWindow;
 
+		const isRevertLog =
+			type === 'assignee_change' &&
+			lastLog &&
+			lastLog.type === 'assignee_change' &&
+			lastLog.created_by === userId &&
+			lastTo === (fromValue ?? null) &&
+			lastFrom === (toValue ?? null) &&
+			isWithinWindow;
+
 		const payloadData = {
 			from: fromValue ?? null,
 			to: toValue ?? null
 		};
+
+		if (isRevertLog) {
+			removeActivityLogFromCache(lastLog);
+			await supabase.from('activity_logs').delete().eq('id', lastLog.id);
+			return;
+		}
 
 		if (shouldUpdate) {
 			const optimistic = {
@@ -915,6 +946,8 @@
 						id: newSub.id,
 						name: newSub.name,
 						status: newSub.status,
+						assigneeId: newSub.assignee_id ?? null,
+						assignee_id: newSub.assignee_id ?? null,
 						parent_id: issueId,
 						issueNumber: newSub.issue_number ?? null,
 						readableId: newSub.readable_id ?? null
@@ -1152,7 +1185,7 @@
 						>
 							<div class="overflow-hidden">
 								<div class="mt-3">
-									{#each subIssues as subIssue}
+									{#each subIssuesWithAssignees as subIssue}
 										<a
 											href={getSubIssueHref(subIssue)}
 											class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
@@ -1161,20 +1194,29 @@
 												<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
 												<span class="text-neutral-800">{subIssue.name}</span>
 											</div>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="16"
-												height="16"
-												fill="currentColor"
-												class="text-neutral-400"
-												viewBox="0 0 16 16"
-											>
-												<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
-												<path
-													fill-rule="evenodd"
-													d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
-												/>
-											</svg>
+											{#if subIssue.assignee}
+												<div
+													class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(subIssue.assignee).color}`}
+													aria-label={getAssigneeAvatar(subIssue.assignee).name}
+												>
+													{getAssigneeAvatar(subIssue.assignee).initial}
+												</div>
+											{:else}
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="16"
+													height="16"
+													fill="currentColor"
+													class="text-neutral-400"
+													viewBox="0 0 16 16"
+												>
+													<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+													<path
+														fill-rule="evenodd"
+														d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+													/>
+												</svg>
+											{/if}
 										</a>
 									{/each}
 								</div>
