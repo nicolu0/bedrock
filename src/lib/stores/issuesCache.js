@@ -3,7 +3,7 @@ import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { primeDetailCacheFromIssuesList } from './issueDetailCache.js';
 
-const CACHE_KEY = 'issues-cache-v1';
+const CACHE_KEY = 'issues-cache-v4';
 const CACHE_TTL = 5 * 60 * 1000;
 
 const statusConfig = {
@@ -77,13 +77,17 @@ const buildSectionsFromIssues = (issues = []) => {
 				unit: subIssue.unit,
 				issueNumber: subIssue.issueNumber ?? subIssue.issue_number ?? null,
 				readableId: subIssue.readableId ?? subIssue.readable_id ?? null,
-				assignees: subIssue.assignees ?? 0
+				assignees: subIssue.assignees ?? 0,
+				assigneeId: subIssue.assigneeId ?? subIssue.assignee_id ?? null,
+				assignee_id: subIssue.assignee_id ?? subIssue.assigneeId ?? null
 			}));
 		bucket.items.push({
 			id: issue.id,
 			issueId: issue.issueId ?? issue.id,
 			title: issue.title ?? issue.name,
 			assignees: issue.assignees ?? 0,
+			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
+			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
 			property: issue.property,
 			unit: issue.unit,
 			issueNumber: issue.issueNumber ?? issue.issue_number ?? null,
@@ -105,6 +109,8 @@ const buildSectionsFromIssues = (issues = []) => {
 			issueId: issue.issueId ?? issue.id,
 			title: issue.title ?? issue.name,
 			assignees: issue.assignees ?? 0,
+			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
+			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
 			property: issue.property,
 			unit: issue.unit,
 			issueNumber: issue.issueNumber ?? issue.issue_number ?? null,
@@ -355,6 +361,8 @@ export const applyIssueInsert = (
 			name: rawIssue.name,
 			description: '',
 			assignees: 0,
+			assigneeId: rawIssue.assignee_id ?? null,
+			assignee_id: rawIssue.assignee_id ?? null,
 			property: propertyName,
 			unit: unitName,
 			issueNumber: rawIssue.issue_number ?? null,
