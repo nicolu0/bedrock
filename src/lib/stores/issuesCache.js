@@ -3,7 +3,7 @@ import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { primeDetailCacheFromIssuesList } from './issueDetailCache.js';
 
-const CACHE_KEY = 'issues-cache-v3';
+const CACHE_KEY = 'issues-cache-v4';
 const CACHE_TTL = 5 * 60 * 1000;
 
 const statusConfig = {

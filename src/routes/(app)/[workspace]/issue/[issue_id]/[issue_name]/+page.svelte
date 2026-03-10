@@ -157,6 +157,15 @@
 	};
 
 	$: issueKey = $page.params.issue_id ?? '';
+	$: if (issueKey && issueKey !== _lastIssueKey) {
+		_lastIssueKey = issueKey;
+		pageReady.set(false);
+		issue = null;
+		subIssues = [];
+		assignee = null;
+		issueAssigneeId = null;
+		_seededForIssueId = null;
+	}
 	$: issueId =
 		listItem?.id ??
 		$issuesCache.data?.issues?.find((item) => item.readableId === issueKey)?.id ??
@@ -233,6 +242,8 @@
 	let membersByUserId = {};
 	let issueAssigneeId = null;
 	let _resolvedReadableIdKey = null;
+	let _resolveReadableRequestId = 0;
+	let _lastIssueKey = null;
 
 	// Reset local state when route/issue changes, preferring cache -> list seed
 	let _seededForIssueId = null;
@@ -250,7 +261,7 @@
 						id: listItem.id ?? issueId,
 						name: listItem.title ?? listItem.name,
 						status: listItem.status,
-						description: null,
+						description: listItem.description ?? null,
 						property: listItem.property ?? null,
 						unit: listItem.unit ?? null,
 						issueNumber: listItem.issueNumber ?? null,
@@ -273,7 +284,7 @@
 			id: listItem.id ?? issueId,
 			name: listItem.title ?? listItem.name,
 			status: listItem.status,
-			description: null,
+			description: listItem.description ?? null,
 			property: listItem.property ?? null,
 			unit: listItem.unit ?? null,
 			issueNumber: listItem.issueNumber ?? null,
@@ -283,13 +294,18 @@
 
 	$: if (browser && issueKey && !issueId && _resolvedReadableIdKey !== issueKey) {
 		_resolvedReadableIdKey = issueKey;
+		const lookupKey = issueKey;
+		const requestId = ++_resolveReadableRequestId;
 		pageReady.set(false);
 		supabase
 			.from('issues')
-			.select('id, name, status, issue_number, readable_id, unit_id, units(name, properties(name))')
+			.select(
+				'id, name, description, status, issue_number, readable_id, unit_id, units(name, properties(name))'
+			)
 			.eq('readable_id', issueKey)
 			.maybeSingle()
 			.then(({ data: resolved, error: resolveErr }) => {
+				if (requestId !== _resolveReadableRequestId || issueKey !== lookupKey) return;
 				if (resolveErr) {
 					console.error('[issue] resolve readable_id error:', resolveErr);
 					return;
@@ -300,7 +316,7 @@
 						id: resolved.id,
 						name: resolved.name,
 						status: resolved.status,
-						description: null,
+						description: resolved.description ?? null,
 						property: resolved.units?.properties?.name ?? null,
 						unit: resolved.units?.name ?? null,
 						issueNumber: resolved.issue_number ?? null,
@@ -322,25 +338,28 @@
 	let _loadedIssueDetailId = null;
 	$: if (browser && issueId && issueId !== _loadedIssueDetailId) {
 		_loadedIssueDetailId = issueId;
+		const requestIssueId = issueId;
 		supabase
 			.from('issues')
 			.select(
-				'id, name, status, issue_number, readable_id, assignee_id, units(name, properties(name))'
+				'id, name, description, status, issue_number, readable_id, assignee_id, units(name, properties(name))'
 			)
-			.eq('id', issueId)
+			.eq('id', requestIssueId)
 			.maybeSingle()
 			.then(({ data: resolved, error: resolveErr }) => {
 				if (resolveErr) {
 					console.error('[issue] load detail error:', resolveErr);
 					return;
 				}
-				if (!resolved?.id || _seededForIssueId !== issueId) return;
+				if (!resolved?.id) return;
+				if (requestIssueId !== issueId || _seededForIssueId !== requestIssueId) return;
+				if (resolved.id !== requestIssueId) return;
 				issueAssigneeId = resolved.assignee_id ?? issueAssigneeId ?? null;
 				const nextIssue = {
 					id: resolved.id,
 					name: resolved.name,
 					status: resolved.status,
-					description: null,
+					description: resolved.description ?? issue?.description ?? null,
 					property: resolved.units?.properties?.name ?? null,
 					unit: resolved.units?.name ?? null,
 					issueNumber: resolved.issue_number ?? null,
@@ -349,9 +368,9 @@
 				issue = issue ? { ...issue, ...nextIssue } : nextIssue;
 				const nextAssignee = resolveAssigneeFromId(issueAssigneeId, membersByUserId);
 				if (nextAssignee) assignee = nextAssignee;
-				const current = getIssueDetail(issueId);
+				const current = getIssueDetail(requestIssueId);
 				if (current) {
-					primeIssueDetail(issueId, {
+					primeIssueDetail(requestIssueId, {
 						...current,
 						issue: { ...current.issue, ...nextIssue },
 						assignee: nextAssignee ?? current.assignee ?? null
@@ -416,18 +435,20 @@
 	let _loadedSubIssuesForId = null;
 	$: if (browser && issueId && issueId !== _loadedSubIssuesForId) {
 		_loadedSubIssuesForId = issueId;
+		const requestIssueId = issueId;
 		supabase
 			.from('issues')
 			.select(
 				'id, name, status, parent_id, issue_number, readable_id, assignee_id, units(name, properties(name))'
 			)
-			.eq('parent_id', issueId)
+			.eq('parent_id', requestIssueId)
 			.then(({ data: freshSubIssues, error: subErr }) => {
 				if (subErr) {
 					console.error('[subIssues] fetch error:', subErr);
 					return;
 				}
-				if (freshSubIssues?.length && _seededForIssueId === issueId) {
+				if (requestIssueId !== issueId || _seededForIssueId !== requestIssueId) return;
+				if (freshSubIssues?.length) {
 					subIssues = sortSubIssues(
 						freshSubIssues.map((s) => ({
 							id: s.id,
@@ -435,16 +456,16 @@
 							status: s.status,
 							assigneeId: s.assignee_id ?? null,
 							assignee_id: s.assignee_id ?? null,
-							parent_id: issueId,
+							parent_id: requestIssueId,
 							property: s.units?.properties?.name ?? null,
 							unit: s.units?.name ?? null,
 							issueNumber: s.issue_number ?? null,
 							readableId: s.readable_id ?? null
 						}))
 					);
-					const current = getIssueDetail(issueId);
+					const current = getIssueDetail(requestIssueId);
 					if (current) {
-						primeIssueDetail(issueId, { ...current, subIssues });
+						primeIssueDetail(requestIssueId, { ...current, subIssues });
 					}
 				}
 			});
@@ -546,10 +567,17 @@
 	};
 
 	const getCommentAuthor = (log) => {
-		const member = log?.created_by ? membersByUserId[log.created_by] : null;
+		if (!log?.created_by) {
+			return {
+				name: 'Bedrock',
+				initial: 'B',
+				color: 'bg-neutral-800 text-white'
+			};
+		}
+		const member = membersByUserId[log.created_by] ?? null;
 		const name = member?.users?.name ?? member?.name ?? 'User';
 		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
-		const color = getAvatarColor(log?.created_by ?? name);
+		const color = getAvatarColor(log.created_by ?? name);
 		return { name, initial, color };
 	};
 
@@ -572,10 +600,12 @@
 
 	const ACTIVITY_LOG_WINDOW_MS = 60 * 60 * 1000;
 
-	const getLatestLogForIssue = (id) => {
+	const getLatestLogForIssue = (id, options = {}) => {
 		const list = logsByIssue[id] ?? [];
+		const ignoreTypes = new Set(options.ignoreTypes ?? []);
 		if (!list.length) return null;
 		return list.reduce((latest, entry) => {
+			if (ignoreTypes.has(entry?.type)) return latest;
 			if (!latest) return entry;
 			const latestTime = new Date(latest.created_at ?? 0).getTime();
 			const entryTime = new Date(entry.created_at ?? 0).getTime();
@@ -589,24 +619,36 @@
 		const userId = data?.userId ?? null;
 		if (!workspaceId || !userId) return;
 
-		const lastLog = getLatestLogForIssue(id);
-		const lastData = lastLog?.data ?? {};
+		const lastLog = getLatestLogForIssue(id, { ignoreTypes: ['comment'] });
+		const logList = logsByIssue[id] ?? [];
+		const lastAssigneeLog = [...logList]
+			.reverse()
+			.find((entry) => entry?.type === 'assignee_change');
+		const lastData = lastAssigneeLog?.data ?? {};
 		const lastFrom = Object.prototype.hasOwnProperty.call(lastData, 'from') ? lastData.from : null;
 		const lastTo = Object.prototype.hasOwnProperty.call(lastData, 'to') ? lastData.to : null;
 		const nowIso = new Date().toISOString();
-		const lastCreatedAt = lastLog?.created_at ? new Date(lastLog.created_at).getTime() : 0;
+		const lastCreatedAt = lastAssigneeLog?.created_at
+			? new Date(lastAssigneeLog.created_at).getTime()
+			: 0;
 		const isWithinWindow = Date.now() - lastCreatedAt <= ACTIVITY_LOG_WINDOW_MS;
 		const shouldUpdate =
 			lastLog && lastLog.type === type && lastLog.created_by === userId && isWithinWindow;
+		const lastAssigneeIndex = lastAssigneeLog
+			? logList.findIndex((entry) => entry?.id === lastAssigneeLog.id)
+			: -1;
+		const hasCommentAfterLastAssignee =
+			lastAssigneeIndex >= 0 &&
+			logList.slice(lastAssigneeIndex + 1).some((entry) => entry?.type === 'comment');
 
 		const isRevertLog =
 			type === 'assignee_change' &&
-			lastLog &&
-			lastLog.type === 'assignee_change' &&
-			lastLog.created_by === userId &&
-			lastTo === (fromValue ?? null) &&
+			lastAssigneeLog &&
+			lastAssigneeLog.created_by === userId &&
+			lastTo === null &&
 			lastFrom === (toValue ?? null) &&
-			isWithinWindow;
+			isWithinWindow &&
+			!hasCommentAfterLastAssignee;
 
 		const payloadData = {
 			from: fromValue ?? null,
@@ -614,8 +656,8 @@
 		};
 
 		if (isRevertLog) {
-			removeActivityLogFromCache(lastLog);
-			await supabase.from('activity_logs').delete().eq('id', lastLog.id);
+			removeActivityLogFromCache(lastAssigneeLog);
+			await supabase.from('activity_logs').delete().eq('id', lastAssigneeLog.id);
 			return;
 		}
 

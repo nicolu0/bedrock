@@ -273,11 +273,35 @@ const listEligibleAssignees = async (workspaceId: string): Promise<Set<string>> 
 		.from('members')
 		.select('user_id, role')
 		.eq('workspace_id', workspaceId)
-		.in('role', ['admin', 'member']);
+		.in('role', ['admin', 'member', 'owner']);
 	const ids = (data ?? [])
 		.map((row) => row.user_id)
 		.filter((id): id is string => typeof id === 'string');
 	return new Set(ids);
+};
+
+const listWorkspaceAssignees = async (workspaceId: string) => {
+	const { data: members } = await supabase
+		.from('members')
+		.select('user_id, role')
+		.eq('workspace_id', workspaceId)
+		.in('role', ['admin', 'member', 'owner']);
+	const memberIds = (members ?? [])
+		.map((row) => row.user_id)
+		.filter((id): id is string => typeof id === 'string');
+	if (!memberIds.length) return [] as Array<{ id: string; name: string | null }>;
+
+	const { data: users } = await supabase.from('users').select('id, name').in('id', memberIds);
+	return (users ?? []).map((user) => ({
+		id: typeof user.id === 'string' ? user.id : String(user.id ?? ''),
+		name: typeof user.name === 'string' ? user.name : null
+	}));
+};
+
+const getUserNameById = async (userId: string | null) => {
+	if (!userId) return null;
+	const { data } = await supabase.from('users').select('name').eq('id', userId).maybeSingle();
+	return data?.name ?? null;
 };
 
 const resolveAssigneeId = ({
@@ -300,16 +324,40 @@ const resolveAssigneeId = ({
 	return null;
 };
 
+const logAgentAssigneeChange = async ({
+	workspaceId,
+	issueId,
+	assigneeId
+}: {
+	workspaceId: string;
+	issueId: string;
+	assigneeId?: string | null;
+}) => {
+	if (!workspaceId || !issueId || !assigneeId) return;
+	await supabase.from('activity_logs').insert({
+		workspace_id: workspaceId,
+		issue_id: issueId,
+		type: 'assignee_change',
+		data: {
+			from: null,
+			to: assigneeId
+		},
+		created_by: null
+	});
+};
+
 const createIssue = async ({
 	name,
 	unitId,
 	workspaceId,
-	assigneeId
+	assigneeId,
+	description
 }: {
 	name: string;
 	unitId: string;
 	workspaceId: string;
 	assigneeId?: string | null;
+	description?: string | null;
 }) => {
 	const { data, error } = await supabase
 		.from('issues')
@@ -318,15 +366,131 @@ const createIssue = async ({
 			unit_id: unitId,
 			workspace_id: workspaceId,
 			status: 'todo',
-			assignee_id: assigneeId ?? null
+			assignee_id: assigneeId ?? null,
+			description: description ?? null
 		})
 		.select('id')
 		.single();
 	if (error || !data?.id) {
 		throw new Error(error?.message ?? 'Issue insert failed');
 	}
+	await logAgentAssigneeChange({
+		workspaceId,
+		issueId: data.id as string,
+		assigneeId
+	});
 	return data.id as string;
 };
+
+const buildIssueDescriptionFallback = ({
+	status,
+	assigneeName,
+	subject,
+	body
+}: {
+	status: string;
+	assigneeName: string | null;
+	subject: string;
+	body: string;
+}) => {
+	const normalizedSubject = subject?.trim() ?? '';
+	const normalizedBody = body?.trim().replace(/\s+/g, ' ') ?? '';
+	const snippet = normalizedBody ? normalizedBody.slice(0, 120) : '';
+	const assigneeLabel = assigneeName?.trim() ? assigneeName.trim() : 'Unassigned';
+	const threadPart =
+		normalizedSubject || snippet
+			? `Thread: ${[
+					normalizedSubject,
+					snippet ? `"${snippet}${normalizedBody.length > 120 ? '...' : ''}"` : null
+				]
+					.filter(Boolean)
+					.join(' — ')}`
+			: 'Thread: N/A';
+	return `Status: ${status}. Assignee: ${assigneeLabel}. ${threadPart}.`;
+};
+
+const buildRootIssueDescriptionFallback = ({
+	reporterName,
+	assigneeName,
+	subject,
+	body,
+	issueTitle
+}: {
+	reporterName: string | null;
+	assigneeName: string | null;
+	subject: string;
+	body: string;
+	issueTitle: string | null;
+}) => {
+	const normalizedSubject = subject?.trim() ?? '';
+	const normalizedBody = body?.trim().replace(/\s+/g, ' ') ?? '';
+	const snippet = normalizedBody ? normalizedBody.slice(0, 120) : '';
+	const reporterLabel = reporterName?.trim()
+		? reporterName.trim()
+		: assigneeName?.trim()
+			? assigneeName.trim()
+			: 'Someone';
+	const cleanedTitle = issueTitle?.trim() ?? '';
+	const subjectOrSnippet = normalizedSubject || snippet;
+	const detail = cleanedTitle || subjectOrSnippet || 'a maintenance issue';
+	return `${reporterLabel} reports ${detail}.`;
+};
+
+const buildSubissueDescriptionFallback = ({
+	name,
+	reasoning
+}: {
+	name: string;
+	reasoning: string | null;
+}) => {
+	const normalizedReasoning = reasoning?.trim() ?? '';
+	const trimmedName = name.trim();
+	const issueTitleFromName = trimmedName
+		.replace(/^triage\s+/i, '')
+		.replace(/^schedule\s+/i, '')
+		.replace(/\s*\([^)]*\)\s*$/i, '')
+		.replace(/^.*?\s+for\s+/i, '')
+		.trim();
+	const isTriage = /^triage\s+/i.test(trimmedName);
+	const isSchedule = /^schedule\s+/i.test(trimmedName);
+
+	if (normalizedReasoning) {
+		const cleaned = normalizedReasoning
+			.replace(/^initial triage:\s*/i, '')
+			.replace(/^triage:\s*/i, '')
+			.replace(/^schedule:\s*/i, '')
+			.replace(/^tenant reports\b[^.;:]*[.;:]\s*/i, '')
+			.replace(/\bask clarifying questions\b/gi, 'collect details')
+			.replace(/\bsuggest basic troubleshooting\b/gi, 'try basic steps')
+			.replace(/\s+/g, ' ')
+			.trim();
+		if (cleaned) return cleaned;
+	}
+	if (isTriage) {
+		const issueTitle = issueTitleFromName || 'issue';
+		return `${issueTitle} seems tenant-fixable, starting triage.`;
+	}
+	if (isSchedule) {
+		const issueTitle = issueTitleFromName || 'issue';
+		return `Tenant cannot resolve ${issueTitle}, scheduling vendor.`;
+	}
+	return `${trimmedName} created.`;
+};
+
+const normalizeOneLine = (value: string, maxLength = 180) => {
+	const cleaned = (value ?? '').replace(/\s+/g, ' ').trim();
+	if (!cleaned) return '';
+	if (cleaned.length <= maxLength) return cleaned;
+	return `${cleaned.slice(0, Math.max(0, maxLength - 3))}...`;
+};
+
+const ensureSentence = (value: string) => {
+	const trimmed = value.trim();
+	if (!trimmed) return '';
+	return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+};
+
+const isStatusListDescription = (value: string) => /^(todo|in_progress|done)[,;:]/i.test(value);
 
 const createSubissue = async ({
 	parentIssueId,
@@ -335,7 +499,8 @@ const createSubissue = async ({
 	workspaceId,
 	status,
 	reasoning,
-	assigneeId
+	assigneeId,
+	description
 }: {
 	parentIssueId: string;
 	name: string;
@@ -344,6 +509,7 @@ const createSubissue = async ({
 	status: string;
 	reasoning: string | null;
 	assigneeId?: string | null;
+	description?: string | null;
 }) => {
 	const { data, error } = await supabase
 		.from('issues')
@@ -354,13 +520,19 @@ const createSubissue = async ({
 			workspace_id: workspaceId,
 			status,
 			reasoning,
-			assignee_id: assigneeId ?? null
+			assignee_id: assigneeId ?? null,
+			description: description ?? null
 		})
 		.select('id')
 		.single();
 	if (error || !data?.id) {
 		throw new Error(error?.message ?? 'Subissue insert failed');
 	}
+	await logAgentAssigneeChange({
+		workspaceId,
+		issueId: data.id as string,
+		assigneeId
+	});
 	return data.id as string;
 };
 
@@ -614,11 +786,14 @@ Process (required):
 Rules:
 - Use tools only.
 - Issue title: 2-5 words, Title Case, no location or unit/building names.
+- Issue description: required when creating an issue. One line only, super concise, human readable summary of the current state. Include who reported it (name if known) and what the issue is. Avoid quoting the email body. Avoid list/CSV formatting; write a sentence.
 - Status must be 'todo' when creating a new issue.
 - Subissue title format:
   - Triage {Issue Title} (${tenantName ?? 'Tenant'})
   - Schedule {Vendor Type} for {Issue Title}
 - Subissue parent rules: Triage and Schedule subissues must use root_issue_id as parent. Never use thread_issue_id as the parent for Schedule.
+- Subissue description: required. One line only, super concise, human readable summary of why this subissue exists (use the reasoning as a base). Make it specific to the subissue stage (triage vs schedule) and the reason for that stage (tenant-fixable, policy requirement, etc.). Avoid quoting the email body. Avoid list/CSV formatting; write a sentence.
+- Reasoning: keep as a short, human-readable sentence that can be reused for the subissue description.
 - Use the workspace_policy to decide triage vs schedule vendor. If policy is empty or unclear, triage unless it matches an emergency.
 - Drafts: Always write from the property manager POV (the user). Never write from the tenant POV.
 - Drafts: For tenant replies, address the tenant by tenant_name only. Never infer a name from the email address.
@@ -656,9 +831,10 @@ When you believe you have completed the task, call done().
 				title: { type: 'string' },
 				unit_id: { type: 'string' },
 				workspace_id: { type: 'string' },
-				assignee_id: { type: 'string' }
+				assignee_id: { type: 'string' },
+				description: { type: 'string' }
 			},
-			required: ['title', 'unit_id', 'workspace_id']
+			required: ['title', 'unit_id', 'workspace_id', 'description']
 		}
 	};
 	const linkThreadTool = {
@@ -687,9 +863,10 @@ When you believe you have completed the task, call done().
 				title: { type: 'string' },
 				status: { type: 'string' },
 				reasoning: { type: 'string' },
-				assignee_id: { type: 'string' }
+				assignee_id: { type: 'string' },
+				description: { type: 'string' }
 			},
-			required: ['parent_issue_id', 'title', 'status', 'reasoning']
+			required: ['parent_issue_id', 'title', 'status', 'reasoning', 'description']
 		}
 	};
 	const draftEmailTool = {
@@ -752,6 +929,15 @@ When you believe you have completed the task, call done().
 	const vendors = await listVendors(workspaceId);
 	const workspaceAdminId = await getWorkspaceAdminId(workspaceId);
 	const eligibleAssignees = await listEligibleAssignees(workspaceId);
+	const assignees = await listWorkspaceAssignees(workspaceId);
+	const assigneeNameById = new Map(
+		assignees.map((assignee) => [assignee.id, assignee.name ?? null])
+	);
+	if (workspaceAdminId && !assigneeNameById.has(workspaceAdminId)) {
+		const adminName = await getUserNameById(workspaceAdminId);
+		assigneeNameById.set(workspaceAdminId, adminName);
+		assignees.push({ id: workspaceAdminId, name: adminName });
+	}
 	if (workspaceAdminId) {
 		eligibleAssignees.add(workspaceAdminId);
 	}
@@ -780,6 +966,7 @@ When you believe you have completed the task, call done().
 				user_name: userName,
 				default_sender_email: defaultSenderEmail,
 				eligible_assignees: Array.from(eligibleAssignees),
+				assignees,
 				admin_user_id: workspaceAdminId
 			})
 		}
@@ -851,6 +1038,27 @@ When you believe you have completed the task, call done().
 					fallbackAssigneeId: workspaceAdminId,
 					eligibleAssignees
 				});
+				const rawDescriptionCandidate =
+					typeof args.description === 'string'
+						? normalizeOneLine(ensureSentence(args.description.replace(/"/g, '')))
+						: '';
+				const rawDescription = isStatusListDescription(rawDescriptionCandidate)
+					? ''
+					: rawDescriptionCandidate;
+				const assigneeName = assignee ? (assigneeNameById.get(assignee) ?? null) : null;
+				const description = rawDescription
+					? rawDescription
+					: normalizeOneLine(
+							ensureSentence(
+								buildRootIssueDescriptionFallback({
+									reporterName: tenantName ?? null,
+									assigneeName,
+									subject,
+									body,
+									issueTitle: title
+								})
+							)
+						);
 				if (!title) {
 					throw new Error('create_issue missing title');
 				}
@@ -858,7 +1066,8 @@ When you believe you have completed the task, call done().
 					name: title,
 					unitId: unit,
 					workspaceId: workspace,
-					assigneeId: assignee
+					assigneeId: assignee,
+					description
 				});
 				linkedIssueId = issueId;
 				createdIssueId = issueId;
@@ -901,6 +1110,20 @@ When you believe you have completed the task, call done().
 					fallbackAssigneeId: workspaceAdminId,
 					eligibleAssignees
 				});
+				const rawDescriptionCandidate =
+					typeof args.description === 'string'
+						? normalizeOneLine(ensureSentence(args.description.replace(/"/g, '')))
+						: '';
+				const rawDescription = isStatusListDescription(rawDescriptionCandidate)
+					? ''
+					: rawDescriptionCandidate;
+				const description = rawDescription
+					? rawDescription
+					: normalizeOneLine(
+							ensureSentence(
+								buildSubissueDescriptionFallback({ name: title || 'Subissue', reasoning })
+							)
+						);
 				const parentIssueId = requestedParent ?? linkedIssueId ?? createdIssueId;
 				if (!title || !parentIssueId) {
 					throw new Error('create_subissue missing title or parent_issue_id');
@@ -912,7 +1135,8 @@ When you believe you have completed the task, call done().
 					workspaceId,
 					status,
 					reasoning,
-					assigneeId: assignee
+					assigneeId: assignee,
+					description
 				});
 				lastSubissueId = subissueId;
 				lastSubissueTitle = title;

@@ -47,7 +47,9 @@ export const GET = async ({ locals, url }) => {
 
 	let { data: issues } = await supabaseAdmin
 		.from('issues')
-		.select('id, name, status, parent_id, unit_id, issue_number, readable_id, assignee_id')
+		.select(
+			'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
+		)
 		.eq('workspace_id', workspace.id)
 		.order('updated_at', { ascending: false });
 
@@ -62,7 +64,9 @@ export const GET = async ({ locals, url }) => {
 		if (fallbackUnitIds.length) {
 			const { data: fallbackIssues } = await supabaseAdmin
 				.from('issues')
-				.select('id, name, status, parent_id, unit_id, issue_number, readable_id, assignee_id')
+				.select(
+					'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
+				)
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
 			issues = fallbackIssues ?? [];
@@ -92,7 +96,7 @@ export const GET = async ({ locals, url }) => {
 			issueId: issue.id,
 			title: issue.name,
 			name: issue.name,
-			description: '',
+			description: issue.description ?? '',
 			assignees: 0,
 			assigneeId: issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? null,

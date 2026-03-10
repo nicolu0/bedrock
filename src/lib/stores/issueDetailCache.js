@@ -1,6 +1,6 @@
 // @ts-nocheck
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const SESSION_KEY = 'issueDetailCache';
+const SESSION_KEY = 'issueDetailCache-v2';
 
 /** @type {Map<string, { issue: any, subIssues: any[], assignee: any, fetchedAt: number }>} */
 const memoryCache = new Map();
@@ -102,7 +102,7 @@ export const primeDetailCacheFromIssuesList = (issuesList) => {
 				id: issue.id,
 				name: issue.name ?? issue.title,
 				status: issue.status,
-				description: null,
+				description: issue.description ?? null,
 				property: issue.property ?? null,
 				unit: issue.unit ?? null,
 				issueNumber: issue.issueNumber ?? null,
