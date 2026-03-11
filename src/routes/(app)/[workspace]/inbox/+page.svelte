@@ -15,8 +15,12 @@
 	export let data;
 
 	let filter = 'All';
+	let unreadSnapshot = null;
 
 	function setFilter(tab) {
+		unreadSnapshot = tab === 'Unread'
+			? new Set((notifications ?? []).filter((n) => !n.is_read && !n.is_resolved).map((n) => n.id))
+			: null;
 		filter = tab;
 		selectedNotification = null;
 	}
@@ -33,7 +37,7 @@
 			: null;
 
 	$: filtered =
-		filter === 'Unread'   ? (notifications ?? []).filter((n) => !n.is_read && !n.is_resolved) :
+		filter === 'Unread'   ? (notifications ?? []).filter((n) => unreadSnapshot?.has(n.id)) :
 		filter === 'Resolved' ? (notifications ?? []).filter((n) => n.is_resolved) :
 		/* All */               (notifications ?? []).filter((n) => !n.is_resolved);
 
