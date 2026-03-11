@@ -1,21 +1,22 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { getContext } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { notificationsCache, primeNotificationsCache } from '$lib/stores/notificationsCache.js';
 	import { peopleMembersCache, primePeopleMembersCache } from '$lib/stores/peopleMembersCache.js';
+	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
+	import { activityLogsCache, ensureActivityLogsCache } from '$lib/stores/activityLogsCache.js';
+	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
+	import { issuesCache, ensureIssuesCache } from '$lib/stores/issuesCache.js';
+	import IssuePanel from '$lib/components/IssuePanel.svelte';
+	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 
 	export let data;
 
 	let filter = 'All';
-	let reassignOpen = {};
-	let reassignValue = {};
+	let selectedNotification = null;
 	let loadError = false;
-	const sidebarControl = getContext('sidebarControl');
-	const openSidebar = () => sidebarControl?.open?.();
-	$: isAdmin = data.workspace?.admin_user_id === data.currentUserId;
 
 	$: workspaceSlug = $page.params.workspace;
 
@@ -25,15 +26,16 @@
 		$notificationsCache.data?.notifications != null
 			? $notificationsCache.data.notifications
 			: null;
-	$: members =
-		$peopleMembersCache.workspace === workspaceSlug && $peopleMembersCache.data != null
-			? $peopleMembersCache.data
-			: [];
 
 	$: filtered =
 		filter === 'Unread' ? (notifications ?? []).filter((n) => !n.is_read) : (notifications ?? []);
 
-	// Prime cache from server data — re-runs after invalidate() triggers a fresh load
+	$: vendors =
+		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
+			? $peopleCache.data.filter((p) => p?.role === 'vendor')
+			: [];
+
+	// Prime cache from server data
 	$: if (browser && data.notifications && data.members) {
 		Promise.all([data.notifications, data.members])
 			.then(([n, m]) => {
@@ -45,14 +47,12 @@
 			});
 	}
 
-	const slugify = (value) => {
-		if (!value) return 'issue';
-		return value
-			.toLowerCase()
-			.trim()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/(^-|-$)+/g, '');
-	};
+	$: if (browser && workspaceSlug) {
+		ensureActivityCache(workspaceSlug, { force: true });
+		ensureActivityLogsCache(workspaceSlug, { force: true });
+		ensurePeopleCache(workspaceSlug);
+		ensureIssuesCache(workspaceSlug);
+	}
 
 	function timeAgo(dateStr) {
 		const diff = Date.now() - new Date(dateStr).getTime();
@@ -72,226 +72,65 @@
 	}
 
 	async function handleClick(n) {
-		const issue = n.issues;
-		const readableId = issue?.readable_id ?? null;
+		selectedNotification = n;
 		if (!n.is_read) {
-			// Fire and forget — don't await so navigation isn't blocked
 			const fd = new FormData();
 			fd.append('id', n.id);
 			fetch('?/markRead', { method: 'POST', body: fd });
+			notificationsCache.update((state) => ({
+				...state,
+				data: state.data
+					? {
+							...state.data,
+							notifications: state.data.notifications.map((notif) =>
+								notif.id === n.id ? { ...notif, is_read: true } : notif
+							)
+						}
+					: state.data
+			}));
 		}
-		if (readableId) {
-			await goto(`/${workspaceSlug}/issue/${readableId}/${slugify(issue.name)}?from=inbox`);
-			// Update cache after navigation so the dot disappears off-screen
-			if (!n.is_read) {
-				notificationsCache.update((state) => ({
-					...state,
-					data: state.data
-						? {
-								...state.data,
-								notifications: state.data.notifications.map((notif) =>
-									notif.id === n.id ? { ...notif, is_read: true } : notif
-								)
-							}
-						: state.data
-				}));
-			}
-		}
-	}
-
-	async function handleApprove(n) {
-		const assigneeId = n.meta?.suggested_assignee_id;
-		if (!assigneeId) return;
-		// Optimistic update
-		notificationsCache.update((state) => ({
-			...state,
-			data: state.data
-				? {
-						...state.data,
-						notifications: state.data.notifications.map((notif) =>
-							notif.id === n.id ? { ...notif, is_read: true, requires_action: false } : notif
-						)
-					}
-				: state.data
-		}));
-		const fd = new FormData();
-		fd.append('notif_id', n.id);
-		fd.append('issue_id', n.issues?.id ?? '');
-		fd.append('assignee_id', assigneeId);
-		await fetch('?/approveAssignment', { method: 'POST', body: fd });
-		invalidate('app:notifications');
-	}
-
-	async function handleReassignConfirm(n) {
-		const assigneeId = reassignValue[n.id];
-		if (!assigneeId) return;
-		// Optimistic update
-		notificationsCache.update((state) => ({
-			...state,
-			data: state.data
-				? {
-						...state.data,
-						notifications: state.data.notifications.map((notif) =>
-							notif.id === n.id ? { ...notif, is_read: true, requires_action: false } : notif
-						)
-					}
-				: state.data
-		}));
-		reassignOpen[n.id] = false;
-		const fd = new FormData();
-		fd.append('notif_id', n.id);
-		fd.append('issue_id', n.issues?.id ?? '');
-		fd.append('assignee_id', assigneeId);
-		await fetch('?/approveAssignment', { method: 'POST', body: fd });
-		invalidate('app:notifications');
 	}
 </script>
 
-<div>
-	<div class="flex items-center gap-2 border-b border-neutral-200 px-6 py-3">
-		<button
-			type="button"
-			aria-label="Open sidebar"
-			class="rounded-md p-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 lg:hidden"
-			on:click={openSidebar}
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="12"
-				height="12"
-				fill="currentColor"
-				class="bi bi-layout-sidebar"
-				viewBox="0 0 16 16"
-			>
-				<path
-					d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm5-1v12h9a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM4 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2z"
-				/>
-			</svg>
-		</button>
-		<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
-	</div>
+<svelte:window on:keydown={(e) => { if (e.key === 'Escape' && selectedNotification) selectedNotification = null; }} />
 
-	<div class="flex items-center gap-2 px-6 py-2">
-		{#each ['All', 'Unread'] as tab}
-			<button
-				class={`rounded-md border px-2.5 py-1 text-xs transition ${
-					filter === tab
-						? 'border-neutral-200 bg-neutral-100 text-neutral-700'
-						: 'border-neutral-200 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
-				}`}
-				type="button"
-				on:click={() => (filter = tab)}
-			>
-				{tab}
-			</button>
-		{/each}
-	</div>
+<div class="flex h-full overflow-hidden">
+	<!-- Notification list -->
+	<div
+		class="flex-none flex flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out
+			{selectedNotification ? 'w-1/2 border-r border-neutral-200' : 'w-full'}"
+	>
+		<div class="flex items-center border-b border-neutral-200 px-6 py-3">
+			<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
+		</div>
 
-	{#if notifications !== null}
-		{#if filtered.length === 0}
-			<div class="px-6 py-8 text-sm text-neutral-400">
-				{filter === 'Unread' ? 'No unread notifications.' : 'No notifications yet.'}
-			</div>
-		{:else}
-			<div>
-				{#each filtered as n}
-					{#if n.requires_action && isAdmin}
-						<!-- Assignment suggestion — actionable card -->
-						<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-						<div
-							class="w-full cursor-pointer border-b border-neutral-100 px-6 py-3 text-left transition last:border-b-0 hover:bg-stone-50"
-							on:click={() => handleClick(n)}
-						>
-							<div class="flex items-start gap-3">
-								<div class="mt-1.5 flex-shrink-0">
-									{#if !n.is_read}
-										<span class="block h-2 w-2 rounded-full bg-blue-500"></span>
-									{:else}
-										<span class="block h-2 w-2"></span>
-									{/if}
-								</div>
-								<div class="min-w-0 flex-1">
-									<div class="flex items-center justify-between gap-3">
-										<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
-										<div class="flex flex-shrink-0 items-center gap-2">
-											{#if n.issues?.units}
-												<div
-													class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
-												>
-													{#if n.issues.units.properties?.name}
-														<span class="px-2 py-0.5">{n.issues.units.properties.name}</span>
-														<span class="border-l border-neutral-200 px-2 py-0.5"
-															>{n.issues.units.name}</span
-														>
-													{:else}
-														<span class="px-2 py-0.5">{n.issues.units.name}</span>
-													{/if}
-												</div>
-											{/if}
-											{#if n.issues?.status}
-												<span
-													class={`h-3 w-3 flex-shrink-0 rounded-full border ${statusClass(n.issues.status)}`}
-												></span>
-											{/if}
-										</div>
-									</div>
-									<div class="mt-0.5 flex items-center justify-between gap-3">
-										<p class="truncate text-xs text-neutral-500">{n.body}</p>
-										<span class="flex-shrink-0 text-xs text-neutral-400"
-											>{timeAgo(n.created_at)}</span
-										>
-									</div>
-									<div class="mt-2 flex items-center gap-2">
-										<button
-											class="rounded-md bg-neutral-800 px-2.5 py-1 text-xs text-white transition hover:bg-neutral-700"
-											type="button"
-											on:click|stopPropagation={() => handleApprove(n)}
-										>
-											Approve
-										</button>
-										<button
-											class="rounded-md border border-neutral-200 px-2.5 py-1 text-xs text-neutral-600 transition hover:bg-neutral-50"
-											type="button"
-											on:click|stopPropagation={() => {
-												reassignOpen[n.id] = !reassignOpen[n.id];
-												if (!reassignValue[n.id]) {
-													const others = members.filter(
-														(m) => m.user_id !== n.meta?.suggested_assignee_id
-													);
-													reassignValue[n.id] = others[0]?.user_id ?? '';
-												}
-											}}
-										>
-											Reassign ▾
-										</button>
-									</div>
-									{#if reassignOpen[n.id]}
-										<div class="mt-2 flex items-center gap-2">
-											<select
-												class="rounded-md border border-neutral-200 px-2 py-1 text-xs text-neutral-700"
-												bind:value={reassignValue[n.id]}
-												on:click|stopPropagation
-											>
-												{#each members.filter((m) => m.user_id !== n.meta?.suggested_assignee_id) as m}
-													<option value={m.user_id}>{m.users?.name ?? m.user_id}</option>
-												{/each}
-											</select>
-											<button
-												class="rounded-md bg-neutral-800 px-2.5 py-1 text-xs text-white transition hover:bg-neutral-700"
-												type="button"
-												on:click|stopPropagation={() => handleReassignConfirm(n)}
-											>
-												Assign
-											</button>
-										</div>
-									{/if}
-								</div>
-							</div>
-						</div>
-					{:else}
-						<!-- Standard notification row -->
+		<div class="flex items-center gap-2 px-6 py-2">
+			{#each ['All', 'Unread'] as tab}
+				<button
+					class={`rounded-md border px-2.5 py-1 text-xs transition ${
+						filter === tab
+							? 'border-neutral-200 bg-neutral-100 text-neutral-700'
+							: 'border-transparent text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
+					}`}
+					type="button"
+					on:click={() => (filter = tab)}
+				>
+					{tab}
+				</button>
+			{/each}
+		</div>
+
+		{#if notifications !== null}
+			{#if filtered.length === 0}
+				<div class="px-6 py-8 text-sm text-neutral-400">
+					{filter === 'Unread' ? 'No unread notifications.' : 'No notifications yet.'}
+				</div>
+			{:else}
+				<div>
+					{#each filtered as n}
 						<button
-							class="w-full border-b border-neutral-100 px-6 py-3 text-left transition last:border-b-0 hover:bg-stone-50"
+							class="w-full border-b border-neutral-100 px-6 py-3 text-left transition last:border-b-0 focus:outline-none
+								{selectedNotification?.id === n.id ? 'bg-stone-100' : 'hover:bg-stone-50'}"
 							type="button"
 							on:click={() => handleClick(n)}
 						>
@@ -304,6 +143,7 @@
 									{/if}
 								</div>
 								<div class="min-w-0 flex-1">
+									<!-- Title row -->
 									<div class="flex items-center justify-between gap-3">
 										<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
 										<div class="flex flex-shrink-0 items-center gap-2">
@@ -328,6 +168,7 @@
 											{/if}
 										</div>
 									</div>
+									<!-- Body + time row -->
 									<div class="mt-0.5 flex items-center justify-between gap-3">
 										<p class="truncate text-xs text-neutral-500">{n.body}</p>
 										<span class="flex-shrink-0 text-xs text-neutral-400"
@@ -337,27 +178,46 @@
 								</div>
 							</div>
 						</button>
-					{/if}
+					{/each}
+				</div>
+			{/if}
+		{:else if loadError}
+			<div class="px-6 py-8 text-sm text-neutral-400">Failed to load notifications.</div>
+		{:else}
+			<!-- First visit: skeleton while server data loads -->
+			<div class="divide-y divide-neutral-100">
+				{#each Array(5) as _, i}
+					<div class="flex items-start gap-3 px-6 py-3">
+						<div class="shimmer mt-1.5 h-2 w-2 flex-shrink-0 rounded-full"></div>
+						<div class="flex-1 space-y-2">
+							<div class="flex items-center justify-between gap-3">
+								<div class="shimmer h-3 rounded" style="width: {i % 2 === 0 ? '45%' : '55%'}"></div>
+								<div class="shimmer h-3 w-20 rounded"></div>
+							</div>
+							<div class="shimmer h-3 rounded" style="width: {i % 3 === 0 ? '70%' : '80%'}"></div>
+						</div>
+					</div>
 				{/each}
 			</div>
 		{/if}
-	{:else if loadError}
-		<div class="px-6 py-8 text-sm text-neutral-400">Failed to load notifications.</div>
-	{:else}
-		<!-- First visit: skeleton while server data loads -->
-		<div class="divide-y divide-neutral-100">
-			{#each Array(5) as _, i}
-				<div class="flex items-start gap-3 px-6 py-3">
-					<div class="shimmer mt-1.5 h-2 w-2 flex-shrink-0 rounded-full"></div>
-					<div class="flex-1 space-y-2">
-						<div class="flex items-center justify-between gap-3">
-							<div class="shimmer h-3 rounded" style="width: {i % 2 === 0 ? '45%' : '55%'}"></div>
-							<div class="shimmer h-3 w-20 rounded"></div>
-						</div>
-						<div class="shimmer h-3 rounded" style="width: {i % 3 === 0 ? '70%' : '80%'}"></div>
-					</div>
-				</div>
-			{/each}
+	</div>
+
+	<!-- Issue detail panel -->
+	{#if selectedNotification}
+		<div
+			class="flex-none w-1/2 overflow-y-auto"
+			in:fly={{ x: 400, duration: 280, easing: cubicOut }}
+			out:fly={{ x: 400, duration: 220, easing: cubicOut }}
+		>
+			<IssuePanel
+				issueId={selectedNotification.issues?.id}
+				seedIssue={selectedNotification.issues}
+				activityData={$activityCache.data}
+				activityLogsData={$activityLogsCache.data}
+				{vendors}
+				allIssues={$issuesCache.data?.issues ?? []}
+				on:close={() => (selectedNotification = null)}
+			/>
 		</div>
 	{/if}
 </div>
