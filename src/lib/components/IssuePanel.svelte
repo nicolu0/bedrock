@@ -307,6 +307,7 @@
 										}}
 										{draft}
 										{vendors}
+										on:sent={() => dispatch('resolved')}
 									/>
 								{/each}
 							</div>
@@ -441,6 +442,7 @@
 														}}
 														{draft}
 														{vendors}
+														on:sent={() => dispatch('resolved')}
 													/>
 												{/each}
 											</div>

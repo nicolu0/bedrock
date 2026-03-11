@@ -1,7 +1,8 @@
 <script>
 	// @ts-nocheck
-	import { onDestroy } from 'svelte';
+	import { onDestroy, createEventDispatcher } from 'svelte';
 	import { fade } from 'svelte/transition';
+	const dispatch = createEventDispatcher();
 
 	export let message;
 	export let draft = null;
@@ -131,6 +132,7 @@
 				const payload = await response.json().catch(() => null);
 				sentMessage = payload?.message ?? null;
 				isSent = true;
+				dispatch('sent', { issueId: draft.issue_id ?? null });
 			}
 		} catch {
 			// ignore send failures

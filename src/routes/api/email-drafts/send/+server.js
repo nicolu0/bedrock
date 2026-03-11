@@ -259,5 +259,14 @@ export const POST = async ({ locals, request }) => {
 
 	await supabaseAdmin.from('email_drafts').delete().eq('id', draft.id);
 
+	if (draft?.issue_id && locals.user?.id) {
+		await supabaseAdmin
+			.from('notifications')
+			.update({ is_resolved: true })
+			.eq('issue_id', draft.issue_id)
+			.eq('user_id', locals.user.id)
+			.eq('is_resolved', false);
+	}
+
 	return json({ ok: true, message: outboundMessage ?? null });
 };

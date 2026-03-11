@@ -62,7 +62,7 @@ export const load = async ({ parent, locals }) => {
 			.from('notifications')
 			.select(
 				`
-        id, title, body, is_read, created_at, type, meta, requires_action,
+        id, title, body, is_read, is_resolved, created_at, type, meta, requires_action,
         issues(id, name, status, parent_id,
           units(name, properties(name)))
       `
@@ -114,7 +114,7 @@ export const actions = {
 		// 2. Mark admin notification as read + no longer requires action
 		await supabaseAdmin
 			.from('notifications')
-			.update({ is_read: true, requires_action: false })
+			.update({ is_read: true, requires_action: false, is_resolved: true })
 			.eq('id', notifId);
 
 		// 3. Build notification title

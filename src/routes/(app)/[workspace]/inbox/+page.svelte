@@ -2,7 +2,7 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
-	import { notificationsCache, primeNotificationsCache } from '$lib/stores/notificationsCache.js';
+	import { notificationsCache, primeNotificationsCache, updateNotificationInCache } from '$lib/stores/notificationsCache.js';
 	import { peopleMembersCache, primePeopleMembersCache } from '$lib/stores/peopleMembersCache.js';
 	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
 	import { activityLogsCache, ensureActivityLogsCache } from '$lib/stores/activityLogsCache.js';
@@ -15,6 +15,11 @@
 	export let data;
 
 	let filter = 'All';
+
+	function setFilter(tab) {
+		filter = tab;
+		selectedNotification = null;
+	}
 	let selectedNotification = null;
 	let loadError = false;
 
@@ -28,7 +33,9 @@
 			: null;
 
 	$: filtered =
-		filter === 'Unread' ? (notifications ?? []).filter((n) => !n.is_read) : (notifications ?? []);
+		filter === 'Unread'   ? (notifications ?? []).filter((n) => !n.is_read && !n.is_resolved) :
+		filter === 'Resolved' ? (notifications ?? []).filter((n) => n.is_resolved) :
+		/* All */               (notifications ?? []).filter((n) => !n.is_resolved);
 
 	$: vendors =
 		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
@@ -105,7 +112,7 @@
 		</div>
 
 		<div class="flex items-center gap-2 px-6 py-2">
-			{#each ['All', 'Unread'] as tab}
+			{#each ['All', 'Unread', 'Resolved'] as tab}
 				<button
 					class={`rounded-md border px-2.5 py-1 text-xs transition ${
 						filter === tab
@@ -113,7 +120,7 @@
 							: 'border-transparent text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
 					}`}
 					type="button"
-					on:click={() => (filter = tab)}
+					on:click={() => setFilter(tab)}
 				>
 					{tab}
 				</button>
@@ -217,6 +224,7 @@
 				{vendors}
 				allIssues={$issuesCache.data?.issues ?? []}
 				on:close={() => (selectedNotification = null)}
+				on:resolved={() => updateNotificationInCache({ id: selectedNotification.id, is_resolved: true })}
 			/>
 		</div>
 	{/if}
