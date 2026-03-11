@@ -32,6 +32,7 @@ export const actions = {
 		const state = form.get('state');
 		const postalCode = form.get('postalCode');
 		const country = form.get('country');
+		const ownerId = form.get('ownerId');
 		if (!name || typeof name !== 'string' || !name.trim()) {
 			return fail(400, { error: 'Property name is required.' });
 		}
@@ -50,9 +51,22 @@ export const actions = {
 		if (!country || typeof country !== 'string' || !country.trim()) {
 			return fail(400, { error: 'Country is required.' });
 		}
+		const ownerIdValue = typeof ownerId === 'string' && ownerId.trim() ? ownerId.trim() : null;
 		const workspace = await resolveWorkspace(locals.user.id, params.workspace);
 		if (!workspace?.id) {
 			return fail(403, { error: 'Workspace access denied.' });
+		}
+		if (ownerIdValue) {
+			const { data: ownerRow } = await supabaseAdmin
+				.from('people')
+				.select('id')
+				.eq('id', ownerIdValue)
+				.eq('workspace_id', workspace.id)
+				.eq('role', 'owner')
+				.maybeSingle();
+			if (!ownerRow?.id) {
+				return fail(400, { error: 'Owner not found.' });
+			}
 		}
 		const { data, error } = await supabaseAdmin
 			.from('properties')
@@ -63,8 +77,78 @@ export const actions = {
 				city: typeof city === 'string' && city.trim() ? city.trim() : null,
 				state: typeof state === 'string' && state.trim() ? state.trim() : null,
 				postal_code: typeof postalCode === 'string' && postalCode.trim() ? postalCode.trim() : null,
-				country: typeof country === 'string' && country.trim() ? country.trim() : null
+				country: typeof country === 'string' && country.trim() ? country.trim() : null,
+				owner_id: ownerIdValue
 			})
+			.select('id, name')
+			.single();
+		if (error) {
+			return fail(500, { error: error.message });
+		}
+		return { property: data };
+	},
+	updateProperty: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(303, '/');
+		const form = await request.formData();
+		const propertyId = form.get('propertyId');
+		const name = form.get('name');
+		const address = form.get('address');
+		const city = form.get('city');
+		const state = form.get('state');
+		const postalCode = form.get('postalCode');
+		const country = form.get('country');
+		const ownerId = form.get('ownerId');
+		if (!propertyId || typeof propertyId !== 'string') {
+			return fail(400, { error: 'Property ID is required.' });
+		}
+		if (!name || typeof name !== 'string' || !name.trim()) {
+			return fail(400, { error: 'Property name is required.' });
+		}
+		if (!address || typeof address !== 'string' || !address.trim()) {
+			return fail(400, { error: 'Address is required.' });
+		}
+		if (!city || typeof city !== 'string' || !city.trim()) {
+			return fail(400, { error: 'City is required.' });
+		}
+		if (!state || typeof state !== 'string' || !state.trim()) {
+			return fail(400, { error: 'State is required.' });
+		}
+		if (!postalCode || typeof postalCode !== 'string' || !postalCode.trim()) {
+			return fail(400, { error: 'Postal code is required.' });
+		}
+		if (!country || typeof country !== 'string' || !country.trim()) {
+			return fail(400, { error: 'Country is required.' });
+		}
+		const ownerIdValue = typeof ownerId === 'string' && ownerId.trim() ? ownerId.trim() : null;
+		const workspace = await resolveWorkspace(locals.user.id, params.workspace);
+		if (!workspace?.id) {
+			return fail(403, { error: 'Workspace access denied.' });
+		}
+		if (ownerIdValue) {
+			const { data: ownerRow } = await supabaseAdmin
+				.from('people')
+				.select('id')
+				.eq('id', ownerIdValue)
+				.eq('workspace_id', workspace.id)
+				.eq('role', 'owner')
+				.maybeSingle();
+			if (!ownerRow?.id) {
+				return fail(400, { error: 'Owner not found.' });
+			}
+		}
+		const { data, error } = await supabaseAdmin
+			.from('properties')
+			.update({
+				name: name.trim(),
+				address: address.trim(),
+				city: city.trim(),
+				state: state.trim(),
+				postal_code: postalCode.trim(),
+				country: country.trim(),
+				owner_id: ownerIdValue
+			})
+			.eq('id', propertyId)
+			.eq('workspace_id', workspace.id)
 			.select('id, name')
 			.single();
 		if (error) {

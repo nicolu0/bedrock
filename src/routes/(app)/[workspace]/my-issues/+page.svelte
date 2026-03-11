@@ -2,34 +2,64 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
+	import { getContext } from 'svelte';
 	import { get } from 'svelte/store';
 	import { issuesCache, primeIssuesCache } from '$lib/stores/issuesCache';
+	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { goto } from '$app/navigation';
 
 	export let data;
 
-	const tabs = ['Assigned', 'Subscribed', 'Activity'];
+	const tabs = ['All issues', 'Subscribed', 'Activity'];
+	const sidebarControl = getContext('sidebarControl');
+	const openSidebar = () => sidebarControl?.open?.();
 
 	$: sections = $issuesCache.data?.sections ?? [];
 	$: isLoading = sections.length === 0 && $issuesCache.loading;
 	$: expandedSections = sections.map((section) => {
 		const rows = section.items.flatMap((item) => {
-			const subRows = (item.subIssues ?? []).map((subIssue) => ({
-				...subIssue,
-				issueId: subIssue.issueId ?? item.issueId,
-				parentTitle: subIssue.parentTitle ?? item.title,
-				assignees: subIssue.assignees ?? item.assignees ?? 0,
-				property: subIssue.property ?? item.property,
-				unit: subIssue.unit ?? item.unit,
-				isSubIssue: true
-			}));
-			return [{ ...item, isSubIssue: false }, ...subRows];
+			const subRows = (item.subIssues ?? []).map((subIssue) => {
+				const assigneeId = subIssue.assigneeId ?? subIssue.assignee_id ?? null;
+				return {
+					...subIssue,
+					issueId: subIssue.issueId ?? item.issueId,
+					parentTitle: subIssue.parentTitle ?? item.title,
+					assignees: subIssue.assignees ?? item.assignees ?? 0,
+					assigneeId,
+					assigneeBadge: getAssigneeBadge(assigneeId, membersByUserId),
+					property: subIssue.property ?? item.property,
+					unit: subIssue.unit ?? item.unit,
+					isSubIssue: true
+				};
+			});
+			const assigneeId = item.assigneeId ?? item.assignee_id ?? null;
+			return [
+				{
+					...item,
+					assigneeId,
+					assigneeBadge: getAssigneeBadge(assigneeId, membersByUserId),
+					isSubIssue: item.isSubIssue ?? false
+				},
+				...subRows
+			];
 		});
 		return { ...section, rows };
 	});
 
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
+	$: membersReady =
+		$peopleMembersCache.workspace === workspaceSlug && Array.isArray($peopleMembersCache.data);
+	$: membersLoading = $peopleMembersCache.loading && !membersReady;
+	$: members = membersReady ? $peopleMembersCache.data : [];
+	$: membersByUserId = members.reduce((acc, member) => {
+		if (!member?.user_id) return acc;
+		acc[member.user_id] = member;
+		return acc;
+	}, {});
+	$: if (browser && workspaceSlug && !membersReady && !membersLoading) {
+		ensurePeopleMembersCache(workspaceSlug);
+	}
 
 	// Prime cache from streaming server data (handles both resolved value and client Promise)
 	// _primedForWorkspace guards against re-registering .then() on every $issuesCache store change
@@ -59,14 +89,66 @@
 			.replace(/(^-|-$)+/g, '');
 	};
 
-	const getIssueHref = (issueId, title) => {
-		const slug = slugify(title);
-		return `${basePath}/issue/${issueId}/${slug}?from=my-issues`;
+	const getIssueHref = (item) => {
+		if (!item) return undefined;
+		const slug = slugify(item.title);
+		const readableId = item.readableId;
+		if (!readableId) return undefined;
+		return `${basePath}/issue/${readableId}/${slug}?from=my-issues`;
+	};
+
+	const avatarPalette = [
+		'bg-amber-200',
+		'bg-blue-200',
+		'bg-emerald-200',
+		'bg-rose-200',
+		'bg-indigo-200',
+		'bg-teal-200',
+		'bg-orange-200',
+		'bg-sky-200'
+	];
+
+	const getAvatarColor = (seed) => {
+		if (!seed) return 'bg-neutral-200';
+		const value = seed.toString();
+		let hash = 0;
+		for (let i = 0; i < value.length; i += 1) {
+			hash = (hash * 31 + value.charCodeAt(i)) % avatarPalette.length;
+		}
+		return avatarPalette[hash] ?? 'bg-neutral-200';
+	};
+
+	const getAssigneeBadge = (assigneeId, membersMap) => {
+		const member = assigneeId ? membersMap[assigneeId] : null;
+		const name = member?.users?.name ?? member?.name ?? 'Assigned';
+		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
+		const color = getAvatarColor(assigneeId ?? name);
+		if (!assigneeId) return null;
+		return { name, initial, color };
 	};
 </script>
 
 <div>
-	<div class="flex items-center border-b border-neutral-200 px-6 py-3">
+	<div class="flex items-center gap-2 border-b border-neutral-200 px-6 py-3">
+		<button
+			type="button"
+			aria-label="Open sidebar"
+			class="rounded-md p-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 lg:hidden"
+			on:click={openSidebar}
+		>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="12"
+				height="12"
+				fill="currentColor"
+				class="bi bi-layout-sidebar"
+				viewBox="0 0 16 16"
+			>
+				<path
+					d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm5-1v12h9a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM4 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2z"
+				/>
+			</svg>
+		</button>
 		<h1 class="text-sm font-normal text-neutral-700">My issues</h1>
 	</div>
 	<div class="flex items-center justify-between px-6 py-2">
@@ -74,9 +156,9 @@
 			{#each tabs as tab}
 				<button
 					class={`rounded-md border px-2.5 py-1 text-xs transition ${
-						tab === 'Assigned'
+						tab === 'All issues'
 							? 'border-neutral-200 bg-neutral-100 text-neutral-700'
-							: 'border-transparent text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
+							: 'border-neutral-200 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
 					}`}
 					type="button"
 				>
@@ -136,7 +218,7 @@
 						{#each section.rows as item}
 							<a
 								class="block w-full px-6 py-2 text-left transition hover:bg-stone-50"
-								href={getIssueHref(item.issueId, item.title)}
+								href={getIssueHref(item)}
 								data-sveltekit-preload-data="hover"
 							>
 								<div class="flex items-center justify-between gap-4">
@@ -159,9 +241,36 @@
 											<span class="px-2 py-0.5">{item.property}</span>
 											<span class="border-l border-neutral-200 px-2 py-0.5">{item.unit}</span>
 										</div>
-										{#each Array(item.assignees) as _}
-											<div class="h-5 w-5 rounded-full bg-neutral-200"></div>
-										{/each}
+										{#if item.assigneeBadge}
+											<div
+												class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${item.assigneeBadge.color}`}
+												aria-label={item.assigneeBadge.name}
+												title={item.assigneeBadge.name}
+											>
+												{item.assigneeBadge.initial}
+											</div>
+										{:else}
+											<div
+												class="flex h-5 w-5 items-center justify-center rounded-full text-neutral-300"
+												aria-label="Unassigned"
+												title="Unassigned"
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="16"
+													height="16"
+													fill="currentColor"
+													class="bi bi-person-circle"
+													viewBox="0 0 16 16"
+												>
+													<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+													<path
+														fill-rule="evenodd"
+														d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+													/>
+												</svg>
+											</div>
+										{/if}
 									</div>
 								</div>
 							</a>

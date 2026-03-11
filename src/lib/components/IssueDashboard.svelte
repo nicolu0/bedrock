@@ -666,7 +666,10 @@
 	const getActionEmails = (action) => {
 		if (editedVendorEmails[action.id] !== undefined) return editedVendorEmails[action.id];
 		if (action.vendorEmailTo) {
-			return action.vendorEmailTo.split(',').map((e) => e.trim()).filter(Boolean);
+			return action.vendorEmailTo
+				.split(',')
+				.map((e) => e.trim())
+				.filter(Boolean);
 		}
 		if (action.vendorEmail) return [action.vendorEmail];
 		return [];
@@ -685,7 +688,9 @@
 	};
 
 	const clickOutside = (node, callback) => {
-		const handler = (e) => { if (!node.contains(e.target)) callback(); };
+		const handler = (e) => {
+			if (!node.contains(e.target)) callback();
+		};
 		document.addEventListener('click', handler, true);
 		return { destroy: () => document.removeEventListener('click', handler, true) };
 	};
@@ -1701,8 +1706,8 @@
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
-							width="16"
-							height="16"
+							width="12"
+							height="12"
 							fill="currentColor"
 							class="bi bi-person-circle"
 							viewBox="0 0 16 16"
@@ -1919,48 +1924,69 @@
 												</div>
 												{#if action.emailBody}
 													<div class="rounded-lg bg-neutral-50 px-4 py-3">
-														<div class="border-b border-neutral-100 pb-3 mb-3">
+														<div class="mb-3 border-b border-neutral-100 pb-3">
 															<div class="text-sm font-medium text-neutral-900">
 																{gmailUser?.name ?? gmailUser?.email ?? 'Bedrock Ops'}
 															</div>
 															{#if action.actionType === 'schedule_vendor'}
-																<div class="flex flex-wrap items-center gap-1.5 text-sm mt-0.5">
+																<div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm">
 																	<span class="font-semibold text-neutral-700">To</span>
 																	{#each getActionEmails(action) as email}
-																		<span class="inline-flex items-center gap-1 rounded-full bg-neutral-200 px-2 py-0.5 text-xs text-neutral-700">
+																		<span
+																			class="inline-flex items-center gap-1 rounded-full bg-neutral-200 px-2 py-0.5 text-xs text-neutral-700"
+																		>
 																			{email}
 																			<button
 																				type="button"
 																				class="ml-0.5 text-neutral-400 hover:text-neutral-600"
 																				on:click={() => removeVendorRecipient(action, email)}
-																			>×</button>
+																				>×</button
+																			>
 																		</span>
 																	{/each}
 																	<div class="relative">
 																		<button
 																			type="button"
 																			class="inline-flex items-center gap-1 rounded-full border border-dashed border-neutral-400 px-2 py-0.5 text-xs text-neutral-500 hover:border-neutral-500 hover:text-neutral-700"
-																			on:click={() => { vendorDropdownOpenId = vendorDropdownOpenId === action.id ? null : action.id; }}
-																		>+ Add</button>
+																			on:click={() => {
+																				vendorDropdownOpenId =
+																					vendorDropdownOpenId === action.id ? null : action.id;
+																			}}>+ Add</button
+																		>
 																		{#if vendorDropdownOpenId === action.id}
 																			<div
-																				class="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-neutral-200 bg-white shadow-lg"
-																				use:clickOutside={() => { vendorDropdownOpenId = null; }}
+																				class="absolute top-full left-0 z-20 mt-1 w-64 rounded-lg border border-neutral-200 bg-white shadow-lg"
+																				use:clickOutside={() => {
+																					vendorDropdownOpenId = null;
+																				}}
 																			>
 																				<div class="max-h-48 overflow-y-auto py-1">
-																					{#each vendors.filter(v => v.email) as vendor}
-																						{@const alreadyAdded = getActionEmails(action).includes(vendor.email)}
+																					{#each vendors.filter((v) => v.email) as vendor}
+																						{@const alreadyAdded = getActionEmails(action).includes(
+																							vendor.email
+																						)}
 																						<button
 																							type="button"
 																							class={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-neutral-50 ${alreadyAdded ? 'opacity-50' : ''}`}
-																							on:click={() => { addVendorRecipient(action, vendor.email); vendorDropdownOpenId = null; }}
+																							on:click={() => {
+																								addVendorRecipient(action, vendor.email);
+																								vendorDropdownOpenId = null;
+																							}}
 																						>
 																							<div class="min-w-0 flex-1">
-																								<div class="font-medium text-neutral-800">{vendor.name ?? vendor.email}</div>
-																								{#if vendor.trade}<div class="text-neutral-400">{vendor.trade}</div>{/if}
-																								<div class="truncate text-neutral-400">{vendor.email}</div>
+																								<div class="font-medium text-neutral-800">
+																									{vendor.name ?? vendor.email}
+																								</div>
+																								{#if vendor.trade}<div class="text-neutral-400">
+																										{vendor.trade}
+																									</div>{/if}
+																								<div class="truncate text-neutral-400">
+																									{vendor.email}
+																								</div>
 																							</div>
-																							{#if alreadyAdded}<span class="text-neutral-400">✓</span>{/if}
+																							{#if alreadyAdded}<span class="text-neutral-400"
+																									>✓</span
+																								>{/if}
 																						</button>
 																					{/each}
 																				</div>
@@ -1969,7 +1995,7 @@
 																	</div>
 																</div>
 															{:else}
-																<div class="text-sm text-neutral-500 mt-0.5">
+																<div class="mt-0.5 text-sm text-neutral-500">
 																	<span class="font-semibold text-neutral-700">To</span>
 																	{' '}{action.tenantName && action.tenantEmail
 																		? `${action.tenantName} <${action.tenantEmail}>`
@@ -2586,38 +2612,57 @@
 																	<div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm">
 																		<span class="font-semibold text-neutral-700">To</span>
 																		{#each getActionEmails(action) as email}
-																			<span class="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-700">
+																			<span
+																				class="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-700"
+																			>
 																				{email}
 																				<button
 																					type="button"
 																					class="ml-0.5 text-neutral-400 hover:text-neutral-600"
 																					on:click={() => removeVendorRecipient(action, email)}
-																				>×</button>
+																					>×</button
+																				>
 																			</span>
 																		{/each}
 																		<div class="relative">
 																			<button
 																				type="button"
 																				class="inline-flex items-center gap-1 rounded-full border border-dashed border-neutral-300 px-2 py-0.5 text-xs text-neutral-500 hover:border-neutral-400 hover:text-neutral-700"
-																				on:click={() => { vendorDropdownOpenId = vendorDropdownOpenId === action.id ? null : action.id; }}
-																			>+ Add</button>
+																				on:click={() => {
+																					vendorDropdownOpenId =
+																						vendorDropdownOpenId === action.id ? null : action.id;
+																				}}>+ Add</button
+																			>
 																			{#if vendorDropdownOpenId === action.id}
 																				<div
-																					class="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-neutral-200 bg-white shadow-lg"
-																					use:clickOutside={() => { vendorDropdownOpenId = null; }}
+																					class="absolute top-full left-0 z-20 mt-1 w-64 rounded-lg border border-neutral-200 bg-white shadow-lg"
+																					use:clickOutside={() => {
+																						vendorDropdownOpenId = null;
+																					}}
 																				>
 																					<div class="max-h-48 overflow-y-auto py-1">
-																						{#each vendors.filter(v => v.email) as vendor}
-																							{@const alreadyAdded = getActionEmails(action).includes(vendor.email)}
+																						{#each vendors.filter((v) => v.email) as vendor}
+																							{@const alreadyAdded = getActionEmails(
+																								action
+																							).includes(vendor.email)}
 																							<button
 																								type="button"
 																								class={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition hover:bg-neutral-50 ${alreadyAdded ? 'opacity-50' : ''}`}
-																								on:click={() => { addVendorRecipient(action, vendor.email); vendorDropdownOpenId = null; }}
+																								on:click={() => {
+																									addVendorRecipient(action, vendor.email);
+																									vendorDropdownOpenId = null;
+																								}}
 																							>
 																								<div class="min-w-0 flex-1">
-																									<div class="font-medium text-neutral-800">{vendor.name ?? vendor.email}</div>
-																									{#if vendor.trade}<div class="text-neutral-400">{vendor.trade}</div>{/if}
-																									<div class="truncate text-neutral-400">{vendor.email}</div>
+																									<div class="font-medium text-neutral-800">
+																										{vendor.name ?? vendor.email}
+																									</div>
+																									{#if vendor.trade}<div class="text-neutral-400">
+																											{vendor.trade}
+																										</div>{/if}
+																									<div class="truncate text-neutral-400">
+																										{vendor.email}
+																									</div>
 																								</div>
 																								{#if alreadyAdded}
 																									<span class="text-neutral-400">✓</span>
@@ -2633,7 +2678,9 @@
 																	{@const recipient = inlineActionRecipient(action, 'vendor')}
 																	<div class="mt-0.5 text-sm text-neutral-500">
 																		<span class="font-semibold text-neutral-700">To</span>
-																		{' '}{recipient.toName}{recipient.toEmail ? ` <${recipient.toEmail}>` : ''}
+																		{' '}{recipient.toName}{recipient.toEmail
+																			? ` <${recipient.toEmail}>`
+																			: ''}
 																	</div>
 																{/if}
 															</div>

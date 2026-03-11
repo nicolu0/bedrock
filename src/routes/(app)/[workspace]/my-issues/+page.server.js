@@ -23,6 +23,16 @@ const statusConfig = {
 const statusOrder = ['in_progress', 'todo', 'done'];
 const allowedStatuses = new Set(statusOrder);
 
+const normalizeStatus = (value) => {
+	if (!value) return 'todo';
+	const normalized = String(value).toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
+	if (normalized === 'in_progress') return 'in_progress';
+	if (normalized === 'done' || normalized === 'completed' || normalized === 'complete')
+		return 'done';
+	if (normalized === 'todo' || normalized === 'to_do' || normalized === 'backlog') return 'todo';
+	return allowedStatuses.has(normalized) ? normalized : 'todo';
+};
+
 const loadSections = async (workspaceId) => {
 	let { data: issues } = await supabaseAdmin
 		.from('issues')
@@ -65,7 +75,7 @@ const loadSections = async (workspaceId) => {
 	const normalized = (issues ?? []).map((issue) => {
 		const unit = unitMap.get(issue.unit_id);
 		const property = unit ? propertyMap.get(unit.property_id) : null;
-		const status = allowedStatuses.has(issue.status) ? issue.status : 'todo';
+		const status = normalizeStatus(issue.status);
 		return {
 			id: issue.id,
 			issueId: issue.id,
@@ -92,34 +102,67 @@ const loadSections = async (workspaceId) => {
 		(issue) => !issue.parentId || !issuesById.has(issue.parentId)
 	);
 
+	const sectionBuckets = new Map(
+		statusOrder.map((status) => {
+			const config = statusConfig[status] ?? {
+				id: status,
+				label: status,
+				statusClass: 'border-neutral-500 text-neutral-600'
+			};
+			return [status, { config, items: [] }];
+		})
+	);
+
+	for (const issue of topLevelIssues) {
+		const status = issue.status ?? 'todo';
+		const bucket = sectionBuckets.get(status);
+		if (!bucket) continue;
+		const subIssues = (childrenByParent.get(issue.id) ?? [])
+			.filter((child) => (child.status ?? 'todo') === status)
+			.map((subIssue) => ({
+				id: subIssue.id,
+				issueId: subIssue.issueId,
+				title: subIssue.title,
+				parentTitle: issue.title,
+				property: subIssue.property,
+				unit: subIssue.unit,
+				assignees: subIssue.assignees
+			}));
+		bucket.items.push({
+			id: issue.id,
+			issueId: issue.issueId,
+			title: issue.title,
+			assignees: issue.assignees,
+			property: issue.property,
+			unit: issue.unit,
+			subIssues
+		});
+	}
+
+	for (const issue of normalized) {
+		if (!issue.parentId) continue;
+		const parent = issuesById.get(issue.parentId);
+		if (!parent) continue;
+		if ((parent.status ?? 'todo') === (issue.status ?? 'todo')) continue;
+		const bucket = sectionBuckets.get(issue.status ?? 'todo');
+		if (!bucket) continue;
+		bucket.items.push({
+			id: issue.id,
+			issueId: issue.issueId,
+			title: issue.title,
+			assignees: issue.assignees,
+			property: issue.property,
+			unit: issue.unit,
+			parentTitle: parent.title,
+			isSubIssue: true,
+			subIssues: []
+		});
+	}
+
 	const sections = statusOrder.map((status) => {
-		const config = statusConfig[status] ?? {
-			id: status,
-			label: status,
-			statusClass: 'border-neutral-500 text-neutral-600'
-		};
-		const items = topLevelIssues
-			.filter((issue) => (issue.status ?? 'todo') === status)
-			.map((issue) => {
-				const subIssues = (childrenByParent.get(issue.id) ?? []).map((subIssue) => ({
-					id: subIssue.id,
-					issueId: subIssue.issueId,
-					title: subIssue.title,
-					parentTitle: issue.title,
-					property: subIssue.property,
-					unit: subIssue.unit,
-					assignees: subIssue.assignees
-				}));
-				return {
-					id: issue.id,
-					issueId: issue.issueId,
-					title: issue.title,
-					assignees: issue.assignees,
-					property: issue.property,
-					unit: issue.unit,
-					subIssues
-				};
-			});
+		const bucket = sectionBuckets.get(status);
+		const config = bucket?.config ?? statusConfig[status];
+		const items = bucket?.items ?? [];
 		return {
 			id: config.id,
 			label: config.label,

@@ -24,6 +24,16 @@ const statusConfig = {
 const statusOrder = ['in_progress', 'todo', 'done'];
 const allowedStatuses = new Set(statusOrder);
 
+const normalizeStatus = (value) => {
+	if (!value) return 'todo';
+	const normalized = String(value).toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
+	if (normalized === 'in_progress') return 'in_progress';
+	if (normalized === 'done' || normalized === 'completed' || normalized === 'complete')
+		return 'done';
+	if (normalized === 'todo' || normalized === 'to_do' || normalized === 'backlog') return 'todo';
+	return allowedStatuses.has(normalized) ? normalized : 'todo';
+};
+
 export const GET = async ({ locals, url }) => {
 	if (!locals.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
@@ -37,7 +47,9 @@ export const GET = async ({ locals, url }) => {
 
 	let { data: issues } = await supabaseAdmin
 		.from('issues')
-		.select('id, name, status, parent_id, unit_id')
+		.select(
+			'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
+		)
 		.eq('workspace_id', workspace.id)
 		.order('updated_at', { ascending: false });
 
@@ -52,7 +64,9 @@ export const GET = async ({ locals, url }) => {
 		if (fallbackUnitIds.length) {
 			const { data: fallbackIssues } = await supabaseAdmin
 				.from('issues')
-				.select('id, name, status, parent_id, unit_id')
+				.select(
+					'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
+				)
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
 			issues = fallbackIssues ?? [];
@@ -76,16 +90,20 @@ export const GET = async ({ locals, url }) => {
 	const normalizedIssues = (issues ?? []).map((issue) => {
 		const unit = unitMap.get(issue.unit_id);
 		const property = unit ? propertyMap.get(unit.property_id) : null;
-		const status = allowedStatuses.has(issue.status) ? issue.status : 'todo';
+		const status = normalizeStatus(issue.status);
 		return {
 			id: issue.id,
 			issueId: issue.id,
 			title: issue.name,
 			name: issue.name,
-			description: '',
+			description: issue.description ?? '',
 			assignees: 0,
+			assigneeId: issue.assignee_id ?? null,
+			assignee_id: issue.assignee_id ?? null,
 			property: property?.name ?? 'Unknown',
 			unit: unit?.name ?? 'Unknown',
+			issueNumber: issue.issue_number ?? null,
+			readableId: issue.readable_id ?? null,
 			status,
 			parentId: issue.parent_id ?? null,
 			parent_id: issue.parent_id ?? null
@@ -101,46 +119,84 @@ export const GET = async ({ locals, url }) => {
 		}
 		childrenByParent.get(issue.parentId).push(issue);
 	}
-	const collectDescendants = (parentId, parentTitle) => {
-		const children = childrenByParent.get(parentId) ?? [];
-		return children.flatMap((child) => {
-			const item = {
-				id: child.id,
-				issueId: child.issueId,
-				title: child.title,
-				parentTitle,
-				property: child.property,
-				unit: child.unit,
-				assignees: child.assignees
-			};
-			return [item, ...collectDescendants(child.id, child.title)];
-		});
-	};
 
 	const topLevelIssues = normalizedIssues.filter(
 		(issue) => !issue.parentId || !issuesById.has(issue.parentId)
 	);
 
+	const sectionBuckets = new Map(
+		statusOrder.map((status) => {
+			const config = statusConfig[status] ?? {
+				id: status,
+				label: status,
+				statusClass: 'border-neutral-500 text-neutral-600'
+			};
+			return [status, { config, items: [] }];
+		})
+	);
+
+	for (const issue of topLevelIssues) {
+		const status = issue.status ?? 'todo';
+		const bucket = sectionBuckets.get(status);
+		if (!bucket) continue;
+		const subIssues = (childrenByParent.get(issue.id) ?? [])
+			.filter((child) => (child.status ?? 'todo') === status)
+			.map((subIssue) => ({
+				id: subIssue.id,
+				issueId: subIssue.issueId,
+				title: subIssue.title,
+				parentTitle: issue.title,
+				property: subIssue.property,
+				unit: subIssue.unit,
+				issueNumber: subIssue.issueNumber,
+				readableId: subIssue.readableId,
+				assignees: subIssue.assignees,
+				assigneeId: subIssue.assigneeId ?? subIssue.assignee_id ?? null,
+				assignee_id: subIssue.assignee_id ?? subIssue.assigneeId ?? null
+			}));
+		bucket.items.push({
+			id: issue.id,
+			issueId: issue.issueId,
+			title: issue.title,
+			assignees: issue.assignees,
+			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
+			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
+			property: issue.property,
+			unit: issue.unit,
+			issueNumber: issue.issueNumber,
+			readableId: issue.readableId,
+			subIssues
+		});
+	}
+
+	for (const issue of normalizedIssues) {
+		if (!issue.parentId) continue;
+		const parent = issuesById.get(issue.parentId);
+		if (!parent) continue;
+		if ((parent.status ?? 'todo') === (issue.status ?? 'todo')) continue;
+		const bucket = sectionBuckets.get(issue.status ?? 'todo');
+		if (!bucket) continue;
+		bucket.items.push({
+			id: issue.id,
+			issueId: issue.issueId,
+			title: issue.title,
+			assignees: issue.assignees,
+			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
+			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
+			property: issue.property,
+			unit: issue.unit,
+			issueNumber: issue.issueNumber,
+			readableId: issue.readableId,
+			parentTitle: parent.title,
+			isSubIssue: true,
+			subIssues: []
+		});
+	}
+
 	const sections = statusOrder.map((status) => {
-		const config = statusConfig[status] ?? {
-			id: status,
-			label: status,
-			statusClass: 'border-neutral-500 text-neutral-600'
-		};
-		const items = topLevelIssues
-			.filter((issue) => (issue.status ?? 'todo') === status)
-			.map((issue) => {
-				const subIssues = collectDescendants(issue.id, issue.title);
-				return {
-					id: issue.id,
-					issueId: issue.issueId,
-					title: issue.title,
-					assignees: issue.assignees,
-					property: issue.property,
-					unit: issue.unit,
-					subIssues
-				};
-			});
+		const bucket = sectionBuckets.get(status);
+		const config = bucket?.config ?? statusConfig[status];
+		const items = bucket?.items ?? [];
 		return {
 			id: config.id,
 			label: config.label,
