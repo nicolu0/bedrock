@@ -7,7 +7,7 @@
 	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
 	import { activityLogsCache, ensureActivityLogsCache } from '$lib/stores/activityLogsCache.js';
 	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
-	import { issuesCache } from '$lib/stores/issuesCache.js';
+	import { issuesCache, ensureIssuesCache } from '$lib/stores/issuesCache.js';
 	import IssuePanel from '$lib/components/IssuePanel.svelte';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
@@ -51,6 +51,7 @@
 		ensureActivityCache(workspaceSlug, { force: true });
 		ensureActivityLogsCache(workspaceSlug, { force: true });
 		ensurePeopleCache(workspaceSlug);
+		ensureIssuesCache(workspaceSlug);
 	}
 
 	function timeAgo(dateStr) {

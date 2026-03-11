@@ -28,21 +28,20 @@
 	$: if (issueId) loadIssue(issueId);
 
 	async function loadIssue(id) {
+		console.log('[IssuePanel] loadIssue called', { id, seedIssue });
 		issue =
 			seedIssue && seedIssue.id === id
-				? { id: seedIssue.id, name: seedIssue.name, status: seedIssue.status, description: null, parent_id: null }
+				? { id: seedIssue.id, name: seedIssue.name, status: seedIssue.status, description: null, parent_id: seedIssue.parent_id ?? null }
 				: null;
+		console.log('[IssuePanel] seed issue set', { issue });
 		subIssues = [];
 
 		const [{ data: iss }, { data: subs }] = await Promise.all([
-			supabase
-				.from('issues')
-				.select('id, name, status, description, parent_id')
-				.eq('id', id)
-				.single(),
-			supabase.from('issues').select('id, name, status, parent_id').eq('parent_id', id)
+			supabase.from('issues').select('id, name, status, description, parent_id').eq('id', id).maybeSingle(),
+			supabase.from('issues').select('id, name, status').eq('parent_id', id)
 		]);
 
+		console.log('[IssuePanel] DB result', { iss, subs });
 		if (iss) issue = iss;
 		subIssues = subs ?? [];
 	}
@@ -59,7 +58,12 @@
 	$: logsByIssue = activityLogsData?.logsByIssue ?? {};
 
 	$: statusMeta = statusConfig[issue?.status ?? 'todo'] ?? statusConfig.todo;
-	$: parentIssue = issue?.parent_id ? allIssues.find((i) => i.id === issue.parent_id) : null;
+	$: parentIssue = (() => {
+		const pid = issue?.parent_id;
+		const found = pid ? allIssues.find((i) => i.id === pid) : null;
+		console.log('[IssuePanel] parentIssue computation', { parent_id: pid, allIssuesCount: allIssues.length, found });
+		return found ?? null;
+	})();
 
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
 
@@ -118,16 +122,14 @@
 
 <div class="flex h-full flex-col">
 	<!-- Header -->
-	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-3">
+	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-3 text-sm text-neutral-600">
 		<div class="flex min-w-0 items-center gap-2">
-			<span class={`h-3 w-3 shrink-0 rounded-full border ${statusMeta.statusClass}`}></span>
 			{#if parentIssue}
-				<span class="truncate text-xs text-neutral-400"
-					>{parentIssue.title ?? parentIssue.name}</span
-				>
-				<span class="text-xs text-neutral-300">›</span>
+				<span class="shrink-0 text-neutral-700">{parentIssue.name}</span>
+				<span class="text-neutral-300">›</span>
 			{/if}
-			<span class="truncate text-sm font-semibold text-neutral-900">{issue?.name ?? ''}</span>
+			<span class={`h-3 w-3 shrink-0 rounded-full border ${statusMeta.statusClass}`}></span>
+			<span class="truncate text-neutral-500">{issue?.name ?? ''}</span>
 		</div>
 		<button
 			on:click={() => dispatch('close')}
@@ -159,6 +161,19 @@
 			</div>
 		</div>
 		<div class="mt-6"></div>
+
+		{#if parentIssue}
+			<div class="mt-2 flex items-center gap-2 text-sm">
+				<span class="text-xs text-neutral-400">Parent</span>
+				<a
+					href={`/${$page.params.workspace}/issue/${parentIssue.id}/${slugify(parentIssue.name ?? '')}?from=inbox`}
+					class="flex items-center gap-1.5 text-neutral-600 hover:underline"
+				>
+					<span class="h-2.5 w-2.5 shrink-0 rounded-full border border-neutral-400"></span>
+					<span>{parentIssue.name}</span>
+				</a>
+			</div>
+		{/if}
 
 		{#if subIssues.length}
 			<div class="mt-8">

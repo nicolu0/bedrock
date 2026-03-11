@@ -16,7 +16,7 @@ export const load = async ({ parent, locals }) => {
 			.select(
 				`
         id, title, body, is_read, created_at, type, meta, requires_action,
-        issues(id, name, status,
+        issues(id, name, status, parent_id,
           units(name, properties(name)))
       `
 			)
