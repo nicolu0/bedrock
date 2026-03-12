@@ -1,4 +1,5 @@
 <script>
+	// @ts-nocheck
 	import { enhance } from '$app/forms';
 	export let form;
 	export let data;
@@ -7,10 +8,10 @@
 <div class="flex min-h-screen flex-col items-center justify-center bg-white px-6">
 	{#if data.isInvite}
 		<a
-			class="anim-auth-1 mb-8 text-xl font-regular flex items-center gap-1 tracking-[0.1em] uppercase text-neutral-800"
+			class="anim-auth-1 font-regular mb-8 flex items-center gap-1 text-xl tracking-[0.1em] text-neutral-800 uppercase"
 			style="font-family: 'Zalando Sans Expanded', sans-serif;"
-			href="/"
-		>Bedrock</a>
+			href="/">Bedrock</a
+		>
 		<div class="anim-auth-2 w-full max-w-xs">
 			<form method="POST" action="?/signup" use:enhance class="flex flex-col gap-4">
 				<input type="hidden" name="invite_token" value={data.inviteToken ?? ''} />
@@ -26,6 +27,7 @@
 						autocomplete="name"
 						class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
 						placeholder="Jane Smith"
+						value={data.inviteName ?? ''}
 					/>
 				</div>
 				<div class="flex flex-col gap-1.5">
@@ -37,6 +39,7 @@
 						autocomplete="email"
 						class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
 						placeholder="jane@company.com"
+						value={data.inviteEmail ?? ''}
 					/>
 				</div>
 				<div class="flex flex-col gap-1.5">
@@ -58,17 +61,18 @@
 				</button>
 			</form>
 			<p class="anim-auth-3 mt-6 text-center text-sm text-neutral-500">
-				Already have an account? <a class="text-neutral-800 hover:underline" href="/login">Log in</a>
+				Already have an account? <a class="text-neutral-800 hover:underline" href="/login">Log in</a
+				>
 			</p>
 		</div>
 	{:else if form?.success}
 		<p class="anim-auth-2 text-sm text-neutral-600">Thanks! We'll be in touch soon.</p>
 	{:else}
 		<a
-			class="anim-auth-1 mb-8 text-xl font-regular flex items-center gap-1 tracking-[0.1em] uppercase text-neutral-800"
+			class="anim-auth-1 font-regular mb-8 flex items-center gap-1 text-xl tracking-[0.1em] text-neutral-800 uppercase"
 			style="font-family: 'Zalando Sans Expanded', sans-serif;"
-			href="/"
-		>Bedrock</a>
+			href="/">Bedrock</a
+		>
 		<div class="anim-auth-2 w-full max-w-xs">
 			<form method="POST" action="?/contact" use:enhance class="flex flex-col gap-4">
 				{#if form?.error}
@@ -101,7 +105,7 @@
 					<select
 						id="units"
 						name="units"
-						class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500 bg-white"
+						class="rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
 					>
 						<option value="1–50">1–50</option>
 						<option value="50–200">50–200</option>
@@ -136,7 +140,8 @@
 				</button>
 			</form>
 			<p class="anim-auth-3 mt-6 text-center text-sm text-neutral-500">
-				Already have an account? <a class="text-neutral-800 hover:underline" href="/login">Log in</a>
+				Already have an account? <a class="text-neutral-800 hover:underline" href="/login">Log in</a
+				>
 			</p>
 		</div>
 	{/if}

@@ -16,6 +16,8 @@
 	let roleOpen = false;
 	let submitting = false;
 	let error = '';
+	/** @type {string | null} */
+	let optimisticId = null;
 
 	const isEdit = person != null;
 	const roles = ['admin', 'member', 'owner', 'vendor'];
@@ -53,11 +55,30 @@
 		}
 
 		submitting = true;
+		const trimmedName = name.trim();
+		const trimmedEmail = email.trim();
+		const trimmedTrade = role === 'vendor' ? trade.trim() : '';
+		const trimmedNotes = notes.trim();
 		try {
 			const personId = person?.id;
 			if (isEdit && !personId) {
 				error = 'Something went wrong.';
 				return;
+			}
+			if (!isEdit) {
+				const tempId = globalThis.crypto?.randomUUID
+					? `temp-${globalThis.crypto.randomUUID()}`
+					: `temp-${Date.now()}`;
+				optimisticId = tempId;
+				dispatch('optimistic', {
+					id: tempId,
+					name: trimmedName,
+					email: trimmedEmail,
+					role,
+					trade: role === 'vendor' ? trimmedTrade : null,
+					notes: trimmedNotes || null,
+					pending: true
+				});
 			}
 			const res = await fetch('/api/people', {
 				method: isEdit ? 'PATCH' : 'POST',
@@ -65,21 +86,34 @@
 				body: JSON.stringify({
 					...(isEdit ? { id: personId } : {}),
 					workspace: $page.params.workspace,
-					name: name.trim(),
-					email: email.trim(),
+					name: trimmedName,
+					email: trimmedEmail,
 					role,
-					trade: role === 'vendor' ? trade.trim() : null,
-					notes: notes.trim() || null
+					trade: role === 'vendor' ? trimmedTrade : null,
+					notes: trimmedNotes || null
 				})
 			});
 			const json = await res.json();
 			if (!res.ok) {
+				if (optimisticId) {
+					dispatch('optimisticError', optimisticId);
+					optimisticId = null;
+				}
 				error = json.error ?? 'Something went wrong.';
 			} else {
-				dispatch('saved', json);
+				if (isEdit) {
+					dispatch('saved', json);
+				} else {
+					dispatch('saved', { person: json, tempId: optimisticId });
+					optimisticId = null;
+				}
 				close();
 			}
 		} catch (e) {
+			if (optimisticId) {
+				dispatch('optimisticError', optimisticId);
+				optimisticId = null;
+			}
 			error = 'Something went wrong.';
 		} finally {
 			submitting = false;
@@ -237,7 +271,7 @@
 				disabled={submitting}
 				class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 			>
-				{submitting ? 'Saving…' : isEdit ? 'Save changes' : 'Add person'}
+				{submitting ? (isEdit ? 'Saving…' : 'Sending…') : isEdit ? 'Save changes' : 'Send invite'}
 			</button>
 		</div>
 	</div>

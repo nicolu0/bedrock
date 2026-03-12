@@ -2,7 +2,11 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
-	import { addPersonToCache } from '$lib/stores/peopleCache.js';
+	import {
+		addPersonToCache,
+		replacePersonInCache,
+		removePersonFromCache
+	} from '$lib/stores/peopleCache.js';
 	import { newPersonModal } from '$lib/stores/peopleModal.js';
 
 	$: workspaceSlug = $page.params.workspace;
@@ -23,9 +27,21 @@
 		newPersonModal.set(false);
 	};
 
-	const onNewPersonSaved = (e) => {
+	const onNewPersonOptimistic = (e) => {
 		addPersonToCache(e.detail, $page.params.workspace);
+	};
+
+	const onNewPersonSaved = (e) => {
+		if (e.detail?.person) {
+			replacePersonInCache(e.detail.tempId, e.detail.person, $page.params.workspace);
+		} else {
+			addPersonToCache(e.detail, $page.params.workspace);
+		}
 		closeNewPersonModal();
+	};
+
+	const onNewPersonOptimisticError = (e) => {
+		removePersonFromCache(e.detail);
 	};
 </script>
 
@@ -64,5 +80,10 @@
 </div>
 
 {#if $newPersonModal}
-	<PeopleModal on:saved={onNewPersonSaved} on:close={closeNewPersonModal} />
+	<PeopleModal
+		on:optimistic={onNewPersonOptimistic}
+		on:optimisticError={onNewPersonOptimisticError}
+		on:saved={onNewPersonSaved}
+		on:close={closeNewPersonModal}
+	/>
 {/if}

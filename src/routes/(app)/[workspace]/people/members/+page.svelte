@@ -97,11 +97,11 @@
 		{#if members !== null}
 			{#if members?.length}
 				<div
-					class="grid grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
+					class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
 				>
 					<div>Role</div>
 					<div>Name</div>
-					<div>Trade</div>
+					<div aria-hidden="true"></div>
 					<div>Email</div>
 					<div></div>
 				</div>
@@ -109,7 +109,7 @@
 				<div>
 					{#each members as member}
 						<div
-							class="group grid cursor-pointer grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
+							class="group grid cursor-pointer grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
 							on:mouseenter={() => (hoveredRow = member.id)}
 							on:mouseleave={() => (hoveredRow = null)}
 							on:click={(e) => {
@@ -129,7 +129,7 @@
 								</span>
 							</div>
 							<div class="truncate">{member.name}</div>
-							<div class="truncate text-neutral-500">{member.trade ?? '—'}</div>
+							<div aria-hidden="true"></div>
 							<div class="truncate text-neutral-500">{member.email ?? '—'}</div>
 							<div class="relative flex items-center">
 								<button
@@ -176,21 +176,21 @@
 			{/if}
 		{:else}
 			<div
-				class="grid grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
+				class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
 			>
 				<div>Role</div>
 				<div>Name</div>
-				<div>Trade</div>
+				<div aria-hidden="true"></div>
 				<div>Email</div>
 				<div></div>
 			</div>
 			<div class="border-t border-neutral-200"></div>
 			<div>
 				{#each Array(3) as _, i}
-					<div class="grid grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-3">
+					<div class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3">
 						<div class="shimmer h-4 w-14 rounded"></div>
 						<div class="shimmer h-4 rounded" style="width: {i % 2 === 0 ? '8rem' : '6rem'}"></div>
-						<div class="shimmer h-4 w-16 rounded"></div>
+						<div></div>
 						<div class="shimmer h-4 rounded" style="width: {i % 3 === 0 ? '10rem' : '7rem'}"></div>
 						<div class="shimmer h-4 w-6 rounded"></div>
 					</div>

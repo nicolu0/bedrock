@@ -25,13 +25,17 @@
 			? $peopleCache.data
 			: null;
 
+	$: activePeople = Array.isArray(people) ? people.filter((person) => !person?.pending) : null;
+	$: invitedPeople = Array.isArray(people) ? people.filter((person) => person?.pending) : null;
+
 	$: if (browser && data.people) {
 		data.people.then((v) => mergePeopleIntoCache(workspaceSlug, v));
 	}
 
-	const formatRole = (role) => {
-		if (!role) return 'Member';
-		return role[0].toUpperCase() + role.slice(1);
+	const formatRole = (role, pending) => {
+		if (!role) return pending ? 'Member (Invited)' : 'Member';
+		const label = role[0].toUpperCase() + role.slice(1);
+		return pending ? `${label} (Invited)` : label;
 	};
 
 	const roleBadgeClass = (role) => {
@@ -94,100 +98,171 @@
 		{#if people !== null}
 			{#if people?.length}
 				<div
-					class="grid grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
+					class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
 				>
 					<div>Role</div>
 					<div>Name</div>
-					<div>Trade</div>
+					<div aria-hidden="true"></div>
 					<div>Email</div>
 					<div></div>
 				</div>
 				<div class="border-t border-neutral-200"></div>
 				<div>
-					{#each people as person}
-						<div
-							class="group grid cursor-pointer grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
-							on:mouseenter={() => (hoveredRow = person.id)}
-							on:mouseleave={() => (hoveredRow = null)}
-							on:click={(e) => {
-								e.currentTarget.blur();
-								openRowMenu = null;
-								editingPerson = person;
-							}}
-							role="button"
-							tabindex="0"
-							on:keydown={(e) => e.key === 'Enter' && (editingPerson = person)}
-						>
-							<div class="flex items-center">
-								<span
-									class={`rounded-sm px-2 py-1 text-xs font-medium ${roleBadgeClass(person.role)}`}
-								>
-									{formatRole(person.role)}
-								</span>
-							</div>
-							<div class="truncate">{person.name}</div>
-							<div class="truncate text-neutral-500">{person.trade ?? '—'}</div>
-							<div class="truncate text-neutral-500">{person.email ?? '—'}</div>
-							<div class="relative flex items-center">
-								<button
-									data-row-menu-toggle="true"
-									class={`rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 ${hoveredRow === person.id || openRowMenu === person.id ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100`}
-									on:click|stopPropagation={() =>
-										(openRowMenu = openRowMenu === person.id ? null : person.id)}
-									type="button"
-								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										width="16"
-										height="16"
-										fill="currentColor"
-										class="bi bi-three-dots"
-										viewBox="0 0 16 16"
+					{#if activePeople?.length}
+						{#each activePeople as person}
+							<div
+								class="group grid cursor-pointer grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
+								on:mouseenter={() => (hoveredRow = person.id)}
+								on:mouseleave={() => (hoveredRow = null)}
+								on:click={(e) => {
+									e.currentTarget.blur();
+									openRowMenu = null;
+									editingPerson = person;
+								}}
+								role="button"
+								tabindex="0"
+								on:keydown={(e) => e.key === 'Enter' && (editingPerson = person)}
+							>
+								<div class="flex items-center">
+									<span
+										class={`rounded-sm px-2 py-1 text-xs font-medium ${roleBadgeClass(person.role)}`}
 									>
-										<path
-											d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"
-										/>
-									</svg>
-								</button>
-								{#if openRowMenu === person.id}
-									<div
-										data-row-menu="true"
-										class="absolute top-full right-0 z-20 mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
-										on:click|stopPropagation
+										{formatRole(person.role, person.pending)}
+									</span>
+								</div>
+								<div class="truncate">{person.name}</div>
+								<div aria-hidden="true"></div>
+								<div class="truncate text-neutral-500">{person.email ?? '—'}</div>
+								<div class="relative flex items-center">
+									<button
+										data-row-menu-toggle="true"
+										class={`rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 ${hoveredRow === person.id || openRowMenu === person.id ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100`}
+										on:click|stopPropagation={() =>
+											(openRowMenu = openRowMenu === person.id ? null : person.id)}
+										type="button"
 									>
-										<button
-											class="flex w-full px-3 py-2 text-left text-rose-600 hover:bg-neutral-50"
-											on:click={() => deletePerson(person)}
-											type="button"
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											fill="currentColor"
+											class="bi bi-three-dots"
+											viewBox="0 0 16 16"
 										>
-											Delete
-										</button>
-									</div>
-								{/if}
+											<path
+												d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"
+											/>
+										</svg>
+									</button>
+									{#if openRowMenu === person.id}
+										<div
+											data-row-menu="true"
+											class="absolute top-full right-0 z-20 mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
+											on:click|stopPropagation
+										>
+											<button
+												class="flex w-full px-3 py-2 text-left text-rose-600 hover:bg-neutral-50"
+												on:click={() => deletePerson(person)}
+												type="button"
+											>
+												{person?.pending ? 'Revoke invite' : 'Delete'}
+											</button>
+										</div>
+									{/if}
+								</div>
 							</div>
+						{/each}
+					{/if}
+					{#if invitedPeople?.length}
+						<div class="border-t border-neutral-200"></div>
+						<div class="bg-neutral-50 px-6 py-2 text-xs font-medium text-neutral-600">
+							Invited {invitedPeople.length}
 						</div>
-					{/each}
+						{#each invitedPeople as person}
+							<div
+								class="group grid cursor-pointer grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
+								on:mouseenter={() => (hoveredRow = person.id)}
+								on:mouseleave={() => (hoveredRow = null)}
+								on:click={(e) => {
+									e.currentTarget.blur();
+									openRowMenu = null;
+									editingPerson = person;
+								}}
+								role="button"
+								tabindex="0"
+								on:keydown={(e) => e.key === 'Enter' && (editingPerson = person)}
+							>
+								<div class="flex items-center">
+									<span
+										class={`rounded-sm px-2 py-1 text-xs font-medium ${roleBadgeClass(person.role)}`}
+									>
+										{formatRole(person.role, person.pending)}
+									</span>
+								</div>
+								<div class="truncate">{person.name}</div>
+								<div aria-hidden="true"></div>
+								<div class="truncate text-neutral-500">{person.email ?? '—'}</div>
+								<div class="relative flex items-center">
+									<button
+										data-row-menu-toggle="true"
+										class={`rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 ${hoveredRow === person.id || openRowMenu === person.id ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100`}
+										on:click|stopPropagation={() =>
+											(openRowMenu = openRowMenu === person.id ? null : person.id)}
+										type="button"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											fill="currentColor"
+											class="bi bi-three-dots"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"
+											/>
+										</svg>
+									</button>
+									{#if openRowMenu === person.id}
+										<div
+											data-row-menu="true"
+											class="absolute top-full right-0 z-20 mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
+											on:click|stopPropagation
+										>
+											<button
+												class="flex w-full px-3 py-2 text-left text-rose-600 hover:bg-neutral-50"
+												on:click={() => deletePerson(person)}
+												type="button"
+											>
+												{person?.pending ? 'Revoke invite' : 'Delete'}
+											</button>
+										</div>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					{/if}
 				</div>
 			{:else}
 				<div class="px-6 py-3 text-sm text-neutral-400">No people yet.</div>
 			{/if}
 		{:else}
 			<div
-				class="grid grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
+				class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
 			>
 				<div>Role</div>
 				<div>Name</div>
-				<div>Trade</div>
+				<div aria-hidden="true"></div>
 				<div>Email</div>
 				<div></div>
 			</div>
 			<div class="border-t border-neutral-200"></div>
 			<div>
 				{#each Array(3) as _, i}
-					<div class="grid grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-3">
+					<div class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3">
 						<div class="shimmer h-4 w-14 rounded"></div>
 						<div class="shimmer h-4 rounded" style="width: {i % 2 === 0 ? '8rem' : '6rem'}"></div>
-						<div class="shimmer h-4 w-16 rounded"></div>
+						<div></div>
 						<div class="shimmer h-4 rounded" style="width: {i % 3 === 0 ? '10rem' : '7rem'}"></div>
 						<div class="shimmer h-4 w-6 rounded"></div>
 					</div>
