@@ -14,15 +14,31 @@ export const GET = async ({ locals, url }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
+	let role = null;
 	let ownerPersonId = null;
-	const { data: member } = await supabaseAdmin
-		.from('people')
-		.select('id, role')
-		.eq('workspace_id', workspace.id)
-		.eq('user_id', locals.user.id)
+	const { data: adminWorkspace } = await supabaseAdmin
+		.from('workspaces')
+		.select('id')
+		.eq('id', workspace.id)
+		.eq('admin_user_id', locals.user.id)
 		.maybeSingle();
-	if (member?.role === 'owner') {
-		ownerPersonId = member.id;
+	if (adminWorkspace?.id) {
+		role = 'admin';
+	} else {
+		const { data: member } = await supabaseAdmin
+			.from('people')
+			.select('id, role')
+			.eq('workspace_id', workspace.id)
+			.eq('user_id', locals.user.id)
+			.maybeSingle();
+		role = member?.role ? String(member.role).toLowerCase() : null;
+		if (role === 'owner') ownerPersonId = member?.id ?? null;
+	}
+	if (!role) {
+		return json({ error: 'Forbidden' }, { status: 403 });
+	}
+	if (role === 'vendor') {
+		return json([]);
 	}
 
 	let query = supabaseAdmin
@@ -30,8 +46,8 @@ export const GET = async ({ locals, url }) => {
 		.select('id, name, address, city, state, postal_code, country, owner_id')
 		.eq('workspace_id', workspace.id)
 		.order('name', { ascending: true });
-	if (ownerPersonId) {
-		query = query.eq('owner_id', ownerPersonId);
+	if (role === 'owner') {
+		query = query.eq('owner_id', ownerPersonId ?? '__none__');
 	}
 	const { data: properties } = await query;
 	if (!Array.isArray(properties) || properties.length === 0) {

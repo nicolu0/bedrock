@@ -47,16 +47,20 @@
 
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
+	$: role = $page.data?.role;
+	$: canViewPeople = role === 'admin' || role === 'member';
 	$: membersReady =
-		$peopleMembersCache.workspace === workspaceSlug && Array.isArray($peopleMembersCache.data);
-	$: membersLoading = $peopleMembersCache.loading && !membersReady;
+		canViewPeople &&
+		$peopleMembersCache.workspace === workspaceSlug &&
+		Array.isArray($peopleMembersCache.data);
+	$: membersLoading = canViewPeople && $peopleMembersCache.loading && !membersReady;
 	$: members = membersReady ? $peopleMembersCache.data : [];
 	$: membersByUserId = members.reduce((acc, member) => {
 		if (!member?.user_id) return acc;
 		acc[member.user_id] = member;
 		return acc;
 	}, {});
-	$: if (browser && workspaceSlug && !membersReady && !membersLoading) {
+	$: if (browser && workspaceSlug && canViewPeople && !membersReady && !membersLoading) {
 		ensurePeopleMembersCache(workspaceSlug);
 	}
 

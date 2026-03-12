@@ -4,7 +4,11 @@
 	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
-	import { propertiesCache, primePropertiesCache } from '$lib/stores/propertiesCache.js';
+	import {
+		propertiesCache,
+		primePropertiesCache,
+		ensurePropertiesCache
+	} from '$lib/stores/propertiesCache.js';
 	import { unitsCache, primeUnitsCache } from '$lib/stores/unitsCache.js';
 	import { primeIssuesCache } from '$lib/stores/issuesCache';
 	import { primeNotificationsCache } from '$lib/stores/notificationsCache';
@@ -84,8 +88,13 @@
 					!Object.prototype.hasOwnProperty.call(item ?? {}, 'unit_count') &&
 					!Object.prototype.hasOwnProperty.call(item ?? {}, 'issue_count')
 			);
-			if (!cache.data || cache.workspace !== _ws || (nextHasCounts && cacheMissingCounts)) {
-				primePropertiesCache(_ws, next);
+			if (
+				!cache.data ||
+				cache.workspace !== _ws ||
+				cache.role !== userRole ||
+				(nextHasCounts && cacheMissingCounts)
+			) {
+				primePropertiesCache(_ws, next, userRole);
 			}
 		};
 		if (data.properties instanceof Promise) {
@@ -148,7 +157,9 @@
 		_primedActivityForWorkspace = workspaceSlug;
 		const _ws = workspaceSlug;
 		if (data.activityData instanceof Promise) {
-			data.activityData.then((d) => { if (d) primeActivityCache(_ws, d); });
+			data.activityData.then((d) => {
+				if (d) primeActivityCache(_ws, d);
+			});
 		} else if (data.activityData) {
 			primeActivityCache(_ws, data.activityData);
 		}
@@ -159,7 +170,9 @@
 		_primedActivityLogsForWorkspace = workspaceSlug;
 		const _ws = workspaceSlug;
 		if (data.activityLogsData instanceof Promise) {
-			data.activityLogsData.then((d) => { if (d) primeActivityLogsCache(_ws, d); });
+			data.activityLogsData.then((d) => {
+				if (d) primeActivityLogsCache(_ws, d);
+			});
 		} else if (data.activityLogsData) {
 			primeActivityLogsCache(_ws, data.activityLogsData);
 		}
@@ -190,16 +203,20 @@
 		return base || 'property';
 	};
 
+	$: workspaceId = data?.workspace?.id;
+	$: userId = data?.userId;
+	$: userRole = data?.role;
+	$: canViewPeople = userRole === 'admin' || userRole === 'member';
+	$: canViewProperties = userRole === 'admin' || userRole === 'member' || userRole === 'owner';
+
 	$: if (browser && workspaceSlug) {
+		if (userRole) ensurePropertiesCache(workspaceSlug, { role: userRole });
 		ensureIssuesCache(workspaceSlug);
 		ensureNotificationsCache(workspaceSlug);
-		ensurePeopleMembersCache(workspaceSlug);
+		if (canViewPeople) ensurePeopleMembersCache(workspaceSlug);
 		ensureActivityCache(workspaceSlug);
 		ensureActivityLogsCache(workspaceSlug);
 	}
-
-	$: workspaceId = data?.workspace?.id;
-	$: userId = data?.userId;
 
 	let _workspaceChannel = null;
 	let _channelWorkspaceId = null;
@@ -489,7 +506,7 @@
 							</a>
 						</div>
 						<div class="flex flex-1 flex-col gap-1 pb-4">
-							{#each navItems as item}
+							{#each navItems.filter((item) => item.id !== 'people' || canViewPeople) as item}
 								<a
 									href={`${basePath}/${item.href}`}
 									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-normal transition ${currentPath === `${basePath}/${item.href}` || currentPath.startsWith(`${basePath}/${item.href}/`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
@@ -497,51 +514,55 @@
 									<span class="truncate">{item.label}</span>
 								</a>
 							{/each}
-							<div class="mt-2">
-								<button
-									type="button"
-									class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-neutral-400 transition hover:bg-neutral-100"
-									on:click={() => (propertiesOpen = !propertiesOpen)}
-								>
-									<span class="truncate">{propertiesItem.label}</span>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										width="14"
-										height="14"
-										fill="currentColor"
-										class={`transition ${propertiesOpen ? '' : '-rotate-90'}`}
-										viewBox="0 0 16 16"
+							{#if canViewProperties}
+								<div class="mt-2">
+									<button
+										type="button"
+										class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-neutral-400 transition hover:bg-neutral-100"
+										on:click={() => (propertiesOpen = !propertiesOpen)}
 									>
-										<path
-											d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-										/>
-									</svg>
-								</button>
-								{#if propertiesOpen}
-									<div class="mt-1 space-y-1">
-										<a
-											href={`${basePath}/${propertiesItem.href}`}
-											class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm font-normal transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+										<span class="truncate">{propertiesItem.label}</span>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="14"
+											height="14"
+											fill="currentColor"
+											class={`transition ${propertiesOpen ? '' : '-rotate-90'}`}
+											viewBox="0 0 16 16"
 										>
-											<span>All properties</span>
-										</a>
-										{#if properties !== null}
-											{#if properties?.length}
-												{#each properties as property}
-													<a
-														href={`${basePath}/${propertiesItem.href}/${slugify(property.name)}`}
-														class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm font-normal transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
-													>
-														<span class="truncate">{property.name}</span>
-													</a>
-												{/each}
+											<path
+												d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+											/>
+										</svg>
+									</button>
+									{#if propertiesOpen}
+										<div class="mt-1 space-y-1">
+											<a
+												href={`${basePath}/${propertiesItem.href}`}
+												class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm font-normal transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+											>
+												<span>All properties</span>
+											</a>
+											{#if properties !== null}
+												{#if properties?.length}
+													{#each properties as property}
+														<a
+															href={`${basePath}/${propertiesItem.href}/${slugify(property.name)}`}
+															class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm font-normal transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+														>
+															<span class="truncate">{property.name}</span>
+														</a>
+													{/each}
+												{/if}
+											{:else}
+												<div class="px-2 py-1.5 text-xs text-neutral-400">
+													Loading properties...
+												</div>
 											{/if}
-										{:else}
-											<div class="px-2 py-1.5 text-xs text-neutral-400">Loading properties...</div>
-										{/if}
-									</div>
-								{/if}
-							</div>
+										</div>
+									{/if}
+								</div>
+							{/if}
 							<div class="mt-auto">
 								<button
 									type="button"

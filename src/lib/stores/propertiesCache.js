@@ -7,6 +7,7 @@ const CACHE_TTL = 10 * 60 * 1000;
 
 const initialState = {
 	workspace: null,
+	role: null,
 	data: null,
 	loading: false,
 	error: null,
@@ -61,14 +62,14 @@ const isHardReload = () => {
 const sortByName = (items) =>
 	(items ?? []).slice().sort((a, b) => (a?.name ?? '').localeCompare(b?.name ?? ''));
 
-export const primePropertiesCache = (workspaceSlug, list) => {
+export const primePropertiesCache = (workspaceSlug, list, role = null) => {
 	if (!browser) return;
 	if (!workspaceSlug) return;
 	if (isHardReload()) {
 		clearSessionCache();
 	}
 	const data = Array.isArray(list) ? sortByName(list) : [];
-	const payload = { workspace: workspaceSlug, data, fetchedAt: Date.now() };
+	const payload = { workspace: workspaceSlug, role, data, fetchedAt: Date.now() };
 	writeSessionCache(payload);
 	propertiesCache.set({ ...initialState, ...payload });
 };
@@ -77,6 +78,8 @@ export const ensurePropertiesCache = async (workspaceSlug, options = {}) => {
 	if (!workspaceSlug) return null;
 	if (!browser) return null;
 	const fetcher = options.fetch ?? fetch;
+	const role = options.role ?? null;
+	const force = options.force ?? false;
 
 	if (isHardReload()) {
 		clearSessionCache();
@@ -92,7 +95,9 @@ export const ensurePropertiesCache = async (workspaceSlug, options = {}) => {
 	if (
 		currentState?.data &&
 		currentState.workspace === workspaceSlug &&
-		now - currentState.fetchedAt < CACHE_TTL
+		currentState.role === role &&
+		now - currentState.fetchedAt < CACHE_TTL &&
+		!force
 	) {
 		return currentState.data;
 	}
@@ -102,6 +107,7 @@ export const ensurePropertiesCache = async (workspaceSlug, options = {}) => {
 	if (
 		sessionCached?.data &&
 		sessionCached.workspace === workspaceSlug &&
+		sessionCached.role === role &&
 		now - sessionCached.fetchedAt < CACHE_TTL &&
 		sessionValid
 	) {
@@ -112,9 +118,11 @@ export const ensurePropertiesCache = async (workspaceSlug, options = {}) => {
 			error: null,
 			fetchedAt: sessionCached.fetchedAt
 		});
-		return sessionCached.data;
+		if (!force) {
+			return sessionCached.data;
+		}
 	}
-	if (sessionCached && !sessionValid) {
+	if (sessionCached && (!sessionValid || sessionCached.role !== role || force)) {
 		clearSessionCache();
 	}
 
@@ -122,6 +130,7 @@ export const ensurePropertiesCache = async (workspaceSlug, options = {}) => {
 
 	propertiesCache.set({
 		workspace: workspaceSlug,
+		role,
 		data: currentState?.data ?? null,
 		loading: true,
 		error: null,
@@ -137,12 +146,14 @@ export const ensurePropertiesCache = async (workspaceSlug, options = {}) => {
 			const data = await response.json();
 			const payload = {
 				workspace: workspaceSlug,
+				role,
 				data,
 				fetchedAt: Date.now()
 			};
 			if (Array.isArray(data)) {
 				propertiesCache.set({
 					workspace: workspaceSlug,
+					role,
 					data,
 					loading: false,
 					error: null,
@@ -260,7 +271,12 @@ export const removePropertyFromCache = (propertyId) => {
 
 if (browser) {
 	const cached = readSessionCache();
-	if (cached?.data && cached?.workspace && Date.now() - cached.fetchedAt < CACHE_TTL) {
+	if (
+		cached?.data &&
+		cached?.workspace &&
+		cached?.role &&
+		Date.now() - cached.fetchedAt < CACHE_TTL
+	) {
 		propertiesCache.set({ ...initialState, ...cached });
 	}
 }

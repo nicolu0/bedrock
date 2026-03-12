@@ -20,7 +20,9 @@
 	// Derive from cache (null = not yet cached)
 	$: members =
 		$peopleMembersCache.workspace === workspaceSlug && $peopleMembersCache.data != null
-			? $peopleMembersCache.data
+			? $peopleMembersCache.data.filter((member) =>
+					['admin', 'member', 'owner'].includes((member?.role ?? '').toLowerCase())
+				)
 			: null;
 
 	// Prime cache from server data — re-runs after invalidate('app:members')

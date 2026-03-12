@@ -45,13 +45,58 @@ export const GET = async ({ locals, url }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
-	let { data: issues } = await supabaseAdmin
-		.from('issues')
-		.select(
-			'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
-		)
+	const { data: member } = await supabaseAdmin
+		.from('people')
+		.select('id, role')
 		.eq('workspace_id', workspace.id)
-		.order('updated_at', { ascending: false });
+		.eq('user_id', locals.user.id)
+		.maybeSingle();
+	let role = member?.role ? String(member.role).toLowerCase() : null;
+	const ownerPersonId = member?.id ?? null;
+	if (!role) {
+		const { data: adminWorkspace } = await supabaseAdmin
+			.from('workspaces')
+			.select('admin_user_id')
+			.eq('id', workspace.id)
+			.maybeSingle();
+		if (adminWorkspace?.admin_user_id === locals.user.id) {
+			role = 'admin';
+		}
+	}
+	if (!role) {
+		return json({ error: 'Forbidden' }, { status: 403 });
+	}
+
+	const isAssigneeScoped = role === 'member' || role === 'vendor';
+	const isOwnerScoped = role === 'owner';
+	let ownerUnitIds = [];
+	if (isOwnerScoped && ownerPersonId) {
+		const { data: ownerUnits } = await supabaseAdmin
+			.from('units')
+			.select('id, properties!inner(id, workspace_id, owner_id)')
+			.eq('properties.workspace_id', workspace.id)
+			.eq('properties.owner_id', ownerPersonId);
+		ownerUnitIds = Array.from(new Set((ownerUnits ?? []).map((unit) => unit.id).filter(Boolean)));
+	}
+
+	const buildIssuesQuery = () => {
+		let query = supabaseAdmin
+			.from('issues')
+			.select(
+				'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
+			)
+			.eq('workspace_id', workspace.id)
+			.order('updated_at', { ascending: false });
+		if (isAssigneeScoped) {
+			query = query.eq('assignee_id', locals.user.id);
+		}
+		if (isOwnerScoped) {
+			query = ownerUnitIds.length ? query.in('unit_id', ownerUnitIds) : query.eq('id', '__none__');
+		}
+		return query;
+	};
+
+	let { data: issues } = await buildIssuesQuery();
 
 	if (!issues?.length) {
 		const { data: fallbackUnits } = await supabaseAdmin
@@ -62,13 +107,22 @@ export const GET = async ({ locals, url }) => {
 			new Set((fallbackUnits ?? []).map((unit) => unit.id).filter(Boolean))
 		);
 		if (fallbackUnitIds.length) {
-			const { data: fallbackIssues } = await supabaseAdmin
+			let fallbackQuery = supabaseAdmin
 				.from('issues')
 				.select(
 					'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
 				)
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
+			if (isAssigneeScoped) {
+				fallbackQuery = fallbackQuery.eq('assignee_id', locals.user.id);
+			}
+			if (isOwnerScoped) {
+				fallbackQuery = ownerUnitIds.length
+					? fallbackQuery.in('unit_id', ownerUnitIds)
+					: fallbackQuery.eq('id', '__none__');
+			}
+			const { data: fallbackIssues } = await fallbackQuery;
 			issues = fallbackIssues ?? [];
 		}
 	}

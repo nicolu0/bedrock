@@ -16,11 +16,51 @@ export const GET = async ({ locals, url }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
-	const { data: issues } = await supabaseAdmin
-		.from('issues')
-		.select('id')
-		.eq('workspace_id', workspace.id);
+	const { data: member } = await supabaseAdmin
+		.from('people')
+		.select('id, role')
+		.eq('workspace_id', workspace.id)
+		.eq('user_id', locals.user.id)
+		.maybeSingle();
+	let role = member?.role ? String(member.role).toLowerCase() : null;
+	const ownerPersonId = member?.id ?? null;
+	if (!role) {
+		const { data: adminWorkspace } = await supabaseAdmin
+			.from('workspaces')
+			.select('admin_user_id')
+			.eq('id', workspace.id)
+			.maybeSingle();
+		if (adminWorkspace?.admin_user_id === locals.user.id) {
+			role = 'admin';
+		}
+	}
+	if (!role) {
+		return json({ error: 'Forbidden' }, { status: 403 });
+	}
 
+	const isAssigneeScoped = role === 'member' || role === 'vendor';
+	const isOwnerScoped = role === 'owner';
+	let ownerUnitIds = [];
+	if (isOwnerScoped && ownerPersonId) {
+		const { data: ownerUnits } = await supabaseAdmin
+			.from('units')
+			.select('id, properties!inner(id, workspace_id, owner_id)')
+			.eq('properties.workspace_id', workspace.id)
+			.eq('properties.owner_id', ownerPersonId);
+		ownerUnitIds = Array.from(new Set((ownerUnits ?? []).map((unit) => unit.id).filter(Boolean)));
+	}
+
+	let issuesQuery = supabaseAdmin.from('issues').select('id').eq('workspace_id', workspace.id);
+	if (isAssigneeScoped) {
+		issuesQuery = issuesQuery.eq('assignee_id', locals.user.id);
+	}
+	if (isOwnerScoped) {
+		issuesQuery = ownerUnitIds.length
+			? issuesQuery.in('unit_id', ownerUnitIds)
+			: issuesQuery.eq('id', '__none__');
+	}
+
+	const { data: issues } = await issuesQuery;
 	const issueIds = (issues ?? []).map((issue) => issue.id).filter(Boolean);
 	if (!issueIds.length) {
 		return json({ messagesByIssue: {}, emailDraftsByMessageId: {}, draftIssueIds: [] });
