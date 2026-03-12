@@ -116,7 +116,7 @@
 		_primedIssuesForWorkspace = workspaceSlug;
 		const _ws = workspaceSlug;
 		const prime = (d) => {
-			if (d?.sections?.length || d?.issues?.length) {
+			if (d) {
 				primeIssuesCache(_ws, d);
 				if (d.issues?.length) primeDetailCacheFromIssuesList(d.issues);
 			}
