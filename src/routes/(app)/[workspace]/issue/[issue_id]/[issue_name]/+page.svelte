@@ -379,28 +379,8 @@
 			});
 	}
 
-	let _fadeIssueId = null;
-	$: subIssuesReady = Boolean(subIssues.length);
-	$: activityReady =
-		$activityCache.workspace === workspaceSlug &&
-		!$activityCache.loading &&
-		$activityLogsCache.workspace === workspaceSlug &&
-		!$activityLogsCache.loading;
 	$: if (browser && issue && listItem) {
 		pageReady.set(true);
-	}
-
-	$: if (
-		browser &&
-		issue &&
-		!listItem &&
-		subIssuesReady &&
-		activityReady &&
-		_fadeIssueId !== issueId
-	) {
-		_fadeIssueId = issueId;
-		pageReady.set(false);
-		setTimeout(() => pageReady.set(true), 50);
 	}
 
 	// Sync subIssues from issuesCache on cold start or when cache grows (e.g. new subissue created)
@@ -423,13 +403,13 @@
 
 	$: if (browser && workspaceSlug && issueId && issueId !== _forcedActivityIssueId) {
 		_forcedActivityIssueId = issueId;
-		ensureActivityCache(workspaceSlug, { force: true });
+		ensureActivityCache(workspaceSlug);
 	}
 
 	let _forcedLogsIssueId = null;
 	$: if (browser && workspaceSlug && issueId && issueId !== _forcedLogsIssueId) {
 		_forcedLogsIssueId = issueId;
-		ensureActivityLogsCache(workspaceSlug, { force: true });
+		ensureActivityLogsCache(workspaceSlug);
 	}
 
 	let _loadedSubIssuesForId = null;

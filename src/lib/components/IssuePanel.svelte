@@ -295,7 +295,7 @@
 										draft={null}
 									/>
 								{/each}
-								{#each draftsByIssue[issueId] ?? [] as draft}
+								{#each draftsByIssue[issueId] ?? [] as draft (draft.id ?? draft.message_id)}
 									<EmailMessageWithDraft
 										message={{
 											id: draft.message_id,
@@ -307,6 +307,7 @@
 										}}
 										{draft}
 										{vendors}
+										on:sent={() => dispatch('resolved')}
 									/>
 								{/each}
 							</div>
@@ -429,7 +430,7 @@
 														draft={null}
 													/>
 												{/each}
-												{#each draftsByIssue[subIssue.id] ?? [] as draft}
+												{#each draftsByIssue[subIssue.id] ?? [] as draft (draft.id ?? draft.message_id)}
 													<EmailMessageWithDraft
 														message={{
 															id: draft.message_id,
@@ -441,6 +442,7 @@
 														}}
 														{draft}
 														{vendors}
+														on:sent={() => dispatch('resolved')}
 													/>
 												{/each}
 											</div>

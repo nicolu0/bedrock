@@ -1,11 +1,13 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
-	import { addPersonToCache } from '$lib/stores/peopleCache.js';
+	import { addPersonToCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
 	import { newPersonModal } from '$lib/stores/peopleModal.js';
 
 	$: workspaceSlug = $page.params.workspace;
+	$: if (browser && workspaceSlug) ensurePeopleCache(workspaceSlug);
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: currentPath = $page.url.pathname;
 	const tabs = [

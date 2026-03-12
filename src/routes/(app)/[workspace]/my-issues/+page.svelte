@@ -3,8 +3,7 @@
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 	import { getContext } from 'svelte';
-	import { get } from 'svelte/store';
-	import { issuesCache, primeIssuesCache } from '$lib/stores/issuesCache';
+	import { issuesCache } from '$lib/stores/issuesCache';
 	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { goto } from '$app/navigation';
 
@@ -59,25 +58,6 @@
 	}, {});
 	$: if (browser && workspaceSlug && !membersReady && !membersLoading) {
 		ensurePeopleMembersCache(workspaceSlug);
-	}
-
-	// Prime cache from streaming server data (handles both resolved value and client Promise)
-	// _primedForWorkspace guards against re-registering .then() on every $issuesCache store change
-	let _primedForWorkspace = null;
-	$: if (browser && data.sections && _primedForWorkspace !== workspaceSlug) {
-		_primedForWorkspace = workspaceSlug;
-		const _ws = workspaceSlug;
-		const prime = (s) => {
-			const cache = get(issuesCache); // non-reactive read — no store subscription added
-			if (s?.length && (!cache.data || cache.workspace !== _ws)) {
-				primeIssuesCache(_ws, { sections: s });
-			}
-		};
-		if (data.sections instanceof Promise) {
-			data.sections.then(prime);
-		} else {
-			prime(data.sections);
-		}
 	}
 
 	const slugify = (value) => {

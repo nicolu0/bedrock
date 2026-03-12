@@ -1,18 +1,14 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
 	import {
 		peopleCache,
 		primePeopleCache,
-		mergePeopleIntoCache,
 		updatePersonInCache,
 		removePersonFromCache
 	} from '$lib/stores/peopleCache.js';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
-
-	export let data;
 
 	let editingPerson = null;
 	let openRowMenu = null;
@@ -26,10 +22,6 @@
 			: null;
 
 	$: members = people ? people.filter((person) => person.role === 'member') : null;
-
-	$: if (browser && data.people) {
-		data.people.then((v) => mergePeopleIntoCache(workspaceSlug, v));
-	}
 
 	const formatRole = (role) => {
 		if (!role) return 'Member';

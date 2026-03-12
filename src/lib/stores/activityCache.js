@@ -97,6 +97,13 @@ const clearSessionCache = () => {
 	}
 };
 
+export const primeActivityCache = (workspaceSlug, data) => {
+	if (!data || !workspaceSlug) return;
+	const now = Date.now();
+	activityCache.set({ workspace: workspaceSlug, data, loading: false, error: null, fetchedAt: now });
+	writeSessionCache({ workspace: workspaceSlug, data, fetchedAt: now });
+};
+
 const isHardReload = () => {
 	if (!browser || !globalThis.performance) return false;
 	try {

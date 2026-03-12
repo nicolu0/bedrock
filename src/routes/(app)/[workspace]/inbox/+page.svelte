@@ -2,8 +2,8 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
-	import { notificationsCache, primeNotificationsCache } from '$lib/stores/notificationsCache.js';
-	import { peopleMembersCache, primePeopleMembersCache } from '$lib/stores/peopleMembersCache.js';
+	import { notificationsCache, updateNotificationInCache } from '$lib/stores/notificationsCache.js';
+	import { peopleMembersCache } from '$lib/stores/peopleMembersCache.js';
 	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
 	import { activityLogsCache, ensureActivityLogsCache } from '$lib/stores/activityLogsCache.js';
 	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
@@ -15,6 +15,15 @@
 	export let data;
 
 	let filter = 'All';
+	let unreadSnapshot = null;
+
+	function setFilter(tab) {
+		unreadSnapshot = tab === 'Unread'
+			? new Set((notifications ?? []).filter((n) => !n.is_read && !n.is_resolved).map((n) => n.id))
+			: null;
+		filter = tab;
+		selectedNotification = null;
+	}
 	let selectedNotification = null;
 	let loadError = false;
 
@@ -28,28 +37,26 @@
 			: null;
 
 	$: filtered =
-		filter === 'Unread' ? (notifications ?? []).filter((n) => !n.is_read) : (notifications ?? []);
+		filter === 'Unread'   ? (notifications ?? []).filter((n) => unreadSnapshot?.has(n.id) && !n.is_resolved) :
+		filter === 'Resolved' ? (notifications ?? []).filter((n) => n.is_resolved) :
+		/* All */               (notifications ?? []).filter((n) => !n.is_resolved);
+
+	function resolveAndAdvance() {
+		if (!selectedNotification) return;
+		const idx = filtered.findIndex((n) => n.id === selectedNotification.id);
+		const next = filtered[idx + 1] ?? filtered[idx - 1] ?? null;
+		updateNotificationInCache({ id: selectedNotification.id, is_resolved: true });
+		if (next) handleClick(next); else selectedNotification = null;
+	}
 
 	$: vendors =
 		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
 			? $peopleCache.data.filter((p) => p?.role === 'vendor')
 			: [];
 
-	// Prime cache from server data
-	$: if (browser && data.notifications && data.members) {
-		Promise.all([data.notifications, data.members])
-			.then(([n, m]) => {
-				primeNotificationsCache(workspaceSlug, { notifications: n, members: m });
-				primePeopleMembersCache(workspaceSlug, m);
-			})
-			.catch(() => {
-				loadError = true;
-			});
-	}
-
 	$: if (browser && workspaceSlug) {
-		ensureActivityCache(workspaceSlug, { force: true });
-		ensureActivityLogsCache(workspaceSlug, { force: true });
+		ensureActivityCache(workspaceSlug);
+		ensureActivityLogsCache(workspaceSlug);
 		ensurePeopleCache(workspaceSlug);
 		ensureIssuesCache(workspaceSlug);
 	}
@@ -74,9 +81,12 @@
 	async function handleClick(n) {
 		selectedNotification = n;
 		if (!n.is_read) {
-			const fd = new FormData();
-			fd.append('id', n.id);
-			fetch('?/markRead', { method: 'POST', body: fd });
+			fetch('/api/notifications/mark-read', {
+				method: 'POST',
+				keepalive: true,
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id: n.id })
+			});
 			notificationsCache.update((state) => ({
 				...state,
 				data: state.data
@@ -105,7 +115,7 @@
 		</div>
 
 		<div class="flex items-center gap-2 px-6 py-2">
-			{#each ['All', 'Unread'] as tab}
+			{#each ['All', 'Unread', 'Resolved'] as tab}
 				<button
 					class={`rounded-md border px-2.5 py-1 text-xs transition ${
 						filter === tab
@@ -113,7 +123,7 @@
 							: 'border-transparent text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
 					}`}
 					type="button"
-					on:click={() => (filter = tab)}
+					on:click={() => setFilter(tab)}
 				>
 					{tab}
 				</button>
@@ -217,6 +227,7 @@
 				{vendors}
 				allIssues={$issuesCache.data?.issues ?? []}
 				on:close={() => (selectedNotification = null)}
+				on:resolved={resolveAndAdvance}
 			/>
 		</div>
 	{/if}

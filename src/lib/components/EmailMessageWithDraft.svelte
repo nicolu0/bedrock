@@ -1,7 +1,9 @@
 <script>
 	// @ts-nocheck
-	import { onDestroy } from 'svelte';
+	import { onDestroy, createEventDispatcher } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import { removeDraftFromCache, applyMessageDelta } from '$lib/stores/activityCache.js';
+	const dispatch = createEventDispatcher();
 
 	export let message;
 	export let draft = null;
@@ -93,6 +95,7 @@
 		try {
 			const response = await fetch('/api/email-drafts', {
 				method: 'PATCH',
+				keepalive: true,
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(
 					draft.message_id
@@ -131,6 +134,9 @@
 				const payload = await response.json().catch(() => null);
 				sentMessage = payload?.message ?? null;
 				isSent = true;
+				removeDraftFromCache(draft);
+				if (sentMessage) applyMessageDelta(sentMessage);
+				dispatch('sent', { issueId: draft.issue_id ?? null });
 			}
 		} catch {
 			// ignore send failures
