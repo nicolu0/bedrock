@@ -46,7 +46,7 @@
 		const idx = filtered.findIndex((n) => n.id === selectedNotification.id);
 		const next = filtered[idx + 1] ?? filtered[idx - 1] ?? null;
 		updateNotificationInCache({ id: selectedNotification.id, is_resolved: true });
-		selectedNotification = next;
+		if (next) handleClick(next); else selectedNotification = null;
 	}
 
 	$: vendors =
