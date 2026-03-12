@@ -6,6 +6,7 @@
 	import { getContext } from 'svelte';
 	import {
 		propertiesCache,
+		ensurePropertiesCache,
 		addPropertyToCache,
 		updatePropertyInCache,
 		replacePropertyInCache,
@@ -14,8 +15,10 @@
 	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
 
 	$: workspaceSlug = $page.params.workspace;
+	$: role = $page.data?.role;
+	$: canViewPeople = role === 'admin' || role === 'member';
 
-	$: if (browser && workspaceSlug) {
+	$: if (browser && workspaceSlug && canViewPeople) {
 		ensurePeopleCache(workspaceSlug);
 	}
 
@@ -24,9 +27,15 @@
 			? $propertiesCache.data
 			: null;
 
+	let propertiesPrimed = false;
+	$: if (browser && workspaceSlug && role && !propertiesPrimed) {
+		propertiesPrimed = true;
+		ensurePropertiesCache(workspaceSlug, { role, force: true });
+	}
+
 	let owners = null;
 	$: owners =
-		$peopleCache.workspace === workspaceSlug && Array.isArray($peopleCache.data)
+		canViewPeople && $peopleCache.workspace === workspaceSlug && Array.isArray($peopleCache.data)
 			? $peopleCache.data.filter((person) => person?.role === 'owner')
 			: null;
 

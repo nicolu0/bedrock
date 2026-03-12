@@ -2,7 +2,7 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
-const CACHE_KEY = 'people-members-cache-v1';
+const CACHE_KEY = 'people-members-cache-v2';
 const CACHE_TTL = 10 * 60 * 1000;
 
 const initialState = {

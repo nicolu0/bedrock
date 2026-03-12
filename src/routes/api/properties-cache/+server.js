@@ -14,25 +14,11 @@ export const GET = async ({ locals, url }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
-	let ownerPersonId = null;
-	const { data: member } = await supabaseAdmin
-		.from('people')
-		.select('id, role')
-		.eq('workspace_id', workspace.id)
-		.eq('user_id', locals.user.id)
-		.maybeSingle();
-	if (member?.role === 'owner') {
-		ownerPersonId = member.id;
-	}
-
-	let query = supabaseAdmin
+	let query = locals.supabase
 		.from('properties')
 		.select('id, name, address, city, state, postal_code, country, owner_id')
 		.eq('workspace_id', workspace.id)
 		.order('name', { ascending: true });
-	if (ownerPersonId) {
-		query = query.eq('owner_id', ownerPersonId);
-	}
 	const { data: properties } = await query;
 	if (!Array.isArray(properties) || properties.length === 0) {
 		return json(properties ?? []);

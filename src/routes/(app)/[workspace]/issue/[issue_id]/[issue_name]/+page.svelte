@@ -8,7 +8,6 @@
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import { pageReady } from '$lib/stores/pageReady';
-	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
 	import {
 		getIssueDetail,
 		primeIssueDetail,
@@ -19,7 +18,7 @@
 		updateIssueFieldsInListCache,
 		updateIssueStatusInListCache
 	} from '$lib/stores/issuesCache.js';
-	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache.js';
+	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
 	import {
 		activityCache,
 		ensureActivityCache,
@@ -37,6 +36,9 @@
 	import { supabase } from '$lib/supabaseClient.js';
 
 	export let data;
+
+	$: role = (data?.role ?? '').toString().toLowerCase();
+	$: canEditIssue = role === 'admin';
 
 	if (!browser) {
 		pageReady.set(false);
@@ -69,7 +71,8 @@
 	const roleLabels = {
 		owner: 'Owner',
 		admin: 'Admin',
-		member: 'Member'
+		member: 'Member',
+		vendor: 'Vendor'
 	};
 
 	const sortSubIssues = (items) => {
@@ -332,7 +335,7 @@
 	}
 
 	$: if (browser && workspaceSlug && issueAssigneeId && !membersReady && !membersLoading) {
-		ensurePeopleMembersCache(workspaceSlug);
+		ensurePeopleCache(workspaceSlug);
 	}
 
 	let _loadedIssueDetailId = null;
@@ -463,11 +466,22 @@
 			resolveAssigneeFromId(assigneeId, membersByUserId) ?? placeholderAssignee(assigneeId);
 		return { ...subIssue, assignee: resolved };
 	});
-	$: membersReady =
-		$peopleMembersCache.workspace === workspaceSlug && Array.isArray($peopleMembersCache.data);
-	$: membersLoading = $peopleMembersCache.loading && !membersReady;
-	$: members = membersReady ? $peopleMembersCache.data : [];
-	$: membersByUserId = members.reduce((acc, member) => {
+	$: membersReady = $peopleCache.workspace === workspaceSlug && Array.isArray($peopleCache.data);
+	$: membersLoading = $peopleCache.loading && !membersReady;
+	$: members = membersReady ? $peopleCache.data : [];
+	$: peopleList =
+		$peopleCache.workspace === workspaceSlug && Array.isArray($peopleCache.data)
+			? $peopleCache.data
+			: [];
+	$: assignmentPool = peopleList
+		.filter((person) => person?.user_id)
+		.map((person) => ({
+			...person,
+			users: person.user_id
+				? { id: person.user_id, name: person.name ?? person.users?.name ?? 'User' }
+				: person.users
+		}));
+	$: membersByUserId = assignmentPool.reduce((acc, member) => {
 		if (!member?.user_id) return acc;
 		acc[member.user_id] = member;
 		return acc;
@@ -479,7 +493,8 @@
 	} else if (issueAssigneeId && !assignee) {
 		assignee = placeholderAssignee(issueAssigneeId);
 	}
-	$: assignableMembers = [...members]
+
+	$: assignableMembers = [...assignmentPool]
 		.filter((member) => {
 			const role = (member?.role ?? '').toLowerCase();
 			return (role === 'admin' || role === 'member') && Boolean(member?.user_id);
@@ -813,6 +828,7 @@
 	const statusCycle = ['todo', 'in_progress', 'done'];
 
 	const handleStatusChange = async (newStatus) => {
+		if (!canEditIssue) return;
 		const prevStatus = statusKey;
 		updateIssueStatusInDetailCache(issueId, newStatus);
 		updateIssueStatusInListCache(issueId, newStatus);
@@ -843,10 +859,11 @@
 	let statusOpen = false;
 	let assigneeOpen = false;
 	$: if (browser && assigneeOpen && workspaceSlug && !membersReady && !membersLoading) {
-		ensurePeopleMembersCache(workspaceSlug);
+		ensurePeopleCache(workspaceSlug);
 	}
 
 	const handleAssigneeSelect = async (member) => {
+		if (!canEditIssue) return;
 		if (!issueId) return;
 		const nextId = member?.user_id ?? null;
 		const currentId = assignee?.id ?? null;
@@ -854,6 +871,7 @@
 			assigneeOpen = false;
 			return;
 		}
+
 		const nextAssignee = normalizeAssignee(member);
 		const prevAssignee = assignee;
 		const prevAssigneeId = issueAssigneeId;
@@ -1637,13 +1655,20 @@
 					<div class="relative">
 						<button
 							type="button"
-							class="-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition hover:bg-stone-100"
-							on:click|stopPropagation={() => (statusOpen = !statusOpen)}
+							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
+								canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+							}`}
+							disabled={!canEditIssue}
+							aria-disabled={!canEditIssue}
+							on:click|stopPropagation={() => {
+								if (!canEditIssue) return;
+								statusOpen = !statusOpen;
+							}}
 						>
 							<span class={`h-3.5 w-3.5 rounded-full border ${statusMeta.statusClass}`}></span>
 							<span>{statusMeta.label}</span>
 						</button>
-						{#if statusOpen}
+						{#if statusOpen && canEditIssue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
 								on:click|stopPropagation
@@ -1673,8 +1698,15 @@
 					<div class="relative">
 						<button
 							type="button"
-							class="-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 hover:bg-stone-100"
-							on:click|stopPropagation={() => (assigneeOpen = !assigneeOpen)}
+							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
+								canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+							}`}
+							disabled={!canEditIssue}
+							aria-disabled={!canEditIssue}
+							on:click|stopPropagation={() => {
+								if (!canEditIssue) return;
+								assigneeOpen = !assigneeOpen;
+							}}
 						>
 							{#if assignee}
 								<div
@@ -1701,7 +1733,7 @@
 							{/if}
 							<span class="truncate">{assigneeName}</span>
 						</button>
-						{#if assigneeOpen}
+						{#if assigneeOpen && canEditIssue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
 								on:click|stopPropagation

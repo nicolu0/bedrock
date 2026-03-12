@@ -10,6 +10,8 @@
 	} from '$lib/stores/peopleCache.js';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
 
+	export let data;
+
 	let editingPerson = null;
 	let openRowMenu = null;
 	let hoveredRow = null;

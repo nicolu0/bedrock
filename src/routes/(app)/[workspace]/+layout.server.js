@@ -24,12 +24,32 @@ export const load = async ({ locals, params }) => {
 			'admin',
 			locals.user.id
 		);
-		const units = loadUnitsList(locals.supabase, supabaseAdmin, adminWorkspace.id);
-		const issuesData = loadIssuesData(adminWorkspace.id, locals.user.id);
+		const units = loadUnitsList(locals.supabase, supabaseAdmin, adminWorkspace.id, 'admin');
+		const issuesData = loadIssuesData(adminWorkspace.id, locals.user.id, 'admin', null);
 		const notificationsData = loadNotificationsData(adminWorkspace.id, locals.user.id);
-		const activityData = loadActivityData(adminWorkspace.id);
-		const activityLogsData = loadActivityLogsData(adminWorkspace.id);
-		return { workspace: adminWorkspace, properties, units, issuesData, notificationsData, activityData, activityLogsData, userId: locals.user.id };
+		const activityData = issuesData.then(({ issues }) =>
+			loadActivityData(
+				adminWorkspace.id,
+				(issues ?? []).map((issue) => issue.id)
+			)
+		);
+		const activityLogsData = issuesData.then(({ issues }) =>
+			loadActivityLogsData(
+				adminWorkspace.id,
+				(issues ?? []).map((issue) => issue.id)
+			)
+		);
+		return {
+			workspace: adminWorkspace,
+			properties,
+			units,
+			issuesData,
+			notificationsData,
+			activityData,
+			activityLogsData,
+			userId: locals.user.id,
+			role: 'admin'
+		};
 	}
 	const { data: memberWorkspace } = await supabaseAdmin
 		.from('people')
@@ -39,32 +59,61 @@ export const load = async ({ locals, params }) => {
 		.maybeSingle();
 	if (memberWorkspace?.workspaces?.slug) {
 		let ownerPersonId = null;
-		if (memberWorkspace.role === 'owner') {
+		const normalizedRole = (memberWorkspace.role ?? '').toLowerCase();
+		if (normalizedRole === 'owner') {
 			const { data: ownerPerson } = await supabaseAdmin
 				.from('people')
 				.select('id')
 				.eq('workspace_id', memberWorkspace.workspaces.id)
 				.eq('user_id', locals.user.id)
-				.eq('role', 'owner')
 				.maybeSingle();
 			ownerPersonId = ownerPerson?.id ?? null;
 		}
-		const properties =
-			memberWorkspace.role === 'owner' && !ownerPersonId
-				? Promise.resolve([])
-				: loadPropertiesList(
-						locals.supabase,
-						supabaseAdmin,
-						memberWorkspace.workspaces.id,
-						memberWorkspace.role,
-						ownerPersonId ?? locals.user.id
-					);
-		const units = loadUnitsList(locals.supabase, supabaseAdmin, memberWorkspace.workspaces.id);
-		const issuesData = loadIssuesData(memberWorkspace.workspaces.id, locals.user.id);
+		const ownerScopeId = normalizedRole === 'owner' ? (ownerPersonId ?? locals.user.id) : null;
+		const properties = loadPropertiesList(
+			locals.supabase,
+			supabaseAdmin,
+			memberWorkspace.workspaces.id,
+			normalizedRole,
+			ownerScopeId
+		);
+		const units = loadUnitsList(
+			locals.supabase,
+			supabaseAdmin,
+			memberWorkspace.workspaces.id,
+			normalizedRole,
+			ownerScopeId
+		);
+		const issuesData = loadIssuesData(
+			memberWorkspace.workspaces.id,
+			locals.user.id,
+			normalizedRole,
+			ownerScopeId
+		);
 		const notificationsData = loadNotificationsData(memberWorkspace.workspaces.id, locals.user.id);
-		const activityData = loadActivityData(memberWorkspace.workspaces.id);
-		const activityLogsData = loadActivityLogsData(memberWorkspace.workspaces.id);
-		return { workspace: memberWorkspace.workspaces, properties, units, issuesData, notificationsData, activityData, activityLogsData, userId: locals.user.id };
+		const activityData = issuesData.then(({ issues }) =>
+			loadActivityData(
+				memberWorkspace.workspaces.id,
+				(issues ?? []).map((issue) => issue.id)
+			)
+		);
+		const activityLogsData = issuesData.then(({ issues }) =>
+			loadActivityLogsData(
+				memberWorkspace.workspaces.id,
+				(issues ?? []).map((issue) => issue.id)
+			)
+		);
+		return {
+			workspace: memberWorkspace.workspaces,
+			properties,
+			units,
+			issuesData,
+			notificationsData,
+			activityData,
+			activityLogsData,
+			userId: locals.user.id,
+			role: normalizedRole
+		};
 	}
 	// Check if the workspace slug exists at all
 	const { data: existingWorkspace } = await supabaseAdmin
@@ -135,7 +184,11 @@ const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, 
 };
 
 const _issuesStatusConfig = {
-	in_progress: { id: 'in-progress', label: 'In Progress', statusClass: 'border-amber-500 text-amber-600' },
+	in_progress: {
+		id: 'in-progress',
+		label: 'In Progress',
+		statusClass: 'border-amber-500 text-amber-600'
+	},
 	todo: { id: 'todo', label: 'Todo', statusClass: 'border-neutral-500 text-neutral-700' },
 	done: { id: 'done', label: 'Done', statusClass: 'border-emerald-500 text-emerald-700' }
 };
@@ -145,30 +198,71 @@ const _normalizeStatus = (value) => {
 	if (!value) return 'todo';
 	const normalized = String(value).toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
 	if (normalized === 'in_progress') return 'in_progress';
-	if (normalized === 'done' || normalized === 'completed' || normalized === 'complete') return 'done';
+	if (normalized === 'done' || normalized === 'completed' || normalized === 'complete')
+		return 'done';
 	if (normalized === 'todo' || normalized === 'to_do' || normalized === 'backlog') return 'todo';
 	return _allowedStatuses.has(normalized) ? normalized : 'todo';
 };
 
-const loadIssuesData = async (workspaceId, userId) => {
-	let { data: issues } = await supabaseAdmin
-		.from('issues')
-		.select('id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id')
-		.eq('workspace_id', workspaceId)
-		.order('updated_at', { ascending: false });
+const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonId) => {
+	const role = (userRole ?? '').toLowerCase();
+	const isAssigneeScoped = role === 'member' || role === 'vendor';
+	const isOwnerScoped = role === 'owner';
+
+	let ownerUnitIds = [];
+	if (isOwnerScoped && ownerPersonId) {
+		const { data: ownerUnits } = await supabaseAdmin
+			.from('units')
+			.select('id, properties!inner(id, workspace_id, owner_id)')
+			.eq('properties.workspace_id', workspaceId)
+			.eq('properties.owner_id', ownerPersonId);
+		ownerUnitIds = Array.from(new Set((ownerUnits ?? []).map((unit) => unit.id).filter(Boolean)));
+	}
+
+	const buildIssuesQuery = () => {
+		let query = supabaseAdmin
+			.from('issues')
+			.select(
+				'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
+			)
+			.eq('workspace_id', workspaceId)
+			.order('updated_at', { ascending: false });
+		if (isAssigneeScoped) {
+			query = query.eq('assignee_id', userId);
+		}
+		if (isOwnerScoped) {
+			query = ownerUnitIds.length ? query.in('unit_id', ownerUnitIds) : query.eq('id', '__none__');
+		}
+		return query;
+	};
+
+	let { data: issues } = await buildIssuesQuery();
 
 	if (!issues?.length) {
 		const { data: fallbackUnits } = await supabaseAdmin
 			.from('units')
 			.select('id, properties!inner(workspace_id)')
 			.eq('properties.workspace_id', workspaceId);
-		const fallbackUnitIds = Array.from(new Set((fallbackUnits ?? []).map((u) => u.id).filter(Boolean)));
+		const fallbackUnitIds = Array.from(
+			new Set((fallbackUnits ?? []).map((u) => u.id).filter(Boolean))
+		);
 		if (fallbackUnitIds.length) {
-			const { data: fallbackIssues } = await supabaseAdmin
+			let fallbackQuery = supabaseAdmin
 				.from('issues')
-				.select('id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id')
+				.select(
+					'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
+				)
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
+			if (isAssigneeScoped) {
+				fallbackQuery = fallbackQuery.eq('assignee_id', userId);
+			}
+			if (isOwnerScoped) {
+				fallbackQuery = ownerUnitIds.length
+					? fallbackQuery.in('unit_id', ownerUnitIds)
+					: fallbackQuery.eq('id', '__none__');
+			}
+			const { data: fallbackIssues } = await fallbackQuery;
 			issues = fallbackIssues ?? [];
 		}
 	}
@@ -220,7 +314,11 @@ const loadIssuesData = async (workspaceId, userId) => {
 
 	const sectionBuckets = new Map(
 		_issuesStatusOrder.map((status) => {
-			const config = _issuesStatusConfig[status] ?? { id: status, label: status, statusClass: 'border-neutral-500 text-neutral-600' };
+			const config = _issuesStatusConfig[status] ?? {
+				id: status,
+				label: status,
+				statusClass: 'border-neutral-500 text-neutral-600'
+			};
 			return [status, { config, items: [] }];
 		})
 	);
@@ -287,7 +385,13 @@ const loadIssuesData = async (workspaceId, userId) => {
 		const bucket = sectionBuckets.get(status);
 		const config = bucket?.config ?? _issuesStatusConfig[status];
 		const items = bucket?.items ?? [];
-		return { id: config.id, label: config.label, count: items.length, statusClass: config.statusClass, items };
+		return {
+			id: config.id,
+			label: config.label,
+			count: items.length,
+			statusClass: config.statusClass,
+			items
+		};
 	});
 
 	const filteredSections = sections.filter((s) => s.count > 0);
@@ -301,20 +405,31 @@ const loadIssuesData = async (workspaceId, userId) => {
 	return { sections: filteredSections, issues: normalizedIssues, assignee, workspaceId };
 };
 
-const loadActivityData = async (workspaceId) => {
+const loadActivityData = async (workspaceId, issueIds = null) => {
 	const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-	const [messagesResult, draftsResult] = await Promise.all([
-		supabaseAdmin.from('messages')
-			.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
-			.eq('workspace_id', workspaceId)
-			.gte('timestamp', cutoff)
-			.order('timestamp', { ascending: true }),
-		supabaseAdmin.from('email_drafts')
-			.select('id, issue_id, message_id, sender_email, recipient_email, subject, body, updated_at')
-			.eq('workspace_id', workspaceId)
-			.gte('updated_at', cutoff)
-			.order('updated_at', { ascending: false })
-	]);
+	if (Array.isArray(issueIds) && issueIds.length === 0) {
+		return { messagesByIssue: {}, emailDraftsByMessageId: {}, draftIssueIds: [] };
+	}
+	let messagesQuery = supabaseAdmin
+		.from('messages')
+		.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
+		.eq('workspace_id', workspaceId)
+		.gte('timestamp', cutoff)
+		.order('timestamp', { ascending: true });
+
+	let draftsQuery = supabaseAdmin
+		.from('email_drafts')
+		.select('id, issue_id, message_id, sender_email, recipient_email, subject, body, updated_at')
+		.eq('workspace_id', workspaceId)
+		.gte('updated_at', cutoff)
+		.order('updated_at', { ascending: false });
+
+	if (Array.isArray(issueIds)) {
+		messagesQuery = messagesQuery.in('issue_id', issueIds);
+		draftsQuery = draftsQuery.in('issue_id', issueIds);
+	}
+
+	const [messagesResult, draftsResult] = await Promise.all([messagesQuery, draftsQuery]);
 	const messagesByIssue = (messagesResult?.data ?? []).reduce((acc, m) => {
 		if (!m.issue_id) return acc;
 		(acc[m.issue_id] ??= []).push(m);
@@ -325,17 +440,29 @@ const loadActivityData = async (workspaceId) => {
 		if (key && !acc[key]) acc[key] = d;
 		return acc;
 	}, {});
-	const draftIssueIds = [...new Set((draftsResult?.data ?? []).map(d => d.issue_id).filter(Boolean))];
+	const draftIssueIds = [
+		...new Set((draftsResult?.data ?? []).map((d) => d.issue_id).filter(Boolean))
+	];
 	return { messagesByIssue, emailDraftsByMessageId, draftIssueIds };
 };
 
-const loadActivityLogsData = async (workspaceId) => {
+const loadActivityLogsData = async (workspaceId, issueIds = null) => {
 	const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-	const { data: logs } = await supabaseAdmin.from('activity_logs')
-		.select('id, issue_id, workspace_id, type, from_email, to_emails, subject, body, data, created_by, created_at')
+	if (Array.isArray(issueIds) && issueIds.length === 0) {
+		return { logsByIssue: {} };
+	}
+	let logsQuery = supabaseAdmin
+		.from('activity_logs')
+		.select(
+			'id, issue_id, workspace_id, type, from_email, to_emails, subject, body, data, created_by, created_at'
+		)
 		.eq('workspace_id', workspaceId)
 		.gte('created_at', cutoff)
 		.order('created_at', { ascending: true });
+	if (Array.isArray(issueIds)) {
+		logsQuery = logsQuery.in('issue_id', issueIds);
+	}
+	const { data: logs } = await logsQuery;
 	const logsByIssue = (logs ?? []).reduce((acc, log) => {
 		if (!log.issue_id) return acc;
 		(acc[log.issue_id] ??= []).push(log);
@@ -357,21 +484,35 @@ const loadNotificationsData = async (workspaceId, userId) => {
 			.order('created_at', { ascending: false }),
 		supabaseAdmin
 			.from('people')
-			.select('user_id, users(name)')
+			.select('user_id, role, users(name, id)')
 			.eq('workspace_id', workspaceId)
-			.in('role', ['admin', 'member', 'owner'])
+			.in('role', ['admin', 'member', 'owner', 'vendor'])
 	]);
 	return { notifications: notifications ?? [], members: members ?? [] };
 };
 
-const loadUnitsList = async (supabase, adminClient, workspaceId) => {
-	const { data: units, error: unitsError } = await supabase
-		.from('units')
-		.select(
-			'id, name, property_id, tenants(id, name, email, unit_id), properties!inner(workspace_id)'
-		)
-		.eq('properties.workspace_id', workspaceId)
-		.order('name', { ascending: true });
+const loadUnitsList = async (
+	supabase,
+	adminClient,
+	workspaceId,
+	userRole = null,
+	ownerScopeId = null
+) => {
+	const isOwner = (userRole ?? '').toLowerCase() === 'owner';
+	const buildQuery = (client) => {
+		let q = client
+			.from('units')
+			.select(
+				'id, name, property_id, tenants(id, name, email, unit_id), properties!inner(workspace_id)'
+			)
+			.eq('properties.workspace_id', workspaceId)
+			.order('name', { ascending: true });
+		if (isOwner && ownerScopeId) {
+			q = q.eq('properties.owner_id', ownerScopeId);
+		}
+		return q;
+	};
+	const { data: units, error: unitsError } = await buildQuery(supabase);
 	if (!unitsError) {
 		return (units ?? []).map((unit) => ({
 			id: unit.id,
@@ -380,13 +521,7 @@ const loadUnitsList = async (supabase, adminClient, workspaceId) => {
 			property_id: unit.property_id
 		}));
 	}
-	const { data: adminUnits } = await adminClient
-		.from('units')
-		.select(
-			'id, name, property_id, tenants(id, name, email, unit_id), properties!inner(workspace_id)'
-		)
-		.eq('properties.workspace_id', workspaceId)
-		.order('name', { ascending: true });
+	const { data: adminUnits } = await buildQuery(adminClient);
 	return (adminUnits ?? []).map((unit) => ({
 		id: unit.id,
 		name: unit.name,

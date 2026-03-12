@@ -4,6 +4,23 @@ import { env } from '$env/dynamic/private';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 import { resolveWorkspace } from '$lib/server/workspaces';
 
+const canAccessPeople = async (workspaceId, userId) => {
+	const { data: adminWorkspace } = await supabaseAdmin
+		.from('workspaces')
+		.select('id')
+		.eq('id', workspaceId)
+		.eq('admin_user_id', userId)
+		.maybeSingle();
+	if (adminWorkspace?.id) return true;
+	const { data: member } = await supabaseAdmin
+		.from('people')
+		.select('role')
+		.eq('workspace_id', workspaceId)
+		.eq('user_id', userId)
+		.maybeSingle();
+	return member?.role === 'admin' || member?.role === 'member';
+};
+
 export const GET = async ({ locals, url }) => {
 	if (!locals.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
@@ -14,10 +31,14 @@ export const GET = async ({ locals, url }) => {
 	if (!workspace?.id) {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
+	const allowed = await canAccessPeople(workspace.id, locals.user.id);
+	if (!allowed) {
+		return json({ error: 'Forbidden' }, { status: 403 });
+	}
 
 	const { data: people } = await supabaseAdmin
 		.from('people')
-		.select('id, name, email, role, trade, notes, pending, created_at')
+		.select('id, name, email, role, trade, notes, pending, created_at, user_id')
 		.eq('workspace_id', workspace.id)
 		.order('name', { ascending: true });
 
@@ -36,6 +57,10 @@ export const POST = async ({ locals, request, url }) => {
 	if (!workspace?.id) {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
+	const allowed = await canAccessPeople(workspace.id, locals.user.id);
+	if (!allowed) {
+		return json({ error: 'Forbidden' }, { status: 403 });
+	}
 
 	const { data, error } = await supabaseAdmin
 		.from('people')
@@ -49,7 +74,7 @@ export const POST = async ({ locals, request, url }) => {
 			pending: true,
 			user_id: null
 		})
-		.select('id, name, email, role, trade, notes, pending, created_at')
+		.select('id, name, email, role, trade, notes, pending, created_at, user_id')
 		.single();
 
 	if (error) {
@@ -135,13 +160,17 @@ export const PATCH = async ({ locals, request }) => {
 	if (!workspace?.id) {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
+	const allowed = await canAccessPeople(workspace.id, locals.user.id);
+	if (!allowed) {
+		return json({ error: 'Forbidden' }, { status: 403 });
+	}
 
 	const { data, error } = await supabaseAdmin
 		.from('people')
 		.update({ name, email, role, trade, notes, updated_at: new Date().toISOString() })
 		.eq('id', id)
 		.eq('workspace_id', workspace.id)
-		.select('id, name, email, role, trade, notes, pending, created_at')
+		.select('id, name, email, role, trade, notes, pending, created_at, user_id')
 		.single();
 
 	if (error) {
@@ -162,6 +191,25 @@ export const DELETE = async ({ locals, request }) => {
 	const workspace = await resolveWorkspace(workspaceSlug, locals.user.id);
 	if (!workspace?.id) {
 		return json({ error: 'Forbidden' }, { status: 403 });
+	}
+	const allowed = await canAccessPeople(workspace.id, locals.user.id);
+	if (!allowed) {
+		return json({ error: 'Forbidden' }, { status: 403 });
+	}
+
+	const { data: person } = await supabaseAdmin
+		.from('people')
+		.select('id, role')
+		.eq('id', id)
+		.eq('workspace_id', workspace.id)
+		.maybeSingle();
+
+	if (person?.role === 'owner') {
+		await supabaseAdmin
+			.from('properties')
+			.update({ owner_id: null })
+			.eq('owner_id', person.id)
+			.eq('workspace_id', workspace.id);
 	}
 
 	const { error } = await supabaseAdmin
