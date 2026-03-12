@@ -37,9 +37,17 @@
 			: null;
 
 	$: filtered =
-		filter === 'Unread'   ? (notifications ?? []).filter((n) => unreadSnapshot?.has(n.id)) :
+		filter === 'Unread'   ? (notifications ?? []).filter((n) => unreadSnapshot?.has(n.id) && !n.is_resolved) :
 		filter === 'Resolved' ? (notifications ?? []).filter((n) => n.is_resolved) :
 		/* All */               (notifications ?? []).filter((n) => !n.is_resolved);
+
+	function resolveAndAdvance() {
+		if (!selectedNotification) return;
+		const idx = filtered.findIndex((n) => n.id === selectedNotification.id);
+		const next = filtered[idx + 1] ?? filtered[idx - 1] ?? null;
+		updateNotificationInCache({ id: selectedNotification.id, is_resolved: true });
+		selectedNotification = next;
+	}
 
 	$: vendors =
 		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
@@ -228,7 +236,7 @@
 				{vendors}
 				allIssues={$issuesCache.data?.issues ?? []}
 				on:close={() => (selectedNotification = null)}
-				on:resolved={() => updateNotificationInCache({ id: selectedNotification.id, is_resolved: true })}
+				on:resolved={resolveAndAdvance}
 			/>
 		</div>
 	{/if}

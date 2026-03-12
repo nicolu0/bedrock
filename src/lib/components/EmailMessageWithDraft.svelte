@@ -2,6 +2,7 @@
 	// @ts-nocheck
 	import { onDestroy, createEventDispatcher } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import { removeDraftFromCache, applyMessageDelta } from '$lib/stores/activityCache.js';
 	const dispatch = createEventDispatcher();
 
 	export let message;
@@ -132,6 +133,8 @@
 				const payload = await response.json().catch(() => null);
 				sentMessage = payload?.message ?? null;
 				isSent = true;
+				removeDraftFromCache(draft);
+				if (sentMessage) applyMessageDelta(sentMessage);
 				dispatch('sent', { issueId: draft.issue_id ?? null });
 			}
 		} catch {
