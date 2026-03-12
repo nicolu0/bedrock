@@ -33,12 +33,16 @@ const normalizeStatus = (value) => {
 	return allowedStatuses.has(normalized) ? normalized : 'todo';
 };
 
-const loadSections = async (workspaceId) => {
-	let { data: issues } = await supabaseAdmin
+const loadSections = async (workspaceId, userId, userRole) => {
+	let issuesQuery = supabaseAdmin
 		.from('issues')
-		.select('id, name, status, parent_id, unit_id')
+		.select('id, name, status, parent_id, unit_id, assignee_id')
 		.eq('workspace_id', workspaceId)
 		.order('updated_at', { ascending: false });
+	if (userRole === 'member' || userRole === 'vendor') {
+		issuesQuery = issuesQuery.eq('assignee_id', userId);
+	}
+	let { data: issues } = await issuesQuery;
 
 	if (!issues?.length) {
 		const { data: fallbackUnits } = await supabaseAdmin
@@ -49,11 +53,15 @@ const loadSections = async (workspaceId) => {
 			new Set((fallbackUnits ?? []).map((unit) => unit.id).filter(Boolean))
 		);
 		if (fallbackUnitIds.length) {
-			const { data: fallbackIssues } = await supabaseAdmin
+			let fallbackQuery = supabaseAdmin
 				.from('issues')
-				.select('id, name, status, parent_id, unit_id')
+				.select('id, name, status, parent_id, unit_id, assignee_id')
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
+			if (userRole === 'member' || userRole === 'vendor') {
+				fallbackQuery = fallbackQuery.eq('assignee_id', userId);
+			}
+			const { data: fallbackIssues } = await fallbackQuery;
 			issues = fallbackIssues ?? [];
 		}
 	}
@@ -81,6 +89,7 @@ const loadSections = async (workspaceId) => {
 			issueId: issue.id,
 			title: issue.name,
 			assignees: 0,
+			assignee_id: issue.assignee_id ?? null,
 			property: property?.name ?? 'Unknown',
 			unit: unit?.name ?? 'Unknown',
 			status,
@@ -126,13 +135,15 @@ const loadSections = async (workspaceId) => {
 				parentTitle: issue.title,
 				property: subIssue.property,
 				unit: subIssue.unit,
-				assignees: subIssue.assignees
+				assignees: subIssue.assignees,
+				assignee_id: subIssue.assignee_id ?? null
 			}));
 		bucket.items.push({
 			id: issue.id,
 			issueId: issue.issueId,
 			title: issue.title,
 			assignees: issue.assignees,
+			assignee_id: issue.assignee_id ?? null,
 			property: issue.property,
 			unit: issue.unit,
 			subIssues
@@ -151,6 +162,7 @@ const loadSections = async (workspaceId) => {
 			issueId: issue.issueId,
 			title: issue.title,
 			assignees: issue.assignees,
+			assignee_id: issue.assignee_id ?? null,
 			property: issue.property,
 			unit: issue.unit,
 			parentTitle: parent.title,
@@ -183,7 +195,14 @@ export const load = async ({ locals, parent }) => {
 	const sections = (async () => {
 		const { workspace } = await parent();
 		if (!workspace?.id) return [];
-		return await loadSections(workspace.id);
+		const { data: person } = await supabaseAdmin
+			.from('people')
+			.select('role')
+			.eq('workspace_id', workspace.id)
+			.eq('user_id', locals.user.id)
+			.maybeSingle();
+		const userRole = person?.role ?? null;
+		return await loadSections(workspace.id, locals.user.id, userRole);
 	})();
 
 	return { sections }; // streamed — navigation doesn't wait

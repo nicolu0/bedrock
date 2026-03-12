@@ -128,7 +128,12 @@
 									{formatRole(vendor.role)}
 								</span>
 							</div>
-							<div class="truncate">{vendor.name}</div>
+							<div class="flex items-center gap-1.5 truncate">
+								<span class="truncate">{vendor.name}</span>
+								{#if vendor.user_id && data.currentUserId && vendor.user_id === data.currentUserId}
+									<span class="text-xs text-neutral-400">(You)</span>
+								{/if}
+							</div>
 							<div class="truncate text-neutral-500">{vendor.trade ?? '—'}</div>
 							<div class="truncate text-neutral-500">{vendor.email ?? '—'}</div>
 							<div class="relative flex items-center">
