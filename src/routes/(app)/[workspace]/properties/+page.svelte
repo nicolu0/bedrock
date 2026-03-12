@@ -1,6 +1,5 @@
 <script>
 	// @ts-nocheck
-	import { enhance } from '$app/forms';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 	import { fade, scale } from 'svelte/transition';
@@ -185,7 +184,7 @@
 		}
 	}
 
-	const enhanceCreateProperty = ({ formData }) => {
+	async function handleCreateProperty(e) {
 		createPropertyError = '';
 		const tempId = `temp-${Date.now()}`;
 		const optimistic = {
@@ -199,28 +198,37 @@
 			owner_id: newPropertyOwnerId?.trim() ? newPropertyOwnerId.trim() : null
 		};
 		addPropertyToCache(optimistic);
-		return async ({ result }) => {
-			if (result?.type === 'success') {
-				const created = result.data?.property;
-				if (created?.id) {
-					replacePropertyInCache(tempId, { ...optimistic, ...created });
-				}
-				closeNewPropertyModal();
+		try {
+			const res = await fetch('/api/properties', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					workspace: workspaceSlug,
+					name: optimistic.name,
+					address: optimistic.address,
+					city: optimistic.city,
+					state: optimistic.state,
+					postalCode: optimistic.postal_code,
+					country: optimistic.country,
+					ownerId: optimistic.owner_id
+				})
+			});
+			const result = await res.json();
+			if (!res.ok) {
+				removePropertyFromCache(tempId);
+				createPropertyError = result?.error ?? 'Unable to create property.';
 				return;
 			}
+			replacePropertyInCache(tempId, { ...optimistic, ...result });
+			closeNewPropertyModal();
+		} catch {
 			removePropertyFromCache(tempId);
-			createPropertyError = result?.data?.error ?? 'Unable to create property.';
-		};
-	};
-	const enhanceUpdateProperty = ({ formData }) => {
-		updatePropertyError = '';
-		if (!editingProperty?.id) {
-			return async ({ result }) => {
-				if (result?.type === 'failure') {
-					updatePropertyError = result.data?.error ?? 'Unable to update property.';
-				}
-			};
+			createPropertyError = 'Unable to create property.';
 		}
+	}
+	async function handleUpdateProperty(e) {
+		updatePropertyError = '';
+		if (!editingProperty?.id) return;
 		const previous = { ...editingProperty };
 		const optimistic = {
 			...editingProperty,
@@ -234,21 +242,36 @@
 		};
 		updatePropertyInCache(optimistic);
 		closeEditPropertyModal();
-		return async ({ result }) => {
-			if (result?.type === 'success') {
-				const updated = result.data?.property;
-				if (updated?.id) {
-					updatePropertyInCache({ ...optimistic, ...updated });
-				}
+		try {
+			const res = await fetch('/api/properties', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					workspace: workspaceSlug,
+					propertyId: previous.id,
+					name: optimistic.name,
+					address: optimistic.address,
+					city: optimistic.city,
+					state: optimistic.state,
+					postalCode: optimistic.postal_code,
+					country: optimistic.country,
+					ownerId: optimistic.owner_id
+				})
+			});
+			const result = await res.json();
+			if (!res.ok) {
+				updatePropertyInCache(previous);
+				openEditPropertyModal(previous);
+				updatePropertyError = result?.error ?? 'Unable to update property.';
 				return;
 			}
-			if (previous?.id) {
-				updatePropertyInCache(previous);
-			}
+			updatePropertyInCache({ ...optimistic, ...result });
+		} catch {
+			updatePropertyInCache(previous);
 			openEditPropertyModal(previous);
-			updatePropertyError = result?.data?.error ?? 'Unable to update property.';
-		};
-	};
+			updatePropertyError = 'Unable to update property.';
+		}
+	}
 	function getInitials(name) {
 		if (!name) return '';
 		const parts = name.trim().split(/\s+/);
@@ -371,7 +394,7 @@
 			role="dialog"
 			aria-modal="true"
 		>
-			<form method="POST" action="?/createProperty" use:enhance={enhanceCreateProperty}>
+			<form on:submit|preventDefault={handleCreateProperty}>
 				<div class="flex items-center justify-between">
 					<div class="text-lg font-medium text-neutral-800">New property</div>
 					<button
@@ -595,7 +618,7 @@
 			role="dialog"
 			aria-modal="true"
 		>
-			<form method="POST" action="?/updateProperty" use:enhance={enhanceUpdateProperty}>
+			<form on:submit|preventDefault={handleUpdateProperty}>
 				<div class="flex items-center justify-between">
 					<div class="text-lg font-medium text-neutral-800">Edit property</div>
 					<button
