@@ -210,7 +210,9 @@
 	$: canViewProperties = userRole === 'admin' || userRole === 'member' || userRole === 'owner';
 
 	$: if (browser && workspaceSlug) {
-		if (userRole) ensurePropertiesCache(workspaceSlug, { role: userRole });
+		if (userRole) {
+			ensurePropertiesCache(workspaceSlug, { role: userRole });
+		}
 		ensureIssuesCache(workspaceSlug);
 		ensureNotificationsCache(workspaceSlug);
 		if (canViewPeople) ensurePeopleMembersCache(workspaceSlug);
