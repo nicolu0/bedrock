@@ -95,6 +95,7 @@
 		try {
 			const response = await fetch('/api/email-drafts', {
 				method: 'PATCH',
+				keepalive: true,
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(
 					draft.message_id

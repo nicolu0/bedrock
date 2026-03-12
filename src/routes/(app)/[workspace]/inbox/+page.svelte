@@ -2,8 +2,8 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
-	import { notificationsCache, primeNotificationsCache, updateNotificationInCache } from '$lib/stores/notificationsCache.js';
-	import { peopleMembersCache, primePeopleMembersCache } from '$lib/stores/peopleMembersCache.js';
+	import { notificationsCache, updateNotificationInCache } from '$lib/stores/notificationsCache.js';
+	import { peopleMembersCache } from '$lib/stores/peopleMembersCache.js';
 	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
 	import { activityLogsCache, ensureActivityLogsCache } from '$lib/stores/activityLogsCache.js';
 	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
@@ -54,21 +54,9 @@
 			? $peopleCache.data.filter((p) => p?.role === 'vendor')
 			: [];
 
-	// Prime cache from server data
-	$: if (browser && data.notifications && data.members) {
-		Promise.all([data.notifications, data.members])
-			.then(([n, m]) => {
-				primeNotificationsCache(workspaceSlug, { notifications: n, members: m });
-				primePeopleMembersCache(workspaceSlug, m);
-			})
-			.catch(() => {
-				loadError = true;
-			});
-	}
-
 	$: if (browser && workspaceSlug) {
-		ensureActivityCache(workspaceSlug, { force: true });
-		ensureActivityLogsCache(workspaceSlug, { force: true });
+		ensureActivityCache(workspaceSlug);
+		ensureActivityLogsCache(workspaceSlug);
 		ensurePeopleCache(workspaceSlug);
 		ensureIssuesCache(workspaceSlug);
 	}
@@ -93,9 +81,12 @@
 	async function handleClick(n) {
 		selectedNotification = n;
 		if (!n.is_read) {
-			const fd = new FormData();
-			fd.append('id', n.id);
-			fetch('?/markRead', { method: 'POST', body: fd });
+			fetch('/api/notifications/mark-read', {
+				method: 'POST',
+				keepalive: true,
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id: n.id })
+			});
 			notificationsCache.update((state) => ({
 				...state,
 				data: state.data

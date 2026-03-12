@@ -6,6 +6,9 @@
 	import { browser } from '$app/environment';
 	import { propertiesCache, primePropertiesCache } from '$lib/stores/propertiesCache.js';
 	import { unitsCache, primeUnitsCache } from '$lib/stores/unitsCache.js';
+	import { primeIssuesCache } from '$lib/stores/issuesCache';
+	import { primeNotificationsCache } from '$lib/stores/notificationsCache';
+	import { primePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { goto } from '$app/navigation';
 	import {
 		ensureIssuesCache,
@@ -23,6 +26,7 @@
 	import { ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import {
 		ensureActivityCache,
+		primeActivityCache,
 		applyMessageDelta,
 		applyDraftDelta,
 		removeMessageFromCache,
@@ -30,10 +34,12 @@
 	} from '$lib/stores/activityCache';
 	import {
 		updateIssueStatusInDetailCache,
-		updateIssueFieldsInDetailCache
+		updateIssueFieldsInDetailCache,
+		primeDetailCacheFromIssuesList
 	} from '$lib/stores/issueDetailCache.js';
 	import {
 		ensureActivityLogsCache,
+		primeActivityLogsCache,
 		applyActivityLogDelta,
 		removeActivityLogFromCache
 	} from '$lib/stores/activityLogsCache';
@@ -105,6 +111,60 @@
 			prime(data.units);
 		}
 	}
+	let _primedIssuesForWorkspace = null;
+	$: if (browser && data.issuesData && _primedIssuesForWorkspace !== workspaceSlug) {
+		_primedIssuesForWorkspace = workspaceSlug;
+		const _ws = workspaceSlug;
+		const prime = (d) => {
+			if (d?.sections?.length || d?.issues?.length) {
+				primeIssuesCache(_ws, d);
+				if (d.issues?.length) primeDetailCacheFromIssuesList(d.issues);
+			}
+		};
+		if (data.issuesData instanceof Promise) {
+			data.issuesData.then(prime);
+		} else {
+			prime(data.issuesData);
+		}
+	}
+
+	let _primedNotificationsForWorkspace = null;
+	$: if (browser && data.notificationsData && _primedNotificationsForWorkspace !== workspaceSlug) {
+		_primedNotificationsForWorkspace = workspaceSlug;
+		const _ws = workspaceSlug;
+		const prime = ({ notifications, members }) => {
+			primeNotificationsCache(_ws, { notifications, members });
+			primePeopleMembersCache(_ws, members);
+		};
+		if (data.notificationsData instanceof Promise) {
+			data.notificationsData.then(prime);
+		} else {
+			prime(data.notificationsData);
+		}
+	}
+
+	let _primedActivityForWorkspace = null;
+	$: if (browser && data.activityData && _primedActivityForWorkspace !== workspaceSlug) {
+		_primedActivityForWorkspace = workspaceSlug;
+		const _ws = workspaceSlug;
+		if (data.activityData instanceof Promise) {
+			data.activityData.then((d) => { if (d) primeActivityCache(_ws, d); });
+		} else if (data.activityData) {
+			primeActivityCache(_ws, data.activityData);
+		}
+	}
+
+	let _primedActivityLogsForWorkspace = null;
+	$: if (browser && data.activityLogsData && _primedActivityLogsForWorkspace !== workspaceSlug) {
+		_primedActivityLogsForWorkspace = workspaceSlug;
+		const _ws = workspaceSlug;
+		if (data.activityLogsData instanceof Promise) {
+			data.activityLogsData.then((d) => { if (d) primeActivityLogsCache(_ws, d); });
+		} else if (data.activityLogsData) {
+			primeActivityLogsCache(_ws, data.activityLogsData);
+		}
+	}
+
 	const navItems = [
 		{ id: 'inbox', label: 'Inbox', href: 'inbox' },
 		{ id: 'my-issues', label: 'My issues', href: 'my-issues' },
