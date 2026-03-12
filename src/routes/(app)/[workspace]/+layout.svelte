@@ -289,6 +289,10 @@
 				({ new: issue }) => {
 					updateIssueFieldsInListCache(issue.id, { name: issue.name, status: issue.status });
 					updateIssueFieldsInDetailCache(issue.id, { name: issue.name, status: issue.status });
+					const state = get(issuesCache);
+					if (state.data && !state.data.issues?.some((i) => i.id === issue.id)) {
+						ensureIssuesCache(workspaceSlug, { force: true });
+					}
 				}
 			)
 
@@ -314,6 +318,7 @@
 					filter: `user_id=eq.${userId}`
 				},
 				async ({ new: notification }) => {
+					await ensureNotificationsCache(workspaceSlug);
 					const { data: full } = await supabase
 						.from('notifications')
 						.select(
@@ -321,7 +326,7 @@
 						)
 						.eq('id', notification.id)
 						.maybeSingle();
-					if (full) addNotificationToCache(full);
+					addNotificationToCache(full ?? notification);
 				}
 			)
 
