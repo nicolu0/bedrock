@@ -122,7 +122,7 @@
 							</div>
 							<div class="flex items-center gap-1.5 truncate">
 								<span class="truncate">{member.name}</span>
-								{#if member.user_id && data.currentUserId && member.user_id === data.currentUserId}
+								{#if member.user_id && data.userId && member.user_id === data.userId}
 									<span class="text-xs text-neutral-400">(You)</span>
 								{/if}
 							</div>
