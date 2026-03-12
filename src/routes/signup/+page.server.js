@@ -4,9 +4,34 @@ import { supabaseAdmin } from '$lib/supabaseAdmin';
 import { env } from '$env/dynamic/private';
 
 export const load = async ({ locals, url }) => {
-	if (locals.user) throw redirect(303, '/');
 	const inviteToken = url.searchParams.get('invite');
-	return { inviteToken, isInvite: !!inviteToken };
+	if (locals.user) {
+		if (inviteToken) throw redirect(303, `/accept-invite?token=${inviteToken}`);
+		throw redirect(303, '/');
+	}
+	let inviteEmail = null;
+	let inviteName = null;
+	if (inviteToken) {
+		const { data: invite } = await supabaseAdmin
+			.from('invites')
+			.select('email, accepted_at, expires_at, workspace_id')
+			.eq('token', inviteToken)
+			.maybeSingle();
+		if (invite && !invite.accepted_at && new Date(invite.expires_at) > new Date()) {
+			inviteEmail = invite.email ?? null;
+			if (invite.workspace_id && invite.email) {
+				const { data: person } = await supabaseAdmin
+					.from('people')
+					.select('name')
+					.eq('workspace_id', invite.workspace_id)
+					.eq('pending', true)
+					.ilike('email', invite.email)
+					.maybeSingle();
+				inviteName = person?.name ?? null;
+			}
+		}
+	}
+	return { inviteToken, isInvite: !!inviteToken, inviteEmail, inviteName };
 };
 
 const bootstrap = async (user) => {
@@ -53,13 +78,65 @@ const acceptInvite = async (user, token) => {
 
 	const name = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User';
 	await supabaseAdmin.from('users').upsert({ id: user.id, name });
-	await supabaseAdmin.from('people').insert({
-		workspace_id: invite.workspace_id,
-		user_id: user.id,
-		role: invite.role,
-		name,
-		email: user.email ?? null
-	});
+
+	const { data: existingByUser } = await supabaseAdmin
+		.from('people')
+		.select('id')
+		.eq('workspace_id', invite.workspace_id)
+		.eq('user_id', user.id)
+		.maybeSingle();
+
+	let existingPersonId = existingByUser?.id ?? null;
+
+	if (!existingPersonId && invite.people_id) {
+		existingPersonId = invite.people_id;
+	}
+
+	if (!existingPersonId && invite.email) {
+		const { data: existingPendingByEmail } = await supabaseAdmin
+			.from('people')
+			.select('id')
+			.eq('workspace_id', invite.workspace_id)
+			.eq('pending', true)
+			.ilike('email', invite.email)
+			.limit(1)
+			.maybeSingle();
+		existingPersonId = existingPendingByEmail?.id ?? null;
+	}
+
+	if (!existingPersonId && invite.email) {
+		const { data: existingByEmail } = await supabaseAdmin
+			.from('people')
+			.select('id')
+			.eq('workspace_id', invite.workspace_id)
+			.ilike('email', invite.email)
+			.limit(1)
+			.maybeSingle();
+		existingPersonId = existingByEmail?.id ?? null;
+	}
+
+	if (existingPersonId) {
+		await supabaseAdmin
+			.from('people')
+			.update({
+				role: invite.role,
+				name,
+				email: user.email ?? invite.email ?? null,
+				user_id: user.id,
+				pending: false
+			})
+			.eq('id', existingPersonId)
+			.eq('workspace_id', invite.workspace_id);
+	} else {
+		await supabaseAdmin.from('people').insert({
+			workspace_id: invite.workspace_id,
+			user_id: user.id,
+			role: invite.role,
+			name,
+			email: user.email ?? invite.email ?? null,
+			pending: false
+		});
+	}
 	await supabaseAdmin
 		.from('invites')
 		.update({ accepted_at: new Date().toISOString() })

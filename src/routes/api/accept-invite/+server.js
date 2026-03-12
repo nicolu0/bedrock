@@ -29,26 +29,62 @@ export const POST = async ({ locals, request }) => {
 	await supabaseAdmin.from('users').upsert({ id: user.id, name });
 
 	// Upsert person
-	const { data: existingPerson } = await supabaseAdmin
+	const { data: existingByUser } = await supabaseAdmin
 		.from('people')
 		.select('id')
 		.eq('workspace_id', invite.workspace_id)
 		.eq('user_id', user.id)
 		.maybeSingle();
 
-	if (existingPerson) {
+	let existingPersonId = existingByUser?.id ?? null;
+
+	if (!existingPersonId && invite.people_id) {
+		existingPersonId = invite.people_id;
+	}
+
+	if (!existingPersonId && invite.email) {
+		const { data: existingPendingByEmail } = await supabaseAdmin
+			.from('people')
+			.select('id')
+			.eq('workspace_id', invite.workspace_id)
+			.eq('pending', true)
+			.ilike('email', invite.email)
+			.limit(1)
+			.maybeSingle();
+		existingPersonId = existingPendingByEmail?.id ?? null;
+	}
+
+	if (!existingPersonId && invite.email) {
+		const { data: existingByEmail } = await supabaseAdmin
+			.from('people')
+			.select('id')
+			.eq('workspace_id', invite.workspace_id)
+			.ilike('email', invite.email)
+			.limit(1)
+			.maybeSingle();
+		existingPersonId = existingByEmail?.id ?? null;
+	}
+
+	if (existingPersonId) {
 		await supabaseAdmin
 			.from('people')
-			.update({ role: invite.role, name, email: user.email ?? null })
-			.eq('workspace_id', invite.workspace_id)
-			.eq('user_id', user.id);
+			.update({
+				role: invite.role,
+				name,
+				email: user.email ?? invite.email ?? null,
+				user_id: user.id,
+				pending: false
+			})
+			.eq('id', existingPersonId)
+			.eq('workspace_id', invite.workspace_id);
 	} else {
 		await supabaseAdmin.from('people').insert({
 			workspace_id: invite.workspace_id,
 			user_id: user.id,
 			role: invite.role,
 			name,
-			email: user.email ?? null
+			email: user.email ?? invite.email ?? null,
+			pending: false
 		});
 	}
 

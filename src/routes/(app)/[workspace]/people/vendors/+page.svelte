@@ -89,7 +89,7 @@
 		{#if vendors !== null}
 			{#if vendors?.length}
 				<div
-					class="grid grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
+					class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
 				>
 					<div>Role</div>
 					<div>Name</div>
@@ -101,7 +101,7 @@
 				<div>
 					{#each vendors as vendor}
 						<div
-							class="group grid cursor-pointer grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
+							class="group grid cursor-pointer grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
 							on:mouseenter={() => (hoveredRow = vendor.id)}
 							on:mouseleave={() => (hoveredRow = null)}
 							on:click={(e) => {
@@ -120,7 +120,12 @@
 									{formatRole(vendor.role)}
 								</span>
 							</div>
-							<div class="truncate">{vendor.name}</div>
+							<div class="flex items-center gap-1.5 truncate">
+								<span class="truncate">{vendor.name}</span>
+								{#if vendor.user_id && data.currentUserId && vendor.user_id === data.currentUserId}
+									<span class="text-xs text-neutral-400">(You)</span>
+								{/if}
+							</div>
 							<div class="truncate text-neutral-500">{vendor.trade ?? '—'}</div>
 							<div class="truncate text-neutral-500">{vendor.email ?? '—'}</div>
 							<div class="relative flex items-center">
@@ -168,7 +173,7 @@
 			{/if}
 		{:else}
 			<div
-				class="grid grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
+				class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
 			>
 				<div>Role</div>
 				<div>Name</div>
@@ -179,7 +184,7 @@
 			<div class="border-t border-neutral-200"></div>
 			<div>
 				{#each Array(3) as _, i}
-					<div class="grid grid-cols-[0.6fr_2fr_1fr_1.5fr_2rem] gap-4 px-6 py-3">
+					<div class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3">
 						<div class="shimmer h-4 w-14 rounded"></div>
 						<div class="shimmer h-4 rounded" style="width: {i % 2 === 0 ? '8rem' : '6rem'}"></div>
 						<div class="shimmer h-4 w-16 rounded"></div>

@@ -25,6 +25,7 @@
 					autocomplete="email"
 					class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
 					placeholder="jane@company.com"
+					value={data.inviteEmail ?? ''}
 					required
 				/>
 			</div>
