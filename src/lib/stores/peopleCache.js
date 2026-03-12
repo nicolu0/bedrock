@@ -261,6 +261,29 @@ export const updatePersonInCache = (person) => {
 	});
 };
 
+export const replacePersonInCache = (tempId, person, workspaceSlug) => {
+	if (!browser) return;
+	peopleCache.update((state) => {
+		const nextWorkspace = workspaceSlug ?? state.workspace;
+		const existing = Array.isArray(state.data) ? state.data : [];
+		let replaced = false;
+		const data = existing
+			.map((p) => {
+				if (tempId && p?.id === tempId) {
+					replaced = true;
+					return person;
+				}
+				return p;
+			})
+			.concat(replaced ? [] : [person])
+			.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+		const fetchedAt = state.fetchedAt || Date.now();
+		const payload = { workspace: nextWorkspace, data, fetchedAt };
+		writeSessionCache(payload);
+		return { ...state, workspace: nextWorkspace, data, fetchedAt };
+	});
+};
+
 export const removePersonFromCache = (personId) => {
 	if (!browser) return;
 	peopleCache.update((state) => {
