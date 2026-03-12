@@ -120,7 +120,12 @@
 									{formatRole(owner.role)}
 								</span>
 							</div>
-							<div class="truncate">{owner.name}</div>
+							<div class="flex items-center gap-1.5 truncate">
+								<span class="truncate">{owner.name}</span>
+								{#if owner.user_id && data.currentUserId && owner.user_id === data.currentUserId}
+									<span class="text-xs text-neutral-400">(You)</span>
+								{/if}
+							</div>
 							<div aria-hidden="true"></div>
 							<div class="truncate text-neutral-500">{owner.email ?? '—'}</div>
 							<div class="relative flex items-center">

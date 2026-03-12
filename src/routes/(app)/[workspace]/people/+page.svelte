@@ -122,7 +122,12 @@
 										{formatRole(person.role, person.pending)}
 									</span>
 								</div>
-								<div class="truncate">{person.name}</div>
+								<div class="flex items-center gap-1.5 truncate">
+									<span class="truncate">{person.name}</span>
+									{#if person.user_id && data.currentUserId && person.user_id === data.currentUserId}
+										<span class="text-xs text-neutral-400">(You)</span>
+									{/if}
+								</div>
 								<div aria-hidden="true"></div>
 								<div class="truncate text-neutral-500">{person.email ?? '—'}</div>
 								<div class="relative flex items-center">
@@ -191,7 +196,12 @@
 										{formatRole(person.role, person.pending)}
 									</span>
 								</div>
-								<div class="truncate">{person.name}</div>
+								<div class="flex items-center gap-1.5 truncate">
+									<span class="truncate">{person.name}</span>
+									{#if person.user_id && data.currentUserId && person.user_id === data.currentUserId}
+										<span class="text-xs text-neutral-400">(You)</span>
+									{/if}
+								</div>
 								<div aria-hidden="true"></div>
 								<div class="truncate text-neutral-500">{person.email ?? '—'}</div>
 								<div class="relative flex items-center">
