@@ -1,69 +1,70 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { browser } from '$app/environment';
-	import { notificationsCache, updateNotificationInCache } from '$lib/stores/notificationsCache.js';
-	import { peopleMembersCache } from '$lib/stores/peopleMembersCache.js';
-	import { activityCache, ensureActivityCache } from '$lib/stores/activityCache.js';
-	import { activityLogsCache, ensureActivityLogsCache } from '$lib/stores/activityLogsCache.js';
-	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
-	import { issuesCache, ensureIssuesCache } from '$lib/stores/issuesCache.js';
+	import { invalidate } from '$app/navigation';
 	import IssuePanel from '$lib/components/IssuePanel.svelte';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
+	import { onMount, onDestroy } from 'svelte';
 
 	export let data;
 
 	let filter = 'All';
 	let unreadSnapshot = null;
+	let selectedNotification = null;
+	let localReadIds = new Set();
+	let localResolvedIds = new Set();
 
 	function setFilter(tab) {
 		unreadSnapshot = tab === 'Unread'
-			? new Set((notifications ?? []).filter((n) => !n.is_read && !n.is_resolved).map((n) => n.id))
+			? new Set((effectiveNotifications ?? []).filter((n) => !n.is_read && !n.is_resolved).map((n) => n.id))
 			: null;
 		filter = tab;
 		selectedNotification = null;
 	}
-	let selectedNotification = null;
-	let loadError = false;
 
 	$: workspaceSlug = $page.params.workspace;
 
-	// Derive display data from cache (null = not yet cached)
-	$: notifications =
-		$notificationsCache.workspace === workspaceSlug &&
-		$notificationsCache.data?.notifications != null
-			? $notificationsCache.data.notifications
-			: null;
+	$: notifications = data.notificationsData?.notifications ?? [];
+
+	// Patch is_read and is_resolved optimistically from local sets
+	$: effectiveNotifications = notifications.map((n) => ({
+		...n,
+		is_read: n.is_read || localReadIds.has(n.id),
+		is_resolved: n.is_resolved || localResolvedIds.has(n.id)
+	}));
+
+	// Reset local optimistic sets when server data changes
+	$: if (notifications) {
+		localReadIds = new Set();
+		localResolvedIds = new Set();
+	}
 
 	$: filtered =
-		filter === 'Unread'   ? (notifications ?? []).filter((n) => unreadSnapshot?.has(n.id) && !n.is_resolved) :
-		filter === 'Resolved' ? (notifications ?? []).filter((n) => n.is_resolved) :
-		/* All */               (notifications ?? []).filter((n) => !n.is_resolved);
+		filter === 'Unread'   ? effectiveNotifications.filter((n) => unreadSnapshot?.has(n.id) && !n.is_resolved) :
+		filter === 'Resolved' ? effectiveNotifications.filter((n) => n.is_resolved) :
+		/* All */               effectiveNotifications.filter((n) => !n.is_resolved);
 
 	function resolveAndAdvance() {
 		if (!selectedNotification) return;
 		const idx = filtered.findIndex((n) => n.id === selectedNotification.id);
 		const next = filtered[idx + 1] ?? filtered[idx - 1] ?? null;
-		updateNotificationInCache({ id: selectedNotification.id, is_resolved: true });
+		localResolvedIds = new Set([...localResolvedIds, selectedNotification.id]);
 		if (next) handleClick(next); else selectedNotification = null;
+		invalidate('app:notifications');
 	}
 
-	$: vendors =
-		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
-			? $peopleCache.data.filter((p) => p?.role === 'vendor')
-			: [];
+	$: vendors = data.vendors ?? [];
 
-	$: if (browser && workspaceSlug) {
-		ensureActivityCache(workspaceSlug);
-		ensureActivityLogsCache(workspaceSlug);
-		ensurePeopleCache(workspaceSlug);
-		ensureIssuesCache(workspaceSlug);
-	}
+	let _now = Date.now();
+	let _ticker;
+	onMount(() => { _ticker = setInterval(() => { _now = Date.now(); }, 30_000); });
+	onDestroy(() => clearInterval(_ticker));
 
-	function timeAgo(dateStr) {
-		const diff = Date.now() - new Date(dateStr).getTime();
+	function timeAgo(dateStr, now) {
+		const diff = now - new Date(dateStr).getTime();
 		const mins = Math.floor(diff / 60000);
+		if (mins < 1) return 'just now';
 		if (mins < 60) return `${mins} ${mins === 1 ? 'min' : 'mins'} ago`;
 		const hrs = Math.floor(mins / 60);
 		if (hrs < 24) return `${hrs} ${hrs === 1 ? 'hr' : 'hrs'} ago`;
@@ -80,24 +81,14 @@
 
 	async function handleClick(n) {
 		selectedNotification = n;
-		if (!n.is_read) {
+		if (!n.is_read && !localReadIds.has(n.id)) {
+			localReadIds = new Set([...localReadIds, n.id]);
 			fetch('/api/notifications/mark-read', {
 				method: 'POST',
 				keepalive: true,
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ id: n.id })
 			});
-			notificationsCache.update((state) => ({
-				...state,
-				data: state.data
-					? {
-							...state.data,
-							notifications: state.data.notifications.map((notif) =>
-								notif.id === n.id ? { ...notif, is_read: true } : notif
-							)
-						}
-					: state.data
-			}));
 		}
 	}
 </script>
@@ -130,83 +121,63 @@
 			{/each}
 		</div>
 
-		{#if notifications !== null}
-			{#if filtered.length === 0}
-				<div class="px-6 py-8 text-sm text-neutral-400">
-					{filter === 'Unread' ? 'No unread notifications.' : 'No notifications yet.'}
-				</div>
-			{:else}
-				<div>
-					{#each filtered as n}
-						<button
-							class="w-full border-b border-neutral-100 px-6 py-3 text-left transition last:border-b-0 focus:outline-none
-								{selectedNotification?.id === n.id ? 'bg-stone-100' : 'hover:bg-stone-50'}"
-							type="button"
-							on:click={() => handleClick(n)}
-						>
-							<div class="flex items-start gap-3">
-								<div class="mt-1.5 flex-shrink-0">
-									{#if !n.is_read}
-										<span class="block h-2 w-2 rounded-full bg-blue-500"></span>
-									{:else}
-										<span class="block h-2 w-2"></span>
-									{/if}
-								</div>
-								<div class="min-w-0 flex-1">
-									<!-- Title row -->
-									<div class="flex items-center justify-between gap-3">
-										<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
-										<div class="flex flex-shrink-0 items-center gap-2">
-											{#if n.issues?.units}
-												<div
-													class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
-												>
-													{#if n.issues.units.properties?.name}
-														<span class="px-2 py-0.5">{n.issues.units.properties.name}</span>
-														<span class="border-l border-neutral-200 px-2 py-0.5"
-															>{n.issues.units.name}</span
-														>
-													{:else}
-														<span class="px-2 py-0.5">{n.issues.units.name}</span>
-													{/if}
-												</div>
-											{/if}
-											{#if n.issues?.status}
-												<span
-													class={`h-3 w-3 flex-shrink-0 rounded-full border ${statusClass(n.issues.status)}`}
-												></span>
-											{/if}
-										</div>
-									</div>
-									<!-- Body + time row -->
-									<div class="mt-0.5 flex items-center justify-between gap-3">
-										<p class="truncate text-xs text-neutral-500">{n.body}</p>
-										<span class="flex-shrink-0 text-xs text-neutral-400"
-											>{timeAgo(n.created_at)}</span
-										>
-									</div>
-								</div>
-							</div>
-						</button>
-					{/each}
-				</div>
-			{/if}
-		{:else if loadError}
-			<div class="px-6 py-8 text-sm text-neutral-400">Failed to load notifications.</div>
+		{#if filtered.length === 0}
+			<div class="px-6 py-8 text-sm text-neutral-400">
+				{filter === 'Unread' ? 'No unread notifications.' : 'No notifications yet.'}
+			</div>
 		{:else}
-			<!-- First visit: skeleton while server data loads -->
-			<div class="divide-y divide-neutral-100">
-				{#each Array(5) as _, i}
-					<div class="flex items-start gap-3 px-6 py-3">
-						<div class="shimmer mt-1.5 h-2 w-2 flex-shrink-0 rounded-full"></div>
-						<div class="flex-1 space-y-2">
-							<div class="flex items-center justify-between gap-3">
-								<div class="shimmer h-3 rounded" style="width: {i % 2 === 0 ? '45%' : '55%'}"></div>
-								<div class="shimmer h-3 w-20 rounded"></div>
+			<div>
+				{#each filtered as n}
+					<button
+						class="w-full border-b border-neutral-100 px-6 py-3 text-left transition last:border-b-0 focus:outline-none
+							{selectedNotification?.id === n.id ? 'bg-stone-100' : 'hover:bg-stone-50'}"
+						type="button"
+						on:click={() => handleClick(n)}
+					>
+						<div class="flex items-start gap-3">
+							<div class="mt-1.5 flex-shrink-0">
+								{#if !n.is_read}
+									<span class="block h-2 w-2 rounded-full bg-blue-500"></span>
+								{:else}
+									<span class="block h-2 w-2"></span>
+								{/if}
 							</div>
-							<div class="shimmer h-3 rounded" style="width: {i % 3 === 0 ? '70%' : '80%'}"></div>
+							<div class="min-w-0 flex-1">
+								<!-- Title row -->
+								<div class="flex items-center justify-between gap-3">
+									<span class="truncate text-sm font-medium text-neutral-800">{n.title}</span>
+									<div class="flex flex-shrink-0 items-center gap-2">
+										{#if n.issues?.units}
+											<div
+												class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
+											>
+												{#if n.issues.units.properties?.name}
+													<span class="px-2 py-0.5">{n.issues.units.properties.name}</span>
+													<span class="border-l border-neutral-200 px-2 py-0.5"
+														>{n.issues.units.name}</span
+													>
+												{:else}
+													<span class="px-2 py-0.5">{n.issues.units.name}</span>
+												{/if}
+											</div>
+										{/if}
+										{#if n.issues?.status}
+											<span
+												class={`h-3 w-3 flex-shrink-0 rounded-full border ${statusClass(n.issues.status)}`}
+											></span>
+										{/if}
+									</div>
+								</div>
+								<!-- Body + time row -->
+								<div class="mt-0.5 flex items-center justify-between gap-3">
+									<p class="truncate text-xs text-neutral-500">{n.body}</p>
+									<span class="flex-shrink-0 text-xs text-neutral-400"
+										>{timeAgo(n.created_at, _now)}</span
+									>
+								</div>
+							</div>
 						</div>
-					</div>
+					</button>
 				{/each}
 			</div>
 		{/if}
@@ -222,10 +193,10 @@
 			<IssuePanel
 				issueId={selectedNotification.issues?.id}
 				seedIssue={selectedNotification.issues}
-				activityData={$activityCache.data}
-				activityLogsData={$activityLogsCache.data}
+				activityData={data.activityData}
+				activityLogsData={data.activityLogsData}
 				{vendors}
-				allIssues={$issuesCache.data?.issues ?? []}
+				allIssues={[]}
 				on:close={() => (selectedNotification = null)}
 				on:resolved={resolveAndAdvance}
 			/>

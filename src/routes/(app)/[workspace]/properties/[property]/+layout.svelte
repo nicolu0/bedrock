@@ -1,7 +1,6 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { propertiesCache } from '$lib/stores/propertiesCache.js';
 	import { getContext, setContext } from 'svelte';
 	import { writable } from 'svelte/store';
 
@@ -15,24 +14,29 @@
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: propertySlug = $page.params.property;
 	$: currentPath = $page.url.pathname;
-	$: properties =
-		$propertiesCache.workspace === workspaceSlug && $propertiesCache.data != null
-			? $propertiesCache.data
-			: null;
-	$: propertyTitle = propertySlug
+
+	let propertyTitle = propertySlug
 		? propertySlug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 		: 'Property';
-	$: if (properties && propertySlug) {
-		const match = (properties ?? []).find((property) => {
-			const slug = property.name
-				.toLowerCase()
-				.trim()
-				.replace(/[^a-z0-9]+/g, '-')
-				.replace(/(^-|-$)+/g, '');
-			return slug === propertySlug;
-		});
-		if (match?.name) {
-			propertyTitle = match.name;
+
+	$: {
+		const propData = data.properties;
+		const slug = propertySlug;
+		if (propData && slug) {
+			const resolve = (list) => {
+				if (!Array.isArray(list)) return;
+				const match = list.find((p) => {
+					const s = p.name
+						.toLowerCase()
+						.trim()
+						.replace(/[^a-z0-9]+/g, '-')
+						.replace(/(^-|-$)+/g, '');
+					return s === slug;
+				});
+				if (match?.name) propertyTitle = match.name;
+			};
+			if (propData instanceof Promise) propData.then(resolve);
+			else resolve(propData);
 		}
 	}
 	const tabs = [

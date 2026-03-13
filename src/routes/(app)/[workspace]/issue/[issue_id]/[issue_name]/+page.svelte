@@ -3,36 +3,10 @@
 	import { browser } from '$app/environment';
 	import { goto, preloadData } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { get } from 'svelte/store';
 	import { onDestroy } from 'svelte';
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import { pageReady } from '$lib/stores/pageReady';
-	import {
-		getIssueDetail,
-		primeIssueDetail,
-		updateIssueStatusInDetailCache
-	} from '$lib/stores/issueDetailCache.js';
-	import {
-		issuesCache,
-		updateIssueFieldsInListCache,
-		updateIssueStatusInListCache
-	} from '$lib/stores/issuesCache.js';
-	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
-	import {
-		activityCache,
-		ensureActivityCache,
-		applyMessageDelta,
-		applyDraftDelta,
-		removeMessageFromCache,
-		removeDraftFromCache
-	} from '$lib/stores/activityCache.js';
-	import {
-		activityLogsCache,
-		ensureActivityLogsCache,
-		applyActivityLogDelta,
-		removeActivityLogFromCache
-	} from '$lib/stores/activityLogsCache.js';
 	import { supabase } from '$lib/supabaseClient.js';
 
 	export let data;
@@ -42,15 +16,6 @@
 
 	if (!browser) {
 		pageReady.set(false);
-	}
-
-	$: vendors =
-		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
-			? $peopleCache.data.filter((person) => person?.role === 'vendor')
-			: [];
-
-	$: if (browser && workspaceSlug) {
-		ensurePeopleCache(workspaceSlug);
 	}
 
 	const statusConfig = {
@@ -87,430 +52,113 @@
 		});
 	};
 
-	const groupByIssue = (items = []) => {
-		const grouped = items.reduce((acc, item) => {
-			const key = item?.issue_id;
-			if (!key) return acc;
-			if (!acc[key]) acc[key] = [];
-			acc[key].push(item);
-			return acc;
-		}, {});
-		for (const key of Object.keys(grouped)) {
-			grouped[key].sort((a, b) => {
-				const timeA = new Date(a?.timestamp ?? a?.created_at ?? 0).getTime();
-				const timeB = new Date(b?.timestamp ?? b?.created_at ?? 0).getTime();
-				return timeA - timeB;
-			});
-		}
-		return grouped;
-	};
+	// ── Local state from server data ────────────────────────────────────────────
 
-	const indexDraftsByMessageId = (items = []) =>
-		items.reduce((acc, draft) => {
-			const key = draft?.message_id ?? draft?.id;
-			if (!key) return acc;
-			acc[key] = draft;
-			return acc;
-		}, {});
-
-	const buildDraftIssueIds = (items = []) =>
-		Array.from(new Set(items.map((draft) => draft?.issue_id).filter(Boolean)));
-
-	const findIssueInSections = (sections = [], readableId) => {
-		if (!readableId) return null;
-		const statusBySection = {
-			'in-progress': 'in_progress',
-			todo: 'todo',
-			done: 'done'
-		};
-		for (const section of sections) {
-			const status = statusBySection[section?.id] ?? 'todo';
-			for (const item of section.items ?? []) {
-				if (item.readableId === readableId) {
-					return {
-						id: item.issueId ?? item.id,
-						title: item.title,
-						name: item.title,
-						status,
-						assigneeId: item.assigneeId ?? item.assignee_id ?? null,
-						property: item.property,
-						unit: item.unit,
-						issueNumber: item.issueNumber,
-						readableId: item.readableId
-					};
-				}
-				for (const sub of item.subIssues ?? []) {
-					if (sub.readableId === readableId) {
-						return {
-							id: sub.issueId ?? sub.id,
-							title: sub.title,
-							name: sub.title,
-							status,
-							assigneeId: sub.assigneeId ?? sub.assignee_id ?? null,
-							property: sub.property,
-							unit: sub.unit,
-							issueNumber: sub.issueNumber,
-							readableId: sub.readableId
-						};
-					}
-				}
-			}
-		}
-		return null;
-	};
-
-	$: issueKey = $page.params.issue_id ?? '';
-	$: if (issueKey && issueKey !== _lastIssueKey) {
-		_lastIssueKey = issueKey;
-		pageReady.set(false);
-		issue = null;
-		subIssues = [];
-		assignee = null;
-		issueAssigneeId = null;
-		_seededForIssueId = null;
-	}
-	$: issueId =
-		listItem?.id ??
-		$issuesCache.data?.issues?.find((item) => item.readableId === issueKey)?.id ??
-		null;
-	$: issueNameSlug = $page.params.issue_name ?? '';
-	$: workspaceSlug = $page.params.workspace;
-
-	// Cache / seed data
-	$: cached = browser && issueId ? getIssueDetail(issueId) : null;
-
-	// Seed partial data from the flat issues list (includes sub-issues)
-	$: listItem =
-		browser && issueKey
-			? ($issuesCache.data?.issues?.find((item) => item.readableId === issueKey) ??
-				findIssueInSections($issuesCache.data?.sections ?? [], issueKey) ??
-				null)
-			: null;
-
-	// Derive sub-issues (including descendants) from flat issues list as fallback for cold start
-	$: listSubIssues =
-		browser && issueId
-			? (() => {
-					const issues = $issuesCache.data?.issues ?? [];
-					const childrenByParent = new Map();
-					for (const item of issues) {
-						if (!item.parent_id) continue;
-						if (!childrenByParent.has(item.parent_id)) {
-							childrenByParent.set(item.parent_id, []);
-						}
-						childrenByParent.get(item.parent_id).push(item);
-					}
-					const collect = (parentId) => {
-						const children = childrenByParent.get(parentId) ?? [];
-						return children.flatMap((child) => {
-							const entry = {
-								id: child.id,
-								name: child.name ?? child.title,
-								status: child.status,
-								assigneeId: child.assigneeId ?? child.assignee_id ?? null,
-								parent_id: parentId,
-								property: child.property ?? null,
-								unit: child.unit ?? null,
-								issueNumber: child.issueNumber ?? null,
-								readableId: child.readableId ?? null
-							};
-							return [entry, ...collect(child.id)];
-						});
-					};
-					return sortSubIssues(collect(issueId));
-				})()
-			: [];
-
-	const resolveAssigneeFromId = (assigneeId, memberMap) =>
-		assigneeId && memberMap[assigneeId] ? normalizeAssignee(memberMap[assigneeId]) : null;
-
-	const placeholderAssignee = (assigneeId) =>
-		assigneeId ? { id: assigneeId, user_id: assigneeId, name: 'Assigned', users: null } : null;
-
-	// Default assignee from cache/list when available.
-	$: seedAssignee =
-		cached?.assignee ??
-		resolveAssigneeFromId(listItem?.assigneeId ?? listItem?.assignee_id ?? null, membersByUserId) ??
-		placeholderAssignee(listItem?.assigneeId ?? listItem?.assignee_id ?? null);
-
-	let issue = null;
-	let subIssues = [];
+	let issue = data.issue ?? null;
+	let subIssues = data.subIssues ?? [];
+	let messagesByIssue = data.activityData?.messagesByIssue ?? {};
+	let emailDraftsByMessageId = data.activityData?.emailDraftsByMessageId ?? {};
+	let draftIssueIds = data.activityData?.draftIssueIds ?? [];
+	let logsByIssue = data.activityLogsData?.logsByIssue ?? {};
+	let members = data.members ?? [];
+	let vendors = data.vendors ?? [];
 	let assignee = null;
-	let messagesByIssue = {};
-	let emailDraftsByMessageId = {};
-	let draftIssueIds = [];
-	let logsByIssue = {};
+	let issueAssigneeId = data.issue?.assignee_id ?? null;
 	let commentBody = '';
 	let commentTextarea;
-	let membersByUserId = {};
-	let issueAssigneeId = null;
-	let _resolvedReadableIdKey = null;
-	let _resolveReadableRequestId = 0;
-	let _lastIssueKey = null;
 
-	// Reset local state when route/issue changes, preferring cache -> list seed
-	let _seededForIssueId = null;
-	$: if (issueId && issueId !== _seededForIssueId) {
-		_seededForIssueId = issueId;
-		if (browser && !listItem) pageReady.set(false);
-		issue = null;
-		subIssues = [];
-		issueAssigneeId = listItem?.assigneeId ?? listItem?.assignee_id ?? null;
-		assignee = seedAssignee;
-		issue =
-			cached?.issue ??
-			(listItem
-				? {
-						id: listItem.id ?? issueId,
-						name: listItem.title ?? listItem.name,
-						status: listItem.status,
-						description: listItem.description ?? null,
-						property: listItem.property ?? null,
-						unit: listItem.unit ?? null,
-						issueNumber: listItem.issueNumber ?? null,
-						readableId: listItem.readableId ?? null
-					}
-				: null);
-
-		subIssues = sortSubIssues(cached?.subIssues ?? listSubIssues);
-		assignee = cached?.assignee ?? seedAssignee;
-		messagesByIssue = $activityCache.data?.messagesByIssue ?? {};
-		emailDraftsByMessageId = $activityCache.data?.emailDraftsByMessageId ?? {};
-		draftIssueIds = $activityCache.data?.draftIssueIds ?? [];
-		logsByIssue = $activityLogsCache.data?.logsByIssue ?? {};
-		if (!issue) pageReady.set(false);
-	}
-
-	// Fill in blank issue when issuesCache loads after cold start
-	$: if (browser && _seededForIssueId === issueId && !issue && listItem) {
-		issue = {
-			id: listItem.id ?? issueId,
-			name: listItem.title ?? listItem.name,
-			status: listItem.status,
-			description: listItem.description ?? null,
-			property: listItem.property ?? null,
-			unit: listItem.unit ?? null,
-			issueNumber: listItem.issueNumber ?? null,
-			readableId: listItem.readableId ?? null
-		};
-	}
-
-	$: if (browser && issueKey && !issueId && _resolvedReadableIdKey !== issueKey) {
-		_resolvedReadableIdKey = issueKey;
-		const lookupKey = issueKey;
-		const requestId = ++_resolveReadableRequestId;
-		pageReady.set(false);
-		supabase
-			.from('issues')
-			.select(
-				'id, name, description, status, issue_number, readable_id, unit_id, units(name, properties(name))'
-			)
-			.eq('readable_id', issueKey)
-			.maybeSingle()
-			.then(({ data: resolved, error: resolveErr }) => {
-				if (requestId !== _resolveReadableRequestId || issueKey !== lookupKey) return;
-				if (resolveErr) {
-					console.error('[issue] resolve readable_id error:', resolveErr);
-					return;
-				}
-				if (resolved?.id) {
-					issueId = resolved.id;
-					issue = {
-						id: resolved.id,
-						name: resolved.name,
-						status: resolved.status,
-						description: resolved.description ?? null,
-						property: resolved.units?.properties?.name ?? null,
-						unit: resolved.units?.name ?? null,
-						issueNumber: resolved.issue_number ?? null,
-						readableId: resolved.readable_id ?? null
-					};
-					pageReady.set(true);
-				}
-			});
-	}
-
-	$: if (browser && issueId && !issue && !listItem) {
+	// Re-sync when route changes (navigation to a different issue) or after invalidation
+	$: if (data.issue?.id && data.issue.id !== issue?.id) {
+		issue = data.issue;
+		subIssues = data.subIssues ?? [];
+		messagesByIssue = data.activityData?.messagesByIssue ?? {};
+		emailDraftsByMessageId = data.activityData?.emailDraftsByMessageId ?? {};
+		draftIssueIds = data.activityData?.draftIssueIds ?? [];
+		logsByIssue = data.activityLogsData?.logsByIssue ?? {};
+		members = data.members ?? [];
+		vendors = data.vendors ?? [];
+		issueAssigneeId = data.issue.assignee_id ?? null;
+		assignee = null;
 		pageReady.set(false);
 	}
 
-	$: if (browser && workspaceSlug && issueAssigneeId && !membersReady && !membersLoading) {
-		ensurePeopleCache(workspaceSlug);
-	}
+	$: if (data.members) members = data.members;
+	$: if (data.vendors) vendors = data.vendors;
 
-	let _loadedIssueDetailId = null;
-	$: if (browser && issueId && issueId !== _loadedIssueDetailId) {
-		_loadedIssueDetailId = issueId;
-		const requestIssueId = issueId;
-		supabase
-			.from('issues')
-			.select(
-				'id, name, description, status, issue_number, readable_id, assignee_id, units(name, properties(name))'
-			)
-			.eq('id', requestIssueId)
-			.maybeSingle()
-			.then(({ data: resolved, error: resolveErr }) => {
-				if (resolveErr) {
-					console.error('[issue] load detail error:', resolveErr);
-					return;
-				}
-				if (!resolved?.id) return;
-				if (requestIssueId !== issueId || _seededForIssueId !== requestIssueId) return;
-				if (resolved.id !== requestIssueId) return;
-				issueAssigneeId = resolved.assignee_id ?? issueAssigneeId ?? null;
-				const nextIssue = {
-					id: resolved.id,
-					name: resolved.name,
-					status: resolved.status,
-					description: resolved.description ?? issue?.description ?? null,
-					property: resolved.units?.properties?.name ?? null,
-					unit: resolved.units?.name ?? null,
-					issueNumber: resolved.issue_number ?? null,
-					readableId: resolved.readable_id ?? null
-				};
-				issue = issue ? { ...issue, ...nextIssue } : nextIssue;
-				const nextAssignee = resolveAssigneeFromId(issueAssigneeId, membersByUserId);
-				if (nextAssignee) assignee = nextAssignee;
-				const current = getIssueDetail(requestIssueId);
-				if (current) {
-					primeIssueDetail(requestIssueId, {
-						...current,
-						issue: { ...current.issue, ...nextIssue },
-						assignee: nextAssignee ?? current.assignee ?? null
-					});
-				}
-			});
-	}
+	// ── Derived values ───────────────────────────────────────────────────────────
 
-	$: if (browser && issue && listItem) {
-		pageReady.set(true);
-	}
-
-	// Sync subIssues from issuesCache on cold start or when cache grows (e.g. new subissue created)
-	$: if (browser && _seededForIssueId === issueId && listSubIssues.length > subIssues.length) {
-		subIssues = sortSubIssues(listSubIssues);
-	}
-
-	let _forcedActivityIssueId = null;
-
-	$: if (browser && issueId) {
-		const nextMessagesByIssue = $activityCache.data?.messagesByIssue ?? {};
-		const nextDraftsByMessage = $activityCache.data?.emailDraftsByMessageId ?? {};
-		const nextDraftIssueIds = $activityCache.data?.draftIssueIds ?? [];
-		const nextLogsByIssue = $activityLogsCache.data?.logsByIssue ?? {};
-		if (Object.keys(nextMessagesByIssue).length) messagesByIssue = nextMessagesByIssue;
-		if (Object.keys(nextDraftsByMessage).length) emailDraftsByMessageId = nextDraftsByMessage;
-		if (nextDraftIssueIds.length) draftIssueIds = nextDraftIssueIds;
-		if (Object.keys(nextLogsByIssue).length) logsByIssue = nextLogsByIssue;
-	}
-
-	$: if (browser && workspaceSlug && issueId && issueId !== _forcedActivityIssueId) {
-		_forcedActivityIssueId = issueId;
-		ensureActivityCache(workspaceSlug);
-	}
-
-	let _forcedLogsIssueId = null;
-	$: if (browser && workspaceSlug && issueId && issueId !== _forcedLogsIssueId) {
-		_forcedLogsIssueId = issueId;
-		ensureActivityLogsCache(workspaceSlug);
-	}
-
-	let _loadedSubIssuesForId = null;
-	$: if (browser && issueId && issueId !== _loadedSubIssuesForId) {
-		_loadedSubIssuesForId = issueId;
-		const requestIssueId = issueId;
-		supabase
-			.from('issues')
-			.select(
-				'id, name, status, parent_id, issue_number, readable_id, assignee_id, units(name, properties(name))'
-			)
-			.eq('parent_id', requestIssueId)
-			.then(({ data: freshSubIssues, error: subErr }) => {
-				if (subErr) {
-					console.error('[subIssues] fetch error:', subErr);
-					return;
-				}
-				if (requestIssueId !== issueId || _seededForIssueId !== requestIssueId) return;
-				if (freshSubIssues?.length) {
-					subIssues = sortSubIssues(
-						freshSubIssues.map((s) => ({
-							id: s.id,
-							name: s.name,
-							status: s.status,
-							assigneeId: s.assignee_id ?? null,
-							assignee_id: s.assignee_id ?? null,
-							parent_id: requestIssueId,
-							property: s.units?.properties?.name ?? null,
-							unit: s.units?.name ?? null,
-							issueNumber: s.issue_number ?? null,
-							readableId: s.readable_id ?? null
-						}))
-					);
-					const current = getIssueDetail(requestIssueId);
-					if (current) {
-						primeIssueDetail(requestIssueId, { ...current, subIssues });
-					}
-				}
-			});
-	}
+	$: issueId = issue?.id ?? null;
+	$: workspaceSlug = $page.params.workspace;
+	$: issueKey = $page.params.issue_id ?? '';
+	$: issueNameSlug = $page.params.issue_name ?? '';
 
 	$: issueName = issue?.name ?? '';
-
 	$: issueDescription = issue?.description ?? '';
 	$: statusKey = issue?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
-	$: assigneeName = assignee?.name ?? assignee?.users?.name ?? 'Unassigned';
+	$: issueReadableId = issue?.readableId ?? issueKey;
+
+	$: if (issue) pageReady.set(true);
+
+	// ── Member resolution ────────────────────────────────────────────────────────
+
+	$: assignmentPool = members
+		.filter((m) => m?.user_id)
+		.map((m) => ({
+			...m,
+			users: m.user_id ? { id: m.user_id, name: m.name ?? m.users?.name ?? 'User' } : m.users
+		}));
+
+	$: membersByUserId = assignmentPool.reduce((acc, member) => {
+		if (!member?.user_id) return acc;
+		acc[member.user_id] = member;
+		return acc;
+	}, {});
+
+	$: membersReady = true;
+	$: membersLoading = false;
+
+	// Initialize assignee from member map when available
+	$: if (!assignee && issueAssigneeId && membersByUserId[issueAssigneeId]) {
+		assignee = normalizeAssignee(membersByUserId[issueAssigneeId]);
+	} else if (!assignee && issueAssigneeId) {
+		assignee = placeholderAssignee(issueAssigneeId);
+	}
+
+	$: assignableMembers = [...assignmentPool]
+		.filter((member) => {
+			const r = (member?.role ?? '').toLowerCase();
+			return (r === 'admin' || r === 'member') && Boolean(member?.user_id);
+		})
+		.sort((a, b) => {
+			const order = { admin: 0, member: 1 };
+			const rA = (a?.role ?? '').toLowerCase();
+			const rB = (b?.role ?? '').toLowerCase();
+			const roleDiff = (order[rA] ?? 9) - (order[rB] ?? 9);
+			if (roleDiff !== 0) return roleDiff;
+			const nameA = (a?.users?.name ?? '').toString();
+			const nameB = (b?.users?.name ?? '').toString();
+			return nameA.localeCompare(nameB);
+		});
+
 	$: subIssuesWithAssignees = subIssues.map((subIssue) => {
 		const assigneeId = subIssue?.assigneeId ?? subIssue?.assignee_id ?? null;
 		const resolved =
 			resolveAssigneeFromId(assigneeId, membersByUserId) ?? placeholderAssignee(assigneeId);
 		return { ...subIssue, assignee: resolved };
 	});
-	$: membersReady = $peopleCache.workspace === workspaceSlug && Array.isArray($peopleCache.data);
-	$: membersLoading = $peopleCache.loading && !membersReady;
-	$: members = membersReady ? $peopleCache.data : [];
-	$: peopleList =
-		$peopleCache.workspace === workspaceSlug && Array.isArray($peopleCache.data)
-			? $peopleCache.data
-			: [];
-	$: assignmentPool = peopleList
-		.filter((person) => person?.user_id)
-		.map((person) => ({
-			...person,
-			users: person.user_id
-				? { id: person.user_id, name: person.name ?? person.users?.name ?? 'User' }
-				: person.users
-		}));
-	$: membersByUserId = assignmentPool.reduce((acc, member) => {
-		if (!member?.user_id) return acc;
-		acc[member.user_id] = member;
-		return acc;
-	}, {});
-	$: if (issueAssigneeId && membersByUserId[issueAssigneeId]) {
-		if (assignee?.id !== issueAssigneeId) {
-			assignee = normalizeAssignee(membersByUserId[issueAssigneeId]);
-		}
-	} else if (issueAssigneeId && !assignee) {
-		assignee = placeholderAssignee(issueAssigneeId);
-	}
 
-	$: assignableMembers = [...assignmentPool]
-		.filter((member) => {
-			const role = (member?.role ?? '').toLowerCase();
-			return (role === 'admin' || role === 'member') && Boolean(member?.user_id);
-		})
-		.sort((a, b) => {
-			const order = { admin: 0, member: 1 };
-			const roleA = (a?.role ?? '').toLowerCase();
-			const roleB = (b?.role ?? '').toLowerCase();
-			const roleDiff = (order[roleA] ?? 9) - (order[roleB] ?? 9);
-			if (roleDiff !== 0) return roleDiff;
-			const nameA = (a?.users?.name ?? '').toString();
-			const nameB = (b?.users?.name ?? '').toString();
-			return nameA.localeCompare(nameB);
-		});
-	$: issueReadableId = issue?.readableId ?? listItem?.readableId ?? issueKey;
+	$: assigneeName = assignee?.name ?? assignee?.users?.name ?? 'Unassigned';
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
+
+	// ── Navigation (prev/next removed — no issuesCache) ─────────────────────────
+
+	$: prevIssue = null;
+	$: nextIssue = null;
+	$: currentIndex = -1;
+	$: totalIssues = 0;
+
+	// ── Activity derived ─────────────────────────────────────────────────────────
 
 	$: draftsByIssue = Object.values(emailDraftsByMessageId ?? {}).reduce((acc, draft) => {
 		if (!draft?.issue_id) return acc;
@@ -519,79 +167,73 @@
 		return acc;
 	}, {});
 
-	const collectMessagesForIssue = (issueId) => {
-		const messages = messagesByIssue[issueId] ?? [];
-		return [...messages].sort((a, b) => {
-			const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
-			const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
-			return timeA - timeB;
-		});
-	};
+	$: hasActivity =
+		subIssues.some((item) => {
+			const messages = messagesByIssue[item.id] ?? [];
+			const hasDraft = draftIssueIds.includes(item.id);
+			const hasLogs = (logsByIssue[item.id] ?? []).length > 0;
+			return messages.length || hasDraft || hasLogs;
+		}) ||
+		(messagesByIssue[issueId]?.length ?? 0) > 0 ||
+		(draftsByIssue[issueId]?.length ?? 0) > 0 ||
+		(logsByIssue[issueId]?.length ?? 0) > 0;
 
-	const formatTimestamp = (value) => {
-		if (!value) return '';
-		const date = new Date(value);
-		if (Number.isNaN(date.getTime())) return '';
-		return date.toLocaleString('en-US', {
-			month: 'short',
-			day: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	};
+	// ── Local mutation helpers ───────────────────────────────────────────────────
 
-	const avatarPalette = [
-		'bg-amber-200',
-		'bg-blue-200',
-		'bg-emerald-200',
-		'bg-rose-200',
-		'bg-indigo-200',
-		'bg-teal-200',
-		'bg-orange-200',
-		'bg-sky-200'
-	];
+	function applyActivityLogDelta(log) {
+		if (!log?.issue_id) return;
+		const list = logsByIssue[log.issue_id] ?? [];
+		const idx = list.findIndex((l) => l.id === log.id);
+		const updated =
+			idx >= 0 ? [...list.slice(0, idx), log, ...list.slice(idx + 1)] : [...list, log];
+		logsByIssue = { ...logsByIssue, [log.issue_id]: updated };
+	}
 
-	const getAvatarColor = (seed) => {
-		if (!seed) return 'bg-neutral-200';
-		const value = seed.toString();
-		let hash = 0;
-		for (let i = 0; i < value.length; i += 1) {
-			hash = (hash * 31 + value.charCodeAt(i)) % avatarPalette.length;
+	function removeActivityLogFromCache(log) {
+		if (!log?.id || !log?.issue_id) return;
+		const list = logsByIssue[log.issue_id] ?? [];
+		logsByIssue = { ...logsByIssue, [log.issue_id]: list.filter((l) => l.id !== log.id) };
+	}
+
+	function applyMessageDelta(msg) {
+		if (!msg?.issue_id) return;
+		const list = messagesByIssue[msg.issue_id] ?? [];
+		const idx = list.findIndex((m) => m.id === msg.id);
+		const updated =
+			idx >= 0 ? [...list.slice(0, idx), msg, ...list.slice(idx + 1)] : [...list, msg];
+		messagesByIssue = { ...messagesByIssue, [msg.issue_id]: updated };
+	}
+
+	function removeMessageFromCache(msg) {
+		if (!msg?.id || !msg?.issue_id) return;
+		const list = messagesByIssue[msg.issue_id] ?? [];
+		messagesByIssue = { ...messagesByIssue, [msg.issue_id]: list.filter((m) => m.id !== msg.id) };
+	}
+
+	function applyDraftDelta(draft) {
+		if (!draft) return;
+		const key = draft.message_id ?? draft.id;
+		if (!key) return;
+		emailDraftsByMessageId = { ...emailDraftsByMessageId, [key]: draft };
+		if (draft.issue_id && !draftIssueIds.includes(draft.issue_id)) {
+			draftIssueIds = [...draftIssueIds, draft.issue_id];
 		}
-		return avatarPalette[hash] ?? 'bg-neutral-200';
-	};
+	}
 
-	const getCommentAuthor = (log) => {
-		if (!log?.created_by) {
-			return {
-				name: 'Bedrock',
-				initial: 'B',
-				color: 'bg-neutral-800 text-white'
-			};
-		}
-		const member = membersByUserId[log.created_by] ?? null;
-		const name = member?.users?.name ?? member?.name ?? 'User';
-		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
-		const color = getAvatarColor(log.created_by ?? name);
-		return { name, initial, color };
-	};
+	function removeDraftFromCache(draft) {
+		if (!draft) return;
+		const key = draft.message_id ?? draft.id;
+		if (!key) return;
+		const { [key]: _, ...rest } = emailDraftsByMessageId;
+		emailDraftsByMessageId = rest;
+	}
 
-	const getActivityActor = (log) => getCommentAuthor(log);
+	const upsertMessage = applyMessageDelta;
+	const removeMessage = removeMessageFromCache;
+	const upsertDraft = applyDraftDelta;
+	const removeDraft = removeDraftFromCache;
 
-	const getAssigneeNameFromLog = (log) => {
-		const data = log?.data ?? {};
-		const hasTo = Object.prototype.hasOwnProperty.call(data, 'to');
-		const targetId = hasTo ? data.to : (data.assignee_id ?? null);
-		if (!targetId) return 'Unassigned';
-		const member = membersByUserId[targetId];
-		return member?.users?.name ?? member?.name ?? 'Unassigned';
-	};
-
-	const getStatusLabelFromLog = (log) => {
-		const nextStatus = log?.data?.to ?? null;
-		if (!nextStatus) return 'Unknown';
-		return (statusConfig[nextStatus]?.label ?? nextStatus).toString();
-	};
+	// ── Activity log helpers ─────────────────────────────────────────────────────
 
 	const ACTIVITY_LOG_WINDOW_MS = 60 * 60 * 1000;
 
@@ -715,32 +357,7 @@
 		applyActivityLogDelta(created);
 	};
 
-	const getMemberAvatar = (member) => {
-		const name = member?.users?.name ?? member?.name ?? 'User';
-		const seed = member?.user_id ?? member?.users?.id ?? name;
-		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
-		const color = getAvatarColor(seed);
-		return { name, initial, color };
-	};
-
-	const getAssigneeAvatar = (nextAssignee) => {
-		const name = nextAssignee?.name ?? nextAssignee?.users?.name ?? 'User';
-		const seed = nextAssignee?.user_id ?? nextAssignee?.id ?? name;
-		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
-		const color = getAvatarColor(seed);
-		return { name, initial, color };
-	};
-
-	const normalizeAssignee = (member) => {
-		if (!member) return null;
-		const id = member.user_id ?? member?.users?.id ?? null;
-		return {
-			id,
-			user_id: id,
-			name: member?.users?.name ?? member?.name ?? null,
-			users: member?.users ?? null
-		};
-	};
+	// ── Comment handling ─────────────────────────────────────────────────────────
 
 	const handleCommentSend = async () => {
 		const trimmed = commentBody.trim();
@@ -793,52 +410,18 @@
 		commentTextarea.style.height = `${commentTextarea.scrollHeight}px`;
 	};
 
-	const getThreadSubject = (id) => {
-		if (!id) return '';
-		const messages = collectMessagesForIssue(id);
-		const messageSubject = messages.find((msg) => msg?.subject)?.subject ?? '';
-		const draftSubject = (draftsByIssue[id] ?? []).find((draft) => draft?.subject)?.subject ?? '';
-		return messageSubject || draftSubject || '';
-	};
-	let subIssuesOpen = true;
-	let activityOpen = {};
-	const toggleActivity = (id) => {
-		activityOpen = { ...activityOpen, [id]: !(activityOpen[id] ?? true) };
-	};
-
-	$: hasActivity =
-		subIssues.some((item) => {
-			const messages = messagesByIssue[item.id] ?? [];
-			const hasDraft = draftIssueIds.includes(item.id);
-			const hasLogs = (logsByIssue[item.id] ?? []).length > 0;
-			return messages.length || hasDraft || hasLogs;
-		}) ||
-		(messagesByIssue[issueId]?.length ?? 0) > 0 ||
-		(draftsByIssue[issueId]?.length ?? 0) > 0 ||
-		(logsByIssue[issueId]?.length ?? 0) > 0;
-
-	const slugify = (value) =>
-		(value ?? '')
-			.toString()
-			.trim()
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, '-')
-			.replace(/^-+|-+$/g, '');
+	// ── Status and assignee changes ──────────────────────────────────────────────
 
 	const statusCycle = ['todo', 'in_progress', 'done'];
 
 	const handleStatusChange = async (newStatus) => {
 		if (!canEditIssue) return;
 		const prevStatus = statusKey;
-		updateIssueStatusInDetailCache(issueId, newStatus);
-		updateIssueStatusInListCache(issueId, newStatus);
 		issue = { ...issue, status: newStatus };
 
 		const { error } = await supabase.from('issues').update({ status: newStatus }).eq('id', issueId);
 
 		if (error) {
-			updateIssueStatusInDetailCache(issueId, prevStatus);
-			updateIssueStatusInListCache(issueId, prevStatus);
 			issue = { ...issue, status: prevStatus };
 			return;
 		}
@@ -851,16 +434,8 @@
 		});
 	};
 
-	const primeAssigneeCache = (nextAssignee) => {
-		if (!issueId) return;
-		primeIssueDetail(issueId, { issue, subIssues, assignee: nextAssignee });
-	};
-
 	let statusOpen = false;
 	let assigneeOpen = false;
-	$: if (browser && assigneeOpen && workspaceSlug && !membersReady && !membersLoading) {
-		ensurePeopleCache(workspaceSlug);
-	}
 
 	const handleAssigneeSelect = async (member) => {
 		if (!canEditIssue) return;
@@ -877,8 +452,6 @@
 		const prevAssigneeId = issueAssigneeId;
 		assignee = nextAssignee;
 		issueAssigneeId = nextId;
-		primeAssigneeCache(nextAssignee);
-		updateIssueFieldsInListCache(issueId, { assigneeId: nextId, assignee_id: nextId });
 		assigneeOpen = false;
 
 		const { error } = await supabase
@@ -889,11 +462,6 @@
 		if (error) {
 			assignee = prevAssignee;
 			issueAssigneeId = prevAssigneeId;
-			primeAssigneeCache(prevAssignee);
-			updateIssueFieldsInListCache(issueId, {
-				assigneeId: prevAssigneeId,
-				assignee_id: prevAssigneeId
-			});
 			return;
 		}
 
@@ -903,6 +471,152 @@
 			fromValue: prevAssigneeId,
 			toValue: nextId
 		});
+	};
+
+	// ── Utility functions ────────────────────────────────────────────────────────
+
+	const normalizeAssignee = (member) => {
+		if (!member) return null;
+		const id = member.user_id ?? member?.users?.id ?? null;
+		return {
+			id,
+			user_id: id,
+			name: member?.users?.name ?? member?.name ?? null,
+			users: member?.users ?? null
+		};
+	};
+
+	const resolveAssigneeFromId = (assigneeId, memberMap) =>
+		assigneeId && memberMap[assigneeId] ? normalizeAssignee(memberMap[assigneeId]) : null;
+
+	const placeholderAssignee = (assigneeId) =>
+		assigneeId ? { id: assigneeId, user_id: assigneeId, name: 'Assigned', users: null } : null;
+
+	const getMemberAvatar = (member) => {
+		const name = member?.users?.name ?? member?.name ?? 'User';
+		const seed = member?.user_id ?? member?.users?.id ?? name;
+		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
+		const color = getAvatarColor(seed);
+		return { name, initial, color };
+	};
+
+	const getAssigneeAvatar = (nextAssignee) => {
+		const name = nextAssignee?.name ?? nextAssignee?.users?.name ?? 'User';
+		const seed = nextAssignee?.user_id ?? nextAssignee?.id ?? name;
+		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
+		const color = getAvatarColor(seed);
+		return { name, initial, color };
+	};
+
+	const avatarPalette = [
+		'bg-amber-200',
+		'bg-blue-200',
+		'bg-emerald-200',
+		'bg-rose-200',
+		'bg-indigo-200',
+		'bg-teal-200',
+		'bg-orange-200',
+		'bg-sky-200'
+	];
+
+	const getAvatarColor = (seed) => {
+		if (!seed) return 'bg-neutral-200';
+		const value = seed.toString();
+		let hash = 0;
+		for (let i = 0; i < value.length; i += 1) {
+			hash = (hash * 31 + value.charCodeAt(i)) % avatarPalette.length;
+		}
+		return avatarPalette[hash] ?? 'bg-neutral-200';
+	};
+
+	const getCommentAuthor = (log) => {
+		if (!log?.created_by) {
+			return { name: 'Bedrock', initial: 'B', color: 'bg-neutral-800 text-white' };
+		}
+		const member = membersByUserId[log.created_by] ?? null;
+		const name = member?.users?.name ?? member?.name ?? 'User';
+		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
+		const color = getAvatarColor(log.created_by ?? name);
+		return { name, initial, color };
+	};
+
+	const getActivityActor = (log) => getCommentAuthor(log);
+
+	const getAssigneeNameFromLog = (log) => {
+		const d = log?.data ?? {};
+		const hasTo = Object.prototype.hasOwnProperty.call(d, 'to');
+		const targetId = hasTo ? d.to : (d.assignee_id ?? null);
+		if (!targetId) return 'Unassigned';
+		const member = membersByUserId[targetId];
+		return member?.users?.name ?? member?.name ?? 'Unassigned';
+	};
+
+	const getStatusLabelFromLog = (log) => {
+		const nextStatus = log?.data?.to ?? null;
+		if (!nextStatus) return 'Unknown';
+		return (statusConfig[nextStatus]?.label ?? nextStatus).toString();
+	};
+
+	const collectMessagesForIssue = (id) => {
+		const messages = messagesByIssue[id] ?? [];
+		return [...messages].sort((a, b) => {
+			const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
+			const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
+			return timeA - timeB;
+		});
+	};
+
+	const formatTimestamp = (value) => {
+		if (!value) return '';
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return '';
+		return date.toLocaleString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
+	};
+
+	const getThreadSubject = (id) => {
+		if (!id) return '';
+		const messages = collectMessagesForIssue(id);
+		const messageSubject = messages.find((msg) => msg?.subject)?.subject ?? '';
+		const draftSubject = (draftsByIssue[id] ?? []).find((draft) => draft?.subject)?.subject ?? '';
+		return messageSubject || draftSubject || '';
+	};
+
+	let subIssuesOpen = true;
+	let activityOpen = {};
+	const toggleActivity = (id) => {
+		activityOpen = { ...activityOpen, [id]: !(activityOpen[id] ?? true) };
+	};
+
+	const slugify = (value) =>
+		(value ?? '')
+			.toString()
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+
+	const getIssueHref = (item) => {
+		if (!item) return undefined;
+		const slug = slugify(item.title);
+		const readableId = item.readableId;
+		if (!readableId) return undefined;
+		return `/${$page.params.workspace}/issue/${readableId}/${slug}`;
+	};
+
+	const getSubIssueHref = (subIssue) => {
+		if (!subIssue) return undefined;
+		const readableId = subIssue.readableId;
+		if (!readableId) return undefined;
+		const slug = slugify(subIssue.name);
+		const fromId = issueReadableId ?? issueKey;
+		const fromSlug = issueNameSlug;
+		const fromTitle = encodeURIComponent(issueName);
+		return `/${$page.params.workspace}/issue/${readableId}/${slug}?fromIssueId=${fromId}&fromIssueSlug=${fromSlug}&fromIssueTitle=${fromTitle}`;
 	};
 
 	const copyIssueLink = async () => {
@@ -924,53 +638,7 @@
 		}
 	};
 
-	const buildIssueRows = (sections = []) =>
-		sections.flatMap((section) =>
-			(section.items ?? []).flatMap((item) => {
-				const subRows = (item.subIssues ?? []).map((subIssue) => ({
-					...subIssue,
-					issueId: subIssue.issueId ?? item.issueId,
-					parentTitle: subIssue.parentTitle ?? item.title,
-					assignees: subIssue.assignees ?? item.assignees ?? 0,
-					property: subIssue.property ?? item.property,
-					unit: subIssue.unit ?? item.unit,
-					isSubIssue: true
-				}));
-				return [{ ...item, isSubIssue: false }, ...subRows];
-			})
-		);
-
-	const getIssueHref = (item) => {
-		if (!item) return undefined;
-		const slug = slugify(item.title);
-		const readableId = item.readableId;
-		if (!readableId) return undefined;
-		return `/${$page.params.workspace}/issue/${readableId}/${slug}`;
-	};
-
-	const getSubIssueHref = (subIssue) => {
-		if (!subIssue) return undefined;
-		const readableId = subIssue.readableId;
-		if (!readableId) return undefined;
-		const slug = slugify(subIssue.name);
-		const fromId = issueReadableId ?? issueKey;
-		const fromSlug = issueNameSlug;
-		const fromTitle = encodeURIComponent(issueName);
-		return `/${$page.params.workspace}/issue/${readableId}/${slug}?fromIssueId=${fromId}&fromIssueSlug=${fromSlug}&fromIssueTitle=${fromTitle}`;
-	};
-
-	$: issueSections = $issuesCache.data?.sections ?? [];
-	$: issueRows = buildIssueRows(issueSections);
-	$: currentIndex = issueRows.findIndex((item) => item.issueId === issueId);
-	$: totalIssues = issueRows.length;
-	$: prevIssue = currentIndex > 0 ? issueRows[currentIndex - 1] : null;
-	$: nextIssue =
-		currentIndex >= 0 && currentIndex < totalIssues - 1 ? issueRows[currentIndex + 1] : null;
-
-	const upsertMessage = applyMessageDelta;
-	const removeMessage = removeMessageFromCache;
-	const upsertDraft = applyDraftDelta;
-	const removeDraft = removeDraftFromCache;
+	// ── Realtime channels ────────────────────────────────────────────────────────
 
 	let _subIssueChannel = null;
 
@@ -994,10 +662,8 @@
 					};
 					if (!subIssues.some((s) => s.id === sub.id)) {
 						subIssues = sortSubIssues([...subIssues, sub]);
-						const current = getIssueDetail(issueId);
-						if (current) primeIssueDetail(issueId, { ...current, subIssues });
 
-						// Catch-up: fetch any messages/drafts written before the per-issue channel subscribes
+						// Catch-up: fetch any messages/drafts/logs written before the channel subscribes
 						const [{ data: msgs }, { data: drafts }] = await Promise.all([
 							supabase
 								.from('messages')
@@ -1078,6 +744,8 @@
 		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
 		pageReady.set(true);
 	});
+
+	// ── Navigation ───────────────────────────────────────────────────────────────
 
 	$: fromParam = $page.url.searchParams.get('from');
 	$: fromIssueId = $page.url.searchParams.get('fromIssueId');
@@ -1388,13 +1056,9 @@
 												<div class="flex min-w-0 items-start justify-between gap-4">
 													<p class="flex-1 text-sm text-neutral-700">
 														{#if log.type === 'status_change'}
-															{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
-																log
-															)}
+															{getActivityActor(log).name} changed status to {getStatusLabelFromLog(log)}
 														{:else if log.type === 'assignee_change'}
-															{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
-																log
-															)}
+															{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(log)}
 														{/if}
 													</p>
 													<span class="shrink-0 text-xs text-neutral-400">
@@ -1556,13 +1220,9 @@
 																		<div class="flex min-w-0 items-start justify-between gap-4">
 																			<p class="flex-1 text-sm text-neutral-700">
 																				{#if log.type === 'status_change'}
-																					{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
-																						log
-																					)}
+																					{getActivityActor(log).name} changed status to {getStatusLabelFromLog(log)}
 																				{:else if log.type === 'assignee_change'}
-																					{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
-																						log
-																					)}
+																					{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(log)}
 																				{/if}
 																			</p>
 																			<span class="shrink-0 text-xs text-neutral-400">

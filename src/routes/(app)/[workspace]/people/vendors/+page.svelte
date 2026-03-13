@@ -2,12 +2,7 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import {
-		peopleCache,
-		primePeopleCache,
-		updatePersonInCache,
-		removePersonFromCache
-	} from '$lib/stores/peopleCache.js';
+	import { invalidate } from '$app/navigation';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
 
 	export let data;
@@ -15,15 +10,10 @@
 	let editingPerson = null;
 	let openRowMenu = null;
 	let hoveredRow = null;
+	let deletingIds = new Set();
 
 	$: workspaceSlug = $page.params.workspace;
-
-	$: people =
-		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
-			? $peopleCache.data
-			: null;
-
-	$: vendors = people ? people.filter((person) => person.role === 'vendor') : null;
+	$: vendors = (data.people ?? []).filter((person) => person.role === 'vendor');
 
 	const formatRole = (role) => {
 		if (!role) return 'Member';
@@ -60,8 +50,7 @@
 
 	async function deletePerson(person) {
 		if (!person?.id) return;
-		const previous = people;
-		removePersonFromCache(person.id);
+		deletingIds = new Set([...deletingIds, person.id]);
 		openRowMenu = null;
 		try {
 			const res = await fetch('/api/people', {
@@ -69,39 +58,36 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ id: person.id, workspace: workspaceSlug })
 			});
-			if (!res.ok) {
-				throw new Error('Failed to delete person');
-			}
+			if (!res.ok) throw new Error('Failed to delete person');
+			await invalidate('app:people');
 		} catch (error) {
-			primePeopleCache(workspaceSlug, previous ?? []);
+			deletingIds = new Set([...deletingIds].filter((id) => id !== person.id));
 			console.error(error);
 		}
 	}
 
-	function onSaved(e) {
-		const person = e.detail;
-		if (!editingPerson) return;
-		updatePersonInCache(person);
+	function onSaved() {
 		editingPerson = null;
+		invalidate('app:people');
 	}
 </script>
 
 <div class="space-y-2">
 	<div>
-		{#if vendors !== null}
-			{#if vendors?.length}
-				<div
-					class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
-				>
-					<div>Role</div>
-					<div>Name</div>
-					<div>Trade</div>
-					<div>Email</div>
-					<div></div>
-				</div>
-				<div class="border-t border-neutral-200"></div>
-				<div>
-					{#each vendors as vendor}
+		{#if vendors.length}
+			<div
+				class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
+			>
+				<div>Role</div>
+				<div>Name</div>
+				<div>Trade</div>
+				<div>Email</div>
+				<div></div>
+			</div>
+			<div class="border-t border-neutral-200"></div>
+			<div>
+				{#each vendors as vendor}
+					{#if !deletingIds.has(vendor.id)}
 						<div
 							class="group grid cursor-pointer grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
 							on:mouseenter={() => (hoveredRow = vendor.id)}
@@ -124,7 +110,7 @@
 							</div>
 							<div class="flex items-center gap-1.5 truncate">
 								<span class="truncate">{vendor.name}</span>
-								{#if vendor.user_id && data.userId && vendor.user_id === data.userId}
+								{#if vendor.user_id && data.currentUserId && vendor.user_id === data.currentUserId}
 									<span class="text-xs text-neutral-400">(You)</span>
 								{/if}
 							</div>
@@ -168,33 +154,11 @@
 								{/if}
 							</div>
 						</div>
-					{/each}
-				</div>
-			{:else}
-				<div class="px-6 py-3 text-sm text-neutral-400">No vendors yet.</div>
-			{/if}
-		{:else}
-			<div
-				class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
-			>
-				<div>Role</div>
-				<div>Name</div>
-				<div>Trade</div>
-				<div>Email</div>
-				<div></div>
-			</div>
-			<div class="border-t border-neutral-200"></div>
-			<div>
-				{#each Array(3) as _, i}
-					<div class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3">
-						<div class="shimmer h-4 w-14 rounded"></div>
-						<div class="shimmer h-4 rounded" style="width: {i % 2 === 0 ? '8rem' : '6rem'}"></div>
-						<div class="shimmer h-4 w-16 rounded"></div>
-						<div class="shimmer h-4 rounded" style="width: {i % 3 === 0 ? '10rem' : '7rem'}"></div>
-						<div class="shimmer h-4 w-6 rounded"></div>
-					</div>
+					{/if}
 				{/each}
 			</div>
+		{:else}
+			<div class="px-6 py-3 text-sm text-neutral-400">No vendors yet.</div>
 		{/if}
 	</div>
 </div>
@@ -202,19 +166,3 @@
 {#if editingPerson}
 	<PeopleModal person={editingPerson} on:saved={onSaved} on:close={() => (editingPerson = null)} />
 {/if}
-
-<style>
-	@keyframes shimmer {
-		0% {
-			background-position: -200% 0;
-		}
-		100% {
-			background-position: 200% 0;
-		}
-	}
-	.shimmer {
-		background: linear-gradient(90deg, #f5f5f4 25%, #e8e5e3 50%, #f5f5f4 75%);
-		background-size: 200% 100%;
-		animation: shimmer 1.6s ease-in-out infinite;
-	}
-</style>

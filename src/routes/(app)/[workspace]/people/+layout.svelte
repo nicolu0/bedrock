@@ -2,20 +2,13 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
-	import { goto } from '$app/navigation';
+	import { goto, invalidate } from '$app/navigation';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
-	import {
-		addPersonToCache,
-		ensurePeopleCache,
-		replacePersonInCache,
-		removePersonFromCache
-	} from '$lib/stores/peopleCache.js';
 	import { newPersonModal } from '$lib/stores/peopleModal.js';
 
 	$: workspaceSlug = $page.params.workspace;
 	$: role = $page.data?.role;
 	$: canViewPeople = role === 'admin' || role === 'member';
-	$: if (browser && workspaceSlug && canViewPeople) ensurePeopleCache(workspaceSlug);
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: currentPath = $page.url.pathname;
 	$: if (browser && workspaceSlug && role && !canViewPeople) goto(basePath);
@@ -34,21 +27,9 @@
 		newPersonModal.set(false);
 	};
 
-	const onNewPersonOptimistic = (e) => {
-		addPersonToCache(e.detail, $page.params.workspace);
-	};
-
-	const onNewPersonSaved = (e) => {
-		if (e.detail?.person) {
-			replacePersonInCache(e.detail.tempId, e.detail.person, $page.params.workspace);
-		} else {
-			addPersonToCache(e.detail, $page.params.workspace);
-		}
+	const onNewPersonSaved = () => {
 		closeNewPersonModal();
-	};
-
-	const onNewPersonOptimisticError = (e) => {
-		removePersonFromCache(e.detail);
+		invalidate('app:people');
 	};
 </script>
 
@@ -89,8 +70,6 @@
 
 	{#if $newPersonModal}
 		<PeopleModal
-			on:optimistic={onNewPersonOptimistic}
-			on:optimisticError={onNewPersonOptimisticError}
 			on:saved={onNewPersonSaved}
 			on:close={closeNewPersonModal}
 		/>

@@ -1,10 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { browser } from '$app/environment';
 	import { getContext } from 'svelte';
-	import { issuesCache } from '$lib/stores/issuesCache';
-	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { goto } from '$app/navigation';
 
 	export let data;
@@ -13,8 +10,7 @@
 	const sidebarControl = getContext('sidebarControl');
 	const openSidebar = () => sidebarControl?.open?.();
 
-	$: sections = $issuesCache.data?.sections ?? [];
-	$: isLoading = sections.length === 0 && $issuesCache.loading;
+	$: sections = data.issuesData?.sections ?? [];
 	$: expandedSections = sections.map((section) => {
 		const rows = section.items.flatMap((item) => {
 			const subRows = (item.subIssues ?? []).map((subIssue) => {
@@ -47,22 +43,12 @@
 
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
-	$: role = $page.data?.role;
-	$: canViewPeople = role === 'admin' || role === 'member';
-	$: membersReady =
-		canViewPeople &&
-		$peopleMembersCache.workspace === workspaceSlug &&
-		Array.isArray($peopleMembersCache.data);
-	$: membersLoading = canViewPeople && $peopleMembersCache.loading && !membersReady;
-	$: members = membersReady ? $peopleMembersCache.data : [];
+	$: members = data.members ?? [];
 	$: membersByUserId = members.reduce((acc, member) => {
 		if (!member?.user_id) return acc;
 		acc[member.user_id] = member;
 		return acc;
 	}, {});
-	$: if (browser && workspaceSlug && canViewPeople && !membersReady && !membersLoading) {
-		ensurePeopleMembersCache(workspaceSlug);
-	}
 
 	const slugify = (value) => {
 		if (!value) return 'issue';
@@ -182,8 +168,8 @@
 		</div>
 	</div>
 
-	{#if isLoading}
-		<div class="px-6 py-8 text-sm text-neutral-400">Loading issues...</div>
+	{#if sections.length === 0}
+		<div class="px-6 py-8 text-sm text-neutral-400">No issues assigned to you.</div>
 	{:else}
 		<div class="divide-y divide-neutral-100">
 			{#each expandedSections as section}
