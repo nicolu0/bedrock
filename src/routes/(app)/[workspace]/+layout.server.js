@@ -204,6 +204,32 @@ const _normalizeStatus = (value) => {
 	return _allowedStatuses.has(normalized) ? normalized : 'todo';
 };
 
+const normalizeRecipientList = (value) => {
+	if (!value) return [];
+	if (Array.isArray(value)) {
+		return value.map((email) => String(email ?? '').trim()).filter(Boolean);
+	}
+	if (typeof value === 'string') {
+		return value
+			.split(',')
+			.map((email) => email.trim())
+			.filter(Boolean);
+	}
+	return [];
+};
+
+const normalizeDraftRecipients = (draft) => {
+	if (!draft) return draft;
+	const normalized = normalizeRecipientList(draft.recipient_emails);
+	if (!normalized.length && draft.recipient_email) {
+		return { ...draft, recipient_emails: [draft.recipient_email] };
+	}
+	if (normalized.length && normalized !== draft.recipient_emails) {
+		return { ...draft, recipient_emails: normalized };
+	}
+	return draft;
+};
+
 const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonId) => {
 	const role = (userRole ?? '').toLowerCase();
 	const isAssigneeScoped = role === 'member' || role === 'vendor';
@@ -419,7 +445,9 @@ const loadActivityData = async (workspaceId, issueIds = null) => {
 
 	let draftsQuery = supabaseAdmin
 		.from('email_drafts')
-		.select('id, issue_id, message_id, sender_email, recipient_email, subject, body, updated_at')
+		.select(
+			'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at'
+		)
 		.eq('workspace_id', workspaceId)
 		.gte('updated_at', cutoff)
 		.order('updated_at', { ascending: false });
@@ -435,14 +463,15 @@ const loadActivityData = async (workspaceId, issueIds = null) => {
 		(acc[m.issue_id] ??= []).push(m);
 		return acc;
 	}, {});
-	const emailDraftsByMessageId = (draftsResult?.data ?? []).reduce((acc, d) => {
+	const normalizedDrafts = (draftsResult?.data ?? []).map((draft) =>
+		normalizeDraftRecipients(draft)
+	);
+	const emailDraftsByMessageId = normalizedDrafts.reduce((acc, d) => {
 		const key = d.message_id ?? d.id;
 		if (key && !acc[key]) acc[key] = d;
 		return acc;
 	}, {});
-	const draftIssueIds = [
-		...new Set((draftsResult?.data ?? []).map((d) => d.issue_id).filter(Boolean))
-	];
+	const draftIssueIds = [...new Set(normalizedDrafts.map((d) => d.issue_id).filter(Boolean))];
 	return { messagesByIssue, emailDraftsByMessageId, draftIssueIds };
 };
 
@@ -476,8 +505,8 @@ const loadNotificationsData = async (workspaceId, userId) => {
 		supabaseAdmin
 			.from('notifications')
 			.select(
-				`id, title, body, is_read, is_resolved, created_at, type, meta, requires_action,
-        issues(id, name, status, issue_number, readable_id, units(name, properties(name)))`
+				`id, workspace_id, title, body, is_read, is_resolved, created_at, type, meta, requires_action,
+				  issues(id, name, status, issue_number, readable_id, units(name, properties(name)))`
 			)
 			.eq('workspace_id', workspaceId)
 			.eq('user_id', userId)

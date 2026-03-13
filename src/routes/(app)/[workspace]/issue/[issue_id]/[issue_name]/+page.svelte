@@ -785,6 +785,14 @@
 
 		removeActivityLogFromCache(optimisticLog);
 		applyActivityLogDelta(created);
+
+		if (/@bedrock/i.test(trimmed)) {
+			fetch('/api/issue-agent', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ issue_id: issueId ?? issueKey, comment: trimmed })
+			}).catch(() => null);
+		}
 	};
 
 	const resizeCommentTextarea = () => {
@@ -1005,7 +1013,9 @@
 								.eq('issue_id', newSub.id),
 							supabase
 								.from('email_drafts')
-								.select('id, issue_id, message_id, sender, recipient, subject, body, updated_at')
+								.select(
+									'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at'
+								)
 								.eq('issue_id', newSub.id)
 						]);
 						for (const msg of msgs ?? []) applyMessageDelta(msg);

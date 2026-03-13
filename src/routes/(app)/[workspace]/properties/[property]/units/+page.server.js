@@ -54,6 +54,7 @@ export const actions = {
 		if (hasTenantInfo) {
 			const { error: tenantError } = await supabaseAdmin.from('tenants').insert({
 				unit_id: data.id,
+				user_id: locals.user.id,
 				name: typeof tenantName === 'string' && tenantName.trim() ? tenantName.trim() : null,
 				email:
 					typeof tenantEmail === 'string' && tenantEmail.trim()
@@ -136,6 +137,7 @@ export const actions = {
 			} else {
 				const { error: tenantError } = await supabaseAdmin.from('tenants').insert({
 					unit_id: unitId,
+					user_id: locals.user.id,
 					name: typeof tenantName === 'string' && tenantName.trim() ? tenantName.trim() : null,
 					email:
 						typeof tenantEmail === 'string' && tenantEmail.trim()

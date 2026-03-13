@@ -6,6 +6,20 @@ import { env } from '$env/dynamic/private';
 const encodeBase64Url = (value) =>
 	Buffer.from(value).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+const normalizeRecipientList = (value) => {
+	if (!value) return [];
+	if (Array.isArray(value)) {
+		return value.map((email) => String(email ?? '').trim()).filter(Boolean);
+	}
+	if (typeof value === 'string') {
+		return value
+			.split(',')
+			.map((email) => email.trim())
+			.filter(Boolean);
+	}
+	return [];
+};
+
 const refreshAccessToken = async (connection) => {
 	const refreshBody = new URLSearchParams({
 		client_id: env.GOOGLE_CLIENT_ID ?? '',
@@ -50,11 +64,14 @@ export const POST = async ({ locals, request }) => {
 	const issueId = body?.issue_id;
 	const recipientOverride =
 		typeof body?.recipient_email === 'string' ? body.recipient_email.trim() : null;
+	const recipientOverrides = normalizeRecipientList(body?.recipient_emails);
 	if (!messageId && !issueId) return json({ error: 'Invalid payload' }, { status: 400 });
 
 	const draftQuery = supabaseAdmin
 		.from('email_drafts')
-		.select('id, issue_id, recipient_email, subject, body, message_id, sender_email');
+		.select(
+			'id, issue_id, recipient_email, recipient_emails, subject, body, message_id, sender_email'
+		);
 	const { data: draft } = messageId
 		? await draftQuery.eq('message_id', messageId).maybeSingle()
 		: await draftQuery.eq('issue_id', issueId).is('message_id', null).maybeSingle();
@@ -65,8 +82,12 @@ export const POST = async ({ locals, request }) => {
 	if (!draft.sender_email) {
 		return json({ error: 'Sender email required' }, { status: 400 });
 	}
-	const effectiveRecipient = recipientOverride || draft.recipient_email || null;
-	if (!effectiveRecipient) {
+	const effectiveRecipients = recipientOverrides.length
+		? recipientOverrides
+		: normalizeRecipientList(draft.recipient_emails).length
+			? normalizeRecipientList(draft.recipient_emails)
+			: normalizeRecipientList(draft.recipient_email);
+	if (!effectiveRecipients.length) {
 		return json({ error: 'Recipient email required' }, { status: 400 });
 	}
 
@@ -174,16 +195,25 @@ export const POST = async ({ locals, request }) => {
 		}
 	}
 
-	if (recipientOverride && recipientOverride !== draft.recipient_email) {
+	if (recipientOverrides.length) {
+		const nextRecipientEmail = recipientOverrides[0] ?? null;
 		await supabaseAdmin
 			.from('email_drafts')
-			.update({ recipient_email: recipientOverride })
+			.update({
+				recipient_email: nextRecipientEmail,
+				recipient_emails: recipientOverrides
+			})
+			.eq('id', draft.id);
+	} else if (recipientOverride && recipientOverride !== draft.recipient_email) {
+		await supabaseAdmin
+			.from('email_drafts')
+			.update({ recipient_email: recipientOverride, recipient_emails: [recipientOverride] })
 			.eq('id', draft.id);
 	}
 
 	const rawEmail = [
 		`From: ${connection.email}`,
-		`To: ${effectiveRecipient}`,
+		`To: ${effectiveRecipients.join(', ')}`,
 		`Subject: ${subjectLine}`,
 		...replyHeaders,
 		'MIME-Version: 1.0',
@@ -214,7 +244,7 @@ export const POST = async ({ locals, request }) => {
 
 	let outboundThreadId = message?.thread_id ?? null;
 	if (!messageId) {
-		const primaryRecipient = effectiveRecipient.split(',')[0].trim();
+		const primaryRecipient = effectiveRecipients[0]?.trim() ?? '';
 		const { data: vendorRow } = await supabaseAdmin
 			.from('people')
 			.select('id')

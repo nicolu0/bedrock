@@ -2,6 +2,7 @@
 	// @ts-nocheck
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { clearSessionCaches } from '$lib/stores/clearSessionCaches';
 
 	export let data;
 
@@ -91,6 +92,7 @@
 				method="POST"
 				action={`/api/logout?redirect=${encodeURIComponent(`/signup?invite=${data.token}`)}`}
 				class="mt-5 flex justify-end"
+				on:submit={clearSessionCaches}
 			>
 				<button
 					type="submit"
