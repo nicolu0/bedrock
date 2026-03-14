@@ -540,7 +540,7 @@
 					role="presentation"
 				></div>
 				<div
-					class="pointer-events-none fixed inset-0 z-50 flex items-start justify-center px-4 pt-24 sm:pt-28"
+					class="pointer-events-none fixed inset-0 z-50 flex items-start justify-center px-3 pt-24 sm:pt-28"
 				>
 					<div
 						class="pointer-events-auto w-full max-w-xl rounded-xl border border-neutral-200 bg-white shadow-xl"
@@ -549,7 +549,7 @@
 						aria-modal="true"
 						aria-labelledby="search-modal-title"
 					>
-						<div class="px-3 py-4">
+						<div class="px-2 py-4">
 							<div class="flex w-full items-center">
 								<input
 									bind:this={searchInput}

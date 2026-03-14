@@ -786,6 +786,10 @@ const handleIssueAgent = async ({ payload, locals }) => {
 
 	const issueIdRaw = typeof payload?.issue_id === 'string' ? payload.issue_id : '';
 	const comment = typeof payload?.comment === 'string' ? payload.comment : '';
+	console.log('agent-comment', {
+		user_id: locals.user.id,
+		issue_id: issueIdRaw
+	});
 	if (!issueIdRaw || !comment) {
 		return json({ error: 'Missing issue_id or comment' }, { status: 400 });
 	}

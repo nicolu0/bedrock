@@ -10,7 +10,13 @@ export const load = async ({ locals, params, depends }) => {
 		throw redirect(303, '/');
 	}
 	const userName = locals.user.user_metadata?.name ?? locals.user.email?.split('@')[0] ?? 'User';
-	const [{ data: { session } }, , { data: adminWorkspace }] = await Promise.all([
+	const [
+		{
+			data: { session }
+		},
+		,
+		{ data: adminWorkspace }
+	] = await Promise.all([
 		locals.supabase.auth.getSession(),
 		ensureWorkspace(locals.supabase, locals.user),
 		supabaseAdmin

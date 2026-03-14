@@ -7,6 +7,7 @@
 	export let message;
 	export let draft = null;
 	export let vendors = [];
+	export let people = [];
 
 	let draftBody = draft?.body ?? '';
 	let saveTimeout;
@@ -39,8 +40,15 @@
 		return [];
 	};
 
+	let localRecipientEmails = normalizeRecipientList(
+		draft?.recipient_emails ?? draft?.recipient_email
+	);
+	let recipients = localRecipientEmails.map((email) => ({ email }));
+
 	const setDraftRecipients = (emails) => {
 		const normalized = normalizeRecipientList(emails);
+		localRecipientEmails = normalized;
+		recipients = normalized.map((email) => ({ email }));
 		draft = {
 			...draft,
 			recipient_emails: normalized.length ? normalized : null,
@@ -66,17 +74,14 @@
 		}
 	};
 
-	$: recipients = normalizeRecipientList(draft?.recipient_emails ?? draft?.recipient_email).map(
-		(email) => ({ email })
-	);
-
 	$: recipientString = recipients.map((r) => r.email).join(', ');
 
-	$: filteredVendors = (vendors ?? []).filter(
-		(v) =>
-			!recipients.some((r) => r.email === v.email) &&
-			(v.name.toLowerCase().includes(vendorSearch.toLowerCase()) ||
-				v.email.toLowerCase().includes(vendorSearch.toLowerCase()))
+	$: contactOptions = (people ?? []).length ? people : vendors;
+
+	$: filteredPeople = (contactOptions ?? []).filter(
+		(person) =>
+			person.name.toLowerCase().includes(vendorSearch.toLowerCase()) ||
+			person.email.toLowerCase().includes(vendorSearch.toLowerCase())
 	);
 
 	const handleWindowClick = () => {
@@ -85,13 +90,27 @@
 
 	onDestroy(() => {});
 
-	const addVendor = (vendor) => {
-		if (!recipients.some((r) => r.email === vendor.email)) {
-			const nextRecipients = setDraftRecipients([...recipients.map((r) => r.email), vendor.email]);
+	const isRecipient = (email) => localRecipientEmails.some((item) => item === email);
+
+	const addPerson = (person) => {
+		if (!isRecipient(person.email)) {
+			const nextRecipients = setDraftRecipients([...recipients.map((r) => r.email), person.email]);
 			persistDraftRecipients(nextRecipients);
 		}
-		showVendorDropdown = false;
-		vendorSearch = '';
+	};
+
+	const removeRecipientByEmail = (email) => {
+		const updated = recipients.filter((r) => r.email !== email).map((r) => r.email);
+		const nextRecipients = setDraftRecipients(updated);
+		persistDraftRecipients(nextRecipients);
+	};
+
+	const togglePerson = (person) => {
+		if (isRecipient(person.email)) {
+			removeRecipientByEmail(person.email);
+		} else {
+			addPerson(person);
+		}
 	};
 
 	const removeRecipient = (idx) => {
@@ -103,6 +122,10 @@
 	$: if (draft && (draft.message_id ?? draft.id) !== lastMessageKey) {
 		lastMessageKey = draft.message_id ?? draft.id;
 		draftBody = draft.body ?? '';
+		localRecipientEmails = normalizeRecipientList(
+			draft?.recipient_emails ?? draft?.recipient_email
+		);
+		recipients = localRecipientEmails.map((email) => ({ email }));
 		if (textareaEl) {
 			textareaEl.style.height = 'auto';
 			textareaEl.style.height = `${textareaEl.scrollHeight}px`;
@@ -306,15 +329,13 @@
 		{/if}
 	{/if}
 	{#if draft && !isSent}
-		<div class="bg-white px-4 py-3">
-			<div class="flex flex-wrap items-center gap-1.5 text-xs">
-				<span class="shrink-0 font-semibold text-neutral-700">To</span>
-				{#if draft.message_id}
-					<span class="text-neutral-500">{draft.recipient_email ?? ''}</span>
-				{:else}
+		<div class="bg-white">
+			<div class="px-4 py-3">
+				<div class="flex flex-wrap items-center gap-1.5">
+					<span class="shrink-0 text-sm font-semibold text-neutral-900">To</span>
 					{#each recipients as recipient, i}
 						<span
-							class="inline-flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 text-neutral-700"
+							class="inline-flex items-center gap-1.5 rounded bg-neutral-100 px-2.5 py-0.5 text-neutral-700"
 						>
 							{recipient.email}
 							<button
@@ -324,8 +345,8 @@
 							>
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
-									width="10"
-									height="10"
+									width="12"
+									height="12"
 									viewBox="0 0 16 16"
 									fill="currentColor"
 								>
@@ -336,10 +357,10 @@
 							</button>
 						</span>
 					{/each}
-					<div class="relative">
+					<div class="relative ml-auto">
 						<button
 							type="button"
-							class="inline-flex h-5 w-5 items-center justify-center rounded bg-neutral-100 text-neutral-500 transition hover:bg-neutral-200"
+							class="inline-flex h-6 w-6 items-center justify-center rounded bg-neutral-100 text-neutral-500 transition hover:bg-neutral-200"
 							on:click|stopPropagation={() => {
 								showVendorDropdown = !showVendorDropdown;
 								vendorSearch = '';
@@ -347,8 +368,8 @@
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
-								width="10"
-								height="10"
+								width="12"
+								height="12"
 								viewBox="0 0 16 16"
 								fill="currentColor"
 							>
@@ -359,37 +380,57 @@
 						</button>
 						{#if showVendorDropdown}
 							<div
-								class="absolute top-full left-0 z-20 mt-1 w-56 rounded-md border border-neutral-200 bg-white shadow-md"
+								class="absolute top-full right-0 z-20 mt-1 w-56 rounded-md border border-neutral-200 bg-white shadow-md"
+								on:click|stopPropagation
 							>
 								<div class="border-b border-neutral-100 px-2 py-1.5">
 									<input
 										type="text"
-										class="w-full bg-transparent text-xs outline-none placeholder:text-neutral-400"
-										placeholder="Search vendors..."
+										class="w-full border-0 bg-transparent text-xs ring-0 outline-none placeholder:text-neutral-400 focus:ring-0"
+										placeholder="Search people..."
 										bind:value={vendorSearch}
 										on:click|stopPropagation
 									/>
 								</div>
 								<div class="max-h-40 overflow-y-auto">
-									{#each filteredVendors as vendor}
+									{#each filteredPeople as person}
 										<button
 											type="button"
-											class="flex w-full flex-col items-start px-3 py-2 text-left text-xs hover:bg-neutral-50"
-											on:click={() => addVendor(vendor)}
+											class="flex w-full items-start gap-2 px-3 py-2 text-left text-xs hover:bg-neutral-50"
+											on:click={() => togglePerson(person)}
 										>
-											<span class="font-medium text-neutral-800">{vendor.name}</span>
-											<span class="text-neutral-400">{vendor.email}</span>
+											<span
+												class="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded border border-neutral-200"
+											>
+												{#if isRecipient(person.email)}
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="10"
+														height="10"
+														viewBox="0 0 16 16"
+														fill="currentColor"
+													>
+														<path
+															d="M6.173 13.414 1.757 9l1.414-1.414 3.002 3.002 6.65-6.65L14.237 5z"
+														/>
+													</svg>
+												{/if}
+											</span>
+											<span class="flex flex-col items-start">
+												<span class="font-medium text-neutral-800">{person.name}</span>
+												<span class="text-neutral-400">{person.email}</span>
+											</span>
 										</button>
 									{:else}
-										<p class="px-3 py-2 text-xs text-neutral-400">No vendors found</p>
+										<p class="px-3 py-2 text-xs text-neutral-400">No people found</p>
 									{/each}
 								</div>
 							</div>
 						{/if}
 					</div>
-				{/if}
+				</div>
 			</div>
-			<div class="mt-3 border-t border-neutral-100 pt-3">
+			<div class="border-t border-neutral-100 px-4 py-3">
 				<textarea
 					class="w-full resize-none border-0 bg-transparent p-0 text-sm text-neutral-700 ring-0 outline-none focus:ring-0 focus:outline-none"
 					rows="2"
@@ -397,30 +438,30 @@
 					bind:this={textareaEl}
 					on:input={queueSave}
 				/>
-			</div>
-			<div class="mt-3 flex items-center justify-end">
-				<button
-					class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-800 disabled:opacity-50"
-					type="button"
-					on:click={sendDraft}
-					disabled={isSending}
-				>
-					{#if isSending}
-						<span class="text-[10px] font-semibold">...</span>
-					{:else}
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							width="18"
-							height="18"
-							fill="currentColor"
-							viewBox="0 0 16 16"
-						>
-							<path
-								d="M8 12a.5.5 0 0 0 .5-.5V4.707l2.147 2.147a.5.5 0 0 0 .707-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 1 0 .708.708L7.5 4.707V11.5A.5.5 0 0 0 8 12z"
-							/>
-						</svg>
-					{/if}
-				</button>
+				<div class="mt-3 flex items-center justify-end">
+					<button
+						class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-800 disabled:opacity-50"
+						type="button"
+						on:click={sendDraft}
+						disabled={isSending}
+					>
+						{#if isSending}
+							<span class="text-[10px] font-semibold">...</span>
+						{:else}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="18"
+								height="18"
+								fill="currentColor"
+								viewBox="0 0 16 16"
+							>
+								<path
+									d="M8 12a.5.5 0 0 0 .5-.5V4.707l2.147 2.147a.5.5 0 0 0 .707-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 1 0 .708.708L7.5 4.707V11.5A.5.5 0 0 0 8 12z"
+								/>
+							</svg>
+						{/if}
+					</button>
+				</div>
 			</div>
 		</div>
 	{/if}
