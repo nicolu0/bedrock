@@ -14,35 +14,8 @@
 		updateIssueStatusInListCache,
 		updateIssueFieldsInListCache
 	} from '$lib/stores/issuesCache';
-	import {
-		notificationsCache,
-		ensureNotificationsCache,
-		addNotificationToCache,
-		updateNotificationInCache,
-		primeNotificationsCache
-	} from '$lib/stores/notificationsCache';
-	import {
-		peopleMembersCache,
-		primePeopleMembersCache,
-		ensurePeopleMembersCache
-	} from '$lib/stores/peopleMembersCache';
+	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
-	import {
-		activityCache,
-		ensureActivityCache,
-		primeActivityCache,
-		applyMessageDelta,
-		applyDraftDelta,
-		removeMessageFromCache,
-		removeDraftFromCache
-	} from '$lib/stores/activityCache';
-	import {
-		activityLogsCache,
-		ensureActivityLogsCache,
-		primeActivityLogsCache,
-		applyActivityLogDelta,
-		removeActivityLogFromCache
-	} from '$lib/stores/activityLogsCache';
 	import {
 		updateIssueStatusInDetailCache,
 		updateIssueFieldsInDetailCache,
@@ -296,13 +269,10 @@
 
 	$: if (browser && workspaceSlug) {
 		ensureIssuesCache(workspaceSlug);
-		ensureNotificationsCache(workspaceSlug);
 		if (canViewPeople) {
 			ensurePeopleMembersCache(workspaceSlug);
 			ensurePeopleCache(workspaceSlug);
 		}
-		ensureActivityCache(workspaceSlug);
-		ensureActivityLogsCache(workspaceSlug);
 	}
 
 	let _workspaceChannel = null;
