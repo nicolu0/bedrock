@@ -56,11 +56,11 @@
 	const statusConfig = {
 		in_progress: {
 			label: 'In Progress',
-			statusClass: 'border-amber-500 text-amber-600'
+			statusClass: 'border-amber-300 text-amber-600'
 		},
 		todo: {
 			label: 'Todo',
-			statusClass: 'border-neutral-500 text-neutral-700'
+			statusClass: 'border-neutral-300 text-neutral-600'
 		},
 		done: {
 			label: 'Done',
@@ -1162,7 +1162,7 @@
 				>
 					<a href={backHref} class="text-neutral-700 hover:underline">{backLabel}</a>
 					<span class="text-neutral-300">›</span>
-					<span class={`h-3 w-3 rounded-full border ${statusMeta.statusClass}`}></span>
+					<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${statusMeta.statusClass}`}></span>
 					<span class="text-neutral-500">{issueName}</span>
 				</div>
 				<div
@@ -1903,7 +1903,8 @@
 								statusOpen = !statusOpen;
 							}}
 						>
-							<span class={`h-3.5 w-3.5 rounded-full border ${statusMeta.statusClass}`}></span>
+							<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
+							></span>
 							<span>{statusMeta.label}</span>
 						</button>
 						{#if statusOpen && canEditIssue}
@@ -1923,7 +1924,7 @@
 										}}
 									>
 										<span
-											class={`h-3.5 w-3.5 rounded-full border ${
+											class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${
 												(statusConfig[status] ?? statusConfig.todo).statusClass
 											}`}
 										></span>

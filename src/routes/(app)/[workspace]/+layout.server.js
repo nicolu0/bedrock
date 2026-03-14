@@ -192,9 +192,9 @@ const _issuesStatusConfig = {
 	in_progress: {
 		id: 'in-progress',
 		label: 'In Progress',
-		statusClass: 'border-amber-500 text-amber-600'
+		statusClass: 'border-amber-300 text-amber-600'
 	},
-	todo: { id: 'todo', label: 'Todo', statusClass: 'border-neutral-500 text-neutral-700' },
+	todo: { id: 'todo', label: 'Todo', statusClass: 'border-neutral-300 text-neutral-600' },
 	done: { id: 'done', label: 'Done', statusClass: 'border-emerald-500 text-emerald-700' }
 };
 const _issuesStatusOrder = ['in_progress', 'todo', 'done'];

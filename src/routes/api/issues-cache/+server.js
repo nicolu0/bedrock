@@ -7,12 +7,12 @@ const statusConfig = {
 	in_progress: {
 		id: 'in-progress',
 		label: 'In Progress',
-		statusClass: 'border-amber-500 text-amber-600'
+		statusClass: 'border-amber-300 text-amber-600'
 	},
 	todo: {
 		id: 'todo',
 		label: 'Todo',
-		statusClass: 'border-neutral-500 text-neutral-700'
+		statusClass: 'border-neutral-300 text-neutral-600'
 	},
 	done: {
 		id: 'done',

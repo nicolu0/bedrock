@@ -192,7 +192,7 @@
 						class="flex items-center justify-between border-y border-neutral-200 bg-stone-50 px-6 py-2 text-sm text-neutral-600"
 					>
 						<div class="flex items-center gap-3">
-							<span class={`h-3 w-3 rounded-full border ${section.statusClass}`}></span>
+							<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${section.statusClass}`}></span>
 							<span class="text-sm text-neutral-700">{section.label}</span>
 							<span class="text-sm text-neutral-400">{section.count}</span>
 						</div>
@@ -207,7 +207,8 @@
 							>
 								<div class="flex items-center justify-between gap-4">
 									<div class="flex items-center gap-3">
-										<span class={`h-3 w-3 rounded-full border-2 ${section.statusClass}`}></span>
+										<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${section.statusClass}`}
+										></span>
 										{#if item.isSubIssue}
 											<div class="flex items-center gap-2 text-sm">
 												<span class="text-neutral-600">{item.title}</span>

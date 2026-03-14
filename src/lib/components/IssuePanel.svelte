@@ -10,13 +10,14 @@
 	export let activityData;
 	export let activityLogsData;
 	export let vendors = [];
+	export let people = [];
 	export let allIssues = [];
 
 	const dispatch = createEventDispatcher();
 
 	const statusConfig = {
-		in_progress: { label: 'In Progress', statusClass: 'border-amber-500 text-amber-600' },
-		todo: { label: 'Todo', statusClass: 'border-neutral-500 text-neutral-700' },
+		in_progress: { label: 'In Progress', statusClass: 'border-amber-300 text-amber-600' },
+		todo: { label: 'Todo', statusClass: 'border-neutral-300 text-neutral-600' },
 		done: { label: 'Done', statusClass: 'border-emerald-500 text-emerald-700' }
 	};
 
@@ -31,13 +32,23 @@
 		console.log('[IssuePanel] loadIssue called', { id, seedIssue });
 		issue =
 			seedIssue && seedIssue.id === id
-				? { id: seedIssue.id, name: seedIssue.name, status: seedIssue.status, description: null, parent_id: seedIssue.parent_id ?? null }
+				? {
+						id: seedIssue.id,
+						name: seedIssue.name,
+						status: seedIssue.status,
+						description: null,
+						parent_id: seedIssue.parent_id ?? null
+					}
 				: null;
 		console.log('[IssuePanel] seed issue set', { issue });
 		subIssues = [];
 
 		const [{ data: iss }, { data: subs }] = await Promise.all([
-			supabase.from('issues').select('id, name, status, description, parent_id').eq('id', id).maybeSingle(),
+			supabase
+				.from('issues')
+				.select('id, name, status, description, parent_id')
+				.eq('id', id)
+				.maybeSingle(),
 			supabase.from('issues').select('id, name, status').eq('parent_id', id)
 		]);
 
@@ -61,7 +72,11 @@
 	$: parentIssue = (() => {
 		const pid = issue?.parent_id;
 		const found = pid ? allIssues.find((i) => i.id === pid) : null;
-		console.log('[IssuePanel] parentIssue computation', { parent_id: pid, allIssuesCount: allIssues.length, found });
+		console.log('[IssuePanel] parentIssue computation', {
+			parent_id: pid,
+			allIssuesCount: allIssues.length,
+			found
+		});
 		return found ?? null;
 	})();
 
@@ -122,7 +137,9 @@
 
 <div class="flex h-full flex-col">
 	<!-- Header -->
-	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-3 text-sm text-neutral-600">
+	<div
+		class="flex items-center justify-between border-b border-neutral-200 px-6 py-3 text-sm text-neutral-600"
+	>
 		<div class="flex min-w-0 items-center gap-2">
 			{#if parentIssue}
 				<span class="shrink-0 text-neutral-700">{parentIssue.name}</span>
@@ -209,7 +226,7 @@
 							{#each subIssues as subIssue}
 								<a
 									href={`/${$page.params.workspace}/issue/${subIssue.id}/${slugify(subIssue.name)}?from=inbox`}
-									class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-200"
+									class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
 								>
 									<div class="flex items-center gap-3">
 										<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
@@ -293,6 +310,7 @@
 											timestampLabel: formatTimestamp(message.timestamp)
 										}}
 										draft={null}
+										{people}
 									/>
 								{/each}
 								{#each draftsByIssue[issueId] ?? [] as draft (draft.id ?? draft.message_id)}
@@ -307,6 +325,7 @@
 										}}
 										{draft}
 										{vendors}
+										{people}
 										on:sent={() => dispatch('resolved')}
 									/>
 								{/each}
@@ -428,6 +447,7 @@
 															timestampLabel: formatTimestamp(message.timestamp)
 														}}
 														draft={null}
+														{people}
 													/>
 												{/each}
 												{#each draftsByIssue[subIssue.id] ?? [] as draft (draft.id ?? draft.message_id)}
@@ -442,6 +462,7 @@
 														}}
 														{draft}
 														{vendors}
+														{people}
 														on:sent={() => dispatch('resolved')}
 													/>
 												{/each}
