@@ -202,7 +202,6 @@
 								</div>
 							{/if}
 						</div>
-						</div>
 					</div>
 				{/each}
 			</div>
