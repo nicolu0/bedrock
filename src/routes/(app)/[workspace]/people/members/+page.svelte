@@ -13,7 +13,16 @@
 	let deletingIds = new Set();
 
 	$: workspaceSlug = $page.params.workspace;
-	$: members = (data.people ?? []).filter((person) => person.role === 'member');
+
+	let _resolvedPeople = null;
+	$: {
+		if (data.people instanceof Promise) {
+			data.people.then((d) => { _resolvedPeople = Array.isArray(d) ? d : []; });
+		} else {
+			_resolvedPeople = data.people ?? [];
+		}
+	}
+	$: members = (_resolvedPeople ?? []).filter((person) => person.role === 'member');
 
 	const formatRole = (role) => {
 		if (!role) return 'Member';
@@ -74,7 +83,19 @@
 
 <div class="space-y-2">
 	<div>
-		{#if members.length}
+		{#if _resolvedPeople === null}
+			<div>
+				{#each { length: 4 } as _}
+					<div class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3">
+						<div class="skeleton h-5 w-16 rounded-sm"></div>
+						<div class="skeleton h-4 w-32"></div>
+						<div></div>
+						<div class="skeleton h-4 w-40"></div>
+						<div></div>
+					</div>
+				{/each}
+			</div>
+		{:else if members.length}
 			<div
 				class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
 			>

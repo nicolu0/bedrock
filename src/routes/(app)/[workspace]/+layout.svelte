@@ -278,12 +278,7 @@
 				</div>
 			</aside>
 			<section class="flex-1 overflow-y-auto">
-				<div
-					class="h-full w-full"
-					class:transition-opacity={!isIssueRoute}
-					class:duration-150={!isIssueRoute}
-					class:opacity-0={!isIssueRoute && !pageVisible}
-				>
+				<div class="h-full w-full">
 					<slot />
 				</div>
 			</section>

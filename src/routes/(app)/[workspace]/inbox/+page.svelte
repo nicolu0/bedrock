@@ -15,6 +15,27 @@
 	let localReadIds = new Set();
 	let localResolvedIds = new Set();
 
+	let _resolvedNotifications = null;
+	$: {
+		if (data.notificationsData instanceof Promise) {
+			data.notificationsData.then((d) => { _resolvedNotifications = d; });
+		} else if (data.notificationsData) {
+			_resolvedNotifications = data.notificationsData;
+		}
+	}
+
+	let _resolvedActivity = null, _resolvedLogs = null;
+	$: {
+		if (data.activityBundle instanceof Promise) {
+			data.activityBundle.then((d) => {
+				if (d) { _resolvedActivity = d.activityData; _resolvedLogs = d.activityLogsData; }
+			});
+		} else if (data.activityBundle) {
+			_resolvedActivity = data.activityBundle.activityData;
+			_resolvedLogs = data.activityBundle.activityLogsData;
+		}
+	}
+
 	function setFilter(tab) {
 		unreadSnapshot = tab === 'Unread'
 			? new Set((effectiveNotifications ?? []).filter((n) => !n.is_read && !n.is_resolved).map((n) => n.id))
@@ -25,7 +46,7 @@
 
 	$: workspaceSlug = $page.params.workspace;
 
-	$: notifications = data.notificationsData?.notifications ?? [];
+	$: notifications = _resolvedNotifications?.notifications ?? [];
 
 	// Patch is_read and is_resolved optimistically from local sets
 	$: effectiveNotifications = notifications.map((n) => ({
@@ -121,7 +142,19 @@
 			{/each}
 		</div>
 
-		{#if filtered.length === 0}
+		{#if _resolvedNotifications === null}
+			<div>
+				{#each { length: 4 } as _}
+					<div class="flex items-start gap-3 px-6 py-3 border-b border-neutral-100">
+						<div class="skeleton mt-1.5 h-2 w-2 rounded-full flex-shrink-0"></div>
+						<div class="flex-1 space-y-2">
+							<div class="skeleton h-4 w-3/4"></div>
+							<div class="skeleton h-3 w-1/2"></div>
+						</div>
+					</div>
+				{/each}
+			</div>
+		{:else if filtered.length === 0}
 			<div class="px-6 py-8 text-sm text-neutral-400">
 				{filter === 'Unread' ? 'No unread notifications.' : 'No notifications yet.'}
 			</div>
@@ -193,8 +226,8 @@
 			<IssuePanel
 				issueId={selectedNotification.issues?.id}
 				seedIssue={selectedNotification.issues}
-				activityData={data.activityData}
-				activityLogsData={data.activityLogsData}
+				activityData={_resolvedActivity}
+				activityLogsData={_resolvedLogs}
 				{vendors}
 				allIssues={[]}
 				on:close={() => (selectedNotification = null)}
@@ -203,19 +236,3 @@
 		</div>
 	{/if}
 </div>
-
-<style>
-	@keyframes shimmer {
-		0% {
-			background-position: -200% 0;
-		}
-		100% {
-			background-position: 200% 0;
-		}
-	}
-	.shimmer {
-		background: linear-gradient(90deg, #f5f5f4 25%, #e8e5e3 50%, #f5f5f4 75%);
-		background-size: 200% 100%;
-		animation: shimmer 1.6s ease-in-out infinite;
-	}
-</style>

@@ -13,7 +13,16 @@
 	let deletingIds = new Set();
 
 	$: workspaceSlug = $page.params.workspace;
-	$: people = data.people ?? [];
+
+	let _resolvedPeople = null;
+	$: {
+		if (data.people instanceof Promise) {
+			data.people.then((d) => { _resolvedPeople = Array.isArray(d) ? d : []; });
+		} else {
+			_resolvedPeople = data.people ?? [];
+		}
+	}
+	$: people = _resolvedPeople ?? [];
 	$: activePeople = people.filter((person) => !person?.pending);
 	$: invitedPeople = people.filter((person) => person?.pending);
 
@@ -77,7 +86,19 @@
 
 <div class="space-y-2">
 	<div>
-		{#if people.length}
+		{#if _resolvedPeople === null}
+			<div>
+				{#each { length: 4 } as _}
+					<div class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3">
+						<div class="skeleton h-5 w-16 rounded-sm"></div>
+						<div class="skeleton h-4 w-32"></div>
+						<div></div>
+						<div class="skeleton h-4 w-40"></div>
+						<div></div>
+					</div>
+				{/each}
+			</div>
+		{:else if people.length}
 			<div
 				class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
 			>

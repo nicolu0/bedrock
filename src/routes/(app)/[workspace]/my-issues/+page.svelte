@@ -10,7 +10,16 @@
 	const sidebarControl = getContext('sidebarControl');
 	const openSidebar = () => sidebarControl?.open?.();
 
-	$: sections = data.issuesData?.sections ?? [];
+	let _resolvedIssues = null;
+	$: {
+		if (data.issuesData instanceof Promise) {
+			data.issuesData.then((d) => { _resolvedIssues = d; });
+		} else if (data.issuesData) {
+			_resolvedIssues = data.issuesData;
+		}
+	}
+
+	$: sections = _resolvedIssues?.sections ?? [];
 	$: expandedSections = sections.map((section) => {
 		const rows = section.items.flatMap((item) => {
 			const subRows = (item.subIssues ?? []).map((subIssue) => {
@@ -168,7 +177,18 @@
 		</div>
 	</div>
 
-	{#if sections.length === 0}
+	{#if _resolvedIssues === null}
+		<div class="divide-y divide-neutral-100">
+			{#each { length: 4 } as _}
+				<div class="flex items-center gap-3 px-6 py-2">
+					<div class="skeleton h-3 w-3 rounded-full flex-shrink-0"></div>
+					<div class="skeleton h-4 w-2/5"></div>
+					<div class="ml-auto skeleton h-5 w-28 rounded-full"></div>
+					<div class="skeleton h-5 w-5 rounded-full"></div>
+				</div>
+			{/each}
+		</div>
+	{:else if sections.length === 0}
 		<div class="px-6 py-8 text-sm text-neutral-400">No issues assigned to you.</div>
 	{:else}
 		<div class="divide-y divide-neutral-100">

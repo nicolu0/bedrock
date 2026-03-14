@@ -14,21 +14,16 @@ export const load = async ({ parent, depends }) => {
 
 	const { workspace, userId } = await parent();
 
-	const [notificationsData, vendors] = await Promise.all([
-		loadNotificationsData(workspace.id, userId),
-		loadVendors(workspace.id)
-	]);
+	const notificationsData = loadNotificationsData(workspace.id, userId);
+	const activityBundle = notificationsData.then(async (nd) => {
+		const issueIds = [...new Set((nd.notifications ?? []).map((n) => n.issues?.id).filter(Boolean))];
+		const [activityData, activityLogsData] = await Promise.all([
+			loadActivityData(workspace.id, issueIds),
+			loadActivityLogsData(workspace.id, issueIds)
+		]);
+		return { activityData, activityLogsData };
+	});
+	const vendors = await loadVendors(workspace.id);
 
-	const issueIds = (notificationsData.notifications ?? [])
-		.map((n) => n.issues?.id)
-		.filter(Boolean);
-
-	const uniqueIssueIds = [...new Set(issueIds)];
-
-	const [activityData, activityLogsData] = await Promise.all([
-		loadActivityData(workspace.id, uniqueIssueIds),
-		loadActivityLogsData(workspace.id, uniqueIssueIds)
-	]);
-
-	return { notificationsData, activityData, activityLogsData, vendors };
+	return { notificationsData, activityBundle, vendors };
 };
