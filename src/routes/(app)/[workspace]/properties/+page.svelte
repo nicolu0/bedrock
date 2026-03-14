@@ -2,13 +2,25 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { fade, scale } from 'svelte/transition';
-	import { getContext } from 'svelte';
+	import { getContext, onMount } from 'svelte';
 	import { invalidate } from '$app/navigation';
+	import { peopleCache } from '$lib/stores/peopleCache.js';
 
 	export let data;
 
 	$: workspaceSlug = $page.params.workspace;
 	$: role = $page.data?.role;
+	$: canViewPeople = role === 'admin' || role === 'member';
+	$: userName = $page.data?.userName;
+	$: ownerPersonId = $page.data?.ownerPersonId;
+	$: isOwnerRole = role === 'owner';
+	$: ownerFallbackName = isOwnerRole ? (userName?.trim() ? userName.trim() : 'You') : '';
+	$: ownerFallbackLabel =
+		isOwnerRole && ownerFallbackName
+			? ownerFallbackName === 'You'
+				? 'You'
+				: `${ownerFallbackName} (You)`
+			: '';
 
 	// data.properties from layout may be a streaming Promise
 	let _properties = [];
@@ -55,12 +67,28 @@
 	let debounceTimer;
 	let newOwnerOpen = false;
 	let editOwnerOpen = false;
+	let openRowMenu = null;
+	let hoveredRow = null;
+
+	onMount(() => {
+		const handleDocumentClick = (event) => {
+			if (!openRowMenu) return;
+			const path = event.composedPath?.() ?? [];
+			const isMenuClick = path.some(
+				(node) => node?.dataset?.rowMenu === 'true' || node?.dataset?.rowMenuToggle === 'true'
+			);
+			if (!isMenuClick) openRowMenu = null;
+		};
+
+		document.addEventListener('click', handleDocumentClick);
+		return () => document.removeEventListener('click', handleDocumentClick);
+	});
 
 	const openNewPropertyModal = () => {
 		showNewPropertyModal = true;
 		createPropertyError = '';
 		addressTarget = 'new';
-		newPropertyOwnerId = '';
+		newPropertyOwnerId = isOwnerRole && ownerPersonId ? ownerPersonId : '';
 		newOwnerOpen = false;
 	};
 
@@ -89,7 +117,7 @@
 		editPropertyPostalCode = property?.postal_code ?? '';
 		editPropertyCountry = property?.country ?? '';
 		editPropertyOwnerId = property?.owner_id ?? '';
-		editPropertyOwnerName = '';
+		editPropertyOwnerName = isOwnerRole ? ownerFallbackName : '';
 		updatePropertyError = '';
 		addressTarget = 'edit';
 		editOwnerOpen = false;
@@ -246,6 +274,22 @@
 		}
 	}
 
+	async function deleteProperty(property) {
+		if (!property?.id) return;
+		openRowMenu = null;
+		try {
+			const res = await fetch('/api/properties', {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id: property.id, workspace: workspaceSlug })
+			});
+			if (!res.ok) {
+				throw new Error('Failed to delete property');
+			}
+		} catch (error) {
+			console.error(error);
+		}
+	}
 	function getInitials(name) {
 		if (!name) return '';
 		const parts = name.trim().split(/\s+/);
@@ -304,41 +348,86 @@
 	</div>
 	<div>
 		{#if properties.length}
-			<div
-				class="grid grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr] gap-4 px-6 pb-2 text-xs text-neutral-500"
-			>
-				<div>Name</div>
-				<div>Units</div>
-				<div>Issues</div>
-				<div>Owner</div>
-			</div>
-			<div class="border-t border-neutral-200"></div>
-			{#each properties as property}
 				<div
-					class="grid cursor-pointer grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
-					on:click={(e) => {
-						e.currentTarget.blur();
-						openEditPropertyModal(property);
-					}}
-					role="button"
-					tabindex="0"
-					on:keydown={(e) => e.key === 'Enter' && openEditPropertyModal(property)}
+					class="grid grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr_2rem] gap-4 px-6 pb-2 text-xs text-neutral-500"
 				>
-					<div class="truncate">{property.name}</div>
-					<div class="text-neutral-500">{property.unit_count ?? 0}</div>
-					<div class="text-neutral-500">{property.issue_count ?? 0}</div>
-					<div class="flex items-center">
-						<div
-							class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600"
-						>
-							{getInitials(getOwnerLabel(owners, property.owner_id, property.owner?.name))}
+					<div>Name</div>
+					<div>Units</div>
+					<div>Issues</div>
+					<div>Owner</div>
+					<div></div>
+				</div>
+				<div class="border-t border-neutral-200"></div>
+				{#each properties as property}
+					<div
+						class="group grid cursor-pointer grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
+						on:mouseenter={() => (hoveredRow = property.id)}
+						on:mouseleave={() => (hoveredRow = null)}
+						on:click={(e) => {
+							e.currentTarget.blur();
+							openRowMenu = null;
+							openEditPropertyModal(property);
+						}}
+						role="button"
+						tabindex="0"
+						on:keydown={(e) => e.key === 'Enter' && openEditPropertyModal(property)}
+					>
+						<div class="truncate">{property.name}</div>
+						<div class="text-neutral-500">{property.unit_count ?? 0}</div>
+						<div class="text-neutral-500">{property.issue_count ?? 0}</div>
+						<div class="flex items-center">
+							<div
+								class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600"
+							>
+								{getInitials(getOwnerLabel(owners, property.owner_id, ownerFallbackName))}
+							</div>
+						</div>
+						<div class="relative flex items-center justify-end">
+							<button
+								data-row-menu-toggle="true"
+								class={`rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 ${
+									hoveredRow === property.id || openRowMenu === property.id
+										? 'opacity-100'
+										: 'opacity-0'
+								} group-hover:opacity-100`}
+								on:click|stopPropagation={() =>
+									(openRowMenu = openRowMenu === property.id ? null : property.id)}
+								type="button"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									fill="currentColor"
+									class="bi bi-three-dots"
+									viewBox="0 0 16 16"
+								>
+									<path
+										d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"
+									/>
+								</svg>
+							</button>
+							{#if openRowMenu === property.id}
+								<div
+									data-row-menu="true"
+									class="absolute top-full right-0 z-20 mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
+									on:click|stopPropagation
+								>
+									<button
+										class="flex w-full px-3 py-2 text-left text-rose-600 hover:bg-neutral-50"
+										on:click={() => deleteProperty(property)}
+										type="button"
+									>
+										Delete
+									</button>
+								</div>
+							{/if}
 						</div>
 					</div>
-				</div>
-			{/each}
-		{:else}
-			<div class="px-6 py-3 text-sm text-neutral-400">No properties yet.</div>
-		{/if}
+				{/each}
+			{:else}
+				<div class="px-6 py-3 text-sm text-neutral-400">No properties yet.</div>
+			{/if}
 	</div>
 </div>
 
@@ -392,6 +481,7 @@
 						required
 						type="text"
 					/>
+					{#if canViewPeople}
 					<div class="owner-dropdown relative">
 						<label class="text-xs text-neutral-500">Owner</label>
 						<button
@@ -403,7 +493,7 @@
 							}}
 							aria-expanded={newOwnerOpen}
 						>
-							<span>{getOwnerLabel(owners, newPropertyOwnerId)}</span>
+							<span>{getOwnerLabel(owners, newPropertyOwnerId, ownerFallbackName)}</span>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								width="16"
@@ -456,9 +546,32 @@
 										{/if}
 									</button>
 								{/each}
+								</div>
+							{/if}
+						</div>
+					{:else if isOwnerRole}
+						<div>
+							<label class="text-xs text-neutral-500">Owner</label>
+							<div
+								class="mt-1 rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-600"
+							>
+								{ownerFallbackLabel}
+								<input type="hidden" name="ownerId" value={newPropertyOwnerId} />
 							</div>
-						{/if}
-					</div>
+						</div>
+					{:else if $peopleCache.error}
+						<div
+							class="rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-400"
+						>
+							Unable to load owners.
+						</div>
+					{:else}
+						<div
+							class="rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-400"
+						>
+							Loading owners...
+						</div>
+					{/if}
 					<div class="mt-2 text-xs text-neutral-500">Address</div>
 					<div class="address-wrapper relative">
 						<input
@@ -604,6 +717,7 @@
 						required
 						type="text"
 					/>
+					{#if canViewPeople}
 					<div class="owner-dropdown relative">
 						<label class="text-xs text-neutral-500">Owner</label>
 						<button
@@ -615,7 +729,7 @@
 							}}
 							aria-expanded={editOwnerOpen}
 						>
-							<span>{getOwnerLabel(owners, editPropertyOwnerId, editPropertyOwnerName)}</span>
+							<span>{getOwnerLabel(owners, editPropertyOwnerId, isOwnerRole ? ownerFallbackName : editPropertyOwnerName)}</span>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								width="16"
@@ -670,9 +784,32 @@
 										{/if}
 									</button>
 								{/each}
+								</div>
+							{/if}
+						</div>
+					{:else if isOwnerRole}
+						<div>
+							<label class="text-xs text-neutral-500">Owner</label>
+							<div
+								class="mt-1 rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-600"
+							>
+								{ownerFallbackLabel}
+								<input type="hidden" name="ownerId" value={editPropertyOwnerId} />
 							</div>
-						{/if}
-					</div>
+						</div>
+					{:else if $peopleCache.error}
+						<div
+							class="rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-400"
+						>
+							Unable to load owners.
+						</div>
+					{:else}
+						<div
+							class="rounded-xl border border-stone-200 bg-neutral-50 px-3.5 py-2.5 text-sm text-neutral-400"
+						>
+							Loading owners...
+						</div>
+					{/if}
 					<div class="mt-2 text-xs text-neutral-500">Address</div>
 					<div class="address-wrapper relative">
 						<input

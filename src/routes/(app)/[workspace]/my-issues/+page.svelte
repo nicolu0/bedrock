@@ -213,7 +213,7 @@
 							>
 								<div class="flex items-center justify-between gap-4">
 									<div class="flex items-center gap-3">
-										<span class={`h-3 w-3 rounded-full border ${section.statusClass}`}></span>
+										<span class={`h-3 w-3 rounded-full border-2 ${section.statusClass}`}></span>
 										{#if item.isSubIssue}
 											<div class="flex items-center gap-2 text-sm">
 												<span class="text-neutral-600">{item.title}</span>

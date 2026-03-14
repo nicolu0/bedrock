@@ -2,6 +2,20 @@
 import { json } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
+const normalizeRecipientList = (value) => {
+	if (!value) return [];
+	if (Array.isArray(value)) {
+		return value.map((email) => String(email ?? '').trim()).filter(Boolean);
+	}
+	if (typeof value === 'string') {
+		return value
+			.split(',')
+			.map((email) => email.trim())
+			.filter(Boolean);
+	}
+	return [];
+};
+
 export const PATCH = async ({ locals, request }) => {
 	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -9,8 +23,17 @@ export const PATCH = async ({ locals, request }) => {
 	const messageId = body?.message_id;
 	const issueId = body?.issue_id;
 	const draftBody = body?.body;
+	const hasRecipientEmails = Object.prototype.hasOwnProperty.call(body ?? {}, 'recipient_emails');
+	const normalizedRecipients = hasRecipientEmails
+		? normalizeRecipientList(body?.recipient_emails)
+		: null;
 
-	if ((!messageId && !issueId) || typeof draftBody !== 'string') {
+	if (!messageId && !issueId) {
+		return json({ error: 'Invalid payload' }, { status: 400 });
+	}
+
+	const hasBody = typeof draftBody === 'string';
+	if (!hasBody && !hasRecipientEmails) {
 		return json({ error: 'Invalid payload' }, { status: 400 });
 	}
 
@@ -55,9 +78,16 @@ export const PATCH = async ({ locals, request }) => {
 		}
 	}
 
+	const updatePayload = { updated_at: new Date().toISOString() };
+	if (hasBody) updatePayload.body = draftBody;
+	if (hasRecipientEmails) {
+		updatePayload.recipient_emails = normalizedRecipients?.length ? normalizedRecipients : null;
+		updatePayload.recipient_email = normalizedRecipients?.[0] ?? null;
+	}
+
 	const { error } = await supabaseAdmin
 		.from('email_drafts')
-		.update({ body: draftBody, updated_at: new Date().toISOString() })
+		.update(updatePayload)
 		.eq('id', draft.id);
 
 	if (error) {

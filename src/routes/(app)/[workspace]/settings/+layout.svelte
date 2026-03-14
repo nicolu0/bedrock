@@ -3,18 +3,17 @@
 	import { page } from '$app/stores';
 	import { goto, afterNavigate } from '$app/navigation';
 	import { fade, scale } from 'svelte/transition';
+	import { clearSessionCaches } from '$lib/stores/clearSessionCaches';
 
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	const items = [
 		{ id: 'integrations', label: 'Integrations', href: 'integrations' },
-		{ id: 'preferences', label: 'Preferences', href: 'preferences' },
 		{ id: 'members', label: 'Members', href: 'members' }
 	];
 
-	$: activeHref = items.find(
-		(item) => $page.url.pathname === `${basePath}/settings/${item.href}`
-	)?.href ?? null;
+	$: activeHref =
+		items.find((item) => $page.url.pathname === `${basePath}/settings/${item.href}`)?.href ?? null;
 
 	// Module-level so it survives tab switches within settings
 	let returnTo = null;
@@ -28,6 +27,10 @@
 	$: exitUrl = returnTo ?? (workspaceSlug ? `/${workspaceSlug}` : '/');
 
 	let showLogoutModal = false;
+
+	const handleLogoutSubmit = () => {
+		clearSessionCaches();
+	};
 
 	function onKeydown(e) {
 		if (e.key !== 'Escape') return;
@@ -134,7 +137,7 @@
 				>
 					Cancel
 				</button>
-				<form method="POST" action="/api/logout">
+				<form method="POST" action="/api/logout" on:submit={handleLogoutSubmit}>
 					<button
 						type="submit"
 						class="rounded-xl bg-red-600 px-4 py-2 text-sm text-white transition-colors hover:bg-red-700 focus-visible:ring-1 focus-visible:ring-red-400 focus-visible:outline-none"

@@ -6,6 +6,20 @@ import { env } from '$env/dynamic/private';
 const encodeBase64Url = (value) =>
 	Buffer.from(value).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+const normalizeRecipientList = (value) => {
+	if (!value) return [];
+	if (Array.isArray(value)) {
+		return value.map((email) => String(email ?? '').trim()).filter(Boolean);
+	}
+	if (typeof value === 'string') {
+		return value
+			.split(',')
+			.map((email) => email.trim())
+			.filter(Boolean);
+	}
+	return [];
+};
+
 const refreshAccessToken = async (connection) => {
 	const refreshBody = new URLSearchParams({
 		client_id: env.GOOGLE_CLIENT_ID ?? '',
@@ -42,6 +56,25 @@ const refreshAccessToken = async (connection) => {
 	return accessToken;
 };
 
+const logEmailSendError = async ({ workspaceId, issueId, userId, action, error, meta }) => {
+	if (!workspaceId || !userId) return;
+	const payload = {
+		workspace_id: workspaceId,
+		issue_id: issueId ?? null,
+		type: 'email_outbound',
+		data: {
+			action,
+			error,
+			...(meta ?? {})
+		},
+		created_by: userId
+	};
+	const { error: insertError } = await supabaseAdmin.from('activity_logs').insert(payload);
+	if (insertError) {
+		console.error('email-send-error log insert failed', insertError);
+	}
+};
+
 export const POST = async ({ locals, request }) => {
 	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -50,11 +83,14 @@ export const POST = async ({ locals, request }) => {
 	const issueId = body?.issue_id;
 	const recipientOverride =
 		typeof body?.recipient_email === 'string' ? body.recipient_email.trim() : null;
+	const recipientOverrides = normalizeRecipientList(body?.recipient_emails);
 	if (!messageId && !issueId) return json({ error: 'Invalid payload' }, { status: 400 });
 
 	const draftQuery = supabaseAdmin
 		.from('email_drafts')
-		.select('id, issue_id, recipient_email, subject, body, message_id, sender_email');
+		.select(
+			'id, issue_id, recipient_email, recipient_emails, subject, body, message_id, sender_email'
+		);
 	const { data: draft } = messageId
 		? await draftQuery.eq('message_id', messageId).maybeSingle()
 		: await draftQuery.eq('issue_id', issueId).is('message_id', null).maybeSingle();
@@ -65,8 +101,12 @@ export const POST = async ({ locals, request }) => {
 	if (!draft.sender_email) {
 		return json({ error: 'Sender email required' }, { status: 400 });
 	}
-	const effectiveRecipient = recipientOverride || draft.recipient_email || null;
-	if (!effectiveRecipient) {
+	const effectiveRecipients = recipientOverrides.length
+		? recipientOverrides
+		: normalizeRecipientList(draft.recipient_emails).length
+			? normalizeRecipientList(draft.recipient_emails)
+			: normalizeRecipientList(draft.recipient_email);
+	if (!effectiveRecipients.length) {
 		return json({ error: 'Recipient email required' }, { status: 400 });
 	}
 
@@ -174,16 +214,25 @@ export const POST = async ({ locals, request }) => {
 		}
 	}
 
-	if (recipientOverride && recipientOverride !== draft.recipient_email) {
+	if (recipientOverrides.length) {
+		const nextRecipientEmail = recipientOverrides[0] ?? null;
 		await supabaseAdmin
 			.from('email_drafts')
-			.update({ recipient_email: recipientOverride })
+			.update({
+				recipient_email: nextRecipientEmail,
+				recipient_emails: recipientOverrides
+			})
+			.eq('id', draft.id);
+	} else if (recipientOverride && recipientOverride !== draft.recipient_email) {
+		await supabaseAdmin
+			.from('email_drafts')
+			.update({ recipient_email: recipientOverride, recipient_emails: [recipientOverride] })
 			.eq('id', draft.id);
 	}
 
 	const rawEmail = [
 		`From: ${connection.email}`,
-		`To: ${effectiveRecipient}`,
+		`To: ${effectiveRecipients.join(', ')}`,
 		`Subject: ${subjectLine}`,
 		...replyHeaders,
 		'MIME-Version: 1.0',
@@ -206,6 +255,25 @@ export const POST = async ({ locals, request }) => {
 
 	if (!sendResponse.ok) {
 		const detail = await sendResponse.text();
+		console.error('gmail send failed', {
+			issueId: draft.issue_id,
+			draftId: draft.id,
+			recipients: effectiveRecipients,
+			subject: draft.subject,
+			detail
+		});
+		await logEmailSendError({
+			workspaceId,
+			issueId: draft.issue_id,
+			userId: locals.user?.id,
+			action: 'gmail-send',
+			error: detail,
+			meta: {
+				draft_id: draft.id,
+				recipients: effectiveRecipients,
+				subject: draft.subject
+			}
+		});
 		return json({ error: detail }, { status: 400 });
 	}
 
@@ -214,7 +282,7 @@ export const POST = async ({ locals, request }) => {
 
 	let outboundThreadId = message?.thread_id ?? null;
 	if (!messageId) {
-		const primaryRecipient = effectiveRecipient.split(',')[0].trim();
+		const primaryRecipient = effectiveRecipients[0]?.trim() ?? '';
 		const { data: vendorRow } = await supabaseAdmin
 			.from('people')
 			.select('id')
@@ -222,7 +290,7 @@ export const POST = async ({ locals, request }) => {
 			.eq('role', 'vendor')
 			.ilike('email', primaryRecipient)
 			.maybeSingle();
-		const { data: createdThread } = await supabaseAdmin
+		const { data: createdThread, error: threadError } = await supabaseAdmin
 			.from('threads')
 			.insert({
 				tenant_id: null,
@@ -237,15 +305,40 @@ export const POST = async ({ locals, request }) => {
 			.select('id')
 			.maybeSingle();
 		outboundThreadId = createdThread?.id ?? null;
+		if (threadError || !outboundThreadId) {
+			console.error('thread insert failed after send', {
+				issueId: draft.issue_id,
+				draftId: draft.id,
+				recipients: effectiveRecipients,
+				subject: draft.subject,
+				connectionId: connection.id,
+				threadExternalId: sendPayload?.threadId ?? null,
+				error: threadError?.message ?? 'thread insert returned null'
+			});
+			await logEmailSendError({
+				workspaceId,
+				issueId: draft.issue_id,
+				userId: locals.user?.id,
+				action: 'thread-insert',
+				error: threadError?.message ?? 'thread insert returned null',
+				meta: {
+					draft_id: draft.id,
+					recipients: effectiveRecipients,
+					subject: draft.subject,
+					connection_id: connection.id,
+					thread_external_id: sendPayload?.threadId ?? null
+				}
+			});
+		}
 	}
 
-	const { data: outboundMessage } = await supabaseAdmin
+	const { data: outboundMessage, error: messageError } = await supabaseAdmin
 		.from('messages')
 		.insert({
 			thread_id: outboundThreadId,
 			issue_id: draft.issue_id,
 			message: draft.body,
-			sender: 'outbound',
+			sender: 'unknown',
 			subject: draft.subject,
 			timestamp: new Date().toISOString(),
 			channel: 'gmail',
@@ -256,6 +349,35 @@ export const POST = async ({ locals, request }) => {
 		})
 		.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
 		.maybeSingle();
+
+	if (messageError || !outboundMessage?.id) {
+		console.error('message insert failed after send', {
+			issueId: draft.issue_id,
+			draftId: draft.id,
+			threadId: outboundThreadId,
+			recipients: effectiveRecipients,
+			subject: draft.subject,
+			connectionId: connection.id,
+			externalId: sentExternalId,
+			error: messageError?.message ?? 'message insert returned null'
+		});
+		await logEmailSendError({
+			workspaceId,
+			issueId: draft.issue_id,
+			userId: locals.user?.id,
+			action: 'message-insert',
+			error: messageError?.message ?? 'message insert returned null',
+			meta: {
+				draft_id: draft.id,
+				thread_id: outboundThreadId,
+				recipients: effectiveRecipients,
+				subject: draft.subject,
+				body_length: typeof draft.body === 'string' ? draft.body.length : null,
+				connection_id: connection.id,
+				external_id: sentExternalId
+			}
+		});
+	}
 
 	await supabaseAdmin.from('email_drafts').delete().eq('id', draft.id);
 

@@ -65,7 +65,7 @@ const bootstrap = async (user) => {
 	});
 };
 
-/** @returns {Promise<string|null>} workspace slug, or null if invite invalid */
+/** @returns {Promise<{ workspaceSlug: string | null, error: string | null }>} */
 const acceptInvite = async (user, token) => {
 	const { data: invite } = await supabaseAdmin
 		.from('invites')
@@ -73,8 +73,28 @@ const acceptInvite = async (user, token) => {
 		.eq('token', token)
 		.maybeSingle();
 
-	if (!invite || invite.accepted_at || new Date(invite.expires_at) < new Date()) return null;
-	if (invite.email !== user.email) return null;
+	if (!invite || invite.accepted_at || new Date(invite.expires_at) < new Date()) {
+		return { workspaceSlug: null, error: 'Invite is invalid or expired.' };
+	}
+	const inviteEmail = invite.email?.toLowerCase?.() ?? null;
+	const userEmail = user.email?.toLowerCase?.() ?? null;
+	if (inviteEmail && userEmail && inviteEmail !== userEmail) {
+		return { workspaceSlug: null, error: 'Invite email does not match your account.' };
+	}
+
+	const { data: existingMembership } = await supabaseAdmin
+		.from('people')
+		.select('workspace_id')
+		.eq('user_id', user.id)
+		.neq('workspace_id', invite.workspace_id)
+		.limit(1)
+		.maybeSingle();
+	if (existingMembership?.workspace_id) {
+		return {
+			workspaceSlug: null,
+			error: 'You already belong to another workspace. Leave it before accepting this invite.'
+		};
+	}
 
 	const name = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User';
 	await supabaseAdmin.from('users').upsert({ id: user.id, name });
@@ -123,7 +143,8 @@ const acceptInvite = async (user, token) => {
 				name,
 				email: user.email ?? invite.email ?? null,
 				user_id: user.id,
-				pending: false
+				pending: false,
+				updated_at: new Date().toISOString()
 			})
 			.eq('id', existingPersonId)
 			.eq('workspace_id', invite.workspace_id);
@@ -134,7 +155,8 @@ const acceptInvite = async (user, token) => {
 			role: invite.role,
 			name,
 			email: user.email ?? invite.email ?? null,
-			pending: false
+			pending: false,
+			updated_at: new Date().toISOString()
 		});
 	}
 	await supabaseAdmin
@@ -142,7 +164,7 @@ const acceptInvite = async (user, token) => {
 		.update({ accepted_at: new Date().toISOString() })
 		.eq('token', token);
 
-	return invite.workspaces?.slug ?? null;
+	return { workspaceSlug: invite.workspaces?.slug ?? null, error: null };
 };
 
 export const actions = {
@@ -207,11 +229,38 @@ export const actions = {
 			options: { data: { name } }
 		});
 
-		if (error) return fail(400, { error: error.message });
+		if (error) {
+			const isExistingUser =
+				error?.message?.toLowerCase?.().includes('already registered') ?? false;
+
+			if (inviteToken && isExistingUser) {
+				const { data: signInData, error: signInError } =
+					await locals.supabase.auth.signInWithPassword({
+						email,
+						password
+					});
+
+				if (signInData?.user && !signInError) {
+					const { workspaceSlug, error: inviteError } = await acceptInvite(
+						signInData.user,
+						inviteToken
+					);
+					if (inviteError) return fail(400, { error: inviteError });
+					throw redirect(303, workspaceSlug ? `/${workspaceSlug}` : '/');
+				}
+
+				return fail(400, {
+					error: 'Account already exists. Log in to accept the invite.'
+				});
+			}
+
+			return fail(400, { error: error.message });
+		}
 		if (!data.user) return fail(400, { error: 'Signup failed. Please try again.' });
 
 		if (inviteToken) {
-			const workspaceSlug = await acceptInvite(data.user, inviteToken);
+			const { workspaceSlug, error: inviteError } = await acceptInvite(data.user, inviteToken);
+			if (inviteError) return fail(400, { error: inviteError });
 			throw redirect(303, workspaceSlug ? `/${workspaceSlug}` : '/');
 		}
 

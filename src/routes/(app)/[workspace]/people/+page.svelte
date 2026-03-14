@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { invalidate } from '$app/navigation';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
+	import { peopleCache } from '$lib/stores/peopleCache.js';
 
 	export let data;
 
@@ -11,20 +12,25 @@
 	let openRowMenu = null;
 	let hoveredRow = null;
 	let deletingIds = new Set();
+	let lastOpenedPersonId = null;
 
 	$: workspaceSlug = $page.params.workspace;
 
-	let _resolvedPeople = null;
-	$: {
-		if (data.people instanceof Promise) {
-			data.people.then((d) => { _resolvedPeople = Array.isArray(d) ? d : []; });
-		} else {
-			_resolvedPeople = data.people ?? [];
+	$: people =
+		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
+			? $peopleCache.data
+			: null;
+
+	$: activePeople = Array.isArray(people) ? people.filter((person) => !person?.pending) : null;
+	$: invitedPeople = Array.isArray(people) ? people.filter((person) => person?.pending) : null;
+	$: editPersonId = $page.url.searchParams.get('editPersonId');
+	$: if (editPersonId && people && editPersonId !== lastOpenedPersonId) {
+		const match = (people ?? []).find((person) => person?.id === editPersonId);
+		if (match) {
+			editingPerson = match;
+			lastOpenedPersonId = editPersonId;
 		}
 	}
-	$: people = _resolvedPeople ?? [];
-	$: activePeople = people.filter((person) => !person?.pending);
-	$: invitedPeople = people.filter((person) => person?.pending);
 
 	const formatRole = (role, pending) => {
 		if (!role) return pending ? 'Member (Invited)' : 'Member';
@@ -86,7 +92,7 @@
 
 <div class="space-y-2">
 	<div>
-		{#if _resolvedPeople === null}
+		{#if people === null}
 			<div>
 				{#each { length: 4 } as _}
 					<div class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3">

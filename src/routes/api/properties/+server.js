@@ -7,7 +7,16 @@ export const POST = async ({ locals, request }) => {
 	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
 	const body = await request.json();
-	const { workspace: workspaceSlug, name, address, city, state, postalCode, country, ownerId } = body;
+	const {
+		workspace: workspaceSlug,
+		name,
+		address,
+		city,
+		state,
+		postalCode,
+		country,
+		ownerId
+	} = body;
 
 	if (!name?.trim()) return json({ error: 'Property name is required.' }, { status: 400 });
 	if (!address?.trim()) return json({ error: 'Address is required.' }, { status: 400 });
@@ -54,7 +63,17 @@ export const PATCH = async ({ locals, request }) => {
 	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
 	const body = await request.json();
-	const { workspace: workspaceSlug, propertyId, name, address, city, state, postalCode, country, ownerId } = body;
+	const {
+		workspace: workspaceSlug,
+		propertyId,
+		name,
+		address,
+		city,
+		state,
+		postalCode,
+		country,
+		ownerId
+	} = body;
 
 	if (!propertyId) return json({ error: 'Property ID is required.' }, { status: 400 });
 	if (!name?.trim()) return json({ error: 'Property name is required.' }, { status: 400 });
@@ -97,4 +116,25 @@ export const PATCH = async ({ locals, request }) => {
 
 	if (error) return json({ error: error.message }, { status: 500 });
 	return json(data);
+};
+
+export const DELETE = async ({ locals, request }) => {
+	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
+
+	const body = await request.json();
+	const { id, workspace: workspaceSlug } = body;
+
+	if (!id) return json({ error: 'Property ID is required.' }, { status: 400 });
+
+	const workspace = await resolveWorkspace(workspaceSlug, locals.user.id);
+	if (!workspace?.id) return json({ error: 'Workspace access denied.' }, { status: 403 });
+
+	const { error } = await supabaseAdmin
+		.from('properties')
+		.delete()
+		.eq('id', id)
+		.eq('workspace_id', workspace.id);
+
+	if (error) return json({ error: error.message }, { status: 500 });
+	return json({ id });
 };

@@ -2,7 +2,9 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { invalidate } from '$app/navigation';
+	import { updateNotificationInCache } from '$lib/stores/notificationsCache';
 	import IssuePanel from '$lib/components/IssuePanel.svelte';
+	import PolicyPanel from '$lib/components/PolicyPanel.svelte';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { onMount, onDestroy } from 'svelte';
@@ -71,6 +73,7 @@
 		const idx = filtered.findIndex((n) => n.id === selectedNotification.id);
 		const next = filtered[idx + 1] ?? filtered[idx - 1] ?? null;
 		localResolvedIds = new Set([...localResolvedIds, selectedNotification.id]);
+		updateNotificationInCache({ id: selectedNotification.id, is_resolved: true });
 		if (next) handleClick(next); else selectedNotification = null;
 		invalidate('app:notifications');
 	}
@@ -114,12 +117,16 @@
 	}
 </script>
 
-<svelte:window on:keydown={(e) => { if (e.key === 'Escape' && selectedNotification) selectedNotification = null; }} />
+<svelte:window
+	on:keydown={(e) => {
+		if (e.key === 'Escape' && selectedNotification) selectedNotification = null;
+	}}
+/>
 
 <div class="flex h-full overflow-hidden">
 	<!-- Notification list -->
 	<div
-		class="flex-none flex flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out
+		class="flex flex-none flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out
 			{selectedNotification ? 'w-1/2 border-r border-neutral-200' : 'w-full'}"
 	>
 		<div class="flex items-center border-b border-neutral-200 px-6 py-3">
@@ -219,20 +226,28 @@
 	<!-- Issue detail panel -->
 	{#if selectedNotification}
 		<div
-			class="flex-none w-1/2 overflow-y-auto"
+			class="w-1/2 flex-none overflow-y-auto"
 			in:fly={{ x: 400, duration: 280, easing: cubicOut }}
 			out:fly={{ x: 400, duration: 220, easing: cubicOut }}
 		>
-			<IssuePanel
-				issueId={selectedNotification.issues?.id}
-				seedIssue={selectedNotification.issues}
-				activityData={_resolvedActivity}
-				activityLogsData={_resolvedLogs}
-				{vendors}
-				allIssues={[]}
-				on:close={() => (selectedNotification = null)}
-				on:resolved={resolveAndAdvance}
-			/>
+			{#if ['email_unknown_sender', 'allowed_unknown_behavior'].includes(selectedNotification.type)}
+				<PolicyPanel
+					notification={selectedNotification}
+					on:close={() => (selectedNotification = null)}
+					on:resolved={resolveAndAdvance}
+				/>
+			{:else}
+				<IssuePanel
+					issueId={selectedNotification.issues?.id}
+					seedIssue={selectedNotification.issues}
+					activityData={_resolvedActivity}
+					activityLogsData={_resolvedLogs}
+					{vendors}
+					allIssues={[]}
+					on:close={() => (selectedNotification = null)}
+					on:resolved={resolveAndAdvance}
+				/>
+			{/if}
 		</div>
 	{/if}
 </div>

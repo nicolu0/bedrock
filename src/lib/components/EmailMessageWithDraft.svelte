@@ -25,9 +25,50 @@
 	let showVendorDropdown = false;
 	let vendorSearch = '';
 
-	$: recipients = draft?.recipient_email
-		? draft.recipient_email.split(',').map((e) => ({ email: e.trim() })).filter((r) => r.email)
-		: [];
+	const normalizeRecipientList = (value) => {
+		if (!value) return [];
+		if (Array.isArray(value)) {
+			return value.map((email) => String(email ?? '').trim()).filter(Boolean);
+		}
+		if (typeof value === 'string') {
+			return value
+				.split(',')
+				.map((email) => email.trim())
+				.filter(Boolean);
+		}
+		return [];
+	};
+
+	const setDraftRecipients = (emails) => {
+		const normalized = normalizeRecipientList(emails);
+		draft = {
+			...draft,
+			recipient_emails: normalized.length ? normalized : null,
+			recipient_email: normalized[0] ?? null
+		};
+		return normalized;
+	};
+
+	const persistDraftRecipients = async (emails) => {
+		if (!draft?.message_id && !draft?.issue_id) return;
+		try {
+			await fetch('/api/email-drafts', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(
+					draft.message_id
+						? { message_id: draft.message_id, recipient_emails: emails }
+						: { issue_id: draft.issue_id, recipient_emails: emails }
+				)
+			});
+		} catch {
+			// ignore recipient update failures
+		}
+	};
+
+	$: recipients = normalizeRecipientList(draft?.recipient_emails ?? draft?.recipient_email).map(
+		(email) => ({ email })
+	);
 
 	$: recipientString = recipients.map((r) => r.email).join(', ');
 
@@ -46,15 +87,17 @@
 
 	const addVendor = (vendor) => {
 		if (!recipients.some((r) => r.email === vendor.email)) {
-			draft = { ...draft, recipient_email: recipientString ? `${recipientString}, ${vendor.email}` : vendor.email };
+			const nextRecipients = setDraftRecipients([...recipients.map((r) => r.email), vendor.email]);
+			persistDraftRecipients(nextRecipients);
 		}
 		showVendorDropdown = false;
 		vendorSearch = '';
 	};
 
 	const removeRecipient = (idx) => {
-		const updated = recipients.filter((_, i) => i !== idx);
-		draft = { ...draft, recipient_email: updated.map((r) => r.email).join(', ') };
+		const updated = recipients.filter((_, i) => i !== idx).map((r) => r.email);
+		const nextRecipients = setDraftRecipients(updated);
+		persistDraftRecipients(nextRecipients);
 	};
 
 	$: if (draft && (draft.message_id ?? draft.id) !== lastMessageKey) {
@@ -112,8 +155,8 @@
 
 	const sendDraft = async () => {
 		if (!draft?.message_id && !draft?.issue_id) return;
-		const effectiveRecipient = draft.message_id ? (draft.recipient_email ?? '') : recipientString;
-		if (!draft?.sender_email || !effectiveRecipient) {
+		const effectiveRecipients = recipients.map((r) => r.email).filter(Boolean);
+		if (!draft?.sender_email || !effectiveRecipients.length) {
 			showToast('Draft needs sender and recipient email.');
 			return;
 		}
@@ -126,7 +169,7 @@
 				body: JSON.stringify(
 					draft.message_id
 						? { message_id: draft.message_id }
-						: { issue_id: draft.issue_id, recipient_email: recipientString }
+						: { issue_id: draft.issue_id, recipient_emails: effectiveRecipients }
 				)
 			});
 			if (response.ok) {
@@ -182,11 +225,16 @@
 		return String(body).replace(/\s+/g, ' ').trim();
 	};
 
-	const formatSenderLabel = (sender) => {
+	const formatSenderLabel = (message) => {
+		if (message?.direction === 'outbound') return 'You';
+		const sender = message?.sender;
+		if (sender === 'unknown') {
+			const senderEmail = message?.metadata?.sender_email ?? message?.sender_email ?? '';
+			return senderEmail || 'Unknown';
+		}
 		if (!sender) return 'Unknown';
 		if (sender === 'tenant') return 'Tenant';
 		if (sender === 'agent') return 'Bedrock Ops';
-		if (sender === 'outbound') return 'You';
 		return sender;
 	};
 
@@ -218,7 +266,7 @@
 			<div class="min-w-0">
 				<div class="flex min-w-0 items-baseline gap-3">
 					<span class="shrink-0 font-semibold text-neutral-900">
-						{formatSenderLabel(message?.sender)}
+						{formatSenderLabel(message)}
 					</span>
 					{#if !isExpanded}
 						<span class="truncate text-sm text-neutral-600">
@@ -265,11 +313,25 @@
 					<span class="text-neutral-500">{draft.recipient_email ?? ''}</span>
 				{:else}
 					{#each recipients as recipient, i}
-						<span class="inline-flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 text-neutral-700">
+						<span
+							class="inline-flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 text-neutral-700"
+						>
 							{recipient.email}
-							<button type="button" class="text-neutral-400 hover:text-neutral-600" on:click={() => removeRecipient(i)}>
-								<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
-									<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+							<button
+								type="button"
+								class="text-neutral-400 hover:text-neutral-600"
+								on:click={() => removeRecipient(i)}
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="10"
+									height="10"
+									viewBox="0 0 16 16"
+									fill="currentColor"
+								>
+									<path
+										d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"
+									/>
 								</svg>
 							</button>
 						</span>
@@ -277,15 +339,28 @@
 					<div class="relative">
 						<button
 							type="button"
-							class="inline-flex h-5 w-5 items-center justify-center rounded bg-neutral-100 text-neutral-500 hover:bg-neutral-200 transition"
-							on:click|stopPropagation={() => { showVendorDropdown = !showVendorDropdown; vendorSearch = ''; }}
+							class="inline-flex h-5 w-5 items-center justify-center rounded bg-neutral-100 text-neutral-500 transition hover:bg-neutral-200"
+							on:click|stopPropagation={() => {
+								showVendorDropdown = !showVendorDropdown;
+								vendorSearch = '';
+							}}
 						>
-							<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
-								<path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="10"
+								height="10"
+								viewBox="0 0 16 16"
+								fill="currentColor"
+							>
+								<path
+									d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"
+								/>
 							</svg>
 						</button>
 						{#if showVendorDropdown}
-							<div class="absolute left-0 top-full z-20 mt-1 w-56 rounded-md border border-neutral-200 bg-white shadow-md">
+							<div
+								class="absolute top-full left-0 z-20 mt-1 w-56 rounded-md border border-neutral-200 bg-white shadow-md"
+							>
 								<div class="border-b border-neutral-100 px-2 py-1.5">
 									<input
 										type="text"
@@ -362,7 +437,7 @@
 				<div class="min-w-0">
 					<div class="flex min-w-0 items-baseline gap-3">
 						<span class="shrink-0 font-semibold text-neutral-900">
-							{formatSenderLabel(sentMessage?.sender ?? message?.sender)}
+							{formatSenderLabel(sentMessage ?? message)}
 						</span>
 						{#if !isExpanded}
 							<span class="truncate text-sm text-neutral-600">

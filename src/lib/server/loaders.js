@@ -232,6 +232,32 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 	return { sections: filteredSections, issues: normalizedIssues, assignee, workspaceId };
 };
 
+const normalizeRecipientList = (value) => {
+	if (!value) return [];
+	if (Array.isArray(value)) {
+		return value.map((email) => String(email ?? '').trim()).filter(Boolean);
+	}
+	if (typeof value === 'string') {
+		return value
+			.split(',')
+			.map((email) => email.trim())
+			.filter(Boolean);
+	}
+	return [];
+};
+
+const normalizeDraftRecipients = (draft) => {
+	if (!draft) return draft;
+	const normalized = normalizeRecipientList(draft.recipient_emails);
+	if (!normalized.length && draft.recipient_email) {
+		return { ...draft, recipient_emails: [draft.recipient_email] };
+	}
+	if (normalized.length && normalized !== draft.recipient_emails) {
+		return { ...draft, recipient_emails: normalized };
+	}
+	return draft;
+};
+
 export const loadActivityData = async (workspaceId, issueIds = null) => {
 	const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 	if (Array.isArray(issueIds) && issueIds.length === 0) {
@@ -246,7 +272,9 @@ export const loadActivityData = async (workspaceId, issueIds = null) => {
 
 	let draftsQuery = supabaseAdmin
 		.from('email_drafts')
-		.select('id, issue_id, message_id, sender_email, recipient_email, subject, body, updated_at')
+		.select(
+			'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at'
+		)
 		.eq('workspace_id', workspaceId)
 		.gte('updated_at', cutoff)
 		.order('updated_at', { ascending: false });
@@ -262,14 +290,15 @@ export const loadActivityData = async (workspaceId, issueIds = null) => {
 		(acc[m.issue_id] ??= []).push(m);
 		return acc;
 	}, {});
-	const emailDraftsByMessageId = (draftsResult?.data ?? []).reduce((acc, d) => {
+	const normalizedDrafts = (draftsResult?.data ?? []).map((draft) =>
+		normalizeDraftRecipients(draft)
+	);
+	const emailDraftsByMessageId = normalizedDrafts.reduce((acc, d) => {
 		const key = d.message_id ?? d.id;
 		if (key && !acc[key]) acc[key] = d;
 		return acc;
 	}, {});
-	const draftIssueIds = [
-		...new Set((draftsResult?.data ?? []).map((d) => d.issue_id).filter(Boolean))
-	];
+	const draftIssueIds = [...new Set(normalizedDrafts.map((d) => d.issue_id).filter(Boolean))];
 	return { messagesByIssue, emailDraftsByMessageId, draftIssueIds };
 };
 
