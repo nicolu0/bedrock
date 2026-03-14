@@ -7,6 +7,7 @@ export const load = async ({ locals, params }) => {
 	if (!locals.user) {
 		throw redirect(303, '/');
 	}
+	const userName = locals.user.user_metadata?.name ?? locals.user.email?.split('@')[0] ?? 'User';
 	const [, { data: adminWorkspace }] = await Promise.all([
 		ensureWorkspace(locals.supabase, locals.user),
 		supabaseAdmin
@@ -48,7 +49,9 @@ export const load = async ({ locals, params }) => {
 			activityData,
 			activityLogsData,
 			userId: locals.user.id,
-			role: 'admin'
+			role: 'admin',
+			userName,
+			ownerPersonId: null
 		};
 	}
 	const { data: memberWorkspace } = await supabaseAdmin
@@ -112,7 +115,9 @@ export const load = async ({ locals, params }) => {
 			activityData,
 			activityLogsData,
 			userId: locals.user.id,
-			role: normalizedRole
+			role: normalizedRole,
+			userName,
+			ownerPersonId: normalizedRole === 'owner' ? ownerPersonId : null
 		};
 	}
 	// Check if the workspace slug exists at all
@@ -542,13 +547,16 @@ const loadUnitsList = async (
 		return q;
 	};
 	const { data: units, error: unitsError } = await buildQuery(supabase);
-	if (!unitsError) {
-		return (units ?? []).map((unit) => ({
-			id: unit.id,
-			name: unit.name,
-			tenant: (unit.tenants ?? [])[0] ?? null,
-			property_id: unit.property_id
-		}));
+	const mappedUnits = (units ?? []).map((unit) => ({
+		id: unit.id,
+		name: unit.name,
+		tenant: (unit.tenants ?? [])[0] ?? null,
+		property_id: unit.property_id
+	}));
+	const needsAdminFallback =
+		!!unitsError || (isOwner && ownerScopeId && Array.isArray(units) && units.length === 0);
+	if (!needsAdminFallback) {
+		return mappedUnits;
 	}
 	const { data: adminUnits } = await buildQuery(adminClient);
 	return (adminUnits ?? []).map((unit) => ({

@@ -56,6 +56,25 @@ const refreshAccessToken = async (connection) => {
 	return accessToken;
 };
 
+const logEmailSendError = async ({ workspaceId, issueId, userId, action, error, meta }) => {
+	if (!workspaceId || !userId) return;
+	const payload = {
+		workspace_id: workspaceId,
+		issue_id: issueId ?? null,
+		type: 'email_outbound',
+		data: {
+			action,
+			error,
+			...(meta ?? {})
+		},
+		created_by: userId
+	};
+	const { error: insertError } = await supabaseAdmin.from('activity_logs').insert(payload);
+	if (insertError) {
+		console.error('email-send-error log insert failed', insertError);
+	}
+};
+
 export const POST = async ({ locals, request }) => {
 	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -236,6 +255,25 @@ export const POST = async ({ locals, request }) => {
 
 	if (!sendResponse.ok) {
 		const detail = await sendResponse.text();
+		console.error('gmail send failed', {
+			issueId: draft.issue_id,
+			draftId: draft.id,
+			recipients: effectiveRecipients,
+			subject: draft.subject,
+			detail
+		});
+		await logEmailSendError({
+			workspaceId,
+			issueId: draft.issue_id,
+			userId: locals.user?.id,
+			action: 'gmail-send',
+			error: detail,
+			meta: {
+				draft_id: draft.id,
+				recipients: effectiveRecipients,
+				subject: draft.subject
+			}
+		});
 		return json({ error: detail }, { status: 400 });
 	}
 
@@ -252,7 +290,7 @@ export const POST = async ({ locals, request }) => {
 			.eq('role', 'vendor')
 			.ilike('email', primaryRecipient)
 			.maybeSingle();
-		const { data: createdThread } = await supabaseAdmin
+		const { data: createdThread, error: threadError } = await supabaseAdmin
 			.from('threads')
 			.insert({
 				tenant_id: null,
@@ -267,15 +305,40 @@ export const POST = async ({ locals, request }) => {
 			.select('id')
 			.maybeSingle();
 		outboundThreadId = createdThread?.id ?? null;
+		if (threadError || !outboundThreadId) {
+			console.error('thread insert failed after send', {
+				issueId: draft.issue_id,
+				draftId: draft.id,
+				recipients: effectiveRecipients,
+				subject: draft.subject,
+				connectionId: connection.id,
+				threadExternalId: sendPayload?.threadId ?? null,
+				error: threadError?.message ?? 'thread insert returned null'
+			});
+			await logEmailSendError({
+				workspaceId,
+				issueId: draft.issue_id,
+				userId: locals.user?.id,
+				action: 'thread-insert',
+				error: threadError?.message ?? 'thread insert returned null',
+				meta: {
+					draft_id: draft.id,
+					recipients: effectiveRecipients,
+					subject: draft.subject,
+					connection_id: connection.id,
+					thread_external_id: sendPayload?.threadId ?? null
+				}
+			});
+		}
 	}
 
-	const { data: outboundMessage } = await supabaseAdmin
+	const { data: outboundMessage, error: messageError } = await supabaseAdmin
 		.from('messages')
 		.insert({
 			thread_id: outboundThreadId,
 			issue_id: draft.issue_id,
 			message: draft.body,
-			sender: 'outbound',
+			sender: 'unknown',
 			subject: draft.subject,
 			timestamp: new Date().toISOString(),
 			channel: 'gmail',
@@ -286,6 +349,35 @@ export const POST = async ({ locals, request }) => {
 		})
 		.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
 		.maybeSingle();
+
+	if (messageError || !outboundMessage?.id) {
+		console.error('message insert failed after send', {
+			issueId: draft.issue_id,
+			draftId: draft.id,
+			threadId: outboundThreadId,
+			recipients: effectiveRecipients,
+			subject: draft.subject,
+			connectionId: connection.id,
+			externalId: sentExternalId,
+			error: messageError?.message ?? 'message insert returned null'
+		});
+		await logEmailSendError({
+			workspaceId,
+			issueId: draft.issue_id,
+			userId: locals.user?.id,
+			action: 'message-insert',
+			error: messageError?.message ?? 'message insert returned null',
+			meta: {
+				draft_id: draft.id,
+				thread_id: outboundThreadId,
+				recipients: effectiveRecipients,
+				subject: draft.subject,
+				body_length: typeof draft.body === 'string' ? draft.body.length : null,
+				connection_id: connection.id,
+				external_id: sentExternalId
+			}
+		});
+	}
 
 	await supabaseAdmin.from('email_drafts').delete().eq('id', draft.id);
 

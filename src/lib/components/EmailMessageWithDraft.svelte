@@ -228,11 +228,16 @@
 		return String(body).replace(/\s+/g, ' ').trim();
 	};
 
-	const formatSenderLabel = (sender) => {
+	const formatSenderLabel = (message) => {
+		if (message?.direction === 'outbound') return 'You';
+		const sender = message?.sender;
+		if (sender === 'unknown') {
+			const senderEmail = message?.metadata?.sender_email ?? message?.sender_email ?? '';
+			return senderEmail || 'Unknown';
+		}
 		if (!sender) return 'Unknown';
 		if (sender === 'tenant') return 'Tenant';
 		if (sender === 'agent') return 'Bedrock Ops';
-		if (sender === 'outbound') return 'You';
 		return sender;
 	};
 
@@ -264,7 +269,7 @@
 			<div class="min-w-0">
 				<div class="flex min-w-0 items-baseline gap-3">
 					<span class="shrink-0 font-semibold text-neutral-900">
-						{formatSenderLabel(message?.sender)}
+						{formatSenderLabel(message)}
 					</span>
 					{#if !isExpanded}
 						<span class="truncate text-sm text-neutral-600">
@@ -435,7 +440,7 @@
 				<div class="min-w-0">
 					<div class="flex min-w-0 items-baseline gap-3">
 						<span class="shrink-0 font-semibold text-neutral-900">
-							{formatSenderLabel(sentMessage?.sender ?? message?.sender)}
+							{formatSenderLabel(sentMessage ?? message)}
 						</span>
 						{#if !isExpanded}
 							<span class="truncate text-sm text-neutral-600">

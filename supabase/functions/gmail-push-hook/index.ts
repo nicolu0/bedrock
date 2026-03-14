@@ -1510,8 +1510,7 @@ When you believe you have completed the task, call done().
 						if (issueName) issueNameCache.set(issue, issueName);
 					}
 					const isScheduleSubissue = issueName.startsWith('Schedule ');
-					const rawMessageId = typeof args.message_id === 'string' ? args.message_id.trim() : '';
-					const messageId = rawMessageId || null;
+					const messageId = null;
 					let normalizedRecipient = recipient ? normalizeEmail(extractEmail(recipient)) : null;
 					const normalizedRecipientList = recipientList
 						.map((email) => normalizeEmail(extractEmail(email)))
@@ -1859,7 +1858,8 @@ const processMessage = async ({
 					connection_id: connection.id,
 					issue_id: null,
 					thread_external_id: threadExternalId,
-					workspace_id: workspaceIdForConnection
+					workspace_id: workspaceIdForConnection,
+					metadata: { sender_email: senderEmail }
 				})
 				.select('id')
 				.maybeSingle();
@@ -1938,7 +1938,8 @@ const processMessage = async ({
 					connection_id: connection.id,
 					issue_id: threadRow.issue_id ?? null,
 					thread_external_id: threadExternalId,
-					workspace_id: workspaceIdForConnection
+					workspace_id: workspaceIdForConnection,
+					metadata: { sender_email: senderEmail }
 				})
 				.select('id')
 				.maybeSingle();

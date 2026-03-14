@@ -638,7 +638,7 @@ Guidance:
 					}
 					const draftId = await upsertEmailDraft({
 						issueId,
-						messageId: typeof args.message_id === 'string' ? args.message_id : null,
+						messageId: null,
 						senderEmail: defaultSenderEmail ?? null,
 						recipientEmail,
 						recipientEmails,

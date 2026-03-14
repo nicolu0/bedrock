@@ -97,7 +97,7 @@ export const GET = async ({ locals, url }) => {
 	const [messagesResult, draftsResult] = await Promise.all([
 		supabaseAdmin
 			.from('messages')
-			.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
+			.select('id, issue_id, message, sender, subject, timestamp, direction, channel, metadata')
 			.in('issue_id', issueIds)
 			.gte('timestamp', cutoff)
 			.order('timestamp', { ascending: true }),

@@ -39,6 +39,18 @@ const ensureWorkspace = async (supabase, user) => {
 		await supabase.from('users').upsert({ id: user.id, name: resolvedName });
 	}
 	const { supabaseAdmin } = await import('$lib/supabaseAdmin');
+	// If the user is already a member somewhere (e.g. accepted an invite),
+	// don't create a new workspace for them.
+	const { data: existingMember } = await supabaseAdmin
+		.from('people')
+		.select('workspace_id, updated_at, workspaces(id, slug)')
+		.eq('user_id', user.id)
+		.order('updated_at', { ascending: false })
+		.limit(1)
+		.maybeSingle();
+	if (existingMember?.workspaces) {
+		return existingMember.workspaces;
+	}
 	const { data: existingWorkspace } = await supabaseAdmin
 		.from('workspaces')
 		.select('id, slug')
@@ -46,18 +58,6 @@ const ensureWorkspace = async (supabase, user) => {
 		.maybeSingle();
 	let workspace = existingWorkspace ?? null;
 	if (!workspace) {
-		// If the user is already a member somewhere (e.g. accepted an invite),
-		// don't create a new workspace for them.
-		const { data: existingMember } = await supabaseAdmin
-			.from('people')
-			.select('workspace_id, workspaces(id, slug)')
-			.eq('user_id', user.id)
-			.limit(1)
-			.maybeSingle();
-		if (existingMember?.workspaces) {
-			return existingMember.workspaces;
-		}
-
 		const workspaceName = `${resolvedName} Workspace`;
 		const baseSlug = slugify(workspaceName);
 		const slug = await getAvailableSlug(supabaseAdmin, baseSlug);

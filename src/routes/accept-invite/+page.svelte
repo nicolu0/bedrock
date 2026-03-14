@@ -1,23 +1,26 @@
 <script>
 	// @ts-nocheck
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { clearSessionCaches } from '$lib/stores/clearSessionCaches';
 
 	export let data;
 
-	let status = 'pending';
+	let status = 'idle';
 	let errorMsg = '';
 
 	$: inviteEmail = data.inviteEmail ?? null;
 	$: userEmail = data.user?.email ?? null;
 	$: requiresLogout =
 		!!data.user && !!inviteEmail && userEmail?.toLowerCase() !== inviteEmail.toLowerCase();
+	$: inviterName = data.inviteMeta?.inviterName ?? 'Someone';
+	$: workspaceName = data.inviteMeta?.workspaceName ?? 'this workspace';
+	$: role = data.inviteMeta?.role ?? 'member';
+	$: roleLabel = role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Member';
 
-	onMount(async () => {
+	const acceptInvite = async () => {
 		if (!data.user || requiresLogout) return;
-
 		status = 'accepting';
+		errorMsg = '';
 		try {
 			const res = await fetch('/api/accept-invite', {
 				method: 'POST',
@@ -31,76 +34,100 @@
 				return;
 			}
 			status = 'success';
-			goto('/');
+			goto(json.workspace_slug ? `/${json.workspace_slug}` : '/');
 		} catch {
 			status = 'error';
 			errorMsg = 'Something went wrong. Please try again.';
 		}
-	});
+	};
 </script>
 
-<div class="flex min-h-screen flex-col items-center justify-center bg-white px-6">
-	<a
-		class="font-regular mb-8 flex items-center gap-1 text-xl tracking-[0.1em] text-neutral-800 uppercase"
-		style="font-family: 'Zalando Sans Expanded', sans-serif;"
-		href="/">Bedrock</a
-	>
-
-	<div class="w-full max-w-xs text-center">
-		{#if !data.user}
-			<h1 class="mb-2 text-lg font-medium text-neutral-800">You've been invited</h1>
-			<p class="mb-6 text-sm text-neutral-500">
-				Create an account or log in to accept your invite.
-			</p>
-			<div class="flex flex-col gap-3">
-				<a
-					href="/signup?invite={data.token}"
-					class="rounded-xl bg-stone-800 px-4 py-2.5 text-sm text-neutral-200 transition-colors hover:bg-stone-700"
-				>
-					Create account
-				</a>
-				<a
-					href="/login?invite={data.token}"
-					class="rounded-xl border border-stone-300 px-4 py-2.5 text-sm text-neutral-700 transition-colors hover:bg-stone-50"
-				>
-					Log in
-				</a>
+<div class="min-h-screen bg-white px-6">
+	<div class="flex items-center justify-between py-8 text-sm text-neutral-500">
+		<a class="flex items-center gap-2 text-neutral-600 hover:text-neutral-800" href="/">
+			<span aria-hidden="true">←</span>
+			<span>Back to Bedrock</span>
+		</a>
+		{#if data.user}
+			<div class="text-right">
+				<p class="text-xs tracking-[0.2em] text-neutral-400 uppercase">Logged in as</p>
+				<p class="text-sm font-medium text-neutral-700">{userEmail}</p>
 			</div>
-		{:else if requiresLogout}
-			<p class="text-sm text-neutral-500">You're already signed in.</p>
-		{:else if status === 'pending' || status === 'accepting'}
-			<p class="text-sm text-neutral-500">Accepting your invite…</p>
-		{:else if status === 'success'}
-			<p class="text-sm text-neutral-500">Invite accepted! Redirecting…</p>
-		{:else if status === 'error'}
-			<p class="mb-4 text-sm font-medium text-red-600">{errorMsg}</p>
-			<a href="/" class="text-sm text-neutral-800 hover:underline">Go to app</a>
 		{/if}
 	</div>
-</div>
 
-{#if requiresLogout}
-	<div class="fixed inset-0 z-40 bg-neutral-900/30"></div>
-	<div class="fixed inset-0 z-50 flex items-center justify-center px-4">
-		<div class="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl">
-			<h2 class="text-lg font-medium text-neutral-800">You're already logged in</h2>
-			<p class="mt-2 text-sm text-neutral-600">
-				You're signed in as {userEmail}. To accept this invite for {inviteEmail}, we need to log you
-				out so you can create a new account.
-			</p>
-			<form
-				method="POST"
-				action={`/api/logout?redirect=${encodeURIComponent(`/signup?invite=${data.token}`)}`}
-				class="mt-5 flex justify-end"
-				on:submit={clearSessionCaches}
+	<div class="flex items-center justify-center pb-16">
+		<div
+			class="w-full max-w-md rounded-3xl border border-neutral-200 bg-white px-8 py-10 text-center shadow-[0_20px_60px_-40px_rgba(0,0,0,0.6)]"
+		>
+			<div
+				class="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-stone-100 text-xl"
 			>
-				<button
-					type="submit"
-					class="rounded-xl bg-stone-800 px-4 py-2.5 text-sm text-neutral-200 transition-colors hover:bg-stone-700"
+				<span aria-hidden="true">◆</span>
+			</div>
+			{#if !data.inviteValid}
+				<h1 class="mb-2 text-2xl font-medium text-neutral-800">Invite unavailable</h1>
+				<p class="mb-6 text-sm text-neutral-500">This invite link is invalid or has expired.</p>
+				<a href="/" class="rounded-xl bg-stone-800 px-5 py-2.5 text-sm text-neutral-200"
+					>Go to Bedrock</a
 				>
-					Log out to accept invite
-				</button>
-			</form>
+			{:else}
+				<h1 class="mb-3 text-2xl font-medium text-neutral-800">
+					{inviterName} invited you to the {workspaceName} workspace
+				</h1>
+				<p class="mb-8 text-sm text-neutral-500">You'll join as a {roleLabel}.</p>
+				{#if requiresLogout}
+					<p class="mb-6 text-sm text-neutral-500">
+						You're logged in as {userEmail}. This invite is for {inviteEmail}. Log out to switch
+						accounts and accept it.
+					</p>
+					<form
+						method="POST"
+						action={`/api/logout?redirect=${encodeURIComponent(`/accept-invite?token=${data.token}`)}`}
+						class="flex justify-center"
+						on:submit={clearSessionCaches}
+					>
+						<button
+							type="submit"
+							class="w-full rounded-xl bg-stone-800 px-5 py-3 text-sm text-neutral-200 transition-colors hover:bg-stone-700"
+						>
+							Log out to accept invite
+						</button>
+					</form>
+				{:else}
+					{#if status === 'error'}
+						<p class="mb-4 rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-600">
+							{errorMsg}
+						</p>
+					{/if}
+					{#if data.user}
+						<button
+							type="button"
+							on:click={acceptInvite}
+							class="w-full rounded-xl bg-stone-800 px-5 py-3 text-sm text-neutral-200 transition-colors hover:bg-stone-700"
+							disabled={status === 'accepting'}
+						>
+							{status === 'accepting' ? 'Accepting…' : 'Accept invite'}
+						</button>
+						{#if status === 'success'}
+							<p class="mt-4 text-sm text-neutral-500">Invite accepted! Redirecting…</p>
+						{/if}
+					{:else}
+						<a
+							href="/signup?invite={data.token}"
+							class="block w-full rounded-xl bg-stone-800 px-5 py-3 text-sm text-neutral-200 transition-colors hover:bg-stone-700"
+						>
+							Accept invite
+						</a>
+						<p class="mt-4 text-sm text-neutral-500">
+							Already have an account?
+							<a class="ml-1 text-neutral-800 hover:underline" href="/login?invite={data.token}">
+								Log in
+							</a>
+						</p>
+					{/if}
+				{/if}
+			{/if}
 		</div>
 	</div>
-{/if}
+</div>
