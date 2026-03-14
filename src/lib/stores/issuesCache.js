@@ -196,7 +196,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 	const fetcher = options.fetch ?? fetch;
 	const force = options.force ?? false;
 
-	console.log('[issuesCache] ensureIssuesCache called', { workspaceSlug, force });
 
 	if (isHardReload()) {
 		clearSessionCache();
@@ -215,9 +214,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 		currentState.workspace === workspaceSlug &&
 		now - currentState.fetchedAt < CACHE_TTL
 	) {
-		console.log('[issuesCache] returning from in-memory cache (TTL valid)', {
-			issueCount: currentState.data?.issues?.length
-		});
 		return currentState.data;
 	}
 
@@ -232,9 +228,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 		now - sessionCached.fetchedAt < CACHE_TTL &&
 		sessionValid
 	) {
-		console.log('[issuesCache] returning from sessionStorage cache', {
-			issueCount: sessionCached.data?.issues?.length
-		});
 		issuesCache.set({
 			workspace: workspaceSlug,
 			data: sessionCached.data,
@@ -249,11 +242,9 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 	}
 
 	if (!force && inFlight) {
-		console.log('[issuesCache] reusing in-flight request');
 		return inFlight;
 	}
 	if (force && inFlight) {
-		console.log('[issuesCache] force=true, ignoring in-flight and starting fresh fetch');
 	}
 
 	issuesCache.set({
@@ -279,18 +270,7 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 			const nextSections = data?.sections?.length ?? 0;
 			const nextIssues = data?.issues?.length ?? 0;
 			const shouldOverwrite = nextSections > 0 || nextIssues > 0;
-			console.log('[issuesCache] fetch complete', {
-				force,
-				nextSections,
-				nextIssues,
-				shouldOverwrite,
-				workspace: workspaceSlug
-			});
 			if (!shouldOverwrite) {
-				console.warn('[issuesCache] shouldOverwrite=false — API returned empty data', {
-					force,
-					workspaceSlug
-				});
 			}
 			if (shouldOverwrite) {
 				issuesCache.set({
@@ -311,7 +291,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 			}));
 			return currentState?.data;
 		} catch (error) {
-			console.error('[issuesCache] fetch error', { force, error });
 			issuesCache.update((state) => ({
 				...state,
 				loading: false,

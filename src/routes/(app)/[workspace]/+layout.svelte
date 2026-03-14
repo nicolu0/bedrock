@@ -313,10 +313,10 @@
 	let _rtActivityV = 0, _doneActivityV = 0;
 	let _rtLogsV = 0, _doneLogsV = 0;
 
-	$: if (_rtIssuesV > _doneIssuesV) { _doneIssuesV = _rtIssuesV; console.log('[invalidate] app:issues (from RT counter, v=' + _rtIssuesV + ')'); invalidate('app:issues'); }
-	$: if (_rtNotifsV > _doneNotifsV) { _doneNotifsV = _rtNotifsV; console.log('[invalidate] app:notifications (from RT counter, v=' + _rtNotifsV + ')'); invalidate('app:notifications'); }
-	$: if (_rtActivityV > _doneActivityV) { _doneActivityV = _rtActivityV; console.log('[invalidate] app:activity (from RT counter, v=' + _rtActivityV + ')'); invalidate('app:activity'); }
-	$: if (_rtLogsV > _doneLogsV) { _doneLogsV = _rtLogsV; console.log('[invalidate] app:activityLogs (from RT counter, v=' + _rtLogsV + ')'); invalidate('app:activityLogs'); }
+	$: if (_rtIssuesV > _doneIssuesV) { _doneIssuesV = _rtIssuesV; invalidate('app:issues'); }
+	$: if (_rtNotifsV > _doneNotifsV) { _doneNotifsV = _rtNotifsV; invalidate('app:notifications'); }
+	$: if (_rtActivityV > _doneActivityV) { _doneActivityV = _rtActivityV; invalidate('app:activity'); }
+	$: if (_rtLogsV > _doneLogsV) { _doneLogsV = _rtLogsV; invalidate('app:activityLogs'); }
 
 	onMount(async () => {
 		// Ensure the browser Supabase client has the authenticated session from the server.
@@ -330,7 +330,6 @@
 		const uid = userId;
 		if (!wid) return;
 
-		console.log('[issues realtime] creating subscription — workspace:', wid);
 
 		_workspaceChannel = supabase
 			.channel(`workspace-delta-${wid}`)
@@ -338,9 +337,7 @@
 			.on(
 				'postgres_changes',
 				{ event: '*', schema: 'public', table: 'issues', filter: `workspace_id=eq.${wid}` },
-				(payload) => {
-					const r = payload?.new ?? payload?.old ?? payload?.record ?? {};
-					console.log('[issues realtime] event received:', payload.eventType, '— id:', r.id, 'readableId:', r.readable_id);
+				() => {
 					_rtIssuesV++;
 				}
 			)
@@ -370,9 +367,7 @@
 			)
 
 			.subscribe((status) => {
-				console.log('[issues realtime] channel status:', status);
 				if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-					console.warn('[issues realtime]', status, '— triggering full invalidate');
 					_rtIssuesV++; _rtNotifsV++; _rtActivityV++; _rtLogsV++;
 					invalidate('app:people');
 					invalidate('app:properties');
