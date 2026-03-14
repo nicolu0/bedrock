@@ -5,6 +5,32 @@ import { resolveWorkspace } from '$lib/server/workspaces';
 
 const ACTIVITY_WINDOW_DAYS = 30;
 
+const normalizeRecipientList = (value) => {
+	if (!value) return [];
+	if (Array.isArray(value)) {
+		return value.map((email) => String(email ?? '').trim()).filter(Boolean);
+	}
+	if (typeof value === 'string') {
+		return value
+			.split(',')
+			.map((email) => email.trim())
+			.filter(Boolean);
+	}
+	return [];
+};
+
+const normalizeDraftRecipients = (draft) => {
+	if (!draft) return draft;
+	const normalized = normalizeRecipientList(draft.recipient_emails);
+	if (!normalized.length && draft.recipient_email) {
+		return { ...draft, recipient_emails: [draft.recipient_email] };
+	}
+	if (normalized.length && normalized !== draft.recipient_emails) {
+		return { ...draft, recipient_emails: normalized };
+	}
+	return draft;
+};
+
 export const GET = async ({ locals, url }) => {
 	if (!locals.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
@@ -71,13 +97,15 @@ export const GET = async ({ locals, url }) => {
 	const [messagesResult, draftsResult] = await Promise.all([
 		supabaseAdmin
 			.from('messages')
-			.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
+			.select('id, issue_id, message, sender, subject, timestamp, direction, channel, metadata')
 			.in('issue_id', issueIds)
 			.gte('timestamp', cutoff)
 			.order('timestamp', { ascending: true }),
 		supabaseAdmin
 			.from('email_drafts')
-			.select('id, issue_id, message_id, sender_email, recipient_email, subject, body, updated_at')
+			.select(
+				'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at'
+			)
 			.in('issue_id', issueIds)
 			.gte('updated_at', cutoff)
 			.order('updated_at', { ascending: false })
@@ -90,7 +118,10 @@ export const GET = async ({ locals, url }) => {
 		return acc;
 	}, {});
 
-	const emailDraftsByMessageId = (draftsResult?.data ?? []).reduce((acc, draft) => {
+	const normalizedDrafts = (draftsResult?.data ?? []).map((draft) =>
+		normalizeDraftRecipients(draft)
+	);
+	const emailDraftsByMessageId = normalizedDrafts.reduce((acc, draft) => {
 		const key = draft.message_id ?? draft.id;
 		if (!key || acc[key]) return acc;
 		acc[key] = draft;
@@ -98,7 +129,7 @@ export const GET = async ({ locals, url }) => {
 	}, {});
 
 	const draftIssueIds = [
-		...new Set((draftsResult?.data ?? []).map((draft) => draft.issue_id).filter(Boolean))
+		...new Set(normalizedDrafts.map((draft) => draft.issue_id).filter(Boolean))
 	];
 
 	return json({ messagesByIssue, emailDraftsByMessageId, draftIssueIds });

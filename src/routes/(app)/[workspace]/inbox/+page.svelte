@@ -9,6 +9,7 @@
 	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
 	import { issuesCache, ensureIssuesCache } from '$lib/stores/issuesCache.js';
 	import IssuePanel from '$lib/components/IssuePanel.svelte';
+	import PolicyPanel from '$lib/components/PolicyPanel.svelte';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 
@@ -18,9 +19,12 @@
 	let unreadSnapshot = null;
 
 	function setFilter(tab) {
-		unreadSnapshot = tab === 'Unread'
-			? new Set((notifications ?? []).filter((n) => !n.is_read && !n.is_resolved).map((n) => n.id))
-			: null;
+		unreadSnapshot =
+			tab === 'Unread'
+				? new Set(
+						(notifications ?? []).filter((n) => !n.is_read && !n.is_resolved).map((n) => n.id)
+					)
+				: null;
 		filter = tab;
 		selectedNotification = null;
 	}
@@ -37,16 +41,19 @@
 			: null;
 
 	$: filtered =
-		filter === 'Unread'   ? (notifications ?? []).filter((n) => unreadSnapshot?.has(n.id) && !n.is_resolved) :
-		filter === 'Resolved' ? (notifications ?? []).filter((n) => n.is_resolved) :
-		/* All */               (notifications ?? []).filter((n) => !n.is_resolved);
+		filter === 'Unread'
+			? (notifications ?? []).filter((n) => unreadSnapshot?.has(n.id) && !n.is_resolved)
+			: filter === 'Resolved'
+				? (notifications ?? []).filter((n) => n.is_resolved)
+				: /* All */ (notifications ?? []).filter((n) => !n.is_resolved);
 
 	function resolveAndAdvance() {
 		if (!selectedNotification) return;
 		const idx = filtered.findIndex((n) => n.id === selectedNotification.id);
 		const next = filtered[idx + 1] ?? filtered[idx - 1] ?? null;
 		updateNotificationInCache({ id: selectedNotification.id, is_resolved: true });
-		if (next) handleClick(next); else selectedNotification = null;
+		if (next) handleClick(next);
+		else selectedNotification = null;
 	}
 
 	$: vendors =
@@ -102,12 +109,16 @@
 	}
 </script>
 
-<svelte:window on:keydown={(e) => { if (e.key === 'Escape' && selectedNotification) selectedNotification = null; }} />
+<svelte:window
+	on:keydown={(e) => {
+		if (e.key === 'Escape' && selectedNotification) selectedNotification = null;
+	}}
+/>
 
 <div class="flex h-full overflow-hidden">
 	<!-- Notification list -->
 	<div
-		class="flex-none flex flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out
+		class="flex flex-none flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out
 			{selectedNotification ? 'w-1/2 border-r border-neutral-200' : 'w-full'}"
 	>
 		<div class="flex items-center border-b border-neutral-200 px-6 py-3">
@@ -215,20 +226,28 @@
 	<!-- Issue detail panel -->
 	{#if selectedNotification}
 		<div
-			class="flex-none w-1/2 overflow-y-auto"
+			class="w-1/2 flex-none overflow-y-auto"
 			in:fly={{ x: 400, duration: 280, easing: cubicOut }}
 			out:fly={{ x: 400, duration: 220, easing: cubicOut }}
 		>
-			<IssuePanel
-				issueId={selectedNotification.issues?.id}
-				seedIssue={selectedNotification.issues}
-				activityData={$activityCache.data}
-				activityLogsData={$activityLogsCache.data}
-				{vendors}
-				allIssues={$issuesCache.data?.issues ?? []}
-				on:close={() => (selectedNotification = null)}
-				on:resolved={resolveAndAdvance}
-			/>
+			{#if ['email_unknown_sender', 'allowed_unknown_behavior'].includes(selectedNotification.type)}
+				<PolicyPanel
+					notification={selectedNotification}
+					on:close={() => (selectedNotification = null)}
+					on:resolved={resolveAndAdvance}
+				/>
+			{:else}
+				<IssuePanel
+					issueId={selectedNotification.issues?.id}
+					seedIssue={selectedNotification.issues}
+					activityData={$activityCache.data}
+					activityLogsData={$activityLogsCache.data}
+					{vendors}
+					allIssues={$issuesCache.data?.issues ?? []}
+					on:close={() => (selectedNotification = null)}
+					on:resolved={resolveAndAdvance}
+				/>
+			{/if}
 		</div>
 	{/if}
 </div>

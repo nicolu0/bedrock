@@ -6,6 +6,7 @@
 	import { page } from '$app/stores';
 	import { supabase } from '$lib/supabaseClient';
 	import MessageThread from '$lib/components/MessageThread.svelte';
+	import { clearSessionCaches } from '$lib/stores/clearSessionCaches';
 	export let issues = [];
 	export let threadsByIssue = {};
 	export let messagesByThread = {};
@@ -628,12 +629,14 @@
 
 	const handleSignOut = async (event) => {
 		event.preventDefault();
+		clearSessionCaches();
 		await postAction('?/signOut', new FormData());
 		window.location.href = '/';
 	};
 
 	const handleDeleteAccount = async (event) => {
 		event.preventDefault();
+		clearSessionCaches();
 		await postAction('?/deleteAccount', new FormData());
 		window.location.href = '/';
 	};

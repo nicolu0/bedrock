@@ -55,6 +55,11 @@ const trimQuotedReply = (input: string) => {
 	return markerMatch[0].trim();
 };
 
+const isRelevantEmail = (subject: string, body: string) => {
+	const combined = `${subject || ''}\n${body || ''}`;
+	return RELEVANCE_REGEX.test(combined);
+};
+
 const extractHeaders = (headers: Array<{ name: string; value: string }>) => {
 	const subject = headers.find((h) => h.name.toLowerCase() === 'subject')?.value ?? '';
 	const from = headers.find((h) => h.name.toLowerCase() === 'from')?.value ?? '';
@@ -68,6 +73,23 @@ const extractEmail = (fromValue: string) => {
 };
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+const getHeaderValue = (headers: Array<{ name: string; value: string }>, name: string) =>
+	headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
+
+const isBulkMessage = (headers: Array<{ name: string; value: string }>) => {
+	const listUnsubscribe = getHeaderValue(headers, 'List-Unsubscribe');
+	const listId = getHeaderValue(headers, 'List-Id');
+	const precedence = getHeaderValue(headers, 'Precedence');
+	const autoSubmitted = getHeaderValue(headers, 'Auto-Submitted');
+	if (listUnsubscribe || listId) return true;
+	if (/\b(bulk|list|junk)\b/i.test(precedence)) return true;
+	if (autoSubmitted && !/\bno\b/i.test(autoSubmitted)) return true;
+	return false;
+};
+
+const RELEVANCE_REGEX =
+	/\b(maintenance|repair|fix|broken|leak|leaking|water damage|flood|clog|plumb|hvac|air[- ]?cond|ac\b|heater|heating|thermostat|electrical|power outage|no power|gas leak|gas smell|smoke|alarm|mold|pest|bug|roach|bed ?bug|rat|rats|sewer|toilet|sink|shower|bath|pipe|burst|lock|key|window|door|appliance|fridge|oven|stove|dishwasher|laundry|washer|dryer|rent|payment|invoice|late fee|lease|move[- ]?in|move[- ]?out|eviction|deposit|booking|reservation|check[- ]?in|check[- ]?out|cleaning|housekeep|turnover|short[- ]?term|long[- ]?term|airbnb|vrbo|guest)\b/i;
 
 const isUuid = (value: string) =>
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -146,6 +168,44 @@ const insertIngestionLog = async ({
 		.insert({ user_id: userId, source, detail: trimmed });
 	if (error) {
 		console.error('gmail-push-hook log insert failed', error);
+	}
+};
+
+const logAgentError = async ({
+	workspaceId,
+	issueId,
+	userId,
+	action,
+	error,
+	messageId,
+	runId,
+	step
+}: {
+	workspaceId: string;
+	issueId: string | null;
+	userId: string;
+	action: string;
+	error: string;
+	messageId?: string | null;
+	runId?: string | null;
+	step?: number | null;
+}) => {
+	if (!workspaceId || !userId) return;
+	const { error: insertError } = await supabase.from('activity_logs').insert({
+		workspace_id: workspaceId,
+		issue_id: issueId ?? null,
+		type: 'agent-error',
+		data: {
+			action,
+			error,
+			message_id: messageId ?? null,
+			run_id: runId ?? null,
+			step: Number.isFinite(step) ? step : null
+		},
+		created_by: userId
+	});
+	if (insertError) {
+		console.error('agent-error log insert failed', insertError);
 	}
 };
 
@@ -238,7 +298,8 @@ const logLlmOutput = async (userId: string, payload: unknown, runId: string, ste
 	}
 };
 
-const listOpenIssues = async (unitId: string) => {
+const listOpenIssues = async (unitId: string | null) => {
+	if (!unitId) return [];
 	const { data } = await supabase
 		.from('issues')
 		.select('id, name, status, parent_id, updated_at')
@@ -259,6 +320,21 @@ const listVendors = async (workspaceId: string) => {
 	return data ?? [];
 };
 
+const listWorkspaceUnitsForAgent = async (workspaceId: string) => {
+	const { data } = await supabase
+		.from('units')
+		.select('id, name, property_id, properties!inner(name, address, workspace_id)')
+		.eq('properties.workspace_id', workspaceId)
+		.order('name', { ascending: true });
+	return (data ?? []).map((unit) => ({
+		id: unit.id,
+		name: unit.name,
+		property_id: unit.property_id,
+		property_name: unit.properties?.name ?? null,
+		property_address: unit.properties?.address ?? null
+	}));
+};
+
 const getWorkspaceAdminId = async (workspaceId: string) => {
 	const { data } = await supabase
 		.from('workspaces')
@@ -266,6 +342,102 @@ const getWorkspaceAdminId = async (workspaceId: string) => {
 		.eq('id', workspaceId)
 		.maybeSingle();
 	return data?.admin_user_id ?? null;
+};
+
+const getWorkspaceIdForUser = async (userId: string) => {
+	const { data } = await supabase
+		.from('people')
+		.select('workspace_id')
+		.eq('user_id', userId)
+		.in('role', ['admin', 'member', 'owner'])
+		.maybeSingle();
+	return data?.workspace_id ?? null;
+};
+
+const getPolicyMatch = async ({
+	workspaceId,
+	senderEmail
+}: {
+	workspaceId: string;
+	senderEmail: string;
+}) => {
+	const normalized = normalizeEmail(senderEmail);
+	if (!normalized) return { allow: false, block: false };
+	const { data } = await supabase
+		.from('workspace_policies')
+		.select('type')
+		.eq('workspace_id', workspaceId)
+		.eq('email', normalized)
+		.in('type', ['allow', 'block']);
+	const types = new Set((data ?? []).map((row) => row.type));
+	return { allow: types.has('allow'), block: types.has('block') };
+};
+
+const createUnknownSenderNotification = async ({
+	workspaceId,
+	issueId,
+	senderEmail,
+	subject,
+	body,
+	messageId,
+	threadId,
+	userId,
+	type
+}: {
+	workspaceId: string;
+	issueId: string | null;
+	senderEmail: string;
+	subject: string;
+	body: string;
+	messageId: string | null;
+	threadId: string | null;
+	userId: string;
+	type: 'email_unknown_sender' | 'allowed_unknown_behavior';
+}) => {
+	const adminUserId = await getWorkspaceAdminId(workspaceId);
+	if (!adminUserId) {
+		await insertIngestionLog({
+			userId,
+			source: 'notification',
+			detail: JSON.stringify({
+				reason: 'missing_workspace_admin',
+				workspace_id: workspaceId
+			})
+		});
+		return;
+	}
+
+	const safeSubject = subject?.trim() || 'New email received';
+	const safeBody = body?.trim() || safeSubject;
+	const titleSender = senderEmail ? senderEmail : 'Unknown sender';
+	const bodyPreview = safeSubject !== safeBody ? safeSubject : safeBody.slice(0, 160);
+	const { error } = await supabase.from('notifications').insert({
+		workspace_id: workspaceId,
+		issue_id: issueId,
+		user_id: adminUserId,
+		title: `Email from ${titleSender}`,
+		body: bodyPreview,
+		type,
+		requires_action: true,
+		meta: {
+			sender_email: senderEmail,
+			subject: safeSubject,
+			body: safeBody,
+			message_id: messageId,
+			thread_id: threadId
+		}
+	});
+	if (error) {
+		await insertIngestionLog({
+			userId,
+			source: 'notification',
+			detail: JSON.stringify({
+				reason: 'insert_failed',
+				workspace_id: workspaceId,
+				error: error.message
+			})
+		});
+	}
 };
 
 const listEligibleAssignees = async (workspaceId: string): Promise<Set<string>> => {
@@ -354,7 +526,7 @@ const createIssue = async ({
 	description
 }: {
 	name: string;
-	unitId: string;
+	unitId: string | null;
 	workspaceId: string;
 	assigneeId?: string | null;
 	description?: string | null;
@@ -363,7 +535,7 @@ const createIssue = async ({
 		.from('issues')
 		.insert({
 			name,
-			unit_id: unitId,
+			unit_id: unitId ?? null,
 			workspace_id: workspaceId,
 			status: 'todo',
 			assignee_id: assigneeId ?? null,
@@ -504,7 +676,7 @@ const createSubissue = async ({
 }: {
 	parentIssueId: string;
 	name: string;
-	unitId: string;
+	unitId: string | null;
 	workspaceId: string;
 	status: string;
 	reasoning: string | null;
@@ -516,7 +688,7 @@ const createSubissue = async ({
 		.insert({
 			parent_id: parentIssueId,
 			name,
-			unit_id: unitId,
+			unit_id: unitId ?? null,
 			workspace_id: workspaceId,
 			status,
 			reasoning,
@@ -541,6 +713,7 @@ const upsertEmailDraft = async ({
 	messageId,
 	senderEmail,
 	recipientEmail,
+	recipientEmails,
 	subject,
 	body,
 	userId,
@@ -550,16 +723,25 @@ const upsertEmailDraft = async ({
 	messageId: string | null;
 	senderEmail: string;
 	recipientEmail: string | null;
+	recipientEmails: string[] | null;
 	subject: string;
 	body: string;
 	userId: string;
 	workspaceId: string;
 }) => {
+	const normalizedRecipients = Array.isArray(recipientEmails)
+		? recipientEmails.map((email) => String(email ?? '').trim()).filter(Boolean)
+		: [];
+	const fallbackRecipient = typeof recipientEmail === 'string' ? recipientEmail.trim() : '';
+	if (!normalizedRecipients.length && fallbackRecipient) {
+		normalizedRecipients.push(fallbackRecipient);
+	}
 	const payload = {
 		issue_id: issueId,
 		message_id: messageId,
 		sender_email: senderEmail,
-		recipient_email: recipientEmail,
+		recipient_email: normalizedRecipients[0] ?? recipientEmail,
+		recipient_emails: normalizedRecipients.length ? normalizedRecipients : null,
 		subject,
 		body,
 		workspace_id: workspaceId,
@@ -649,7 +831,7 @@ const generateIssueTitle = async ({
 	subject: string;
 	body: string;
 	senderEmail: string;
-	unitId: string;
+	unitId: string | null;
 	workspaceId: string;
 }) => {
 	const system = `Generate a concise maintenance issue title.
@@ -733,12 +915,13 @@ const runIssueAgent = async ({
 	replyMessageId,
 	rootIssueId,
 	threadIssueId,
-	relatedIssues
+	relatedIssues,
+	workspaceUnits
 }: {
 	subject: string;
 	body: string;
 	senderEmail: string;
-	unitId: string;
+	unitId: string | null;
 	unitName: string | null;
 	workspaceId: string;
 	propertyName: string | null;
@@ -757,6 +940,13 @@ const runIssueAgent = async ({
 		name: string | null;
 		status: string | null;
 		parent_id: string | null;
+	}>;
+	workspaceUnits?: Array<{
+		id: string;
+		name: string | null;
+		property_id: string | null;
+		property_name: string | null;
+		property_address: string | null;
 	}>;
 }) => {
 	const system = `You are Bedrock, an assistant for property management.
@@ -778,10 +968,15 @@ Process (required):
 7) If you created a triage subissue, create an email draft reply to the tenant using draft_reply (required).
 8) When you determine the tenant cannot resolve the issue and you create a Schedule subissue, you should create two drafts in the same run:
    - Tenant reply: acknowledge, confirm availability/entry permission, and keep the tenant informed. Use latest_message_id for message_id.
-   - Vendor request: pick a vendor from the vendors list (prefer trade match) and draft a vendor email. Omit message_id unless a vendor thread exists. If no suitable vendor or no vendor email exists, draft with recipient_email null and note that no matching vendor was found.
+    - Vendor request: pick a vendor from the vendors list (prefer trade match) and draft a vendor email. Omit message_id unless a vendor thread exists. If no suitable vendor or no vendor email exists, draft with recipient_email null and note that no matching vendor was found.
    This is a stopping point for triage: do not keep asking tenant troubleshooting questions in the same run.
 9) Linking: Always link the tenant thread to the triage subissue (or existing triage subissue). Do NOT link the tenant thread to the Schedule subissue; that subissue is for the vendor thread.
 10) Finally, call link_thread_to_issue once with the triage subissue id. This is required.
+
+Non-tenant routing:
+- If tenant_name is null and workspace_units are provided, infer the most likely unit_id from the email subject/body.
+- Use property/unit hints in the email to pick a unit_id from workspace_units.
+- If there is no confident match, set unit_id to null.
 
 Rules:
 - Use tools only.
@@ -794,7 +989,7 @@ Rules:
 - Subissue parent rules: Triage and Schedule subissues must use root_issue_id as parent. Never use thread_issue_id as the parent for Schedule.
 - Subissue description: required. One line only, super concise, human readable summary of why this subissue exists (use the reasoning as a base). Make it specific to the subissue stage (triage vs schedule) and the reason for that stage (tenant-fixable, policy requirement, etc.). Avoid quoting the email body. Avoid list/CSV formatting; write a sentence.
 - Reasoning: keep as a short, human-readable sentence that can be reused for the subissue description.
-- Use the workspace_policy to decide triage vs schedule vendor. If policy is empty or unclear, triage unless it matches an emergency.
+- Use the workspace_policy to decide triage vs schedule vendor. If the policy instructs drafting emails to cleaners or vendors, do that and skip draft_reply unless the policy explicitly says to reply.
 - Drafts: Always write from the property manager POV (the user). Never write from the tenant POV.
 - Drafts: For tenant replies, address the tenant by tenant_name only. Never infer a name from the email address.
 - Drafts: End with the user_name as the signature. Never use an email address as the signature.
@@ -806,6 +1001,7 @@ Rules:
 - Drafts: For Schedule subissues, the draft recipient must be a vendor email or null; never send to sender_email.
 - Drafts: sender_email should not be provided by the agent. The system will use default_sender_email.
 - Drafts: When provided, pass recipient_email as a plain email address (no display name).
+- Drafts: If emailing multiple recipients, pass recipient_emails as an array of plain email addresses.
 - root_issue_id: When present, you must not call create_issue. Reuse existing subissues when possible.
 - Drafts: Use the subissue id for issue_id. For replies, use latest_message_id for message_id. For vendor scheduling drafts, use draft_email for new outreach and draft_reply for replies; include message_id only when replying in an existing vendor thread, otherwise omit it entirely (do not send empty string).
 - Linking: Call link_thread_to_issue exactly once and only after issue/subissue creation. This is required.
@@ -829,12 +1025,12 @@ When you believe you have completed the task, call done().
 			additionalProperties: false,
 			properties: {
 				title: { type: 'string' },
-				unit_id: { type: 'string' },
+				unit_id: { type: ['string', 'null'] },
 				workspace_id: { type: 'string' },
 				assignee_id: { type: 'string' },
 				description: { type: 'string' }
 			},
-			required: ['title', 'unit_id', 'workspace_id', 'description']
+			required: ['title', 'workspace_id', 'description']
 		}
 	};
 	const linkThreadTool = {
@@ -880,6 +1076,7 @@ When you believe you have completed the task, call done().
 				issue_id: { type: 'string' },
 				message_id: { type: 'string' },
 				recipient_email: { type: 'string' },
+				recipient_emails: { type: 'array', items: { type: 'string' } },
 				subject: { type: 'string' },
 				body: { type: 'string' }
 			},
@@ -967,7 +1164,8 @@ When you believe you have completed the task, call done().
 				default_sender_email: defaultSenderEmail,
 				eligible_assignees: Array.from(eligibleAssignees),
 				assignees,
-				admin_user_id: workspaceAdminId
+				admin_user_id: workspaceAdminId,
+				workspace_units: workspaceUnits ?? []
 			})
 		}
 	];
@@ -979,6 +1177,7 @@ When you believe you have completed the task, call done().
 	let lastSubissueTitle: string | null = null;
 	let draftedIssueId: string | null = null;
 	let threadLinked = false;
+	let resolvedUnitId: string | null = unitId;
 	const issueNameCache = new Map<string, string>();
 
 	for (let i = 0; i < 6; i += 1) {
@@ -1028,334 +1227,398 @@ When you believe you have completed the task, call done().
 			const name = toolCall.name;
 			const args = toolCall.arguments ? JSON.parse(toolCall.arguments) : {};
 			let result: Record<string, unknown> = {};
-
-			if (name === 'create_issue') {
-				const title = typeof args.title === 'string' ? args.title.trim() : '';
-				const unit = typeof args.unit_id === 'string' ? args.unit_id : unitId;
-				const workspace = typeof args.workspace_id === 'string' ? args.workspace_id : workspaceId;
-				const assignee = resolveAssigneeId({
-					requestedAssigneeId: typeof args.assignee_id === 'string' ? args.assignee_id : null,
-					fallbackAssigneeId: workspaceAdminId,
-					eligibleAssignees
-				});
-				const rawDescriptionCandidate =
-					typeof args.description === 'string'
-						? normalizeOneLine(ensureSentence(args.description.replace(/"/g, '')))
-						: '';
-				const rawDescription = isStatusListDescription(rawDescriptionCandidate)
-					? ''
-					: rawDescriptionCandidate;
-				const assigneeName = assignee ? (assigneeNameById.get(assignee) ?? null) : null;
-				const description = rawDescription
-					? rawDescription
-					: normalizeOneLine(
-							ensureSentence(
-								buildRootIssueDescriptionFallback({
-									reporterName: tenantName ?? null,
-									assigneeName,
-									subject,
-									body,
-									issueTitle: title
-								})
-							)
-						);
-				if (!title) {
-					throw new Error('create_issue missing title');
-				}
-				const issueId = await createIssue({
-					name: title,
-					unitId: unit,
-					workspaceId: workspace,
-					assigneeId: assignee,
-					description
-				});
-				linkedIssueId = issueId;
-				createdIssueId = issueId;
-				issuedAction = true;
-				result = { issue_id: issueId };
-			}
-
-			if (name === 'link_thread_to_issue') {
-				const thread = typeof args.thread_id === 'string' ? args.thread_id : threadId;
-				const issue =
-					typeof args.issue_id === 'string' ? args.issue_id : (lastSubissueId ?? linkedIssueId);
-				if (!thread || !issue) {
-					throw new Error('link_thread_to_issue missing thread_id or issue_id');
-				}
-				const linked = await linkThreadToIssue({ threadId: thread, issueId: issue });
-				if (!linked) {
-					const { data: existingThread } = await supabase
-						.from('threads')
-						.select('issue_id')
-						.eq('id', thread)
-						.maybeSingle();
-					linkedIssueId = existingThread?.issue_id ?? issue;
-				} else {
-					linkedIssueId = issue;
-				}
-				threadLinked = true;
-				issuedAction = true;
-				result = { ok: true };
-			}
-
-			if (name === 'create_subissue') {
-				const title = typeof args.title === 'string' ? args.title.trim() : '';
-				const statusValue = typeof args.status === 'string' ? args.status : 'todo';
-				const status = ['todo', 'in_progress', 'done'].includes(statusValue) ? statusValue : 'todo';
-				const reasoning = typeof args.reasoning === 'string' ? args.reasoning : '';
-				const requestedParent =
-					typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
-				const assignee = resolveAssigneeId({
-					requestedAssigneeId: typeof args.assignee_id === 'string' ? args.assignee_id : null,
-					fallbackAssigneeId: workspaceAdminId,
-					eligibleAssignees
-				});
-				const rawDescriptionCandidate =
-					typeof args.description === 'string'
-						? normalizeOneLine(ensureSentence(args.description.replace(/"/g, '')))
-						: '';
-				const rawDescription = isStatusListDescription(rawDescriptionCandidate)
-					? ''
-					: rawDescriptionCandidate;
-				const description = rawDescription
-					? rawDescription
-					: normalizeOneLine(
-							ensureSentence(
-								buildSubissueDescriptionFallback({ name: title || 'Subissue', reasoning })
-							)
-						);
-				const parentIssueId = requestedParent ?? linkedIssueId ?? createdIssueId;
-				if (!title || !parentIssueId) {
-					throw new Error('create_subissue missing title or parent_issue_id');
-				}
-				const subissueId = await createSubissue({
-					parentIssueId,
-					name: title,
-					unitId,
-					workspaceId,
-					status,
-					reasoning,
-					assigneeId: assignee,
-					description
-				});
-				lastSubissueId = subissueId;
-				lastSubissueTitle = title;
-				issuedAction = true;
-				result = { subissue_id: subissueId };
-			}
-
-			if (name === 'draft_reply') {
-				const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
-				const messageId = typeof args.message_id === 'string' ? args.message_id.trim() : '';
-				const subject = typeof args.subject === 'string' ? args.subject : '';
-				const bodyText = typeof args.body === 'string' ? args.body : '';
-				const senderEmailToUse = defaultSenderEmail ? normalizeEmail(defaultSenderEmail) : '';
-				if (!issue || !messageId || !subject || !bodyText) {
-					throw new Error('draft_reply missing required fields');
-				}
-				if (!senderEmailToUse) {
-					throw new Error('draft_reply missing default_sender_email');
-				}
-
-				const { data: messageRow } = await supabase
-					.from('messages')
-					.select('id, thread_id')
-					.eq('id', messageId)
-					.maybeSingle();
-				if (!messageRow?.thread_id) {
-					throw new Error('draft_reply message not found');
-				}
-
-				const { data: threadRow } = await supabase
-					.from('threads')
-					.select('id, issue_id, participant_type, participant_id, tenant_id')
-					.eq('id', messageRow.thread_id)
-					.maybeSingle();
-				if (!threadRow?.id) {
-					throw new Error('draft_reply thread not found');
-				}
-				const issueIdForReply = threadRow.issue_id ?? issue;
-
-				let issueName = issueNameCache.get(issueIdForReply) ?? '';
-				if (!issueName) {
-					const { data: issueRow } = await supabase
-						.from('issues')
-						.select('name')
-						.eq('id', issueIdForReply)
-						.maybeSingle();
-					issueName = issueRow?.name ?? '';
-					if (issueName) issueNameCache.set(issueIdForReply, issueName);
-				}
-
-				let recipientEmail = '';
-				if (threadRow.participant_type === 'tenant') {
-					const tenantId = threadRow.tenant_id ?? threadRow.participant_id;
-					if (!tenantId) {
-						throw new Error('draft_reply missing tenant_id');
-					}
-					const { data: tenantRow } = await supabase
-						.from('tenants')
-						.select('email')
-						.eq('id', tenantId)
-						.maybeSingle();
-					recipientEmail = tenantRow?.email ?? '';
-				} else if (threadRow.participant_type === 'vendor') {
-					const vendorId = threadRow.participant_id;
-					if (!vendorId) {
-						throw new Error('draft_reply missing vendor_id');
-					}
-					const { data: vendorRow } = await supabase
-						.from('people')
-						.select('email')
-						.eq('id', vendorId)
-						.eq('role', 'vendor')
-						.maybeSingle();
-					recipientEmail = vendorRow?.email ?? '';
-				} else {
-					throw new Error('draft_reply unsupported participant type');
-				}
-
-				const normalizedRecipient = recipientEmail
-					? normalizeEmail(extractEmail(recipientEmail))
-					: null;
-				if (!normalizedRecipient || !normalizedRecipient.includes('@')) {
-					throw new Error('draft_reply recipient invalid');
-				}
-
-				try {
-					const result = await upsertEmailDraft({
-						issueId: issueIdForReply,
-						messageId,
-						senderEmail: senderEmailToUse,
-						recipientEmail: normalizedRecipient,
-						subject,
-						body: bodyText,
-						userId,
-						workspaceId
+			try {
+				if (name === 'create_issue') {
+					const title = typeof args.title === 'string' ? args.title.trim() : '';
+					const unit = typeof args.unit_id === 'string' ? args.unit_id : unitId;
+					const workspace = typeof args.workspace_id === 'string' ? args.workspace_id : workspaceId;
+					const assignee = resolveAssigneeId({
+						requestedAssigneeId: typeof args.assignee_id === 'string' ? args.assignee_id : null,
+						fallbackAssigneeId: workspaceAdminId,
+						eligibleAssignees
 					});
-					if (result.created) {
-						await createDraftNotification({
+					const rawDescriptionCandidate =
+						typeof args.description === 'string'
+							? normalizeOneLine(ensureSentence(args.description.replace(/"/g, '')))
+							: '';
+					const rawDescription = isStatusListDescription(rawDescriptionCandidate)
+						? ''
+						: rawDescriptionCandidate;
+					const assigneeName = assignee ? (assigneeNameById.get(assignee) ?? null) : null;
+					const description = rawDescription
+						? rawDescription
+						: normalizeOneLine(
+								ensureSentence(
+									buildRootIssueDescriptionFallback({
+										reporterName: tenantName ?? null,
+										assigneeName,
+										subject,
+										body,
+										issueTitle: title
+									})
+								)
+							);
+					if (!title) {
+						throw new Error('create_issue missing title');
+					}
+					const issueId = await createIssue({
+						name: title,
+						unitId: unit,
+						workspaceId: workspace,
+						assigneeId: assignee,
+						description
+					});
+					if (unit && typeof unit === 'string') {
+						resolvedUnitId = unit;
+					}
+					linkedIssueId = issueId;
+					createdIssueId = issueId;
+					issuedAction = true;
+					result = { issue_id: issueId };
+				}
+
+				if (name === 'link_thread_to_issue') {
+					const thread = typeof args.thread_id === 'string' ? args.thread_id : threadId;
+					const issue =
+						typeof args.issue_id === 'string' ? args.issue_id : (lastSubissueId ?? linkedIssueId);
+					if (!thread || !issue) {
+						throw new Error('link_thread_to_issue missing thread_id or issue_id');
+					}
+					const linked = await linkThreadToIssue({ threadId: thread, issueId: issue });
+					if (!linked) {
+						const { data: existingThread } = await supabase
+							.from('threads')
+							.select('issue_id')
+							.eq('id', thread)
+							.maybeSingle();
+						linkedIssueId = existingThread?.issue_id ?? issue;
+					} else {
+						linkedIssueId = issue;
+					}
+					threadLinked = true;
+					issuedAction = true;
+					result = { ok: true };
+				}
+
+				if (name === 'create_subissue') {
+					const title = typeof args.title === 'string' ? args.title.trim() : '';
+					const statusValue = typeof args.status === 'string' ? args.status : 'todo';
+					const status = ['todo', 'in_progress', 'done'].includes(statusValue)
+						? statusValue
+						: 'todo';
+					const reasoning = typeof args.reasoning === 'string' ? args.reasoning : '';
+					const requestedParent =
+						typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
+					const assignee = resolveAssigneeId({
+						requestedAssigneeId: typeof args.assignee_id === 'string' ? args.assignee_id : null,
+						fallbackAssigneeId: workspaceAdminId,
+						eligibleAssignees
+					});
+					const rawDescriptionCandidate =
+						typeof args.description === 'string'
+							? normalizeOneLine(ensureSentence(args.description.replace(/"/g, '')))
+							: '';
+					const rawDescription = isStatusListDescription(rawDescriptionCandidate)
+						? ''
+						: rawDescriptionCandidate;
+					const description = rawDescription
+						? rawDescription
+						: normalizeOneLine(
+								ensureSentence(
+									buildSubissueDescriptionFallback({ name: title || 'Subissue', reasoning })
+								)
+							);
+					const parentIssueId = requestedParent ?? linkedIssueId ?? createdIssueId;
+					if (!title || !parentIssueId) {
+						throw new Error('create_subissue missing title or parent_issue_id');
+					}
+					const subissueId = await createSubissue({
+						parentIssueId,
+						name: title,
+						unitId: resolvedUnitId,
+						workspaceId,
+						status,
+						reasoning,
+						assigneeId: assignee,
+						description
+					});
+					lastSubissueId = subissueId;
+					lastSubissueTitle = title;
+					issuedAction = true;
+					result = { subissue_id: subissueId };
+				}
+
+				if (name === 'draft_reply') {
+					const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
+					const messageId = typeof args.message_id === 'string' ? args.message_id.trim() : '';
+					const subject = typeof args.subject === 'string' ? args.subject : '';
+					const bodyText = typeof args.body === 'string' ? args.body : '';
+					const senderEmailToUse = defaultSenderEmail ? normalizeEmail(defaultSenderEmail) : '';
+					if (!issue || !messageId || !subject || !bodyText) {
+						throw new Error('draft_reply missing required fields');
+					}
+					if (!senderEmailToUse) {
+						throw new Error('draft_reply missing default_sender_email');
+					}
+
+					const { data: messageRow } = await supabase
+						.from('messages')
+						.select('id, thread_id')
+						.eq('id', messageId)
+						.maybeSingle();
+					if (!messageRow?.thread_id) {
+						throw new Error('draft_reply message not found');
+					}
+
+					const { data: threadRow } = await supabase
+						.from('threads')
+						.select('id, issue_id, participant_type, participant_id, tenant_id')
+						.eq('id', messageRow.thread_id)
+						.maybeSingle();
+					if (!threadRow?.id) {
+						throw new Error('draft_reply thread not found');
+					}
+					const issueIdForReply = threadRow.issue_id ?? issue;
+
+					let issueName = issueNameCache.get(issueIdForReply) ?? '';
+					if (!issueName) {
+						const { data: issueRow } = await supabase
+							.from('issues')
+							.select('name')
+							.eq('id', issueIdForReply)
+							.maybeSingle();
+						issueName = issueRow?.name ?? '';
+						if (issueName) issueNameCache.set(issueIdForReply, issueName);
+					}
+
+					let recipientEmail = '';
+					if (threadRow.participant_type === 'tenant') {
+						const tenantId = threadRow.tenant_id ?? threadRow.participant_id;
+						if (!tenantId) {
+							throw new Error('draft_reply missing tenant_id');
+						}
+						const { data: tenantRow } = await supabase
+							.from('tenants')
+							.select('email')
+							.eq('id', tenantId)
+							.maybeSingle();
+						recipientEmail = tenantRow?.email ?? '';
+					} else if (threadRow.participant_type === 'vendor') {
+						const vendorId = threadRow.participant_id;
+						if (!vendorId) {
+							throw new Error('draft_reply missing vendor_id');
+						}
+						const { data: vendorRow } = await supabase
+							.from('people')
+							.select('email')
+							.eq('id', vendorId)
+							.eq('role', 'vendor')
+							.maybeSingle();
+						recipientEmail = vendorRow?.email ?? '';
+					} else if (threadRow.participant_type === 'unknown') {
+						recipientEmail = senderEmail ?? '';
+					} else {
+						throw new Error('draft_reply unsupported participant type');
+					}
+
+					const normalizedRecipient = recipientEmail
+						? normalizeEmail(extractEmail(recipientEmail))
+						: null;
+					if (!normalizedRecipient || !normalizedRecipient.includes('@')) {
+						throw new Error('draft_reply recipient invalid');
+					}
+
+					try {
+						const result = await upsertEmailDraft({
+							issueId: issueIdForReply,
+							messageId,
+							senderEmail: senderEmailToUse,
+							recipientEmail: normalizedRecipient,
+							recipientEmails: normalizedRecipient ? [normalizedRecipient] : null,
+							subject,
+							body: bodyText,
+							userId,
+							workspaceId
+						});
+						if (result.created) {
+							await createDraftNotification({
+								workspaceId,
+								issueId: issueIdForReply,
+								issueName,
+								emailDraftId: result.draftId,
+								messageId,
+								userId
+							});
+						}
+					} catch (err) {
+						await insertIngestionLog({
+							userId,
+							source: 'gmail-draft-error',
+							detail: JSON.stringify({
+								issue_id: issueIdForReply,
+								message_id: messageId,
+								error: err?.message ?? 'draft insert failed'
+							})
+						});
+						await logAgentError({
 							workspaceId,
 							issueId: issueIdForReply,
-							issueName,
-							emailDraftId: result.draftId,
+							userId,
+							action: 'draft_reply',
+							error: err?.message ?? 'draft insert failed',
 							messageId,
-							userId
+							runId,
+							step: i
 						});
 					}
-				} catch (err) {
-					await insertIngestionLog({
-						userId,
-						source: 'gmail-draft-error',
-						detail: JSON.stringify({
-							issue_id: issueIdForReply,
-							message_id: messageId,
-							error: err?.message ?? 'draft insert failed'
-						})
-					});
-				}
-				draftedIssueId = issueIdForReply;
-				issuedAction = true;
-				result = { ok: true };
-			}
-
-			if (name === 'draft_email') {
-				const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
-				const senderEmailToUse = defaultSenderEmail ? normalizeEmail(defaultSenderEmail) : '';
-				let recipient =
-					typeof args.recipient_email === 'string'
-						? args.recipient_email
-						: typeof args.recipient === 'string'
-							? args.recipient
-							: '';
-				const subject = typeof args.subject === 'string' ? args.subject : '';
-				const bodyText = typeof args.body === 'string' ? args.body : '';
-				if (!issue || !subject || !bodyText) {
-					throw new Error('draft_email missing required fields');
-				}
-				if (!senderEmailToUse) {
-					throw new Error('draft_email missing default_sender_email');
+					draftedIssueId = issueIdForReply;
+					issuedAction = true;
+					result = { ok: true };
 				}
 
-				let issueName = issueNameCache.get(issue) ?? '';
-				if (!issueName) {
-					const { data: issueRow } = await supabase
-						.from('issues')
-						.select('name')
-						.eq('id', issue)
-						.maybeSingle();
-					issueName = issueRow?.name ?? '';
-					if (issueName) issueNameCache.set(issue, issueName);
-				}
-				const isScheduleSubissue = issueName.startsWith('Schedule ');
-				const rawMessageId = typeof args.message_id === 'string' ? args.message_id.trim() : '';
-				const messageId = rawMessageId || null;
-				let normalizedRecipient = recipient ? normalizeEmail(extractEmail(recipient)) : null;
-				const normalizedSenderEmail = senderEmail ? normalizeEmail(senderEmail) : null;
-				if (normalizedRecipient && !normalizedRecipient.includes('@')) {
-					normalizedRecipient = null;
-				}
-				if (
-					isScheduleSubissue &&
-					normalizedSenderEmail &&
-					normalizedRecipient &&
-					normalizedRecipient === normalizedSenderEmail
-				) {
-					normalizedRecipient = null;
-					await insertIngestionLog({
-						userId,
-						source: 'gmail-draft-error',
-						detail: JSON.stringify({
-							issue_id: issue,
-							message_id: messageId,
-							reason: 'schedule draft recipient matched sender'
-						})
-					});
-				}
-				if (!normalizedRecipient && !isScheduleSubissue) {
-					throw new Error('draft_email missing recipient_email');
-				}
-				try {
-					const result = await upsertEmailDraft({
-						issueId: issue,
-						messageId,
-						senderEmail: senderEmailToUse,
-						recipientEmail: normalizedRecipient,
-						subject,
-						body: bodyText,
-						userId,
-						workspaceId
-					});
-					if (result.created) {
-						await createDraftNotification({
+				if (name === 'draft_email') {
+					const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
+					const senderEmailToUse = defaultSenderEmail ? normalizeEmail(defaultSenderEmail) : '';
+					const recipientList = Array.isArray(args.recipient_emails)
+						? args.recipient_emails
+								.map((email: unknown) => String(email ?? '').trim())
+								.filter(Boolean)
+						: [];
+					let recipient =
+						typeof args.recipient_email === 'string'
+							? args.recipient_email
+							: typeof args.recipient === 'string'
+								? args.recipient
+								: '';
+					const subject = typeof args.subject === 'string' ? args.subject : '';
+					const bodyText = typeof args.body === 'string' ? args.body : '';
+					if (!issue || !subject || !bodyText) {
+						throw new Error('draft_email missing required fields');
+					}
+					if (!senderEmailToUse) {
+						throw new Error('draft_email missing default_sender_email');
+					}
+
+					let issueName = issueNameCache.get(issue) ?? '';
+					if (!issueName) {
+						const { data: issueRow } = await supabase
+							.from('issues')
+							.select('name')
+							.eq('id', issue)
+							.maybeSingle();
+						issueName = issueRow?.name ?? '';
+						if (issueName) issueNameCache.set(issue, issueName);
+					}
+					const isScheduleSubissue = issueName.startsWith('Schedule ');
+					const messageId = null;
+					let normalizedRecipient = recipient ? normalizeEmail(extractEmail(recipient)) : null;
+					const normalizedRecipientList = recipientList
+						.map((email) => normalizeEmail(extractEmail(email)))
+						.filter((email) => email && email.includes('@'));
+					const normalizedSenderEmail = senderEmail ? normalizeEmail(senderEmail) : null;
+					if (normalizedRecipient && !normalizedRecipient.includes('@')) {
+						normalizedRecipient = null;
+					}
+					if (
+						isScheduleSubissue &&
+						normalizedSenderEmail &&
+						normalizedRecipient &&
+						normalizedRecipient === normalizedSenderEmail
+					) {
+						normalizedRecipient = null;
+						await insertIngestionLog({
+							userId,
+							source: 'gmail-draft-error',
+							detail: JSON.stringify({
+								issue_id: issue,
+								message_id: messageId,
+								reason: 'schedule draft recipient matched sender'
+							})
+						});
+					}
+					if (!normalizedRecipient && !normalizedRecipientList.length && !isScheduleSubissue) {
+						throw new Error('draft_email missing recipient_email');
+					}
+					try {
+						const result = await upsertEmailDraft({
+							issueId: issue,
+							messageId,
+							senderEmail: senderEmailToUse,
+							recipientEmail: normalizedRecipient,
+							recipientEmails: normalizedRecipientList.length
+								? normalizedRecipientList
+								: normalizedRecipient
+									? [normalizedRecipient]
+									: null,
+							subject,
+							body: bodyText,
+							userId,
+							workspaceId
+						});
+						if (result.created) {
+							await createDraftNotification({
+								workspaceId,
+								issueId: issue,
+								issueName,
+								emailDraftId: result.draftId,
+								messageId,
+								userId
+							});
+						}
+					} catch (err) {
+						await insertIngestionLog({
+							userId,
+							source: 'gmail-draft-error',
+							detail: JSON.stringify({
+								issue_id: issue,
+								message_id: messageId,
+								error: err?.message ?? 'draft insert failed'
+							})
+						});
+						await logAgentError({
 							workspaceId,
 							issueId: issue,
-							issueName,
-							emailDraftId: result.draftId,
+							userId,
+							action: 'draft_email',
+							error: err?.message ?? 'draft insert failed',
 							messageId,
-							userId
+							runId,
+							step: i
 						});
 					}
-				} catch (err) {
-					await insertIngestionLog({
-						userId,
-						source: 'gmail-draft-error',
-						detail: JSON.stringify({
-							issue_id: issue,
-							message_id: messageId,
-							error: err?.message ?? 'draft insert failed'
-						})
-					});
+					draftedIssueId = issue;
+					issuedAction = true;
+					result = { ok: true };
 				}
-				draftedIssueId = issue;
-				issuedAction = true;
-				result = { ok: true };
-			}
 
-			if (name === 'done') {
-				doneCalled = true;
-				issuedAction = true;
-				result = { ok: true };
+				if (name === 'done') {
+					doneCalled = true;
+					issuedAction = true;
+					result = { ok: true };
+				}
+			} catch (err) {
+				await insertIngestionLog({
+					userId,
+					source: 'gmail-agent-error',
+					detail: JSON.stringify({
+						action: name,
+						error: err?.message ?? 'unknown',
+						message_id: typeof args.message_id === 'string' ? args.message_id : null,
+						run_id: runId,
+						step: i
+					})
+				});
+				await logAgentError({
+					workspaceId,
+					issueId: lastSubissueId ?? linkedIssueId ?? createdIssueId ?? rootIssueId ?? null,
+					userId,
+					action: name,
+					error: err?.message ?? 'unknown',
+					messageId: typeof args.message_id === 'string' ? args.message_id : null,
+					runId,
+					step: i
+				});
+				throw err;
 			}
 
 			messages.push({
@@ -1427,9 +1690,8 @@ const processMessage = async ({
 	message: any;
 }) => {
 	const pmEmail = connection.email ? normalizeEmail(connection.email) : null;
-	const { subject: messageSubject, from: messageFrom } = extractHeaders(
-		message.payload?.headers ?? []
-	);
+	const messageHeaders = message.payload?.headers ?? [];
+	const { subject: messageSubject, from: messageFrom } = extractHeaders(messageHeaders);
 	const senderEmail = normalizeEmail(extractEmail(messageFrom));
 	if (pmEmail && senderEmail === pmEmail) {
 		await insertIngestionLog({
@@ -1469,6 +1731,54 @@ const processMessage = async ({
 	const normalizedBody = html ? stripHtml(decodedBody) : decodedBody.trim();
 	const cleanedBody = trimQuotedReply(normalizedBody);
 
+	const workspaceIdForConnection = await getWorkspaceIdForUser(connection.user_id);
+	if (!workspaceIdForConnection) {
+		await logError(connection.user_id, `Workspace lookup failed for user ${connection.user_id}`);
+		return;
+	}
+
+	const { allow: allowPolicy, block: blockPolicy } = await getPolicyMatch({
+		workspaceId: workspaceIdForConnection,
+		senderEmail
+	});
+	if (blockPolicy) {
+		await insertIngestionLog({
+			userId: connection.user_id,
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'skip-blocked-sender',
+				sender_email: senderEmail
+			})
+		});
+		return;
+	}
+
+	const isBulk = isBulkMessage(messageHeaders);
+	if (isBulk && !allowPolicy) {
+		await insertIngestionLog({
+			userId: connection.user_id,
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'skip-bulk',
+				sender_email: senderEmail
+			})
+		});
+		return;
+	}
+
+	const isRelevant = allowPolicy || isRelevantEmail(messageSubject, cleanedBody);
+	if (!isRelevant) {
+		await insertIngestionLog({
+			userId: connection.user_id,
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'skip-nonrelevant',
+				sender_email: senderEmail
+			})
+		});
+		return;
+	}
+
 	const { data: tenant } = await supabase
 		.from('tenants')
 		.select('id, unit_id, email, name')
@@ -1476,7 +1786,257 @@ const processMessage = async ({
 		.maybeSingle();
 
 	if (!tenant?.id || !tenant.unit_id) {
-		await logError(connection.user_id, `No tenant match for ${senderEmail}`);
+		const threadExternalId = message.threadId ?? null;
+		let threadRow = null;
+		if (threadExternalId) {
+			const { error: insertError } = await supabase.from('threads').upsert(
+				{
+					tenant_id: null,
+					participant_type: 'unknown',
+					participant_id: null,
+					name: messageSubject || 'Gmail thread',
+					external_id: threadExternalId,
+					connection_id: connection.id,
+					workspace_id: workspaceIdForConnection
+				},
+				{ onConflict: 'external_id', ignoreDuplicates: true }
+			);
+			if (insertError) {
+				await logError(
+					connection.user_id,
+					`Unknown thread upsert failed: ${insertError?.message ?? 'unknown'}`
+				);
+				return;
+			}
+			const { data: existingThread } = await supabase
+				.from('threads')
+				.select('id, issue_id')
+				.eq('external_id', threadExternalId)
+				.maybeSingle();
+			threadRow = existingThread ?? null;
+		}
+
+		if (!threadRow?.id) {
+			const { data: createdThread, error: threadError } = await supabase
+				.from('threads')
+				.insert({
+					tenant_id: null,
+					participant_type: 'unknown',
+					participant_id: null,
+					issue_id: null,
+					name: messageSubject || 'Gmail thread',
+					external_id: threadExternalId,
+					connection_id: connection.id,
+					workspace_id: workspaceIdForConnection
+				})
+				.select('id')
+				.single();
+			if (threadError || !createdThread?.id) {
+				await logError(
+					connection.user_id,
+					`Unknown thread insert failed: ${threadError?.message ?? 'unknown'}`
+				);
+				return;
+			}
+			threadRow = createdThread;
+		}
+
+		if (!allowPolicy) {
+			const internalDate = Number(message.internalDate ?? 0);
+			const { data: unknownMessage, error: unknownMessageError } = await supabase
+				.from('messages')
+				.insert({
+					thread_id: threadRow.id,
+					external_id: message.id,
+					message: cleanedBody,
+					sender: 'unknown',
+					subject: messageSubject,
+					timestamp: new Date(internalDate || Date.now()).toISOString(),
+					channel: 'gmail',
+					direction: 'inbound',
+					delivery_status: 'received',
+					connection_id: connection.id,
+					issue_id: null,
+					thread_external_id: threadExternalId,
+					workspace_id: workspaceIdForConnection,
+					metadata: { sender_email: senderEmail }
+				})
+				.select('id')
+				.maybeSingle();
+
+			if (unknownMessageError) {
+				if (unknownMessageError.code !== '23505') {
+					await logError(
+						connection.user_id,
+						`Unknown message insert failed: ${unknownMessageError?.message ?? 'unknown'}`
+					);
+					return;
+				}
+			}
+
+			await createUnknownSenderNotification({
+				workspaceId: workspaceIdForConnection,
+				issueId: null,
+				senderEmail,
+				subject: messageSubject,
+				body: cleanedBody,
+				messageId: unknownMessage?.id ?? null,
+				threadId: threadRow.id,
+				userId: connection.user_id,
+				type: 'email_unknown_sender'
+			});
+			return;
+		}
+
+		const lockCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+		const lockTime = new Date().toISOString();
+		const { data: lockRow } = await supabase
+			.from('threads')
+			.update({ processing_at: lockTime })
+			.eq('id', threadRow.id)
+			.is('processing_at', null)
+			.select('id')
+			.maybeSingle();
+		let lockAcquired = Boolean(lockRow?.id);
+		if (!lockAcquired) {
+			const { data: staleLockRow } = await supabase
+				.from('threads')
+				.update({ processing_at: lockTime })
+				.eq('id', threadRow.id)
+				.lt('processing_at', lockCutoff)
+				.select('id')
+				.maybeSingle();
+			lockAcquired = Boolean(staleLockRow?.id);
+		}
+		if (!lockAcquired) {
+			await insertIngestionLog({
+				userId: connection.user_id,
+				source: 'gmail-push',
+				detail: JSON.stringify({
+					phase: 'lock-skip',
+					thread_id: threadRow.id,
+					external_thread_id: threadExternalId
+				})
+			});
+			return;
+		}
+
+		try {
+			const internalDate = Number(message.internalDate ?? 0);
+			const { data: inboundMessage, error: inboundInsertError } = await supabase
+				.from('messages')
+				.insert({
+					thread_id: threadRow.id,
+					external_id: message.id,
+					message: cleanedBody,
+					sender: 'unknown',
+					subject: messageSubject,
+					timestamp: new Date(internalDate || Date.now()).toISOString(),
+					channel: 'gmail',
+					direction: 'inbound',
+					delivery_status: 'received',
+					connection_id: connection.id,
+					issue_id: threadRow.issue_id ?? null,
+					thread_external_id: threadExternalId,
+					workspace_id: workspaceIdForConnection,
+					metadata: { sender_email: senderEmail }
+				})
+				.select('id')
+				.maybeSingle();
+
+			let inboundMessageId = inboundMessage?.id ?? null;
+			if (inboundInsertError) {
+				if (inboundInsertError.code === '23505') {
+					const { data: existingInboundMessage } = await supabase
+						.from('messages')
+						.select('id')
+						.eq('external_id', message.id)
+						.maybeSingle();
+					inboundMessageId = existingInboundMessage?.id ?? null;
+					if (!inboundMessageId) {
+						return;
+					}
+				} else {
+					await logError(
+						connection.user_id,
+						`Inbound insert failed: ${inboundInsertError.message}`
+					);
+					return;
+				}
+			}
+
+			const { data: refreshedThread } = await supabase
+				.from('threads')
+				.select('issue_id')
+				.eq('id', threadRow.id)
+				.maybeSingle();
+
+			let issueId = refreshedThread?.issue_id ?? threadRow.issue_id ?? null;
+			let rootIssueIdForAgent = issueId;
+			let relatedIssues = [];
+			if (issueId) {
+				const { data: issueRow } = await supabase
+					.from('issues')
+					.select('id, name, status, parent_id')
+					.eq('id', issueId)
+					.maybeSingle();
+				rootIssueIdForAgent = issueRow?.parent_id ?? issueRow?.id ?? issueId;
+				if (rootIssueIdForAgent) {
+					const { data: related } = await supabase
+						.from('issues')
+						.select('id, name, status, parent_id')
+						.or(`id.eq.${rootIssueIdForAgent},parent_id.eq.${rootIssueIdForAgent}`);
+					relatedIssues = related ?? [];
+				}
+			}
+
+			const { data: policyRow } = await supabase
+				.from('workspace_policies')
+				.select('policy_text')
+				.eq('workspace_id', workspaceIdForConnection)
+				.in('type', ['behavior', 'allow'])
+				.order('updated_at', { ascending: false })
+				.limit(1)
+				.maybeSingle();
+			const policyText = policyRow?.policy_text ?? '';
+			const { data: userProfile } = await supabase
+				.from('users')
+				.select('name')
+				.eq('id', connection.user_id)
+				.maybeSingle();
+			const userName = userProfile?.name ?? 'Bedrock';
+			const workspaceUnits = await listWorkspaceUnitsForAgent(workspaceIdForConnection);
+
+			const created = await runIssueAgent({
+				subject: messageSubject,
+				body: cleanedBody,
+				senderEmail,
+				unitId: null,
+				unitName: null,
+				workspaceId: workspaceIdForConnection,
+				propertyName: null,
+				threadId: threadRow.id,
+				userId: connection.user_id,
+				policyText,
+				tenantName: null,
+				tenantEmail: null,
+				userName,
+				defaultSenderEmail: connection.email ?? null,
+				replyMessageId: inboundMessageId,
+				rootIssueId: rootIssueIdForAgent,
+				threadIssueId: issueId,
+				relatedIssues,
+				workspaceUnits
+			});
+			issueId = created.issueId ?? issueId;
+
+			if (issueId) {
+				await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
+				await supabase.from('messages').update({ issue_id: issueId }).eq('thread_id', threadRow.id);
+			}
+		} finally {
+			await supabase.from('threads').update({ processing_at: null }).eq('id', threadRow.id);
+		}
 		return;
 	}
 
@@ -1660,6 +2220,9 @@ const processMessage = async ({
 			.from('workspace_policies')
 			.select('policy_text')
 			.eq('workspace_id', propertyRow.workspace_id)
+			.in('type', ['behavior', 'allow'])
+			.order('updated_at', { ascending: false })
+			.limit(1)
 			.maybeSingle();
 		const policyText = policyRow?.policy_text ?? '';
 		const { data: userProfile } = await supabase
@@ -1668,6 +2231,7 @@ const processMessage = async ({
 			.eq('id', connection.user_id)
 			.maybeSingle();
 		const userName = userProfile?.name ?? 'Bedrock';
+		const workspaceUnits = await listWorkspaceUnitsForAgent(propertyRow.workspace_id);
 		const created = await runIssueAgent({
 			subject: messageSubject,
 			body: cleanedBody,
@@ -1686,7 +2250,8 @@ const processMessage = async ({
 			replyMessageId: inboundMessageId,
 			rootIssueId: rootIssueIdForAgent,
 			threadIssueId: issueId,
-			relatedIssues
+			relatedIssues,
+			workspaceUnits
 		});
 		issueId = created.issueId ?? issueId;
 

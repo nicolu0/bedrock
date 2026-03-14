@@ -12,7 +12,7 @@ export const POST = async ({ locals, request }) => {
 	// Look up invite
 	const { data: invite } = await supabaseAdmin
 		.from('invites')
-		.select('*')
+		.select('*, workspaces(slug)')
 		.eq('token', token)
 		.maybeSingle();
 
@@ -20,8 +20,25 @@ export const POST = async ({ locals, request }) => {
 	if (invite.accepted_at) return json({ error: 'Invite already used' }, { status: 400 });
 	if (new Date(invite.expires_at) < new Date())
 		return json({ error: 'Invite expired' }, { status: 400 });
-	if (invite.email !== user.email)
+	const inviteEmail = invite.email?.toLowerCase?.() ?? null;
+	const userEmail = user.email?.toLowerCase?.() ?? null;
+	if (inviteEmail && userEmail && inviteEmail !== userEmail) {
 		return json({ error: 'Invite email does not match your account' }, { status: 400 });
+	}
+
+	const { data: existingMembership } = await supabaseAdmin
+		.from('people')
+		.select('workspace_id')
+		.eq('user_id', user.id)
+		.neq('workspace_id', invite.workspace_id)
+		.limit(1)
+		.maybeSingle();
+	if (existingMembership?.workspace_id) {
+		return json(
+			{ error: 'You already belong to another workspace. Leave it before accepting this invite.' },
+			{ status: 400 }
+		);
+	}
 
 	const name = user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User';
 
@@ -73,7 +90,8 @@ export const POST = async ({ locals, request }) => {
 				name,
 				email: user.email ?? invite.email ?? null,
 				user_id: user.id,
-				pending: false
+				pending: false,
+				updated_at: new Date().toISOString()
 			})
 			.eq('id', existingPersonId)
 			.eq('workspace_id', invite.workspace_id);
@@ -84,7 +102,8 @@ export const POST = async ({ locals, request }) => {
 			role: invite.role,
 			name,
 			email: user.email ?? invite.email ?? null,
-			pending: false
+			pending: false,
+			updated_at: new Date().toISOString()
 		});
 	}
 
@@ -97,6 +116,7 @@ export const POST = async ({ locals, request }) => {
 	return json({
 		profile: { id: user.id, name },
 		workspace_id: invite.workspace_id,
-		role: invite.role
+		role: invite.role,
+		workspace_slug: invite.workspaces?.slug ?? null
 	});
 };

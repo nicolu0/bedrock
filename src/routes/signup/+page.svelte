@@ -61,8 +61,13 @@
 				</button>
 			</form>
 			<p class="anim-auth-3 mt-6 text-center text-sm text-neutral-500">
-				Already have an account? <a class="text-neutral-800 hover:underline" href="/login">Log in</a
+				Already have an account?
+				<a
+					class="text-neutral-800 hover:underline"
+					href="/login{data.inviteToken ? `?invite=${data.inviteToken}` : ''}"
 				>
+					Log in
+				</a>
 			</p>
 		</div>
 	{:else if form?.success}

@@ -9,7 +9,7 @@
 		primePropertiesCache,
 		ensurePropertiesCache
 	} from '$lib/stores/propertiesCache.js';
-	import { unitsCache, primeUnitsCache } from '$lib/stores/unitsCache.js';
+	import { unitsCache, primeUnitsCache, mergeUnitsIntoCache } from '$lib/stores/unitsCache.js';
 	import { primeIssuesCache } from '$lib/stores/issuesCache';
 	import { primeNotificationsCache } from '$lib/stores/notificationsCache';
 	import { primePeopleMembersCache } from '$lib/stores/peopleMembersCache';
@@ -104,15 +104,16 @@
 		}
 	}
 
-	let _primedUnitsForWorkspace = null;
-	$: if (browser && data.units && _primedUnitsForWorkspace !== workspaceSlug) {
-		_primedUnitsForWorkspace = workspaceSlug;
+	$: if (browser && data.units && workspaceSlug) {
 		const _ws = workspaceSlug;
 		const prime = (list) => {
 			const cache = get(unitsCache);
+			const next = Array.isArray(list) ? list : [];
 			if (!cache.data || cache.workspace !== _ws) {
-				primeUnitsCache(_ws, Array.isArray(list) ? list : []);
+				primeUnitsCache(_ws, next);
+				return;
 			}
+			mergeUnitsIntoCache(_ws, next);
 		};
 		if (data.units instanceof Promise) {
 			data.units.then(prime);
