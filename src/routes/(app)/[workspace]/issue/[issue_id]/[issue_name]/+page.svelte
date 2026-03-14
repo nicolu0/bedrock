@@ -813,7 +813,7 @@
 		applyActivityLogDelta(created);
 
 		if (/@bedrock/i.test(trimmed)) {
-			fetch('/api/issue-agent', {
+			fetch('/api/agent', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ issue_id: issueId ?? issueKey, comment: trimmed })
