@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
-	import { onMount, onDestroy, setContext } from 'svelte';
+	import { onMount, onDestroy, setContext, tick } from 'svelte';
+	import { fade, scale } from 'svelte/transition';
 	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
@@ -12,7 +13,8 @@
 	import { unitsCache, primeUnitsCache, mergeUnitsIntoCache } from '$lib/stores/unitsCache.js';
 	import { primeIssuesCache } from '$lib/stores/issuesCache';
 	import { primeNotificationsCache } from '$lib/stores/notificationsCache';
-	import { primePeopleMembersCache } from '$lib/stores/peopleMembersCache';
+	import { peopleMembersCache, primePeopleMembersCache } from '$lib/stores/peopleMembersCache';
+	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
 	import { goto } from '$app/navigation';
 	import {
 		ensureIssuesCache,
@@ -52,9 +54,183 @@
 	export let data;
 
 	let appMounted = false;
+	let showSearchModal = false;
+	let searchInput;
+	let searchQuery = '';
+	const openSearchModal = async () => {
+		showSearchModal = true;
+		await tick();
+		searchInput?.focus();
+	};
+	const closeSearchModal = () => {
+		showSearchModal = false;
+	};
+	const normalizeText = (value) => (value ?? '').toString().toLowerCase();
+	const formatRole = (role) => {
+		if (!role) return 'Member';
+		return role[0].toUpperCase() + role.slice(1);
+	};
+	const normalizeIssueStatus = (value) => {
+		if (!value) return 'todo';
+		const normalized = String(value).toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
+		if (normalized === 'in_progress') return 'in_progress';
+		if (normalized === 'done' || normalized === 'completed' || normalized === 'complete')
+			return 'done';
+		if (normalized === 'todo' || normalized === 'to_do' || normalized === 'backlog') return 'todo';
+		return normalized;
+	};
+	const issueStatusDotClass = (status) => {
+		switch (normalizeIssueStatus(status)) {
+			case 'in_progress':
+				return 'bg-amber-500';
+			case 'done':
+				return 'bg-emerald-500';
+			case 'todo':
+			default:
+				return 'bg-neutral-400';
+		}
+	};
+	const getIssueReadableId = (issue) =>
+		issue?.readableId ?? issue?.readable_id ?? issue?.issueNumber ?? issue?.issue_number ?? '';
+	const getIssueTitle = (issue) => issue?.title ?? issue?.name ?? 'Untitled issue';
+	const getIssueHref = (issue) => {
+		const readableId = getIssueReadableId(issue);
+		if (!readableId) return null;
+		const slug = slugify(getIssueTitle(issue));
+		return `${basePath}/issue/${readableId}/${slug}`;
+	};
+	const getPropertySlug = (property) => slugify(property?.name ?? 'property');
+	const getUnitHref = (unit, property) => {
+		if (!property) return null;
+		const propertySlug = getPropertySlug(property);
+		return `${basePath}/properties/${propertySlug}/units`;
+	};
+	const openSearchResult = (result) => {
+		if (!result) return;
+		if (result.type === 'person') {
+			goto(`${basePath}/people?editPersonId=${result.id}`);
+			closeSearchModal();
+			return;
+		}
+		if (result.href) {
+			goto(result.href);
+		}
+		closeSearchModal();
+	};
 	onMount(() => {
 		appMounted = true;
+		const onKeydown = (event) => {
+			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+				event.preventDefault();
+				if (showSearchModal) {
+					closeSearchModal();
+				} else {
+					openSearchModal();
+				}
+				return;
+			}
+			if (event.key === 'Escape' && showSearchModal) {
+				closeSearchModal();
+			}
+		};
+		window.addEventListener('keydown', onKeydown);
+		return () => {
+			window.removeEventListener('keydown', onKeydown);
+		};
 	});
+
+	$: normalizedSearchQuery = searchQuery.trim().toLowerCase();
+	$: if (!showSearchModal && searchQuery) searchQuery = '';
+	$: issuesList = $issuesCache.data?.issues ?? [];
+	$: issueSections = $issuesCache.data?.sections ?? [];
+	$: sectionIssues = issueSections.flatMap((section) => section?.items ?? []);
+	$: sectionSubIssues = sectionIssues.flatMap((item) => item?.subIssues ?? []);
+	$: combinedIssues = [...issuesList, ...sectionIssues, ...sectionSubIssues];
+	$: propertiesList =
+		$propertiesCache.workspace === workspaceSlug && Array.isArray($propertiesCache.data)
+			? $propertiesCache.data
+			: [];
+	$: unitsList =
+		$unitsCache.workspace === workspaceSlug && Array.isArray($unitsCache.data)
+			? $unitsCache.data
+			: [];
+	$: peopleList =
+		$peopleCache.workspace === workspaceSlug && Array.isArray($peopleCache.data)
+			? $peopleCache.data
+			: $peopleMembersCache.workspace === workspaceSlug && Array.isArray($peopleMembersCache.data)
+				? $peopleMembersCache.data
+				: [];
+	$: propertyById = new Map((propertiesList ?? []).map((property) => [property?.id, property]));
+	$: searchResults = (() => {
+		if (!normalizedSearchQuery) return [];
+		const results = [];
+		const query = normalizedSearchQuery;
+		const match = (value) => normalizeText(value).includes(query);
+		const issueMatches = (() => {
+			const seen = new Set();
+			return combinedIssues
+				.filter((issue) => {
+					const readableId = getIssueReadableId(issue);
+					if (!readableId) return false;
+					if (
+						!(
+							match(getIssueTitle(issue)) ||
+							(readableId && match(readableId)) ||
+							match(issue?.property?.name) ||
+							match(issue?.unit?.name)
+						)
+					)
+						return false;
+					if (seen.has(readableId)) return false;
+					seen.add(readableId);
+					return true;
+				})
+				.map((issue) => ({
+					id: issue?.id ?? issue?.issueId ?? getIssueReadableId(issue),
+					type: 'issue',
+					title: getIssueTitle(issue),
+					right: getIssueReadableId(issue),
+					status: issue?.status,
+					href: getIssueHref(issue)
+				}));
+		})();
+		const propertyMatches = propertiesList
+			.filter((property) => match(property?.name))
+			.map((property) => ({
+				id: property?.id ?? property?.name,
+				type: 'property',
+				title: property?.name ?? 'Property',
+				right: 'Property',
+				href: `${basePath}/properties/${getPropertySlug(property)}`
+			}));
+		const unitMatches = unitsList
+			.filter((unit) => {
+				const property = propertyById.get(unit?.property_id);
+				if (!property) return false;
+				return match(unit?.name) || match(property?.name);
+			})
+			.map((unit) => {
+				const property = propertyById.get(unit?.property_id);
+				return {
+					id: unit?.id ?? unit?.name,
+					type: 'unit',
+					title: unit?.name ?? 'Unit',
+					right: property?.name ?? 'Unit',
+					href: getUnitHref(unit, property)
+				};
+			});
+		const peopleMatches = peopleList
+			.filter((person) => match(person?.name) || match(person?.email) || match(person?.role))
+			.map((person) => ({
+				id: person?.id,
+				type: 'person',
+				title: person?.name ?? person?.email ?? 'Person',
+				role: formatRole(person?.role),
+				href: `${basePath}/people?editPersonId=${person?.id}`
+			}));
+		results.push(...issueMatches, ...propertyMatches, ...unitMatches, ...peopleMatches);
+		return results.slice(0, 12);
+	})();
 	$: pageVisible = appMounted && $pageReady;
 	$: workspaceSlug = $page.params.workspace;
 	$: isIssueRoute = $page.url.pathname.includes('/issue/');
@@ -216,7 +392,10 @@
 		}
 		ensureIssuesCache(workspaceSlug);
 		ensureNotificationsCache(workspaceSlug);
-		if (canViewPeople) ensurePeopleMembersCache(workspaceSlug);
+		if (canViewPeople) {
+			ensurePeopleMembersCache(workspaceSlug);
+			ensurePeopleCache(workspaceSlug);
+		}
 		ensureActivityCache(workspaceSlug);
 		ensureActivityLogsCache(workspaceSlug);
 	}
@@ -485,14 +664,20 @@
 					<div class="flex flex-1 flex-col space-y-6 px-2 pt-4">
 						<div class="flex min-w-0 items-center justify-between gap-2 px-2 text-neutral-700">
 							<div class="flex min-w-0 flex-1 items-center gap-2">
-								<div class="h-4.5 w-4.5 shrink-0 rounded-sm bg-neutral-700"></div>
-								<span class="min-w-0 flex-1 truncate text-sm text-neutral-700">
+								<div
+									class="flex h-3 w-3 shrink-0 items-center justify-center rounded-[2px] bg-neutral-700 text-[7px] font-medium text-white"
+								>
+									A
+								</div>
+								<span class="min-w-0 flex-1 truncate text-xs text-neutral-700">
 									{data?.workspace?.name ?? ''}
 								</span>
 							</div>
-							<a
-								href={`${basePath}/search`}
+							<button
+								type="button"
+								on:click={openSearchModal}
 								class="shrink-0 rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+								aria-label="Open search"
 							>
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
@@ -506,14 +691,54 @@
 										d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"
 									/>
 								</svg>
-							</a>
+							</button>
 						</div>
-						<div class="flex flex-1 flex-col gap-1 pb-4">
+						<div class="flex flex-1 flex-col gap-0.5 pb-4">
 							{#each navItems.filter((item) => item.id !== 'people' || canViewPeople) as item}
 								<a
 									href={`${basePath}/${item.href}`}
-									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-normal transition ${currentPath === `${basePath}/${item.href}` || currentPath.startsWith(`${basePath}/${item.href}/`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
+									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-normal transition ${currentPath === `${basePath}/${item.href}` || currentPath.startsWith(`${basePath}/${item.href}/`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
 								>
+									{#if item.id === 'people'}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="12"
+											height="12"
+											fill="currentColor"
+											class="shrink-0 text-neutral-600"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5"
+											/>
+										</svg>
+									{:else if item.id === 'my-issues'}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="12"
+											height="12"
+											fill="currentColor"
+											class="shrink-0 text-neutral-600"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M2 2v13.5a.5.5 0 0 0 .74.439L8 13.069l5.26 2.87A.5.5 0 0 0 14 15.5V2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2"
+											/>
+										</svg>
+									{:else if item.id === 'inbox'}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="12"
+											height="12"
+											fill="currentColor"
+											class="shrink-0 text-neutral-600"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M12.643 15C13.979 15 15 13.845 15 12.5V5H1v7.5C1 13.845 2.021 15 3.357 15zM5.5 7h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1M.8 1a.8.8 0 0 0-.8.8V3a.8.8 0 0 0 .8.8h14.4A.8.8 0 0 0 16 3V1.8a.8.8 0 0 0-.8-.8z"
+											/>
+										</svg>
+									{/if}
 									<span class="truncate">{item.label}</span>
 								</a>
 							{/each}
@@ -521,14 +746,14 @@
 								<div class="mt-2">
 									<button
 										type="button"
-										class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm text-neutral-400 transition hover:bg-neutral-100"
+										class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-neutral-400 transition hover:bg-neutral-100"
 										on:click={() => (propertiesOpen = !propertiesOpen)}
 									>
 										<span class="truncate">{propertiesItem.label}</span>
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
-											width="14"
-											height="14"
+											width="12"
+											height="12"
 											fill="currentColor"
 											class={`transition ${propertiesOpen ? '' : '-rotate-90'}`}
 											viewBox="0 0 16 16"
@@ -542,8 +767,20 @@
 										<div class="mt-1 space-y-1">
 											<a
 												href={`${basePath}/${propertiesItem.href}`}
-												class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm font-normal transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+												class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-normal transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
 											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="12"
+													height="12"
+													fill="currentColor"
+													class="text-neutral-600"
+													viewBox="0 0 16 16"
+												>
+													<path
+														d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
+													/>
+												</svg>
 												<span>All properties</span>
 											</a>
 											{#if properties !== null}
@@ -551,14 +788,15 @@
 													{#each properties as property}
 														<a
 															href={`${basePath}/${propertiesItem.href}/${slugify(property.name)}`}
-															class={`flex w-full items-center rounded-md px-2 py-1.5 text-sm font-normal transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+															class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-normal transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
 														>
+															<span class="h-1 w-1 rounded-full bg-neutral-700"></span>
 															<span class="truncate">{property.name}</span>
 														</a>
 													{/each}
 												{/if}
 											{:else}
-												<div class="px-2 py-1.5 text-xs text-neutral-400">
+												<div class="px-2 py-1.5 text-[11px] text-neutral-400">
 													Loading properties...
 												</div>
 											{/if}
@@ -570,7 +808,7 @@
 								<button
 									type="button"
 									on:click={() => goto(`${basePath}/${settingsItem.href}`)}
-									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${currentPath === `${basePath}/${settingsItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
+									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${currentPath === `${basePath}/${settingsItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
 								>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
@@ -604,6 +842,102 @@
 					<slot />
 				</div>
 			</section>
+			{#if showSearchModal}
+				<div
+					class="fixed inset-0 z-40 bg-neutral-900/30"
+					transition:fade={{ duration: 120 }}
+					on:click={closeSearchModal}
+					role="presentation"
+				></div>
+				<div
+					class="pointer-events-none fixed inset-0 z-50 flex items-start justify-center px-4 pt-24 sm:pt-28"
+				>
+					<div
+						class="pointer-events-auto w-full max-w-xl rounded-xl border border-neutral-200 bg-white shadow-xl"
+						transition:scale={{ duration: 140, start: 0.96 }}
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby="search-modal-title"
+					>
+						<div class="px-3 py-4">
+							<div class="flex w-full items-center">
+								<input
+									bind:this={searchInput}
+									bind:value={searchQuery}
+									class="w-full border-0 bg-transparent py-0 text-sm text-neutral-700 outline-none placeholder:text-neutral-400 focus:ring-0 focus:outline-none"
+									placeholder="Ask Bedrock or search workspace"
+									type="text"
+									inputmode="search"
+								/>
+							</div>
+							{#if normalizedSearchQuery}
+								<div class="mt-4 pt-3">
+									{#if searchResults.length}
+										<div class="space-y-1">
+											{#each searchResults as result}
+												<button
+													type="button"
+													on:click={() => openSearchResult(result)}
+													class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm text-neutral-800 hover:bg-neutral-50"
+												>
+													<div class="flex min-w-0 items-center gap-2">
+														{#if result.type === 'issue'}
+															<span
+																class={`h-2.5 w-2.5 shrink-0 rounded-full ${issueStatusDotClass(result.status)}`}
+															></span>
+														{:else if result.type === 'person'}
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="14"
+																height="14"
+																fill="currentColor"
+																class="shrink-0 text-neutral-400"
+																viewBox="0 0 16 16"
+															>
+																<path
+																	d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
+																/>
+															</svg>
+														{:else if result.type === 'property'}
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="14"
+																height="14"
+																fill="currentColor"
+																class="shrink-0 text-neutral-400"
+																viewBox="0 0 16 16"
+															>
+																<path
+																	d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
+																/>
+															</svg>
+														{:else}
+															<span class="h-2.5 w-2.5 shrink-0 rounded-sm bg-neutral-300"></span>
+														{/if}
+														<div class="min-w-0">
+															<div class="flex items-center gap-2">
+																<span class="truncate">{result.title}</span>
+																{#if result.type === 'person' && result.role}
+																	<span class="text-xs text-neutral-400">{result.role}</span>
+																{/if}
+															</div>
+														</div>
+													</div>
+													{#if result.type !== 'person' && result.right}
+														<span class="text-xs text-neutral-400">{result.right}</span>
+													{/if}
+												</button>
+											{/each}
+										</div>
+									{:else}
+										<div class="px-2 py-2 text-sm text-neutral-400">No results found.</div>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}

@@ -4,13 +4,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+const agentApiUrl = Deno.env.get('AGENT_API_URL');
+const agentWebhookSecret = Deno.env.get('AGENT_WEBHOOK_SECRET');
 
 if (!supabaseUrl || !supabaseServiceKey) {
 	throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
-}
-
-if (!openaiApiKey) {
-	throw new Error('Missing OPENAI_API_KEY');
 }
 
 const openaiModel = 'gpt-5-mini-2025-08-07';
@@ -296,6 +294,25 @@ const logLlmOutput = async (userId: string, payload: unknown, runId: string, ste
 	} catch (err) {
 		console.error('gmail-push-hook llm log failed', err);
 	}
+};
+
+const callAgentApi = async (payload: Record<string, unknown>) => {
+	if (!agentApiUrl || !agentWebhookSecret) {
+		throw new Error('Missing AGENT_API_URL or AGENT_WEBHOOK_SECRET');
+	}
+	const response = await fetch(agentApiUrl, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			'X-Agent-Secret': agentWebhookSecret
+		},
+		body: JSON.stringify({ source: 'gmail', ...payload })
+	});
+	if (!response.ok) {
+		throw new Error(await response.text());
+	}
+	const data = await response.json().catch(() => ({}));
+	return data ?? {};
 };
 
 const listOpenIssues = async (unitId: string | null) => {
@@ -2007,28 +2024,28 @@ const processMessage = async ({
 			const userName = userProfile?.name ?? 'Bedrock';
 			const workspaceUnits = await listWorkspaceUnitsForAgent(workspaceIdForConnection);
 
-			const created = await runIssueAgent({
+			const created = await callAgentApi({
 				subject: messageSubject,
 				body: cleanedBody,
-				senderEmail,
-				unitId: null,
-				unitName: null,
-				workspaceId: workspaceIdForConnection,
-				propertyName: null,
-				threadId: threadRow.id,
-				userId: connection.user_id,
-				policyText,
-				tenantName: null,
-				tenantEmail: null,
-				userName,
-				defaultSenderEmail: connection.email ?? null,
-				replyMessageId: inboundMessageId,
-				rootIssueId: rootIssueIdForAgent,
-				threadIssueId: issueId,
-				relatedIssues,
-				workspaceUnits
+				sender_email: senderEmail,
+				unit_id: null,
+				unit_name: null,
+				workspace_id: workspaceIdForConnection,
+				property_name: null,
+				thread_id: threadRow.id,
+				user_id: connection.user_id,
+				policy_text: policyText,
+				tenant_name: null,
+				tenant_email: null,
+				user_name: userName,
+				default_sender_email: connection.email ?? null,
+				reply_message_id: inboundMessageId,
+				root_issue_id: rootIssueIdForAgent,
+				thread_issue_id: issueId,
+				related_issues: relatedIssues,
+				workspace_units: workspaceUnits
 			});
-			issueId = created.issueId ?? issueId;
+			issueId = created?.issueId ?? issueId;
 
 			if (issueId) {
 				await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
@@ -2232,28 +2249,28 @@ const processMessage = async ({
 			.maybeSingle();
 		const userName = userProfile?.name ?? 'Bedrock';
 		const workspaceUnits = await listWorkspaceUnitsForAgent(propertyRow.workspace_id);
-		const created = await runIssueAgent({
+		const created = await callAgentApi({
 			subject: messageSubject,
 			body: cleanedBody,
-			senderEmail,
-			unitId: unitRow.id,
-			unitName: unitRow.name ?? null,
-			workspaceId: propertyRow.workspace_id,
-			propertyName: propertyRow.name ?? null,
-			threadId: threadRow.id,
-			userId: connection.user_id,
-			policyText,
-			tenantName: tenant.name ?? null,
-			tenantEmail: tenant.email ?? null,
-			userName,
-			defaultSenderEmail: connection.email ?? null,
-			replyMessageId: inboundMessageId,
-			rootIssueId: rootIssueIdForAgent,
-			threadIssueId: issueId,
-			relatedIssues,
-			workspaceUnits
+			sender_email: senderEmail,
+			unit_id: unitRow.id,
+			unit_name: unitRow.name ?? null,
+			workspace_id: propertyRow.workspace_id,
+			property_name: propertyRow.name ?? null,
+			thread_id: threadRow.id,
+			user_id: connection.user_id,
+			policy_text: policyText,
+			tenant_name: tenant.name ?? null,
+			tenant_email: tenant.email ?? null,
+			user_name: userName,
+			default_sender_email: connection.email ?? null,
+			reply_message_id: inboundMessageId,
+			root_issue_id: rootIssueIdForAgent,
+			thread_issue_id: issueId,
+			related_issues: relatedIssues,
+			workspace_units: workspaceUnits
 		});
-		issueId = created.issueId ?? issueId;
+		issueId = created?.issueId ?? issueId;
 
 		if (issueId) {
 			await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
