@@ -2,6 +2,51 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
+const slugify = (value) => {
+	if (!value) return '';
+	return value
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/(^-|-$)+/g, '');
+};
+
+export const load = async ({ parent, params, depends }) => {
+	depends('app:units');
+
+	const parentData = await parent();
+	const { workspace } = parentData;
+
+	// Resolve properties from parent (may be a streaming promise)
+	const propertiesList = parentData.properties instanceof Promise
+		? await parentData.properties
+		: (parentData.properties ?? []);
+
+	const propertySlug = params.property;
+	const property = (Array.isArray(propertiesList) ? propertiesList : []).find(
+		(p) => slugify(p.name) === propertySlug
+	);
+
+	if (!property?.id) {
+		return { property: null, propertyUnits: [] };
+	}
+
+	const { data: units } = await supabaseAdmin
+		.from('units')
+		.select('id, name, property_id, tenants(id, name, email, unit_id)')
+		.eq('property_id', property.id)
+		.order('name', { ascending: true });
+
+	const propertyUnits = (units ?? []).map((unit) => ({
+		id: unit.id,
+		name: unit.name,
+		property_id: unit.property_id,
+		tenant: (unit.tenants ?? [])[0] ?? null
+	}));
+
+	return { property, propertyUnits };
+};
+
 export const actions = {
 	createUnit: async ({ request, locals, params }) => {
 		if (!locals.user) throw redirect(303, '/');

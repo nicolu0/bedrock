@@ -1,18 +1,12 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { browser } from '$app/environment';
 	import { fade, scale } from 'svelte/transition';
 	import { getContext, onMount } from 'svelte';
-	import {
-		propertiesCache,
-		ensurePropertiesCache,
-		addPropertyToCache,
-		updatePropertyInCache,
-		replacePropertyInCache,
-		removePropertyFromCache
-	} from '$lib/stores/propertiesCache.js';
-	import { peopleCache, ensurePeopleCache } from '$lib/stores/peopleCache.js';
+	import { invalidate } from '$app/navigation';
+	import { peopleCache } from '$lib/stores/peopleCache.js';
+
+	export let data;
 
 	$: workspaceSlug = $page.params.workspace;
 	$: role = $page.data?.role;
@@ -28,26 +22,19 @@
 				: `${ownerFallbackName} (You)`
 			: '';
 
-	$: if (browser && workspaceSlug && canViewPeople) {
-		ensurePeopleCache(workspaceSlug);
+	// data.properties from layout may be a streaming Promise
+	let _properties = [];
+	$: {
+		const propData = data.properties;
+		if (propData instanceof Promise) {
+			propData.then((list) => { if (Array.isArray(list)) _properties = list; });
+		} else if (Array.isArray(propData)) {
+			_properties = propData;
+		}
 	}
+	$: properties = _properties;
 
-	$: properties =
-		$propertiesCache.workspace === workspaceSlug && $propertiesCache.data != null
-			? $propertiesCache.data
-			: null;
-
-	let propertiesPrimed = false;
-	$: if (browser && workspaceSlug && role && !propertiesPrimed) {
-		propertiesPrimed = true;
-		ensurePropertiesCache(workspaceSlug, { role, force: true });
-	}
-
-	let owners = null;
-	$: owners =
-		canViewPeople && $peopleCache.workspace === workspaceSlug && Array.isArray($peopleCache.data)
-			? $peopleCache.data.filter((person) => person?.role === 'owner')
-			: null;
+	$: owners = data.owners ?? [];
 
 	let showNewPropertyModal = false;
 	let newPropertyName = '';
@@ -57,6 +44,7 @@
 	let newPropertyPostalCode = '';
 	let newPropertyCountry = '';
 	let createPropertyError = '';
+	let creating = false;
 	const sidebarControl = getContext('sidebarControl');
 	const openSidebar = () => sidebarControl?.open?.();
 	let newPropertyOwnerId = '';
@@ -70,6 +58,7 @@
 	let editPropertyOwnerId = '';
 	let editPropertyOwnerName = '';
 	let updatePropertyError = '';
+	let updating = false;
 
 	let suggestions = [];
 	let showSuggestions = false;
@@ -177,8 +166,8 @@
 		}
 		debounceTimer = setTimeout(async () => {
 			const res = await fetch(`/api/places?input=${encodeURIComponent(val)}`);
-			const data = await res.json();
-			suggestions = Array.isArray(data) ? data : [];
+			const result = await res.json();
+			suggestions = Array.isArray(result) ? result : [];
 			showSuggestions = suggestions.length > 0;
 		}, 300);
 	}
@@ -221,97 +210,72 @@
 
 	async function handleCreateProperty(e) {
 		createPropertyError = '';
-		const tempId = `temp-${Date.now()}`;
-		const optimistic = {
-			id: tempId,
-			name: newPropertyName.trim(),
-			address: newPropertyAddress.trim(),
-			city: newPropertyCity.trim(),
-			state: newPropertyState.trim(),
-			postal_code: newPropertyPostalCode.trim(),
-			country: newPropertyCountry.trim(),
-			owner_id: newPropertyOwnerId?.trim() ? newPropertyOwnerId.trim() : null
-		};
-		addPropertyToCache(optimistic);
+		creating = true;
 		try {
 			const res = await fetch('/api/properties', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					workspace: workspaceSlug,
-					name: optimistic.name,
-					address: optimistic.address,
-					city: optimistic.city,
-					state: optimistic.state,
-					postalCode: optimistic.postal_code,
-					country: optimistic.country,
-					ownerId: optimistic.owner_id
+					name: newPropertyName.trim(),
+					address: newPropertyAddress.trim(),
+					city: newPropertyCity.trim(),
+					state: newPropertyState.trim(),
+					postalCode: newPropertyPostalCode.trim(),
+					country: newPropertyCountry.trim(),
+					ownerId: newPropertyOwnerId?.trim() ? newPropertyOwnerId.trim() : null
 				})
 			});
 			const result = await res.json();
 			if (!res.ok) {
-				removePropertyFromCache(tempId);
 				createPropertyError = result?.error ?? 'Unable to create property.';
 				return;
 			}
-			replacePropertyInCache(tempId, { ...optimistic, ...result });
 			closeNewPropertyModal();
+			invalidate('app:properties');
 		} catch {
-			removePropertyFromCache(tempId);
 			createPropertyError = 'Unable to create property.';
+		} finally {
+			creating = false;
 		}
 	}
+
 	async function handleUpdateProperty(e) {
 		updatePropertyError = '';
 		if (!editingProperty?.id) return;
-		const previous = { ...editingProperty };
-		const optimistic = {
-			...editingProperty,
-			name: editPropertyName.trim(),
-			address: editPropertyAddress.trim(),
-			city: editPropertyCity.trim(),
-			state: editPropertyState.trim(),
-			postal_code: editPropertyPostalCode.trim(),
-			country: editPropertyCountry.trim(),
-			owner_id: editPropertyOwnerId?.trim() ? editPropertyOwnerId.trim() : null
-		};
-		updatePropertyInCache(optimistic);
-		closeEditPropertyModal();
+		updating = true;
 		try {
 			const res = await fetch('/api/properties', {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					workspace: workspaceSlug,
-					propertyId: previous.id,
-					name: optimistic.name,
-					address: optimistic.address,
-					city: optimistic.city,
-					state: optimistic.state,
-					postalCode: optimistic.postal_code,
-					country: optimistic.country,
-					ownerId: optimistic.owner_id
+					propertyId: editingProperty.id,
+					name: editPropertyName.trim(),
+					address: editPropertyAddress.trim(),
+					city: editPropertyCity.trim(),
+					state: editPropertyState.trim(),
+					postalCode: editPropertyPostalCode.trim(),
+					country: editPropertyCountry.trim(),
+					ownerId: editPropertyOwnerId?.trim() ? editPropertyOwnerId.trim() : null
 				})
 			});
 			const result = await res.json();
 			if (!res.ok) {
-				updatePropertyInCache(previous);
-				openEditPropertyModal(previous);
 				updatePropertyError = result?.error ?? 'Unable to update property.';
 				return;
 			}
-			updatePropertyInCache({ ...optimistic, ...result });
+			closeEditPropertyModal();
+			invalidate('app:properties');
 		} catch {
-			updatePropertyInCache(previous);
-			openEditPropertyModal(previous);
 			updatePropertyError = 'Unable to update property.';
+		} finally {
+			updating = false;
 		}
 	}
 
 	async function deleteProperty(property) {
 		if (!property?.id) return;
-		const previous = properties;
-		removePropertyFromCache(property.id);
 		openRowMenu = null;
 		try {
 			const res = await fetch('/api/properties', {
@@ -323,7 +287,6 @@
 				throw new Error('Failed to delete property');
 			}
 		} catch (error) {
-			primePropertiesCache(workspaceSlug, previous ?? [], role);
 			console.error(error);
 		}
 	}
@@ -333,9 +296,10 @@
 		if (parts.length === 1) return parts[0][0].toUpperCase();
 		return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 	}
-	function getOwnerLabel(owners, ownerId, fallbackName) {
+
+	function getOwnerLabel(ownersList, ownerId, fallbackName) {
 		if (!ownerId) return fallbackName?.trim() ? fallbackName : 'Not Selected';
-		const match = (owners ?? []).find((owner) => owner.id === ownerId);
+		const match = (ownersList ?? []).find((owner) => owner.id === ownerId);
 		return match?.name ?? (fallbackName?.trim() ? fallbackName : 'Not Selected');
 	}
 </script>
@@ -383,8 +347,7 @@
 		<button class="rounded-md px-2 py-1 text-xs text-neutral-400">+ New view</button>
 	</div>
 	<div>
-		{#if properties !== null}
-			{#if properties?.length}
+		{#if properties.length}
 				<div
 					class="grid grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr_2rem] gap-4 px-6 pb-2 text-xs text-neutral-500"
 				>
@@ -465,19 +428,6 @@
 			{:else}
 				<div class="px-6 py-3 text-sm text-neutral-400">No properties yet.</div>
 			{/if}
-		{:else}
-			<div
-				class="grid grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr_2rem] gap-4 px-6 pb-2 text-xs text-neutral-500"
-			>
-				<div>Name</div>
-				<div>Units</div>
-				<div>Issues</div>
-				<div>Owner</div>
-				<div></div>
-			</div>
-			<div class="border-t border-neutral-200"></div>
-			<div class="px-6 py-3 text-xs text-neutral-400">Loading properties...</div>
-		{/if}
 	</div>
 </div>
 
@@ -531,71 +481,71 @@
 						required
 						type="text"
 					/>
-					{#if owners !== null}
-						<div class="owner-dropdown relative">
-							<label class="text-xs text-neutral-500">Owner</label>
-							<button
-								type="button"
-								class="mt-1 flex w-full items-center justify-between rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 transition hover:bg-neutral-50"
-								on:click|stopPropagation={() => {
-									newOwnerOpen = !newOwnerOpen;
-									editOwnerOpen = false;
-								}}
-								aria-expanded={newOwnerOpen}
+					{#if canViewPeople}
+					<div class="owner-dropdown relative">
+						<label class="text-xs text-neutral-500">Owner</label>
+						<button
+							type="button"
+							class="mt-1 flex w-full items-center justify-between rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 transition hover:bg-neutral-50"
+							on:click|stopPropagation={() => {
+								newOwnerOpen = !newOwnerOpen;
+								editOwnerOpen = false;
+							}}
+							aria-expanded={newOwnerOpen}
+						>
+							<span>{getOwnerLabel(owners, newPropertyOwnerId, ownerFallbackName)}</span>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								fill="currentColor"
+								class={`text-neutral-400 transition ${newOwnerOpen ? 'rotate-180' : ''}`}
+								viewBox="0 0 16 16"
 							>
-								<span>{getOwnerLabel(owners, newPropertyOwnerId, ownerFallbackName)}</span>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="16"
-									height="16"
-									fill="currentColor"
-									class={`text-neutral-400 transition ${newOwnerOpen ? 'rotate-180' : ''}`}
-									viewBox="0 0 16 16"
+								<path
+									d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+								/>
+							</svg>
+						</button>
+						<input type="hidden" name="ownerId" value={newPropertyOwnerId} />
+						{#if newOwnerOpen}
+							<div
+								class="absolute z-10 mt-2 w-full rounded-xl border border-stone-200 bg-white py-1 shadow-lg"
+							>
+								<button
+									class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
+										!newPropertyOwnerId ? 'bg-neutral-50 text-neutral-900' : 'hover:bg-neutral-50'
+									}`}
+									type="button"
+									on:click={() => {
+										newPropertyOwnerId = '';
+										newOwnerOpen = false;
+									}}
 								>
-									<path
-										d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-									/>
-								</svg>
-							</button>
-							<input type="hidden" name="ownerId" value={newPropertyOwnerId} />
-							{#if newOwnerOpen}
-								<div
-									class="absolute z-10 mt-2 w-full rounded-xl border border-stone-200 bg-white py-1 shadow-lg"
-								>
+									<span>Not Selected</span>
+									{#if !newPropertyOwnerId}
+										<span class="text-xs text-neutral-400">Selected</span>
+									{/if}
+								</button>
+								{#each owners as owner}
 									<button
 										class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
-											!newPropertyOwnerId ? 'bg-neutral-50 text-neutral-900' : 'hover:bg-neutral-50'
+											owner.id === newPropertyOwnerId
+												? 'bg-neutral-50 text-neutral-900'
+												: 'hover:bg-neutral-50'
 										}`}
 										type="button"
 										on:click={() => {
-											newPropertyOwnerId = '';
+											newPropertyOwnerId = owner.id ?? '';
 											newOwnerOpen = false;
 										}}
 									>
-										<span>Not Selected</span>
-										{#if !newPropertyOwnerId}
+										<span>{owner.name ?? 'Unnamed owner'}</span>
+										{#if owner.id === newPropertyOwnerId}
 											<span class="text-xs text-neutral-400">Selected</span>
 										{/if}
 									</button>
-									{#each owners as owner}
-										<button
-											class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
-												owner.id === newPropertyOwnerId
-													? 'bg-neutral-50 text-neutral-900'
-													: 'hover:bg-neutral-50'
-											}`}
-											type="button"
-											on:click={() => {
-												newPropertyOwnerId = owner.id ?? '';
-												newOwnerOpen = false;
-											}}
-										>
-											<span>{owner.name ?? 'Unnamed owner'}</span>
-											{#if owner.id === newPropertyOwnerId}
-												<span class="text-xs text-neutral-400">Selected</span>
-											{/if}
-										</button>
-									{/each}
+								{/each}
 								</div>
 							{/if}
 						</div>
@@ -699,7 +649,8 @@
 					</button>
 					<button
 						class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-						disabled={!newPropertyName.trim() ||
+						disabled={creating ||
+							!newPropertyName.trim() ||
 							!newPropertyAddress.trim() ||
 							!newPropertyCity.trim() ||
 							!newPropertyState.trim() ||
@@ -707,7 +658,7 @@
 							!newPropertyCountry.trim()}
 						type="submit"
 					>
-						Create property
+						{creating ? 'Creating...' : 'Create property'}
 					</button>
 				</div>
 			</form>
@@ -766,79 +717,73 @@
 						required
 						type="text"
 					/>
-					{#if owners !== null}
-						<div class="owner-dropdown relative">
-							<label class="text-xs text-neutral-500">Owner</label>
-							<button
-								type="button"
-								class="mt-1 flex w-full items-center justify-between rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 transition hover:bg-neutral-50"
-								on:click|stopPropagation={() => {
-									editOwnerOpen = !editOwnerOpen;
-									newOwnerOpen = false;
-								}}
-								aria-expanded={editOwnerOpen}
+					{#if canViewPeople}
+					<div class="owner-dropdown relative">
+						<label class="text-xs text-neutral-500">Owner</label>
+						<button
+							type="button"
+							class="mt-1 flex w-full items-center justify-between rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 transition hover:bg-neutral-50"
+							on:click|stopPropagation={() => {
+								editOwnerOpen = !editOwnerOpen;
+								newOwnerOpen = false;
+							}}
+							aria-expanded={editOwnerOpen}
+						>
+							<span>{getOwnerLabel(owners, editPropertyOwnerId, isOwnerRole ? ownerFallbackName : editPropertyOwnerName)}</span>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								fill="currentColor"
+								class={`text-neutral-400 transition ${editOwnerOpen ? 'rotate-180' : ''}`}
+								viewBox="0 0 16 16"
 							>
-								<span>
-									{getOwnerLabel(
-										owners,
-										editPropertyOwnerId,
-										isOwnerRole ? ownerFallbackName : editPropertyOwnerName
-									)}
-								</span>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="16"
-									height="16"
-									fill="currentColor"
-									class={`text-neutral-400 transition ${editOwnerOpen ? 'rotate-180' : ''}`}
-									viewBox="0 0 16 16"
+								<path
+									d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+								/>
+							</svg>
+						</button>
+						<input type="hidden" name="ownerId" value={editPropertyOwnerId} />
+						{#if editOwnerOpen}
+							<div
+								class="absolute z-10 mt-2 w-full rounded-xl border border-stone-200 bg-white py-1 shadow-lg"
+							>
+								<button
+									class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
+										!editPropertyOwnerId
+											? 'bg-neutral-50 text-neutral-900'
+											: 'hover:bg-neutral-50'
+									}`}
+									type="button"
+									on:click={() => {
+										editPropertyOwnerId = '';
+										editOwnerOpen = false;
+									}}
 								>
-									<path
-										d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-									/>
-								</svg>
-							</button>
-							<input type="hidden" name="ownerId" value={editPropertyOwnerId} />
-							{#if editOwnerOpen}
-								<div
-									class="absolute z-10 mt-2 w-full rounded-xl border border-stone-200 bg-white py-1 shadow-lg"
-								>
+									<span>Not Selected</span>
+									{#if !editPropertyOwnerId}
+										<span class="text-xs text-neutral-400">Selected</span>
+									{/if}
+								</button>
+								{#each owners as owner}
 									<button
 										class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
-											!editPropertyOwnerId
+											owner.id === editPropertyOwnerId
 												? 'bg-neutral-50 text-neutral-900'
 												: 'hover:bg-neutral-50'
 										}`}
 										type="button"
 										on:click={() => {
-											editPropertyOwnerId = '';
+											editPropertyOwnerId = owner.id ?? '';
 											editOwnerOpen = false;
 										}}
 									>
-										<span>Not Selected</span>
-										{#if !editPropertyOwnerId}
+										<span>{owner.name ?? 'Unnamed owner'}</span>
+										{#if owner.id === editPropertyOwnerId}
 											<span class="text-xs text-neutral-400">Selected</span>
 										{/if}
 									</button>
-									{#each owners as owner}
-										<button
-											class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
-												owner.id === editPropertyOwnerId
-													? 'bg-neutral-50 text-neutral-900'
-													: 'hover:bg-neutral-50'
-											}`}
-											type="button"
-											on:click={() => {
-												editPropertyOwnerId = owner.id ?? '';
-												editOwnerOpen = false;
-											}}
-										>
-											<span>{owner.name ?? 'Unnamed owner'}</span>
-											{#if owner.id === editPropertyOwnerId}
-												<span class="text-xs text-neutral-400">Selected</span>
-											{/if}
-										</button>
-									{/each}
+								{/each}
 								</div>
 							{/if}
 						</div>
@@ -942,7 +887,8 @@
 					</button>
 					<button
 						class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-						disabled={!editPropertyName.trim() ||
+						disabled={updating ||
+							!editPropertyName.trim() ||
 							!editPropertyAddress.trim() ||
 							!editPropertyCity.trim() ||
 							!editPropertyState.trim() ||
@@ -950,7 +896,7 @@
 							!editPropertyCountry.trim()}
 						type="submit"
 					>
-						Save changes
+						{updating ? 'Saving...' : 'Save changes'}
 					</button>
 				</div>
 			</form>

@@ -5,32 +5,30 @@
 	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
+	import { goto, invalidate } from '$app/navigation';
 	import {
-		propertiesCache,
-		primePropertiesCache,
-		ensurePropertiesCache
-	} from '$lib/stores/propertiesCache.js';
-	import { unitsCache, primeUnitsCache, mergeUnitsIntoCache } from '$lib/stores/unitsCache.js';
-	import { primeIssuesCache } from '$lib/stores/issuesCache';
-	import { primeNotificationsCache } from '$lib/stores/notificationsCache';
-	import { peopleMembersCache, primePeopleMembersCache } from '$lib/stores/peopleMembersCache';
-	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
-	import { goto } from '$app/navigation';
-	import {
-		ensureIssuesCache,
 		issuesCache,
+		ensureIssuesCache,
 		applyIssueInsert,
 		applyIssueDelete,
 		updateIssueStatusInListCache,
 		updateIssueFieldsInListCache
 	} from '$lib/stores/issuesCache';
 	import {
+		notificationsCache,
 		ensureNotificationsCache,
 		addNotificationToCache,
-		updateNotificationInCache
+		updateNotificationInCache,
+		primeNotificationsCache
 	} from '$lib/stores/notificationsCache';
-	import { ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import {
+		peopleMembersCache,
+		primePeopleMembersCache,
+		ensurePeopleMembersCache
+	} from '$lib/stores/peopleMembersCache';
+	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
+	import {
+		activityCache,
 		ensureActivityCache,
 		primeActivityCache,
 		applyMessageDelta,
@@ -39,16 +37,17 @@
 		removeDraftFromCache
 	} from '$lib/stores/activityCache';
 	import {
-		updateIssueStatusInDetailCache,
-		updateIssueFieldsInDetailCache,
-		primeDetailCacheFromIssuesList
-	} from '$lib/stores/issueDetailCache.js';
-	import {
+		activityLogsCache,
 		ensureActivityLogsCache,
 		primeActivityLogsCache,
 		applyActivityLogDelta,
 		removeActivityLogFromCache
 	} from '$lib/stores/activityLogsCache';
+	import {
+		updateIssueStatusInDetailCache,
+		updateIssueFieldsInDetailCache,
+		primeDetailCacheFromIssuesList
+	} from '$lib/stores/issueDetailCache.js';
 	import { pageReady } from '$lib/stores/pageReady';
 	import { supabase } from '$lib/supabaseClient.js';
 	export let data;
@@ -146,14 +145,8 @@
 	$: sectionIssues = issueSections.flatMap((section) => section?.items ?? []);
 	$: sectionSubIssues = sectionIssues.flatMap((item) => item?.subIssues ?? []);
 	$: combinedIssues = [...issuesList, ...sectionIssues, ...sectionSubIssues];
-	$: propertiesList =
-		$propertiesCache.workspace === workspaceSlug && Array.isArray($propertiesCache.data)
-			? $propertiesCache.data
-			: [];
-	$: unitsList =
-		$unitsCache.workspace === workspaceSlug && Array.isArray($unitsCache.data)
-			? $unitsCache.data
-			: [];
+	$: propertiesList = Array.isArray(_resolvedProperties) ? _resolvedProperties : [];
+	$: unitsList = Array.isArray(_resolvedUnits) ? _resolvedUnits : [];
 	$: peopleList =
 		$peopleCache.workspace === workspaceSlug && Array.isArray($peopleCache.data)
 			? $peopleCache.data
@@ -242,116 +235,31 @@
 			currentPath === `${basePath}/${item.href}` ||
 			currentPath.startsWith(`${basePath}/${item.href}/`)
 	);
-	$: properties =
-		$propertiesCache.workspace === workspaceSlug && $propertiesCache.data != null
-			? $propertiesCache.data
-			: null;
 
-	let _primedPropertiesForWorkspace = null;
-	$: if (browser && data.properties && _primedPropertiesForWorkspace !== workspaceSlug) {
-		_primedPropertiesForWorkspace = workspaceSlug;
-		const _ws = workspaceSlug;
-		const prime = (list) => {
-			const cache = get(propertiesCache);
-			const next = Array.isArray(list) ? list : [];
-			const nextHasCounts = next.some(
-				(item) =>
-					Object.prototype.hasOwnProperty.call(item ?? {}, 'unit_count') ||
-					Object.prototype.hasOwnProperty.call(item ?? {}, 'issue_count')
-			);
-			const cacheMissingCounts = (cache.data ?? []).some(
-				(item) =>
-					!Object.prototype.hasOwnProperty.call(item ?? {}, 'unit_count') &&
-					!Object.prototype.hasOwnProperty.call(item ?? {}, 'issue_count')
-			);
-			if (
-				!cache.data ||
-				cache.workspace !== _ws ||
-				cache.role !== userRole ||
-				(nextHasCounts && cacheMissingCounts)
-			) {
-				primePropertiesCache(_ws, next, userRole);
-			}
-		};
-		if (data.properties instanceof Promise) {
-			data.properties.then(prime);
-		} else {
-			prime(data.properties);
-		}
-	}
-
-	$: if (browser && data.units && workspaceSlug) {
-		const _ws = workspaceSlug;
-		const prime = (list) => {
-			const cache = get(unitsCache);
-			const next = Array.isArray(list) ? list : [];
-			if (!cache.data || cache.workspace !== _ws) {
-				primeUnitsCache(_ws, next);
-				return;
-			}
-			mergeUnitsIntoCache(_ws, next);
-		};
-		if (data.units instanceof Promise) {
-			data.units.then(prime);
-		} else {
-			prime(data.units);
-		}
-	}
-	let _primedIssuesForWorkspace = null;
-	$: if (browser && data.issuesData && _primedIssuesForWorkspace !== workspaceSlug) {
-		_primedIssuesForWorkspace = workspaceSlug;
-		const _ws = workspaceSlug;
-		const prime = (d) => {
-			if (d) {
-				primeIssuesCache(_ws, d);
-				if (d.issues?.length) primeDetailCacheFromIssuesList(d.issues);
-			}
-		};
-		if (data.issuesData instanceof Promise) {
-			data.issuesData.then(prime);
-		} else {
-			prime(data.issuesData);
-		}
-	}
-
-	let _primedNotificationsForWorkspace = null;
-	$: if (browser && data.notificationsData && _primedNotificationsForWorkspace !== workspaceSlug) {
-		_primedNotificationsForWorkspace = workspaceSlug;
-		const _ws = workspaceSlug;
-		const prime = ({ notifications, members }) => {
-			primeNotificationsCache(_ws, { notifications, members });
-			primePeopleMembersCache(_ws, members);
-		};
-		if (data.notificationsData instanceof Promise) {
-			data.notificationsData.then(prime);
-		} else {
-			prime(data.notificationsData);
-		}
-	}
-
-	let _primedActivityForWorkspace = null;
-	$: if (browser && data.activityData && _primedActivityForWorkspace !== workspaceSlug) {
-		_primedActivityForWorkspace = workspaceSlug;
-		const _ws = workspaceSlug;
-		if (data.activityData instanceof Promise) {
-			data.activityData.then((d) => {
-				if (d) primeActivityCache(_ws, d);
+	// Resolve streaming properties promise for sidebar
+	let _resolvedProperties = null;
+	$: {
+		const propData = data.properties;
+		if (propData instanceof Promise) {
+			propData.then((list) => {
+				if (Array.isArray(list)) _resolvedProperties = list;
 			});
-		} else if (data.activityData) {
-			primeActivityCache(_ws, data.activityData);
+		} else if (Array.isArray(propData)) {
+			_resolvedProperties = propData;
 		}
 	}
+	$: properties = _resolvedProperties;
 
-	let _primedActivityLogsForWorkspace = null;
-	$: if (browser && data.activityLogsData && _primedActivityLogsForWorkspace !== workspaceSlug) {
-		_primedActivityLogsForWorkspace = workspaceSlug;
-		const _ws = workspaceSlug;
-		if (data.activityLogsData instanceof Promise) {
-			data.activityLogsData.then((d) => {
-				if (d) primeActivityLogsCache(_ws, d);
+	// Resolve streaming units promise for search
+	let _resolvedUnits = null;
+	$: {
+		const unitsData = data.units;
+		if (unitsData instanceof Promise) {
+			unitsData.then((list) => {
+				if (Array.isArray(list)) _resolvedUnits = list;
 			});
-		} else if (data.activityLogsData) {
-			primeActivityLogsCache(_ws, data.activityLogsData);
+		} else if (Array.isArray(unitsData)) {
+			_resolvedUnits = unitsData;
 		}
 	}
 
@@ -387,9 +295,6 @@
 	$: canViewProperties = userRole === 'admin' || userRole === 'member' || userRole === 'owner';
 
 	$: if (browser && workspaceSlug) {
-		if (userRole) {
-			ensurePropertiesCache(workspaceSlug, { role: userRole });
-		}
 		ensureIssuesCache(workspaceSlug);
 		ensureNotificationsCache(workspaceSlug);
 		if (canViewPeople) {
@@ -401,244 +306,79 @@
 	}
 
 	let _workspaceChannel = null;
-	let _channelWorkspaceId = null;
 
-	$: if (browser && workspaceId && workspaceSlug && workspaceId !== _channelWorkspaceId) {
-		_channelWorkspaceId = workspaceId;
-		if (_workspaceChannel) supabase.removeChannel(_workspaceChannel);
+	// RT → Svelte bridge: counters force a Svelte flush so invalidate() runs inside the update cycle
+	let _rtIssuesV = 0, _doneIssuesV = 0;
+	let _rtNotifsV = 0, _doneNotifsV = 0;
+	let _rtActivityV = 0, _doneActivityV = 0;
+	let _rtLogsV = 0, _doneLogsV = 0;
+
+	$: if (_rtIssuesV > _doneIssuesV) { _doneIssuesV = _rtIssuesV; console.log('[invalidate] app:issues (from RT counter, v=' + _rtIssuesV + ')'); invalidate('app:issues'); }
+	$: if (_rtNotifsV > _doneNotifsV) { _doneNotifsV = _rtNotifsV; console.log('[invalidate] app:notifications (from RT counter, v=' + _rtNotifsV + ')'); invalidate('app:notifications'); }
+	$: if (_rtActivityV > _doneActivityV) { _doneActivityV = _rtActivityV; console.log('[invalidate] app:activity (from RT counter, v=' + _rtActivityV + ')'); invalidate('app:activity'); }
+	$: if (_rtLogsV > _doneLogsV) { _doneLogsV = _rtLogsV; console.log('[invalidate] app:activityLogs (from RT counter, v=' + _rtLogsV + ')'); invalidate('app:activityLogs'); }
+
+	onMount(async () => {
+		// Ensure the browser Supabase client has the authenticated session from the server.
+		// createBrowserClient reads from cookies, but the access token may have expired —
+		// the server always has a fresh token via hooks.server.js, so we pass it explicitly.
+		if (data.session) {
+			await supabase.auth.setSession(data.session);
+		}
+
+		const wid = workspaceId;
+		const uid = userId;
+		if (!wid) return;
+
+		console.log('[issues realtime] creating subscription — workspace:', wid);
 
 		_workspaceChannel = supabase
-			.channel(`workspace-delta-${workspaceId}`)
+			.channel(`workspace-delta-${wid}`)
 
-			// issues INSERT — apply delta, resolve unit/property names for root issues
 			.on(
 				'postgres_changes',
-				{
-					event: 'INSERT',
-					schema: 'public',
-					table: 'issues',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				async ({ new: issue }) => {
-					const cacheStateOnInsert = get(issuesCache);
-					console.log('[RT INSERT] received issue', issue.id, issue.name, {
-						workspaceSlug,
-						cacheDataNull: cacheStateOnInsert.data === null,
-						cacheLoading: cacheStateOnInsert.loading,
-						cacheIssueCount: cacheStateOnInsert.data?.issues?.length ?? 'N/A'
-					});
-					if (issue.parent_id) {
-						const parent = get(issuesCache).data?.issues?.find((i) => i.id === issue.parent_id);
-						applyIssueInsert(issue, {
-							unitName: parent?.unit,
-							propertyName: parent?.property,
-							parentTitle: parent?.title
-						});
-					} else {
-						const { data: unit } = await supabase
-							.from('units')
-							.select('name, properties(name)')
-							.eq('id', issue.unit_id)
-							.maybeSingle();
-						applyIssueInsert(issue, {
-							unitName: unit?.name ?? 'Unknown',
-							propertyName: unit?.properties?.name ?? 'Unknown'
-						});
-					}
-					const afterApply = get(issuesCache);
-					const issueInCacheAfterApply = (afterApply.data?.issues ?? []).some(
-						(i) => i.id === issue.id
-					);
-					console.log('[RT INSERT] after applyIssueInsert', {
-						issueInCache: issueInCacheAfterApply,
-						cacheDataNull: afterApply.data === null,
-						cacheLoading: afterApply.loading
-					});
-					// Fallback: if the cache wasn't ready, applyIssueInsert was a no-op.
-					// Wait for any in-flight fetch, then force-refresh if the issue is still missing.
-					if (!issueInCacheAfterApply) {
-						console.log('[RT INSERT] issue missing after apply — awaiting ensureIssuesCache...');
-						await ensureIssuesCache(workspaceSlug);
-						const afterEnsure = get(issuesCache);
-						const issueInCacheAfterEnsure = (afterEnsure.data?.issues ?? []).some(
-							(i) => i.id === issue.id
-						);
-						console.log('[RT INSERT] after ensureIssuesCache', {
-							issueInCache: issueInCacheAfterEnsure,
-							cacheIssueCount: afterEnsure.data?.issues?.length ?? 'N/A',
-							fetchedAt: afterEnsure.fetchedAt
-						});
-						if (!issueInCacheAfterEnsure) {
-							console.log('[RT INSERT] still missing — calling ensureIssuesCache({ force: true })');
-							ensureIssuesCache(workspaceSlug, { force: true });
-						}
-					}
+				{ event: '*', schema: 'public', table: 'issues', filter: `workspace_id=eq.${wid}` },
+				(payload) => {
+					const r = payload?.new ?? payload?.old ?? payload?.record ?? {};
+					console.log('[issues realtime] event received:', payload.eventType, '— id:', r.id, 'readableId:', r.readable_id);
+					_rtIssuesV++;
 				}
 			)
 
-			// issues UPDATE — sync status and name to all open caches
 			.on(
 				'postgres_changes',
-				{
-					event: 'UPDATE',
-					schema: 'public',
-					table: 'issues',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ new: issue }) => {
-					updateIssueFieldsInListCache(issue.id, { name: issue.name, status: issue.status });
-					updateIssueFieldsInDetailCache(issue.id, { name: issue.name, status: issue.status });
-					const state = get(issuesCache);
-					if (state.data && !state.data.issues?.some((i) => i.id === issue.id)) {
-						ensureIssuesCache(workspaceSlug, { force: true });
-					}
+				{ event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` },
+				() => { _rtNotifsV++; }
+			)
+
+			.on(
+				'postgres_changes',
+				{ event: '*', schema: 'public', table: 'messages', filter: `workspace_id=eq.${wid}` },
+				() => { _rtActivityV++; }
+			)
+
+			.on(
+				'postgres_changes',
+				{ event: '*', schema: 'public', table: 'email_drafts', filter: `workspace_id=eq.${wid}` },
+				() => { _rtActivityV++; }
+			)
+
+			.on(
+				'postgres_changes',
+				{ event: '*', schema: 'public', table: 'activity_logs', filter: `workspace_id=eq.${wid}` },
+				() => { _rtLogsV++; }
+			)
+
+			.subscribe((status) => {
+				console.log('[issues realtime] channel status:', status);
+				if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+					console.warn('[issues realtime]', status, '— triggering full invalidate');
+					_rtIssuesV++; _rtNotifsV++; _rtActivityV++; _rtLogsV++;
+					invalidate('app:people');
+					invalidate('app:properties');
 				}
-			)
-
-			// issues DELETE
-			.on(
-				'postgres_changes',
-				{
-					event: 'DELETE',
-					schema: 'public',
-					table: 'issues',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ old: issue }) => applyIssueDelete(issue.id)
-			)
-
-			// notifications INSERT — fetch full row with joins, add to cache
-			.on(
-				'postgres_changes',
-				{
-					event: 'INSERT',
-					schema: 'public',
-					table: 'notifications',
-					filter: `user_id=eq.${userId}`
-				},
-				async ({ new: notification }) => {
-					await ensureNotificationsCache(workspaceSlug);
-					const { data: full } = await supabase
-						.from('notifications')
-						.select(
-							'*, issues(id, name, unit_id, issue_number, readable_id, units(id, name, properties(id, name)))'
-						)
-						.eq('id', notification.id)
-						.maybeSingle();
-					addNotificationToCache(full ?? notification);
-				}
-			)
-
-			// messages INSERT/UPDATE/DELETE — apply delta to activityCache workspace-wide
-			.on(
-				'postgres_changes',
-				{
-					event: 'INSERT',
-					schema: 'public',
-					table: 'messages',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ new: msg }) => applyMessageDelta(msg)
-			)
-			.on(
-				'postgres_changes',
-				{
-					event: 'UPDATE',
-					schema: 'public',
-					table: 'messages',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ new: msg }) => applyMessageDelta(msg)
-			)
-			.on(
-				'postgres_changes',
-				{
-					event: 'DELETE',
-					schema: 'public',
-					table: 'messages',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ old: msg }) => removeMessageFromCache(msg)
-			)
-
-			// email_drafts INSERT/UPDATE/DELETE — apply delta to activityCache workspace-wide
-			.on(
-				'postgres_changes',
-				{
-					event: 'INSERT',
-					schema: 'public',
-					table: 'email_drafts',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ new: draft }) => applyDraftDelta(draft)
-			)
-			.on(
-				'postgres_changes',
-				{
-					event: 'UPDATE',
-					schema: 'public',
-					table: 'email_drafts',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ new: draft }) => applyDraftDelta(draft)
-			)
-			.on(
-				'postgres_changes',
-				{
-					event: 'DELETE',
-					schema: 'public',
-					table: 'email_drafts',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ old: draft }) => removeDraftFromCache(draft)
-			)
-
-			// activity_logs INSERT/UPDATE/DELETE — apply delta to activityLogsCache workspace-wide
-			.on(
-				'postgres_changes',
-				{
-					event: 'INSERT',
-					schema: 'public',
-					table: 'activity_logs',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ new: log }) => applyActivityLogDelta(log)
-			)
-			.on(
-				'postgres_changes',
-				{
-					event: 'UPDATE',
-					schema: 'public',
-					table: 'activity_logs',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ new: log }) => applyActivityLogDelta(log)
-			)
-			.on(
-				'postgres_changes',
-				{
-					event: 'DELETE',
-					schema: 'public',
-					table: 'activity_logs',
-					filter: `workspace_id=eq.${workspaceId}`
-				},
-				({ old: log }) => removeActivityLogFromCache(log)
-			)
-
-			// notifications UPDATE — sync is_read changes
-			.on(
-				'postgres_changes',
-				{
-					event: 'UPDATE',
-					schema: 'public',
-					table: 'notifications',
-					filter: `user_id=eq.${userId}`
-				},
-				({ new: notification }) => updateNotificationInCache(notification)
-			)
-
-			.subscribe();
-	}
+			});
+	});
 
 	onDestroy(() => {
 		if (_workspaceChannel) supabase.removeChannel(_workspaceChannel);
@@ -833,12 +573,7 @@
 				</div>
 			</aside>
 			<section class="flex-1 overflow-y-auto">
-				<div
-					class="h-full w-full"
-					class:transition-opacity={!isIssueRoute}
-					class:duration-150={!isIssueRoute}
-					class:opacity-0={!isIssueRoute && !pageVisible}
-				>
+				<div class="h-full w-full">
 					<slot />
 				</div>
 			</section>
