@@ -15,6 +15,7 @@
 	let editingPerson = null;
 	let openRowMenu = null;
 	let hoveredRow = null;
+	let lastOpenedPersonId = null;
 
 	$: workspaceSlug = $page.params.workspace;
 
@@ -25,6 +26,14 @@
 
 	$: activePeople = Array.isArray(people) ? people.filter((person) => !person?.pending) : null;
 	$: invitedPeople = Array.isArray(people) ? people.filter((person) => person?.pending) : null;
+	$: editPersonId = $page.url.searchParams.get('editPersonId');
+	$: if (editPersonId && people && editPersonId !== lastOpenedPersonId) {
+		const match = (people ?? []).find((person) => person?.id === editPersonId);
+		if (match) {
+			editingPerson = match;
+			lastOpenedPersonId = editPersonId;
+		}
+	}
 
 	const formatRole = (role, pending) => {
 		if (!role) return pending ? 'Member (Invited)' : 'Member';

@@ -6,9 +6,11 @@ import {
 	SUPABASE_SERVICE_ROLE_KEY
 } from '$env/static/private';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
+import { handleGmailPubsub } from '$lib/server/gmailPush';
 
 const openaiModel = 'gpt-5-mini-2025-08-07';
 const agentSecretHeader = 'x-agent-secret';
+const pubsubSecretParam = 'secret';
 
 const isUuid = (value) =>
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -842,6 +844,10 @@ const handleIssueAgent = async ({ payload, locals }) => {
 		.maybeSingle();
 
 	if (!person?.id) {
+		console.log('agent-forbidden', {
+			user_id: locals.user.id,
+			workspace_id: issue.workspace_id
+		});
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
@@ -966,6 +972,11 @@ const logLlmOutput = async (userId, payload, runId, step) => {
 			userId,
 			source: 'gmail-llm',
 			detail: JSON.stringify({ run_id: runId, step, output: payload })
+		});
+		console.log('agent-llm', {
+			user_id: userId,
+			run_id: runId,
+			step
 		});
 	} catch (err) {
 		console.error('gmail-agent llm log failed', err);
@@ -1360,6 +1371,11 @@ const upsertEmailDraftForGmail = async ({
 		userId,
 		source: 'gmail-draft',
 		detail: JSON.stringify({ issue_id: issueId, message_id: messageId })
+	});
+	console.log('agent-draft', {
+		issue_id: issueId,
+		message_id: messageId,
+		created
 	});
 	return { draftId, created };
 };
@@ -2224,14 +2240,40 @@ const isAgentSecretValid = (request) => {
 	return provided === AGENT_WEBHOOK_SECRET;
 };
 
+const isPubsubSecretValid = (request) => {
+	if (!AGENT_WEBHOOK_SECRET) return false;
+	const headerSecret = request.headers.get(agentSecretHeader) ?? '';
+	const url = new URL(request.url);
+	const querySecret = url.searchParams.get(pubsubSecretParam) ?? '';
+	return headerSecret === AGENT_WEBHOOK_SECRET || querySecret === AGENT_WEBHOOK_SECRET;
+};
+
 export const POST = async ({ request, locals }) => {
 	if (!OPENAI_API_KEY) return json({ error: 'Missing OPENAI_API_KEY' }, { status: 500 });
 	if (!SUPABASE_SERVICE_ROLE_KEY)
 		return json({ error: 'Missing SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 });
 
 	const payload = await request.json().catch(() => null);
-	const source = typeof payload?.source === 'string' ? payload.source : 'issue';
 
+	if (payload?.message?.data) {
+		console.log('agent-route pubsub', {
+			has_secret: isPubsubSecretValid(request)
+		});
+		if (!isPubsubSecretValid(request)) {
+			return json({ error: 'Unauthorized' }, { status: 401 });
+		}
+		const result = await handleGmailPubsub({
+			body: payload,
+			runAgent: (args) => runGmailIssueAgent(args)
+		});
+		return json(result.body, { status: result.status });
+	}
+
+	console.log('agent-route issue', {
+		has_user: Boolean(locals?.user)
+	});
+
+	const source = typeof payload?.source === 'string' ? payload.source : 'issue';
 	if (source === 'gmail') {
 		if (!isAgentSecretValid(request)) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
