@@ -23,7 +23,7 @@ export const load = async ({ parent, depends }) => {
 		]);
 		return { activityData, activityLogsData };
 	});
-	const vendors = await loadVendors(workspace.id);
+	const vendors = loadVendors(workspace.id);
 
 	return { notificationsData, activityBundle, vendors };
 };

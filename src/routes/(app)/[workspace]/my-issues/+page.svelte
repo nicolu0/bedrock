@@ -52,8 +52,15 @@
 
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
-	$: members = data.members ?? [];
-	$: membersByUserId = members.reduce((acc, member) => {
+	let _resolvedMembers = [];
+	$: {
+		if (data.members instanceof Promise) {
+			data.members.then((m) => { _resolvedMembers = m ?? []; });
+		} else {
+			_resolvedMembers = data.members ?? [];
+		}
+	}
+	$: membersByUserId = _resolvedMembers.reduce((acc, member) => {
 		if (!member?.user_id) return acc;
 		acc[member.user_id] = member;
 		return acc;

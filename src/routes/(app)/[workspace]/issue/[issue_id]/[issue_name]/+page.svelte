@@ -55,35 +55,74 @@
 	// ── Local state from server data ────────────────────────────────────────────
 
 	let issue = data.issue ?? null;
-	let subIssues = data.subIssues ?? [];
-	let messagesByIssue = data.activityData?.messagesByIssue ?? {};
-	let emailDraftsByMessageId = data.activityData?.emailDraftsByMessageId ?? {};
-	let draftIssueIds = data.activityData?.draftIssueIds ?? [];
-	let logsByIssue = data.activityLogsData?.logsByIssue ?? {};
-	let members = data.members ?? [];
-	let vendors = data.vendors ?? [];
 	let assignee = null;
 	let issueAssigneeId = data.issue?.assignee_id ?? null;
 	let commentBody = '';
 	let commentTextarea;
 
+	// ── Streaming resolution for secondary data ───────────────────────────────
+
+	let _resolvedSubIssues = [];
+	$: {
+		if (data.subIssues instanceof Promise) {
+			data.subIssues.then((d) => { _resolvedSubIssues = d ?? []; });
+		} else {
+			_resolvedSubIssues = data.subIssues ?? [];
+		}
+	}
+
+	let _resolvedActivity = null;
+	$: {
+		if (data.activityData instanceof Promise) {
+			_resolvedActivity = null;
+			data.activityData.then((d) => { _resolvedActivity = d; });
+		} else if (data.activityData) {
+			_resolvedActivity = data.activityData;
+		}
+	}
+
+	let _resolvedLogs = null;
+	$: {
+		if (data.activityLogsData instanceof Promise) {
+			_resolvedLogs = null;
+			data.activityLogsData.then((d) => { _resolvedLogs = d; });
+		} else if (data.activityLogsData) {
+			_resolvedLogs = data.activityLogsData;
+		}
+	}
+
+	let _resolvedMembers = [];
+	$: {
+		if (data.members instanceof Promise) {
+			data.members.then((m) => { _resolvedMembers = m ?? []; });
+		} else {
+			_resolvedMembers = data.members ?? [];
+		}
+	}
+
+	let _resolvedVendors = [];
+	$: {
+		if (data.vendors instanceof Promise) {
+			data.vendors.then((v) => { _resolvedVendors = v ?? []; });
+		} else {
+			_resolvedVendors = data.vendors ?? [];
+		}
+	}
+
+	$: subIssues = _resolvedSubIssues;
+	$: messagesByIssue = _resolvedActivity?.messagesByIssue ?? {};
+	$: emailDraftsByMessageId = _resolvedActivity?.emailDraftsByMessageId ?? {};
+	$: draftIssueIds = _resolvedActivity?.draftIssueIds ?? [];
+	$: logsByIssue = _resolvedLogs?.logsByIssue ?? {};
+	$: members = _resolvedMembers;
+	$: vendors = _resolvedVendors;
+
 	// Re-sync when route changes (navigation to a different issue) or after invalidation
 	$: if (data.issue?.id && data.issue.id !== issue?.id) {
 		issue = data.issue;
-		subIssues = data.subIssues ?? [];
-		messagesByIssue = data.activityData?.messagesByIssue ?? {};
-		emailDraftsByMessageId = data.activityData?.emailDraftsByMessageId ?? {};
-		draftIssueIds = data.activityData?.draftIssueIds ?? [];
-		logsByIssue = data.activityLogsData?.logsByIssue ?? {};
-		members = data.members ?? [];
-		vendors = data.vendors ?? [];
 		issueAssigneeId = data.issue.assignee_id ?? null;
 		assignee = null;
-		pageReady.set(false);
 	}
-
-	$: if (data.members) members = data.members;
-	$: if (data.vendors) vendors = data.vendors;
 
 	// ── Derived values ───────────────────────────────────────────────────────────
 
