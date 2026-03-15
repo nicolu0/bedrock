@@ -1014,19 +1014,7 @@
 						<h2 class="text-base font-semibold text-neutral-800">Activity</h2>
 						<div class="text-sm text-neutral-400">Unsubscribe</div>
 					</div>
-					{#if _resolvedActivity === null}
-						<div class="mt-4 space-y-3">
-							{#each { length: 3 } as _}
-								<div class="flex items-start gap-3">
-									<div class="skeleton mt-0.5 h-8 w-8 flex-shrink-0 rounded-full"></div>
-									<div class="flex-1 space-y-2 pt-1">
-										<div class="skeleton h-3 w-1/3"></div>
-										<div class="skeleton h-3 w-2/3"></div>
-									</div>
-								</div>
-							{/each}
-						</div>
-					{:else if !hasActivity}
+					{#if !hasActivity}
 						<div class="mt-4 text-sm text-neutral-500">No activity yet.</div>
 					{:else}
 						<div class="mt-4 space-y-4 text-sm">
