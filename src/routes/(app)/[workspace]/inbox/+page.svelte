@@ -78,7 +78,15 @@
 		invalidate('app:notifications');
 	}
 
-	$: vendors = data.vendors ?? [];
+	let _resolvedVendors = [];
+	$: {
+		if (data.vendors instanceof Promise) {
+			data.vendors.then((v) => { _resolvedVendors = v ?? []; });
+		} else {
+			_resolvedVendors = data.vendors ?? [];
+		}
+	}
+	$: vendors = _resolvedVendors;
 
 	let _now = Date.now();
 	let _ticker;

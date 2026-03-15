@@ -3,24 +3,13 @@
 	import { onMount, onDestroy, setContext, tick } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import { get } from 'svelte/store';
-	import { page } from '$app/stores';
+	import { page, navigating } from '$app/stores';
 	import { browser } from '$app/environment';
 	import { goto, invalidate } from '$app/navigation';
-	import {
-		issuesCache,
-		ensureIssuesCache,
-		applyIssueInsert,
-		applyIssueDelete,
-		updateIssueStatusInListCache,
-		updateIssueFieldsInListCache
-	} from '$lib/stores/issuesCache';
+	import { issuesCache, ensureIssuesCache } from '$lib/stores/issuesCache';
 	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
-	import {
-		updateIssueStatusInDetailCache,
-		updateIssueFieldsInDetailCache,
-		primeDetailCacheFromIssuesList
-	} from '$lib/stores/issueDetailCache.js';
+	import { primeDetailCacheFromIssuesList } from '$lib/stores/issueDetailCache.js';
 	import { pageReady } from '$lib/stores/pageReady';
 	import { supabase } from '$lib/supabaseClient.js';
 	export let data;
@@ -203,10 +192,11 @@
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: isSettingsRoute = $page.url.pathname.startsWith(`${basePath}/settings`);
 	$: currentPath = $page.url.pathname;
+	$: _activePath = $navigating?.to?.url?.pathname ?? currentPath;
 	$: activeItem = [...navItems, propertiesItem, settingsItem].find(
 		(item) =>
-			currentPath === `${basePath}/${item.href}` ||
-			currentPath.startsWith(`${basePath}/${item.href}/`)
+			_activePath === `${basePath}/${item.href}` ||
+			_activePath.startsWith(`${basePath}/${item.href}/`)
 	);
 
 	// Resolve streaming properties promise for sidebar

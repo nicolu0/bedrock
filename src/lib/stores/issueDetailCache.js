@@ -4,24 +4,6 @@
 const memoryCache = new Map();
 
 /**
- * @param {string} issueId
- * @returns {{ issue: any, subIssues: any[], assignee: any } | null}
- */
-export const getIssueDetail = (issueId) => {
-	const entry = memoryCache.get(issueId);
-	if (!entry) return null;
-	return { issue: entry.issue, subIssues: entry.subIssues, assignee: entry.assignee };
-};
-
-/**
- * @param {string} issueId
- * @param {{ issue: any, subIssues: any[], assignee: any }} data
- */
-export const primeIssueDetail = (issueId, data) => {
-	memoryCache.set(issueId, { ...data, fetchedAt: Date.now() });
-};
-
-/**
  * Pre-populates the detail cache from the flat issues list.
  * @param {any[]} issuesList
  */
@@ -62,21 +44,4 @@ export const primeDetailCacheFromIssuesList = (issuesList) => {
 			fetchedAt: Date.now()
 		});
 	}
-};
-
-/**
- * Optimistically updates the status of an issue in the detail cache.
- * @param {string} issueId
- * @param {string} newStatus
- */
-export const updateIssueStatusInDetailCache = (issueId, newStatus) => {
-	const entry = memoryCache.get(issueId);
-	if (!entry) return;
-	memoryCache.set(issueId, { ...entry, issue: { ...entry.issue, status: newStatus } });
-};
-
-export const updateIssueFieldsInDetailCache = (issueId, fields) => {
-	const entry = memoryCache.get(issueId);
-	if (!entry) return;
-	memoryCache.set(issueId, { ...entry, issue: { ...entry.issue, ...fields } });
 };

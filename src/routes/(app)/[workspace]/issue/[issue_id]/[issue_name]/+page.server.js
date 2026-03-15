@@ -47,31 +47,30 @@ export const load = async ({ parent, params, depends }) => {
 		unit: issueRow.units?.name ?? null
 	};
 
-	const [subIssuesResult, activityData, activityLogsData, members, vendors] = await Promise.all([
-		supabaseAdmin
-			.from('issues')
-			.select(
-				'id, name, status, parent_id, issue_number, readable_id, assignee_id, units(name, properties(name))'
-			)
-			.eq('parent_id', issueRow.id),
-		loadActivityData(workspace.id, [issueRow.id]),
-		loadActivityLogsData(workspace.id, [issueRow.id]),
-		loadPeopleMembers(workspace.id),
-		loadVendors(workspace.id)
-	]);
-
-	const subIssues = (subIssuesResult.data ?? []).map((s) => ({
-		id: s.id,
-		name: s.name,
-		status: s.status,
-		issueNumber: s.issue_number ?? null,
-		readableId: s.readable_id ?? null,
-		assigneeId: s.assignee_id ?? null,
-		assignee_id: s.assignee_id ?? null,
-		parent_id: issueRow.id,
-		property: s.units?.properties?.name ?? null,
-		unit: s.units?.name ?? null
-	}));
+	const subIssues = supabaseAdmin
+		.from('issues')
+		.select(
+			'id, name, status, parent_id, issue_number, readable_id, assignee_id, units(name, properties(name))'
+		)
+		.eq('parent_id', issueRow.id)
+		.then(({ data }) =>
+			(data ?? []).map((s) => ({
+				id: s.id,
+				name: s.name,
+				status: s.status,
+				issueNumber: s.issue_number ?? null,
+				readableId: s.readable_id ?? null,
+				assigneeId: s.assignee_id ?? null,
+				assignee_id: s.assignee_id ?? null,
+				parent_id: issueRow.id,
+				property: s.units?.properties?.name ?? null,
+				unit: s.units?.name ?? null
+			}))
+		);
+	const activityData = loadActivityData(workspace.id, [issueRow.id]);
+	const activityLogsData = loadActivityLogsData(workspace.id, [issueRow.id]);
+	const members = loadPeopleMembers(workspace.id);
+	const vendors = loadVendors(workspace.id);
 
 	return { issue, subIssues, activityData, activityLogsData, members, vendors };
 };
