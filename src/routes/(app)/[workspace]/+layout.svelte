@@ -9,8 +9,7 @@
 	import { issuesCache, ensureIssuesCache } from '$lib/stores/issuesCache';
 	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
-	import { primeDetailCacheFromIssuesList } from '$lib/stores/issueDetailCache.js';
-	import { pageReady } from '$lib/stores/pageReady';
+import { pageReady } from '$lib/stores/pageReady';
 	import { supabase } from '$lib/supabaseClient.js';
 	export let data;
 

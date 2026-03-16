@@ -8,6 +8,7 @@
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import { pageReady } from '$lib/stores/pageReady';
 	import { supabase } from '$lib/supabaseClient.js';
+	import { getIssueDetailByReadableId, seedIssueDetail } from '$lib/stores/issueDetailCache.js';
 
 	export let data;
 
@@ -54,18 +55,25 @@
 
 	// ── Local state from server data ────────────────────────────────────────────
 
-	let issue = data.issue ?? null;
+	const _initCached = browser ? getIssueDetailByReadableId($page.params.issue_id) : null;
+	let issue = _initCached?.issue ?? (data.issue instanceof Promise ? null : data.issue) ?? null;
 	let assignee = null;
-	let issueAssigneeId = data.issue?.assignee_id ?? null;
+	let issueAssigneeId = issue?.assignee_id ?? null;
+	// Tracks which Promise we've already subscribed to — prevents the reactive block from
+	// re-attaching .then() every time `issue` changes (Svelte always dirtifies objects).
+	let _subscribedIssuePromise = null;
 	let commentBody = '';
 	let commentTextarea;
 
 	// ── Streaming resolution for secondary data ───────────────────────────────
 
-	let _resolvedSubIssues = [];
+	let _resolvedSubIssues = _initCached?.subIssues ?? [];
 	$: {
 		if (data.subIssues instanceof Promise) {
-			data.subIssues.then((d) => { _resolvedSubIssues = d ?? []; });
+			data.subIssues.then((d) => {
+				_resolvedSubIssues = d ?? [];
+				if (browser && issue) seedIssueDetail(issue, d ?? []);
+			});
 		} else {
 			_resolvedSubIssues = data.subIssues ?? [];
 		}
@@ -117,11 +125,33 @@
 	$: members = _resolvedMembers;
 	$: vendors = _resolvedVendors;
 
-	// Re-sync when route changes (navigation to a different issue) or after invalidation
-	$: if (data.issue?.id && data.issue.id !== issue?.id) {
-		issue = data.issue;
-		issueAssigneeId = data.issue.assignee_id ?? null;
-		assignee = null;
+	// Handle streaming data.issue (always a Promise from server)
+	$: if (data.issue instanceof Promise && data.issue !== _subscribedIssuePromise) {
+		_subscribedIssuePromise = data.issue;
+		// On navigation to a different issue: switch to cache or clear
+		if (issue?.readableId && issue.readableId !== $page.params.issue_id) {
+			const cached = browser ? getIssueDetailByReadableId($page.params.issue_id) : null;
+			issue = cached?.issue ?? null;
+			_resolvedSubIssues = cached?.subIssues ?? [];
+			_resolvedActivity = null;
+			_resolvedLogs = null;
+			issueAssigneeId = issue?.assignee_id ?? null;
+			assignee = null;
+		}
+		data.issue.then((d) => {
+			if (!d || (d.readableId && d.readableId !== $page.params.issue_id)) return;
+			issue = d;
+			issueAssigneeId = d.assignee_id ?? null;
+			assignee = null;
+			if (browser) seedIssueDetail(d);
+			pageReady.set(true);
+		});
+	}
+
+	// Re-sync after invalidation (when load returns resolved value)
+	$: if (data.issue && !(data.issue instanceof Promise) && data.issue.id === issue?.id) {
+		issue = { ...issue, ...data.issue };
+		issueAssigneeId = data.issue.assignee_id ?? issueAssigneeId;
 	}
 
 	// ── Derived values ───────────────────────────────────────────────────────────
@@ -1742,5 +1772,18 @@
 		</aside>
 	</div>
 {:else}
-	<div class="h-full w-full bg-white"></div>
+	<div class="flex h-full flex-col">
+		<div class="border-b border-neutral-200 px-6 py-2">
+			<div class="skeleton h-4 w-32 rounded"></div>
+		</div>
+		<div class="flex-1 px-10 pt-8">
+			<div class="skeleton h-7 w-2/3 rounded"></div>
+			<div class="mt-3 skeleton h-4 w-1/2 rounded"></div>
+			<div class="mt-8 space-y-3">
+				{#each { length: 3 } as _}
+					<div class="skeleton h-4 w-full rounded"></div>
+				{/each}
+			</div>
+		</div>
+	</div>
 {/if}

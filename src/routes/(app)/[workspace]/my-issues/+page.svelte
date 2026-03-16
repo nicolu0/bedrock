@@ -1,8 +1,10 @@
 <script>
 	// @ts-nocheck
+	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { seedIssueDetail } from '$lib/stores/issueDetailCache.js';
 
 	export let data;
 
@@ -16,6 +18,14 @@
 			data.issuesData.then((d) => { _resolvedIssues = d; });
 		} else if (data.issuesData) {
 			_resolvedIssues = data.issuesData;
+		}
+	}
+
+	$: if (browser && _resolvedIssues?.sections) {
+		for (const section of _resolvedIssues.sections) {
+			for (const item of section.items ?? []) {
+				seedIssueDetail(item, item.subIssues ?? []);
+			}
 		}
 	}
 
