@@ -9,6 +9,7 @@ export const load = async ({ parent, locals }) => {
 			.from('gmail_connections')
 			.select('id, email, expires_at, mode, updated_at')
 			.eq('user_id', locals.user.id)
+			.eq('workspace_id', workspace.id)
 			.order('updated_at', { ascending: false })
 			.limit(1)
 			.maybeSingle();
