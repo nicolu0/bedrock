@@ -1,5 +1,4 @@
 // @ts-nocheck
-import { error } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 import {
 	loadActivityData,
@@ -17,60 +16,60 @@ export const load = async ({ parent, params, depends }) => {
 	const { workspace } = await parent();
 	const readableId = params.issue_id;
 
-	const { data: issueRow, error: issueErr } = await supabaseAdmin
+	const issueRowPromise = supabaseAdmin
 		.from('issues')
 		.select(
 			'id, name, description, status, issue_number, readable_id, assignee_id, unit_id, units(name, properties(name))'
 		)
 		.eq('workspace_id', workspace.id)
 		.eq('readable_id', readableId)
-		.maybeSingle();
+		.maybeSingle()
+		.then(({ data: issueRow, error: issueErr }) => {
+			if (issueErr || !issueRow?.id) return null;
+			return {
+				id: issueRow.id,
+				name: issueRow.name,
+				description: issueRow.description ?? null,
+				status: issueRow.status,
+				issueNumber: issueRow.issue_number ?? null,
+				readableId: issueRow.readable_id ?? null,
+				assignee_id: issueRow.assignee_id ?? null,
+				assigneeId: issueRow.assignee_id ?? null,
+				property: issueRow.units?.properties?.name ?? null,
+				unit: issueRow.units?.name ?? null
+			};
+		});
 
-	if (issueErr) {
-		console.error('[issue page server] fetch error:', issueErr);
-		throw error(500, 'Failed to load issue');
-	}
-	if (!issueRow?.id) {
-		throw error(404, 'Issue not found');
-	}
+	const subIssues = issueRowPromise.then(async (issue) => {
+		if (!issue?.id) return [];
+		const { data } = await supabaseAdmin
+			.from('issues')
+			.select(
+				'id, name, status, parent_id, issue_number, readable_id, assignee_id, units(name, properties(name))'
+			)
+			.eq('parent_id', issue.id);
+		return (data ?? []).map((s) => ({
+			id: s.id,
+			name: s.name,
+			status: s.status,
+			issueNumber: s.issue_number ?? null,
+			readableId: s.readable_id ?? null,
+			assigneeId: s.assignee_id ?? null,
+			assignee_id: s.assignee_id ?? null,
+			parent_id: issue.id,
+			property: s.units?.properties?.name ?? null,
+			unit: s.units?.name ?? null
+		}));
+	});
 
-	const issue = {
-		id: issueRow.id,
-		name: issueRow.name,
-		description: issueRow.description ?? null,
-		status: issueRow.status,
-		issueNumber: issueRow.issue_number ?? null,
-		readableId: issueRow.readable_id ?? null,
-		assignee_id: issueRow.assignee_id ?? null,
-		assigneeId: issueRow.assignee_id ?? null,
-		property: issueRow.units?.properties?.name ?? null,
-		unit: issueRow.units?.name ?? null
-	};
-
-	const subIssues = supabaseAdmin
-		.from('issues')
-		.select(
-			'id, name, status, parent_id, issue_number, readable_id, assignee_id, units(name, properties(name))'
-		)
-		.eq('parent_id', issueRow.id)
-		.then(({ data }) =>
-			(data ?? []).map((s) => ({
-				id: s.id,
-				name: s.name,
-				status: s.status,
-				issueNumber: s.issue_number ?? null,
-				readableId: s.readable_id ?? null,
-				assigneeId: s.assignee_id ?? null,
-				assignee_id: s.assignee_id ?? null,
-				parent_id: issueRow.id,
-				property: s.units?.properties?.name ?? null,
-				unit: s.units?.name ?? null
-			}))
-		);
-	const activityData = loadActivityData(workspace.id, [issueRow.id]);
-	const activityLogsData = loadActivityLogsData(workspace.id, [issueRow.id]);
+	const activityData = issueRowPromise.then((issue) =>
+		issue?.id ? loadActivityData(workspace.id, [issue.id]) : null
+	);
+	const activityLogsData = issueRowPromise.then((issue) =>
+		issue?.id ? loadActivityLogsData(workspace.id, [issue.id]) : null
+	);
 	const members = loadPeopleMembers(workspace.id);
 	const vendors = loadVendors(workspace.id);
 
-	return { issue, subIssues, activityData, activityLogsData, members, vendors };
+	return { issue: issueRowPromise, subIssues, activityData, activityLogsData, members, vendors };
 };

@@ -36,7 +36,7 @@ const normalizeStatus = (value) => {
 	return statusOrder.includes(normalized) ? normalized : 'todo';
 };
 
-const buildSectionsFromIssues = (issues = []) => {
+export const buildSectionsFromIssues = (issues = []) => {
 	const normalizedIssues = (issues ?? []).map((issue) => ({
 		...issue,
 		status: normalizeStatus(issue.status)
@@ -273,15 +273,7 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 			if (!shouldOverwrite) {
 			}
 			if (shouldOverwrite) {
-				issuesCache.set({
-					workspace: workspaceSlug,
-					data,
-					loading: false,
-					error: null,
-					fetchedAt: payload.fetchedAt
-				});
-				writeSessionCache(payload);
-				primeDetailCacheFromIssuesList(data.issues);
+				primeIssuesCache(workspaceSlug, data, payload.fetchedAt);
 				return data;
 			}
 			issuesCache.update((state) => ({
@@ -305,22 +297,15 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 	return inFlight;
 };
 
-export const primeIssuesCache = (workspaceSlug, data) => {
-	if (!browser) return;
-	if (!workspaceSlug || !data) return;
-	const payload = {
-		workspace: workspaceSlug,
-		data,
-		fetchedAt: Date.now()
-	};
-	issuesCache.set({
-		workspace: workspaceSlug,
-		data,
-		loading: false,
-		error: null,
-		fetchedAt: payload.fetchedAt
+export const primeIssuesCache = (workspaceSlug, data, fetchedAt = Date.now()) => {
+	if (!browser || !workspaceSlug || !data) return;
+	issuesCache.update((current) => {
+		if (fetchedAt < current.fetchedAt) return current; // reject stale write
+		const payload = { workspace: workspaceSlug, data, fetchedAt };
+		writeSessionCache(payload);
+		primeDetailCacheFromIssuesList(data.issues);
+		return { workspace: workspaceSlug, data, loading: false, error: null, fetchedAt };
 	});
-	writeSessionCache(payload);
 };
 
 export const applyIssueInsert = (

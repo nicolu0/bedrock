@@ -1,10 +1,11 @@
 <script>
 	// @ts-nocheck
+	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { invalidate } from '$app/navigation';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
-	import { peopleCache } from '$lib/stores/peopleCache.js';
+	import { peopleCache, primePeopleCache } from '$lib/stores/peopleCache.js';
 
 	export let data;
 
@@ -15,6 +16,16 @@
 	let lastOpenedPersonId = null;
 
 	$: workspaceSlug = $page.params.workspace;
+
+	$: {
+		if (data.people instanceof Promise) {
+			data.people.then((d) => {
+				if (browser && Array.isArray(d)) primePeopleCache(workspaceSlug, d);
+			});
+		} else if (Array.isArray(data.people)) {
+			if (browser) primePeopleCache(workspaceSlug, data.people);
+		}
+	}
 
 	$: people =
 		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
