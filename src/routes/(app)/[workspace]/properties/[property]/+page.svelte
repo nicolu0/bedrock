@@ -3,7 +3,11 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
-	import { issuesCache, primeIssuesCache, buildSectionsFromIssues } from '$lib/stores/issuesCache.js';
+	import {
+		issuesCache,
+		primeIssuesCache,
+		buildSectionsFromIssues
+	} from '$lib/stores/issuesCache.js';
 
 	export let data;
 
@@ -13,13 +17,12 @@
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 
-	$: _resolvedSections = (
+	$: _resolvedSections =
 		$issuesCache?.workspace === workspaceSlug && $issuesCache?.data?.issues != null
-	)
-		? buildSectionsFromIssues(
-				($issuesCache.data.issues).filter(i => slugify(i.property) === $page.params.property)
-			)
-		: null;
+			? buildSectionsFromIssues(
+					$issuesCache.data.issues.filter((i) => slugify(i.property) === $page.params.property)
+				)
+			: null;
 
 	$: sections = _resolvedSections ?? [];
 
@@ -69,8 +72,8 @@
 
 	const getSectionGradientStyle = (statusClass) => {
 		if (!statusClass) return '';
-		if (statusClass.includes('amber')) {
-			return 'background-image: linear-gradient(90deg, rgba(254, 243, 199, 0.14), rgba(254, 243, 199, 0.05), transparent);';
+		if (statusClass.includes('orange')) {
+			return 'background-image: linear-gradient(90deg, rgba(255, 237, 213, 0.16), rgba(255, 237, 213, 0.06), transparent);';
 		}
 		if (statusClass.includes('emerald')) {
 			return 'background-image: linear-gradient(90deg, rgba(209, 250, 229, 0.14), rgba(209, 250, 229, 0.05), transparent);';
@@ -84,9 +87,9 @@
 		<div class="divide-y divide-neutral-100">
 			{#each { length: 4 } as _}
 				<div class="flex items-center gap-3 px-6 py-2">
-					<div class="skeleton h-3 w-3 rounded-full flex-shrink-0"></div>
+					<div class="skeleton h-3 w-3 flex-shrink-0 rounded-full"></div>
 					<div class="skeleton h-4 w-2/5"></div>
-					<div class="ml-auto skeleton h-5 w-28 rounded-full"></div>
+					<div class="skeleton ml-auto h-5 w-28 rounded-full"></div>
 					<div class="skeleton h-5 w-5 rounded-full"></div>
 				</div>
 			{/each}
@@ -103,7 +106,7 @@
 						style={getSectionGradientStyle(section.statusClass)}
 					>
 						<div class="flex items-center gap-3">
-							<span class={`h-3 w-3 rounded-full border ${section.statusClass}`}></span>
+							<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${section.statusClass}`}></span>
 							<span class="text-sm text-neutral-700">{section.label}</span>
 							<span class="text-sm text-neutral-400">{section.count}</span>
 						</div>
@@ -118,7 +121,8 @@
 							>
 								<div class="flex items-center justify-between gap-4">
 									<div class="flex items-center gap-3">
-										<span class={`h-3 w-3 rounded-full border ${section.statusClass}`}></span>
+										<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${section.statusClass}`}
+										></span>
 										{#if item.isSubIssue}
 											<div class="flex items-center gap-2 text-sm">
 												<span class="text-neutral-600">{item.title}</span>

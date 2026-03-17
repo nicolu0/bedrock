@@ -19,13 +19,14 @@ export const load = async ({ parent, params, depends }) => {
 	const issueRowPromise = supabaseAdmin
 		.from('issues')
 		.select(
-			'id, name, description, status, issue_number, readable_id, assignee_id, unit_id, units(name, properties(name))'
+			'id, name, description, status, issue_number, readable_id, assignee_id, unit_id, property_id, properties(name), units(name, property_id, properties(name))'
 		)
 		.eq('workspace_id', workspace.id)
 		.eq('readable_id', readableId)
 		.maybeSingle()
 		.then(({ data: issueRow, error: issueErr }) => {
 			if (issueErr || !issueRow?.id) return null;
+			const propertyId = issueRow.property_id ?? issueRow.units?.property_id ?? null;
 			return {
 				id: issueRow.id,
 				name: issueRow.name,
@@ -35,8 +36,12 @@ export const load = async ({ parent, params, depends }) => {
 				readableId: issueRow.readable_id ?? null,
 				assignee_id: issueRow.assignee_id ?? null,
 				assigneeId: issueRow.assignee_id ?? null,
-				property: issueRow.units?.properties?.name ?? null,
-				unit: issueRow.units?.name ?? null
+				property: issueRow.units?.properties?.name ?? issueRow.properties?.name ?? null,
+				unit: issueRow.units?.name ?? null,
+				property_id: propertyId,
+				propertyId,
+				unit_id: issueRow.unit_id ?? null,
+				unitId: issueRow.unit_id ?? null
 			};
 		});
 
@@ -45,7 +50,7 @@ export const load = async ({ parent, params, depends }) => {
 		const { data } = await supabaseAdmin
 			.from('issues')
 			.select(
-				'id, name, status, parent_id, issue_number, readable_id, assignee_id, units(name, properties(name))'
+				'id, name, status, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, properties(name), units(name, property_id, properties(name))'
 			)
 			.eq('parent_id', issue.id);
 		return (data ?? []).map((s) => ({
@@ -57,17 +62,25 @@ export const load = async ({ parent, params, depends }) => {
 			assigneeId: s.assignee_id ?? null,
 			assignee_id: s.assignee_id ?? null,
 			parent_id: issue.id,
-			property: s.units?.properties?.name ?? null,
-			unit: s.units?.name ?? null
+			property: s.units?.properties?.name ?? s.properties?.name ?? null,
+			unit: s.units?.name ?? null,
+			property_id: s.property_id ?? s.units?.property_id ?? null,
+			propertyId: s.property_id ?? s.units?.property_id ?? null,
+			unit_id: s.unit_id ?? null,
+			unitId: s.unit_id ?? null
 		}));
 	});
 
-	const activityData = issueRowPromise.then((issue) =>
-		issue?.id ? loadActivityData(workspace.id, [issue.id]) : null
-	);
-	const activityLogsData = issueRowPromise.then((issue) =>
-		issue?.id ? loadActivityLogsData(workspace.id, [issue.id]) : null
-	);
+	const activityData = Promise.all([issueRowPromise, subIssues]).then(([issue, subs]) => {
+		if (!issue?.id) return null;
+		const ids = [issue.id, ...(subs ?? []).map((s) => s.id).filter(Boolean)];
+		return loadActivityData(workspace.id, ids);
+	});
+	const activityLogsData = Promise.all([issueRowPromise, subIssues]).then(([issue, subs]) => {
+		if (!issue?.id) return null;
+		const ids = [issue.id, ...(subs ?? []).map((s) => s.id).filter(Boolean)];
+		return loadActivityLogsData(workspace.id, ids);
+	});
 	const members = loadPeopleMembers(workspace.id);
 	const vendors = loadVendors(workspace.id);
 

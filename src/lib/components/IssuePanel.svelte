@@ -16,8 +16,8 @@
 	const dispatch = createEventDispatcher();
 
 	const statusConfig = {
-		in_progress: { label: 'In Progress', statusClass: 'border-amber-300 text-amber-600' },
-		todo: { label: 'Todo', statusClass: 'border-neutral-300 text-neutral-600' },
+		in_progress: { label: 'In Progress', statusClass: 'border-orange-500 text-orange-600' },
+		todo: { label: 'Todo', statusClass: 'border-neutral-500 text-neutral-700' },
 		done: { label: 'Done', statusClass: 'border-emerald-500 text-emerald-700' }
 	};
 
