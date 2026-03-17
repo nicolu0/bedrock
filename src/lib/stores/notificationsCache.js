@@ -124,6 +124,8 @@ export const updateNotificationInCache = (notification) => {
 		const notifications = state.data.notifications.map((n) =>
 			n.id === notification.id ? { ...n, ...notification } : n
 		);
-		return { ...state, data: { ...state.data, notifications } };
+		const newState = { ...state, data: { ...state.data, notifications } };
+		writeSessionCache({ workspace: newState.workspace, data: newState.data, fetchedAt: newState.fetchedAt });
+		return newState;
 	});
 };

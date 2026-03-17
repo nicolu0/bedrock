@@ -148,6 +148,7 @@
 		selectedNotification = n;
 		if (!n.is_read && !localReadIds.has(n.id)) {
 			localReadIds = new Set([...localReadIds, n.id]);
+			updateNotificationInCache({ id: n.id, is_read: true });
 			fetch('/api/notifications/mark-read', {
 				method: 'POST',
 				keepalive: true,
