@@ -21,6 +21,8 @@
 
 	const isEdit = person != null;
 	const roles = ['admin', 'member', 'owner', 'vendor'];
+	const inviteEligibleRoles = new Set(['admin', 'member']);
+	$: inviteEligible = inviteEligibleRoles.has(role);
 	/** @param {string} value */
 	const formatRole = (value) => value[0].toUpperCase() + value.slice(1);
 
@@ -77,7 +79,7 @@
 					role,
 					trade: role === 'vendor' ? trimmedTrade : null,
 					notes: trimmedNotes || null,
-					pending: true
+					pending: inviteEligible
 				});
 			}
 			const res = await fetch('/api/people', {
@@ -271,7 +273,17 @@
 				disabled={submitting}
 				class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 			>
-				{submitting ? (isEdit ? 'Saving…' : 'Sending…') : isEdit ? 'Save changes' : 'Send invite'}
+				{submitting
+					? isEdit
+						? 'Saving…'
+						: inviteEligible
+							? 'Sending…'
+							: 'Adding…'
+					: isEdit
+						? 'Save changes'
+						: inviteEligible
+							? 'Send invite'
+							: 'Add person'}
 			</button>
 		</div>
 	</div>

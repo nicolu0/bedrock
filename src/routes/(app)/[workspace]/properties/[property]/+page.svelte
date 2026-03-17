@@ -66,6 +66,17 @@
 		if (!readableId) return undefined;
 		return `${basePath}/issue/${readableId}/${slug}?from=property-issues`;
 	};
+
+	const getSectionGradientStyle = (statusClass) => {
+		if (!statusClass) return '';
+		if (statusClass.includes('amber')) {
+			return 'background-image: linear-gradient(90deg, rgba(254, 243, 199, 0.14), rgba(254, 243, 199, 0.05), transparent);';
+		}
+		if (statusClass.includes('emerald')) {
+			return 'background-image: linear-gradient(90deg, rgba(209, 250, 229, 0.14), rgba(209, 250, 229, 0.05), transparent);';
+		}
+		return '';
+	};
 </script>
 
 <div>
@@ -89,6 +100,7 @@
 				<div>
 					<div
 						class="flex items-center justify-between border-y border-neutral-200 bg-stone-50 px-6 py-2 text-sm text-neutral-600"
+						style={getSectionGradientStyle(section.statusClass)}
 					>
 						<div class="flex items-center gap-3">
 							<span class={`h-3 w-3 rounded-full border ${section.statusClass}`}></span>

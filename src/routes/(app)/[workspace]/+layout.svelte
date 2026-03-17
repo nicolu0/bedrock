@@ -10,7 +10,7 @@
 	import { notificationsCache, ensureNotificationsCache } from '$lib/stores/notificationsCache';
 	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
-import { pageReady } from '$lib/stores/pageReady';
+	import { pageReady } from '$lib/stores/pageReady';
 	import { supabase } from '$lib/supabaseClient.js';
 	export let data;
 
@@ -269,15 +269,33 @@ import { pageReady } from '$lib/stores/pageReady';
 	let _workspaceChannel = null;
 
 	// RT → Svelte bridge: counters force a Svelte flush so invalidate() runs inside the update cycle
-	let _rtIssuesV = 0, _doneIssuesV = 0;
-	let _rtNotifsV = 0, _doneNotifsV = 0;
-	let _rtActivityV = 0, _doneActivityV = 0;
-	let _rtLogsV = 0, _doneLogsV = 0;
+	let _rtIssuesV = 0,
+		_doneIssuesV = 0;
+	let _rtNotifsV = 0,
+		_doneNotifsV = 0;
+	let _rtActivityV = 0,
+		_doneActivityV = 0;
+	let _rtLogsV = 0,
+		_doneLogsV = 0;
 
-	$: if (_rtIssuesV > _doneIssuesV) { _doneIssuesV = _rtIssuesV; invalidate('app:issues'); if (browser) ensureIssuesCache(workspaceSlug, { force: true }); }
-	$: if (_rtNotifsV > _doneNotifsV) { _doneNotifsV = _rtNotifsV; invalidate('app:notifications'); if (browser) ensureNotificationsCache(workspaceSlug, { force: true }); }
-	$: if (_rtActivityV > _doneActivityV) { _doneActivityV = _rtActivityV; invalidate('app:activity'); }
-	$: if (_rtLogsV > _doneLogsV) { _doneLogsV = _rtLogsV; invalidate('app:activityLogs'); }
+	$: if (_rtIssuesV > _doneIssuesV) {
+		_doneIssuesV = _rtIssuesV;
+		invalidate('app:issues');
+		if (browser) ensureIssuesCache(workspaceSlug, { force: true });
+	}
+	$: if (_rtNotifsV > _doneNotifsV) {
+		_doneNotifsV = _rtNotifsV;
+		invalidate('app:notifications');
+		if (browser) ensureNotificationsCache(workspaceSlug, { force: true });
+	}
+	$: if (_rtActivityV > _doneActivityV) {
+		_doneActivityV = _rtActivityV;
+		invalidate('app:activity');
+	}
+	$: if (_rtLogsV > _doneLogsV) {
+		_doneLogsV = _rtLogsV;
+		invalidate('app:activityLogs');
+	}
 
 	onMount(async () => {
 		// Ensure the browser Supabase client has the authenticated session from the server.
@@ -290,7 +308,6 @@ import { pageReady } from '$lib/stores/pageReady';
 		const wid = workspaceId;
 		const uid = userId;
 		if (!wid) return;
-
 
 		_workspaceChannel = supabase
 			.channel(`workspace-delta-${wid}`)
@@ -306,30 +323,41 @@ import { pageReady } from '$lib/stores/pageReady';
 			.on(
 				'postgres_changes',
 				{ event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` },
-				() => { _rtNotifsV++; }
+				() => {
+					_rtNotifsV++;
+				}
 			)
 
 			.on(
 				'postgres_changes',
 				{ event: '*', schema: 'public', table: 'messages', filter: `workspace_id=eq.${wid}` },
-				() => { _rtActivityV++; }
+				() => {
+					_rtActivityV++;
+				}
 			)
 
 			.on(
 				'postgres_changes',
 				{ event: '*', schema: 'public', table: 'email_drafts', filter: `workspace_id=eq.${wid}` },
-				() => { _rtActivityV++; }
+				() => {
+					_rtActivityV++;
+				}
 			)
 
 			.on(
 				'postgres_changes',
 				{ event: '*', schema: 'public', table: 'activity_logs', filter: `workspace_id=eq.${wid}` },
-				() => { _rtLogsV++; }
+				() => {
+					_rtLogsV++;
+				}
 			)
 
 			.subscribe((status) => {
 				if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-					_rtIssuesV++; _rtNotifsV++; _rtActivityV++; _rtLogsV++;
+					_rtIssuesV++;
+					_rtNotifsV++;
+					_rtActivityV++;
+					_rtLogsV++;
 					invalidate('app:people');
 					invalidate('app:properties');
 				}
@@ -361,7 +389,7 @@ import { pageReady } from '$lib/stores/pageReady';
 						<div class="flex min-w-0 items-center justify-between gap-2 px-2 text-neutral-700">
 							<div class="flex min-w-0 flex-1 items-center gap-2">
 								<div
-									class="flex h-3 w-3 shrink-0 items-center justify-center rounded-[2px] bg-neutral-700 text-[7px] font-medium text-white"
+									class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] bg-neutral-700 text-[8px] font-medium text-white"
 								>
 									A
 								</div>
@@ -393,7 +421,7 @@ import { pageReady } from '$lib/stores/pageReady';
 							{#each navItems.filter((item) => item.id !== 'people' || canViewPeople) as item}
 								<a
 									href={`${basePath}/${item.href}`}
-									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-normal transition ${currentPath === `${basePath}/${item.href}` || currentPath.startsWith(`${basePath}/${item.href}/`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
+									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition ${currentPath === `${basePath}/${item.href}` || currentPath.startsWith(`${basePath}/${item.href}/`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
 								>
 									{#if item.id === 'people'}
 										<svg
@@ -442,7 +470,7 @@ import { pageReady } from '$lib/stores/pageReady';
 								<div class="mt-2">
 									<button
 										type="button"
-										class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-neutral-400 transition hover:bg-neutral-100"
+										class="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[13px] font-medium text-neutral-400 transition hover:bg-neutral-100"
 										on:click={() => (propertiesOpen = !propertiesOpen)}
 									>
 										<span class="truncate">{propertiesItem.label}</span>
@@ -463,7 +491,7 @@ import { pageReady } from '$lib/stores/pageReady';
 										<div class="mt-1 space-y-1">
 											<a
 												href={`${basePath}/${propertiesItem.href}`}
-												class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-normal transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+												class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] font-medium transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
 											>
 												<svg
 													xmlns="http://www.w3.org/2000/svg"
@@ -484,7 +512,7 @@ import { pageReady } from '$lib/stores/pageReady';
 													{#each properties as property}
 														<a
 															href={`${basePath}/${propertiesItem.href}/${slugify(property.name)}`}
-															class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-normal transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+															class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] font-medium transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
 														>
 															<span class="h-1 w-1 rounded-full bg-neutral-700"></span>
 															<span class="truncate">{property.name}</span>
@@ -504,7 +532,7 @@ import { pageReady } from '$lib/stores/pageReady';
 								<button
 									type="button"
 									on:click={() => goto(`${basePath}/${settingsItem.href}`)}
-									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${currentPath === `${basePath}/${settingsItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
+									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition ${currentPath === `${basePath}/${settingsItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
 								>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
