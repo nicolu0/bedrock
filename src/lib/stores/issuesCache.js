@@ -36,7 +36,7 @@ const normalizeStatus = (value) => {
 	return statusOrder.includes(normalized) ? normalized : 'todo';
 };
 
-const buildSectionsFromIssues = (issues = []) => {
+export const buildSectionsFromIssues = (issues = []) => {
 	const normalizedIssues = (issues ?? []).map((issue) => ({
 		...issue,
 		status: normalizeStatus(issue.status)

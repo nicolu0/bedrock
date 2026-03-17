@@ -1,7 +1,9 @@
 <script>
 	// @ts-nocheck
+	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
+	import { issuesCache, primeIssuesCache, buildSectionsFromIssues } from '$lib/stores/issuesCache.js';
 
 	export let data;
 
@@ -11,7 +13,27 @@
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 
-	$: sections = data.sections ?? [];
+	$: _resolvedSections = (
+		$issuesCache?.workspace === workspaceSlug && $issuesCache?.data?.issues != null
+	)
+		? buildSectionsFromIssues(
+				($issuesCache.data.issues).filter(i => slugify(i.property) === $page.params.property)
+			)
+		: null;
+
+	$: sections = _resolvedSections ?? [];
+
+	$: {
+		if (data.issuesData instanceof Promise) {
+			const loadStartedAt = Date.now();
+			data.issuesData.then((d) => {
+				if (browser) primeIssuesCache($page.params.workspace, d, loadStartedAt);
+			});
+		} else if (data.issuesData) {
+			if (browser) primeIssuesCache($page.params.workspace, data.issuesData);
+		}
+	}
+
 	$: expandedSections = sections.map((section) => {
 		const rows = section.items.flatMap((item) => {
 			const subRows = (item.subIssues ?? []).map((subIssue) => ({
@@ -47,7 +69,18 @@
 </script>
 
 <div>
-	{#if expandedSections.length === 0}
+	{#if _resolvedSections === null}
+		<div class="divide-y divide-neutral-100">
+			{#each { length: 4 } as _}
+				<div class="flex items-center gap-3 px-6 py-2">
+					<div class="skeleton h-3 w-3 rounded-full flex-shrink-0"></div>
+					<div class="skeleton h-4 w-2/5"></div>
+					<div class="ml-auto skeleton h-5 w-28 rounded-full"></div>
+					<div class="skeleton h-5 w-5 rounded-full"></div>
+				</div>
+			{/each}
+		</div>
+	{:else if expandedSections.length === 0}
 		<div class="border-t border-neutral-200"></div>
 		<div class="px-6 py-3 text-sm text-neutral-400">No issues yet.</div>
 	{:else}
