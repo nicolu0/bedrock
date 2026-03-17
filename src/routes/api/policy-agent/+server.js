@@ -171,7 +171,7 @@ export const POST = async ({ request, locals }) => {
 		return json({ error: 'Missing workspace_id or action' }, { status: 400 });
 	}
 
-	const allowedActions = new Set(['allow', 'block', 'behavior', 'ignore']);
+	const allowedActions = new Set(['allow', 'block', 'ignore']);
 	if (!allowedActions.has(action)) {
 		return json({ error: 'Invalid action' }, { status: 400 });
 	}
@@ -197,14 +197,14 @@ export const POST = async ({ request, locals }) => {
 
 	if (action !== 'ignore') {
 		const senderEmail = normalizeEmail(senderEmailRaw);
-		if ((action === 'allow' || action === 'block') && !senderEmail) {
+		if (!senderEmail) {
 			return json({ error: 'Missing sender_email' }, { status: 400 });
 		}
 
 		await supabaseAdmin.from('workspace_policies').insert({
 			workspace_id: resolvedWorkspaceId,
 			type: action,
-			email: action === 'behavior' ? null : senderEmail,
+			email: senderEmail,
 			description: comment || null,
 			created_by: locals.user.id,
 			meta: {
@@ -223,7 +223,7 @@ export const POST = async ({ request, locals }) => {
 			.eq('id', notificationId);
 	}
 
-	if (action === 'allow' || action === 'behavior') {
+	if (action === 'allow') {
 		const meta = notificationMeta ?? {};
 		const senderEmail = normalizeEmail(meta?.sender_email ?? senderEmailRaw);
 		const subject = typeof meta?.subject === 'string' ? meta.subject : notificationTitle;

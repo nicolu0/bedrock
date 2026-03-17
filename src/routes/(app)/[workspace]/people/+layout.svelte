@@ -4,6 +4,12 @@
 	import { browser } from '$app/environment';
 	import { goto, invalidate } from '$app/navigation';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
+	import {
+		addPersonToCache,
+		replacePersonInCache,
+		removePersonFromCache,
+		updatePersonInCache
+	} from '$lib/stores/peopleCache.js';
 	import { newPersonModal } from '$lib/stores/peopleModal.js';
 
 	$: workspaceSlug = $page.params.workspace;
@@ -27,7 +33,24 @@
 		newPersonModal.set(false);
 	};
 
-	const onNewPersonSaved = () => {
+	const onNewPersonOptimistic = (event) => {
+		if (!event?.detail) return;
+		addPersonToCache(event.detail, workspaceSlug);
+	};
+
+	const onNewPersonOptimisticError = (event) => {
+		if (!event?.detail) return;
+		removePersonFromCache(event.detail);
+	};
+
+	const onNewPersonSaved = (event) => {
+		const payload = event?.detail;
+		const person = payload?.person ?? payload;
+		if (payload?.tempId) {
+			replacePersonInCache(payload.tempId, person, workspaceSlug);
+		} else if (person?.id) {
+			updatePersonInCache(person);
+		}
 		closeNewPersonModal();
 		invalidate('app:people');
 	};
@@ -70,6 +93,8 @@
 
 	{#if $newPersonModal}
 		<PeopleModal
+			on:optimistic={onNewPersonOptimistic}
+			on:optimisticError={onNewPersonOptimisticError}
 			on:saved={onNewPersonSaved}
 			on:close={closeNewPersonModal}
 		/>

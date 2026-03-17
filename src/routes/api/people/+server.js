@@ -62,6 +62,7 @@ export const POST = async ({ locals, request, url }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
+	const inviteEligible = role === 'admin' || role === 'member';
 	const { data, error } = await supabaseAdmin
 		.from('people')
 		.insert({
@@ -71,7 +72,7 @@ export const POST = async ({ locals, request, url }) => {
 			role,
 			trade,
 			notes,
-			pending: true,
+			pending: inviteEligible,
 			user_id: null
 		})
 		.select('id, name, email, role, trade, notes, pending, created_at, user_id')
@@ -82,7 +83,7 @@ export const POST = async ({ locals, request, url }) => {
 	}
 
 	let inviteToken = null;
-	if (email) {
+	if (email && inviteEligible) {
 		const { data: invite, error: inviteError } = await supabaseAdmin
 			.from('invites')
 			.insert({

@@ -72,7 +72,9 @@
 	let _resolvedMembers = [];
 	$: {
 		if (data.members instanceof Promise) {
-			data.members.then((m) => { _resolvedMembers = m ?? []; });
+			data.members.then((m) => {
+				_resolvedMembers = m ?? [];
+			});
 		} else {
 			_resolvedMembers = data.members ?? [];
 		}
@@ -128,6 +130,17 @@
 		const color = getAvatarColor(assigneeId ?? name);
 		if (!assigneeId) return null;
 		return { name, initial, color };
+	};
+
+	const getSectionGradientStyle = (statusClass) => {
+		if (!statusClass) return '';
+		if (statusClass.includes('amber')) {
+			return 'background-image: linear-gradient(90deg, rgba(254, 243, 199, 0.14), rgba(254, 243, 199, 0.05), transparent);';
+		}
+		if (statusClass.includes('emerald')) {
+			return 'background-image: linear-gradient(90deg, rgba(209, 250, 229, 0.14), rgba(209, 250, 229, 0.05), transparent);';
+		}
+		return '';
 	};
 </script>
 
@@ -205,9 +218,9 @@
 		<div class="divide-y divide-neutral-100">
 			{#each { length: 4 } as _}
 				<div class="flex items-center gap-3 px-6 py-2">
-					<div class="skeleton h-3 w-3 rounded-full flex-shrink-0"></div>
+					<div class="skeleton h-3 w-3 flex-shrink-0 rounded-full"></div>
 					<div class="skeleton h-4 w-2/5"></div>
-					<div class="ml-auto skeleton h-5 w-28 rounded-full"></div>
+					<div class="skeleton ml-auto h-5 w-28 rounded-full"></div>
 					<div class="skeleton h-5 w-5 rounded-full"></div>
 				</div>
 			{/each}
@@ -220,6 +233,7 @@
 				<div>
 					<div
 						class="flex items-center justify-between border-y border-neutral-200 bg-stone-50 px-6 py-2 text-sm text-neutral-600"
+						style={getSectionGradientStyle(section.statusClass)}
 					>
 						<div class="flex items-center gap-3">
 							<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${section.statusClass}`}></span>

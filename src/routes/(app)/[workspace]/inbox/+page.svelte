@@ -3,9 +3,12 @@
 	import { page } from '$app/stores';
 	import { invalidate } from '$app/navigation';
 	import { browser } from '$app/environment';
-	import { notificationsCache, updateNotificationInCache, primeNotificationsCache } from '$lib/stores/notificationsCache';
+	import {
+		notificationsCache,
+		updateNotificationInCache,
+		primeNotificationsCache
+	} from '$lib/stores/notificationsCache';
 	import IssuePanel from '$lib/components/IssuePanel.svelte';
-	import PolicyPanel from '$lib/components/PolicyPanel.svelte';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import { onMount, onDestroy } from 'svelte';
@@ -33,11 +36,15 @@
 		}
 	}
 
-	let _resolvedActivity = null, _resolvedLogs = null;
+	let _resolvedActivity = null,
+		_resolvedLogs = null;
 	$: {
 		if (data.activityBundle instanceof Promise) {
 			data.activityBundle.then((d) => {
-				if (d) { _resolvedActivity = d.activityData; _resolvedLogs = d.activityLogsData; }
+				if (d) {
+					_resolvedActivity = d.activityData;
+					_resolvedLogs = d.activityLogsData;
+				}
 			});
 		} else if (data.activityBundle) {
 			_resolvedActivity = data.activityBundle.activityData;
@@ -46,9 +53,14 @@
 	}
 
 	function setFilter(tab) {
-		unreadSnapshot = tab === 'Unread'
-			? new Set((effectiveNotifications ?? []).filter((n) => !n.is_read && !n.is_resolved).map((n) => n.id))
-			: null;
+		unreadSnapshot =
+			tab === 'Unread'
+				? new Set(
+						(effectiveNotifications ?? [])
+							.filter((n) => !n.is_read && !n.is_resolved)
+							.map((n) => n.id)
+					)
+				: null;
 		filter = tab;
 		selectedNotification = null;
 	}
@@ -76,9 +88,11 @@
 	}
 
 	$: filtered =
-		filter === 'Unread'   ? effectiveNotifications.filter((n) => unreadSnapshot?.has(n.id) && !n.is_resolved) :
-		filter === 'Resolved' ? effectiveNotifications.filter((n) => n.is_resolved) :
-		/* All */               effectiveNotifications.filter((n) => !n.is_resolved);
+		filter === 'Unread'
+			? effectiveNotifications.filter((n) => unreadSnapshot?.has(n.id) && !n.is_resolved)
+			: filter === 'Resolved'
+				? effectiveNotifications.filter((n) => n.is_resolved)
+				: /* All */ effectiveNotifications.filter((n) => !n.is_resolved);
 
 	function resolveAndAdvance() {
 		if (!selectedNotification) return;
@@ -86,14 +100,17 @@
 		const next = filtered[idx + 1] ?? filtered[idx - 1] ?? null;
 		localResolvedIds = new Set([...localResolvedIds, selectedNotification.id]);
 		updateNotificationInCache({ id: selectedNotification.id, is_resolved: true });
-		if (next) handleClick(next); else selectedNotification = null;
+		if (next) handleClick(next);
+		else selectedNotification = null;
 		invalidate('app:notifications');
 	}
 
 	let _resolvedVendors = [];
 	$: {
 		if (data.vendors instanceof Promise) {
-			data.vendors.then((v) => { _resolvedVendors = v ?? []; });
+			data.vendors.then((v) => {
+				_resolvedVendors = v ?? [];
+			});
 		} else {
 			_resolvedVendors = data.vendors ?? [];
 		}
@@ -102,7 +119,11 @@
 
 	let _now = Date.now();
 	let _ticker;
-	onMount(() => { _ticker = setInterval(() => { _now = Date.now(); }, 30_000); });
+	onMount(() => {
+		_ticker = setInterval(() => {
+			_now = Date.now();
+		}, 30_000);
+	});
 	onDestroy(() => clearInterval(_ticker));
 
 	function timeAgo(dateStr, now) {
@@ -172,8 +193,8 @@
 		{#if _resolvedNotifications === null}
 			<div>
 				{#each { length: 4 } as _}
-					<div class="flex items-start gap-3 px-6 py-3 border-b border-neutral-100">
-						<div class="skeleton mt-1.5 h-2 w-2 rounded-full flex-shrink-0"></div>
+					<div class="flex items-start gap-3 border-b border-neutral-100 px-6 py-3">
+						<div class="skeleton mt-1.5 h-2 w-2 flex-shrink-0 rounded-full"></div>
 						<div class="flex-1 space-y-2">
 							<div class="skeleton h-4 w-3/4"></div>
 							<div class="skeleton h-3 w-1/2"></div>
@@ -250,24 +271,16 @@
 			in:fly={{ x: 400, duration: 280, easing: cubicOut }}
 			out:fly={{ x: 400, duration: 220, easing: cubicOut }}
 		>
-			{#if ['email_unknown_sender', 'allowed_unknown_behavior'].includes(selectedNotification.type)}
-				<PolicyPanel
-					notification={selectedNotification}
-					on:close={() => (selectedNotification = null)}
-					on:resolved={resolveAndAdvance}
-				/>
-			{:else}
-				<IssuePanel
-					issueId={selectedNotification.issues?.id}
-					seedIssue={selectedNotification.issues}
-					activityData={_resolvedActivity}
-					activityLogsData={_resolvedLogs}
-					{vendors}
-					allIssues={[]}
-					on:close={() => (selectedNotification = null)}
-					on:resolved={resolveAndAdvance}
-				/>
-			{/if}
+			<IssuePanel
+				issueId={selectedNotification.issues?.id}
+				seedIssue={selectedNotification.issues}
+				activityData={_resolvedActivity}
+				activityLogsData={_resolvedLogs}
+				{vendors}
+				allIssues={[]}
+				on:close={() => (selectedNotification = null)}
+				on:resolved={resolveAndAdvance}
+			/>
 		</div>
 	{/if}
 </div>

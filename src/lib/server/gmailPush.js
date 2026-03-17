@@ -165,6 +165,18 @@ const getWorkspaceIdForUser = async (userId) => {
 	return data?.workspace_id ?? null;
 };
 
+const getWorkspacePersonMatch = async ({ workspaceId, senderEmail }) => {
+	if (!workspaceId || !senderEmail) return null;
+	const { data } = await supabase
+		.from('people')
+		.select('id, role')
+		.eq('workspace_id', workspaceId)
+		.ilike('email', senderEmail)
+		.in('role', ['admin', 'member', 'vendor'])
+		.maybeSingle();
+	return data ?? null;
+};
+
 const getPolicyMatch = async ({ workspaceId, senderEmail }) => {
 	const normalized = normalizeEmail(senderEmail);
 	if (!normalized) return { allow: false, block: false };
@@ -191,62 +203,6 @@ const listWorkspaceUnitsForAgent = async (workspaceId) => {
 		property_name: unit.properties?.name ?? null,
 		property_address: unit.properties?.address ?? null
 	}));
-};
-
-const createUnknownSenderNotification = async ({
-	workspaceId,
-	issueId,
-	senderEmail,
-	subject,
-	body,
-	messageId,
-	threadId,
-	userId,
-	type
-}) => {
-	const adminUserId = await getWorkspaceAdminId(workspaceId);
-	if (!adminUserId) {
-		await insertIngestionLog({
-			userId,
-			source: 'notification',
-			detail: JSON.stringify({
-				reason: 'missing_workspace_admin',
-				workspace_id: workspaceId,
-				issue_id: issueId
-			})
-		});
-		return;
-	}
-
-	const safeSubject = subject?.trim() || '(no subject)';
-	const safeBody = (body ?? '').trim().slice(0, 500);
-	const { error } = await supabase.from('notifications').insert({
-		workspace_id: workspaceId,
-		issue_id: issueId ?? null,
-		user_id: adminUserId,
-		title: 'Unknown Sender',
-		body: safeSubject,
-		type,
-		requires_action: true,
-		meta: {
-			sender_email: senderEmail,
-			subject: safeSubject,
-			body: safeBody,
-			message_id: messageId,
-			thread_id: threadId
-		}
-	});
-	if (error) {
-		await insertIngestionLog({
-			userId,
-			source: 'notification',
-			detail: JSON.stringify({
-				reason: 'insert_failed',
-				workspace_id: workspaceId,
-				error: error.message
-			})
-		});
-	}
 };
 
 const processMessage = async ({ connection, accessToken, message, runAgent }) => {
@@ -298,6 +254,11 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 		return;
 	}
 
+	const personMatch = await getWorkspacePersonMatch({
+		workspaceId: workspaceIdForConnection,
+		senderEmail
+	});
+
 	const { allow: allowPolicy, block: blockPolicy } = await getPolicyMatch({
 		workspaceId: workspaceIdForConnection,
 		senderEmail
@@ -345,8 +306,20 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 		.select('id, unit_id, email, name')
 		.ilike('email', senderEmail)
 		.maybeSingle();
+	const isKnownSender = Boolean(tenant?.id) || Boolean(personMatch?.id);
 
 	if (!tenant?.id || !tenant.unit_id) {
+		if (!isKnownSender) {
+			await insertIngestionLog({
+				userId: connection.user_id,
+				source: 'gmail-push',
+				detail: JSON.stringify({
+					phase: 'skip-unknown-sender',
+					sender_email: senderEmail
+				})
+			});
+			return;
+		}
 		const threadExternalId = message.threadId ?? null;
 		let threadRow = null;
 		if (threadExternalId) {
@@ -400,53 +373,6 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 				return;
 			}
 			threadRow = createdThread;
-		}
-
-		if (!allowPolicy) {
-			const internalDate = Number(message.internalDate ?? 0);
-			const { data: unknownMessage, error: unknownMessageError } = await supabase
-				.from('messages')
-				.insert({
-					thread_id: threadRow.id,
-					external_id: message.id,
-					message: cleanedBody,
-					sender: 'unknown',
-					subject: messageSubject,
-					timestamp: new Date(internalDate || Date.now()).toISOString(),
-					channel: 'gmail',
-					direction: 'inbound',
-					delivery_status: 'received',
-					connection_id: connection.id,
-					issue_id: null,
-					thread_external_id: threadExternalId,
-					workspace_id: workspaceIdForConnection,
-					metadata: { sender_email: senderEmail }
-				})
-				.select('id')
-				.maybeSingle();
-
-			if (unknownMessageError) {
-				if (unknownMessageError.code !== '23505') {
-					await logError(
-						connection.user_id,
-						`Unknown message insert failed: ${unknownMessageError?.message ?? 'unknown'}`
-					);
-					return;
-				}
-			}
-
-			await createUnknownSenderNotification({
-				workspaceId: workspaceIdForConnection,
-				issueId: null,
-				senderEmail,
-				subject: messageSubject,
-				body: cleanedBody,
-				messageId: unknownMessage?.id ?? null,
-				threadId: threadRow.id,
-				userId: connection.user_id,
-				type: 'email_unknown_sender'
-			});
-			return;
 		}
 
 		const lockCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
