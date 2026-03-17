@@ -1,10 +1,12 @@
 <script>
 	// @ts-nocheck
+	import { get } from 'svelte/store';
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { seedIssueDetail } from '$lib/stores/issueDetailCache.js';
+	import { issuesCache, primeIssuesCache } from '$lib/stores/issuesCache.js';
 
 	export let data;
 
@@ -12,12 +14,20 @@
 	const sidebarControl = getContext('sidebarControl');
 	const openSidebar = () => sidebarControl?.open?.();
 
-	let _resolvedIssues = null;
+	const _cachedState = browser ? get(issuesCache) : null;
+	let _resolvedIssues =
+		_cachedState?.workspace === $page.params.workspace && _cachedState?.data
+			? _cachedState.data
+			: null;
 	$: {
 		if (data.issuesData instanceof Promise) {
-			data.issuesData.then((d) => { _resolvedIssues = d; });
+			data.issuesData.then((d) => {
+				_resolvedIssues = d;
+				if (browser) primeIssuesCache($page.params.workspace, d);
+			});
 		} else if (data.issuesData) {
 			_resolvedIssues = data.issuesData;
+			if (browser) primeIssuesCache($page.params.workspace, data.issuesData);
 		}
 	}
 
