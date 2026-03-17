@@ -5,7 +5,7 @@ const _issuesStatusConfig = {
 	in_progress: {
 		id: 'in-progress',
 		label: 'In Progress',
-		statusClass: 'border-amber-500 text-amber-600'
+		statusClass: 'border-orange-500 text-orange-600'
 	},
 	todo: { id: 'todo', label: 'Todo', statusClass: 'border-neutral-500 text-neutral-700' },
 	done: { id: 'done', label: 'Done', statusClass: 'border-emerald-500 text-emerald-700' }
@@ -23,13 +23,27 @@ const _normalizeStatus = (value) => {
 };
 
 export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonId) => {
-	console.log('[loadIssuesData] called — workspaceId:', workspaceId, 'userId:', userId, 'role:', userRole, 'ownerPersonId:', ownerPersonId ?? null);
+	console.log(
+		'[loadIssuesData] called — workspaceId:',
+		workspaceId,
+		'userId:',
+		userId,
+		'role:',
+		userRole,
+		'ownerPersonId:',
+		ownerPersonId ?? null
+	);
 	console.log('[loadIssuesData] fetching directly from Supabase (no cache)');
 
 	const role = (userRole ?? '').toLowerCase();
 	const isAssigneeScoped = role === 'member' || role === 'vendor';
 	const isOwnerScoped = role === 'owner';
-	console.log('[loadIssuesData] filter mode — isAssigneeScoped:', isAssigneeScoped, 'isOwnerScoped:', isOwnerScoped);
+	console.log(
+		'[loadIssuesData] filter mode — isAssigneeScoped:',
+		isAssigneeScoped,
+		'isOwnerScoped:',
+		isOwnerScoped
+	);
 
 	let ownerUnitIds = [];
 	if (isOwnerScoped && ownerPersonId) {
@@ -45,7 +59,7 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 		let query = supabaseAdmin
 			.from('issues')
 			.select(
-				'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
+				'id, name, description, status, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id'
 			)
 			.eq('workspace_id', workspaceId)
 			.order('updated_at', { ascending: false });
@@ -73,7 +87,7 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 			let fallbackQuery = supabaseAdmin
 				.from('issues')
 				.select(
-					'id, name, description, status, parent_id, unit_id, issue_number, readable_id, assignee_id'
+					'id, name, description, status, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id'
 				)
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
@@ -97,7 +111,12 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 		: { data: [] };
 	const unitMap = new Map((units ?? []).map((u) => [u.id, u]));
 
-	const propertyIds = Array.from(new Set((units ?? []).map((u) => u.property_id).filter(Boolean)));
+	const propertyIds = Array.from(
+		new Set([
+			...(units ?? []).map((u) => u.property_id).filter(Boolean),
+			...(issues ?? []).map((i) => i.property_id).filter(Boolean)
+		])
+	);
 	const { data: properties } = propertyIds.length
 		? await supabaseAdmin.from('properties').select('id, name').in('id', propertyIds)
 		: { data: [] };
@@ -105,7 +124,11 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 
 	const normalizedIssues = (issues ?? []).map((issue) => {
 		const unit = unitMap.get(issue.unit_id);
-		const property = unit ? propertyMap.get(unit.property_id) : null;
+		const property = unit
+			? propertyMap.get(unit.property_id)
+			: issue.property_id
+				? propertyMap.get(issue.property_id)
+				: null;
 		const status = _normalizeStatus(issue.status);
 		return {
 			id: issue.id,
@@ -117,6 +140,8 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 			assigneeId: issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? null,
 			property: property?.name ?? 'Unknown',
+			propertyId: issue.property_id ?? null,
+			property_id: issue.property_id ?? null,
 			unit: unit?.name ?? 'Unknown',
 			issueNumber: issue.issue_number ?? null,
 			readableId: issue.readable_id ?? null,
@@ -226,8 +251,17 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 		.eq('id', userId)
 		.maybeSingle();
 
-	const sampleTitles = normalizedIssues.slice(0, 3).map((i) => `${i.readableId ?? i.id}:"${i.title}"`);
-	console.log('[loadIssuesData] returning — totalIssues:', normalizedIssues.length, 'filteredSections:', filteredSections.length, 'samples:', sampleTitles);
+	const sampleTitles = normalizedIssues
+		.slice(0, 3)
+		.map((i) => `${i.readableId ?? i.id}:"${i.title}"`);
+	console.log(
+		'[loadIssuesData] returning — totalIssues:',
+		normalizedIssues.length,
+		'filteredSections:',
+		filteredSections.length,
+		'samples:',
+		sampleTitles
+	);
 
 	return { sections: filteredSections, issues: normalizedIssues, assignee, workspaceId };
 };
@@ -263,12 +297,17 @@ export const loadActivityData = async (workspaceId, issueIds = null) => {
 	if (Array.isArray(issueIds) && issueIds.length === 0) {
 		return { messagesByIssue: {}, emailDraftsByMessageId: {}, draftIssueIds: [] };
 	}
-	let messagesQuery = supabaseAdmin
-		.from('messages')
-		.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
-		.eq('workspace_id', workspaceId)
-		.gte('timestamp', cutoff)
-		.order('timestamp', { ascending: true });
+	let threadIdToIssueId = new Map();
+	let messages = [];
+	let draftsResult = { data: [] };
+
+	const baseMessagesQuery = () =>
+		supabaseAdmin
+			.from('messages')
+			.select('id, issue_id, thread_id, message, sender, subject, timestamp, direction, channel')
+			.eq('workspace_id', workspaceId)
+			.gte('timestamp', cutoff)
+			.order('timestamp', { ascending: true });
 
 	let draftsQuery = supabaseAdmin
 		.from('email_drafts')
@@ -280,14 +319,49 @@ export const loadActivityData = async (workspaceId, issueIds = null) => {
 		.order('updated_at', { ascending: false });
 
 	if (Array.isArray(issueIds)) {
-		messagesQuery = messagesQuery.in('issue_id', issueIds);
-		draftsQuery = draftsQuery.in('issue_id', issueIds);
+		const { data: threads } = await supabaseAdmin
+			.from('threads')
+			.select('id, issue_id')
+			.eq('workspace_id', workspaceId)
+			.in('issue_id', issueIds);
+		const threadIds = (threads ?? []).map((thread) => thread.id).filter(Boolean);
+		threadIdToIssueId = new Map(
+			(threads ?? []).map((thread) => [thread.id, thread.issue_id]).filter(([, id]) => id)
+		);
+
+		const [byIssueResult, byThreadResult, nextDraftsResult] = await Promise.all([
+			baseMessagesQuery().in('issue_id', issueIds),
+			threadIds.length ? baseMessagesQuery().in('thread_id', threadIds) : { data: [] },
+			draftsQuery.in('issue_id', issueIds)
+		]);
+
+		draftsResult = nextDraftsResult;
+		const messageMap = new Map();
+		for (const msg of [...(byIssueResult?.data ?? []), ...(byThreadResult?.data ?? [])]) {
+			if (!msg?.id || messageMap.has(msg.id)) continue;
+			const resolvedIssueId = msg.issue_id ?? threadIdToIssueId.get(msg.thread_id) ?? null;
+			messageMap.set(msg.id, resolvedIssueId ? { ...msg, issue_id: resolvedIssueId } : msg);
+		}
+		messages = [...messageMap.values()].sort((a, b) => {
+			const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
+			const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
+			return timeA - timeB;
+		});
+	} else {
+		const [messagesResult, nextDraftsResult] = await Promise.all([
+			baseMessagesQuery(),
+			draftsQuery
+		]);
+		messages = messagesResult?.data ?? [];
+		draftsResult = nextDraftsResult;
 	}
 
-	const [messagesResult, draftsResult] = await Promise.all([messagesQuery, draftsQuery]);
-	const messagesByIssue = (messagesResult?.data ?? []).reduce((acc, m) => {
-		if (!m.issue_id) return acc;
-		(acc[m.issue_id] ??= []).push(m);
+	const messagesByIssue = messages.reduce((acc, m) => {
+		const resolvedIssueId = m.issue_id ?? threadIdToIssueId.get(m.thread_id) ?? null;
+		if (!resolvedIssueId) return acc;
+		(acc[resolvedIssueId] ??= []).push(
+			resolvedIssueId === m.issue_id ? m : { ...m, issue_id: resolvedIssueId }
+		);
 		return acc;
 	}, {});
 	const normalizedDrafts = (draftsResult?.data ?? []).map((draft) =>

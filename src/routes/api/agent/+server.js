@@ -259,11 +259,15 @@ const linkThreadToIssue = async ({ threadId, issueId }) => {
 		.from('threads')
 		.update({ issue_id: issueId, updated_at: new Date().toISOString() })
 		.eq('id', threadId)
-		.select('issue_id')
+		.select('issue_id, workspace_id')
 		.maybeSingle();
 	if (error) {
 		throw new Error(error.message);
 	}
+	await supabaseAdmin
+		.from('messages')
+		.update({ issue_id: issueId, workspace_id: data?.workspace_id ?? null })
+		.eq('thread_id', threadId);
 	return Boolean(data?.issue_id);
 };
 

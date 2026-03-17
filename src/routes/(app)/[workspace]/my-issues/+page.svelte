@@ -3,15 +3,25 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
+	import { fade, scale } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { seedIssueDetail } from '$lib/stores/issueDetailCache.js';
-	import { issuesCache, primeIssuesCache } from '$lib/stores/issuesCache.js';
+	import { applyIssueInsert, issuesCache, primeIssuesCache } from '$lib/stores/issuesCache.js';
 
 	export let data;
 
 	const tabs = ['All issues', 'Subscribed', 'Activity'];
 	const sidebarControl = getContext('sidebarControl');
 	const openSidebar = () => sidebarControl?.open?.();
+	let showNewIssueModal = false;
+	let newIssueTitle = '';
+	let newIssueDescription = '';
+	let newIssuePropertyId = '';
+	let newIssueUnitId = '';
+	let newIssueStatus = 'todo';
+	let newIssueAssigneeId = '';
+	let createIssueError = '';
+	let creatingIssue = false;
 
 	$: _resolvedIssues =
 		$issuesCache?.workspace === $page.params.workspace && $issuesCache?.data
@@ -69,6 +79,44 @@
 
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
+	$: currentUserId = $page.data?.userId ?? '';
+	let _resolvedProperties = [];
+	let _resolvedUnits = [];
+	$: {
+		const propsData = $page.data?.properties;
+		if (propsData instanceof Promise) {
+			propsData.then((list) => {
+				_resolvedProperties = Array.isArray(list) ? list : [];
+			});
+		} else {
+			_resolvedProperties = Array.isArray(propsData) ? propsData : [];
+		}
+	}
+	$: {
+		const unitsData = $page.data?.units;
+		if (unitsData instanceof Promise) {
+			unitsData.then((list) => {
+				_resolvedUnits = Array.isArray(list) ? list : [];
+			});
+		} else {
+			_resolvedUnits = Array.isArray(unitsData) ? unitsData : [];
+		}
+	}
+	$: properties = _resolvedProperties;
+	$: units = _resolvedUnits;
+	$: propertiesById = properties.reduce((acc, property) => {
+		if (!property?.id) return acc;
+		acc[property.id] = property;
+		return acc;
+	}, {});
+	$: unitsById = units.reduce((acc, unit) => {
+		if (!unit?.id) return acc;
+		acc[unit.id] = unit;
+		return acc;
+	}, {});
+	$: availableUnits = newIssuePropertyId
+		? units.filter((unit) => unit.property_id === newIssuePropertyId)
+		: units;
 	let _resolvedMembers = [];
 	$: {
 		if (data.members instanceof Promise) {
@@ -84,6 +132,12 @@
 		acc[member.user_id] = member;
 		return acc;
 	}, {});
+	$: members = _resolvedMembers;
+	const statusOptions = [
+		{ value: 'todo', label: 'Todo' },
+		{ value: 'in_progress', label: 'In Progress' },
+		{ value: 'done', label: 'Done' }
+	];
 
 	const slugify = (value) => {
 		if (!value) return 'issue';
@@ -134,38 +188,131 @@
 
 	const getSectionGradientStyle = (statusClass) => {
 		if (!statusClass) return '';
-		if (statusClass.includes('amber')) {
-			return 'background-image: linear-gradient(90deg, rgba(254, 243, 199, 0.14), rgba(254, 243, 199, 0.05), transparent);';
+		if (statusClass.includes('orange')) {
+			return 'background-image: linear-gradient(90deg, rgba(255, 237, 213, 0.16), rgba(255, 237, 213, 0.06), transparent);';
 		}
 		if (statusClass.includes('emerald')) {
 			return 'background-image: linear-gradient(90deg, rgba(209, 250, 229, 0.14), rgba(209, 250, 229, 0.05), transparent);';
 		}
 		return '';
 	};
+
+	const openNewIssueModal = () => {
+		showNewIssueModal = true;
+		createIssueError = '';
+		if (!newIssueStatus) newIssueStatus = 'todo';
+		if (!newIssueAssigneeId && currentUserId) newIssueAssigneeId = currentUserId;
+		if (!newIssuePropertyId && properties.length === 1) {
+			newIssuePropertyId = properties[0]?.id ?? '';
+		}
+		if (!newIssueUnitId && availableUnits.length === 1) {
+			newIssueUnitId = availableUnits[0]?.id ?? '';
+		}
+	};
+
+	const closeNewIssueModal = () => {
+		showNewIssueModal = false;
+		newIssueTitle = '';
+		newIssueDescription = '';
+		newIssuePropertyId = '';
+		newIssueUnitId = '';
+		newIssueStatus = 'todo';
+		newIssueAssigneeId = '';
+		createIssueError = '';
+		document.activeElement?.blur();
+	};
+
+	const handlePropertyChange = (event) => {
+		newIssuePropertyId = event.target.value;
+		if (!newIssuePropertyId) {
+			newIssueUnitId = '';
+			return;
+		}
+		const nextUnits = units.filter((unit) => unit.property_id === newIssuePropertyId);
+		if (!nextUnits.some((unit) => unit.id === newIssueUnitId)) {
+			newIssueUnitId = nextUnits[0]?.id ?? '';
+		}
+	};
+
+	const handleCreateIssue = async () => {
+		createIssueError = '';
+		creatingIssue = true;
+		try {
+			const response = await fetch('/api/issues', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					workspace: workspaceSlug,
+					name: newIssueTitle.trim(),
+					description: newIssueDescription.trim(),
+					unitId: newIssueUnitId?.trim() ? newIssueUnitId.trim() : null,
+					propertyId: newIssuePropertyId?.trim() ? newIssuePropertyId.trim() : null,
+					status: newIssueStatus,
+					assigneeId: newIssueAssigneeId?.trim() ? newIssueAssigneeId.trim() : null
+				})
+			});
+			const result = await response.json();
+			if (!response.ok) {
+				createIssueError = result?.error ?? 'Unable to create issue.';
+				return;
+			}
+			const selectedUnit = newIssueUnitId ? unitsById[newIssueUnitId] : null;
+			const selectedProperty = selectedUnit
+				? propertiesById[selectedUnit.property_id]
+				: propertiesById[newIssuePropertyId];
+			applyIssueInsert(result, {
+				unitName: selectedUnit?.name ?? 'Unknown',
+				propertyName: selectedProperty?.name ?? 'Unknown',
+				parentTitle: ''
+			});
+			closeNewIssueModal();
+		} catch {
+			createIssueError = 'Unable to create issue.';
+		} finally {
+			creatingIssue = false;
+		}
+	};
+
+	const onKeydown = (event) => {
+		if (event.key === 'Escape' && showNewIssueModal) {
+			closeNewIssueModal();
+		}
+	};
 </script>
 
+<svelte:window on:keydown={onKeydown} />
+
 <div>
-	<div class="flex items-center gap-2 border-b border-neutral-200 px-6 py-3">
+	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
+		<div class="flex items-center gap-2">
+			<button
+				type="button"
+				aria-label="Open sidebar"
+				class="rounded-md p-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 lg:hidden"
+				on:click={openSidebar}
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="12"
+					height="12"
+					fill="currentColor"
+					class="bi bi-layout-sidebar"
+					viewBox="0 0 16 16"
+				>
+					<path
+						d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm5-1v12h9a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM4 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2z"
+					/>
+				</svg>
+			</button>
+			<h1 class="text-sm font-normal text-neutral-700">My issues</h1>
+		</div>
 		<button
 			type="button"
-			aria-label="Open sidebar"
-			class="rounded-md p-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 lg:hidden"
-			on:click={openSidebar}
+			class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
+			on:click={openNewIssueModal}
 		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="12"
-				height="12"
-				fill="currentColor"
-				class="bi bi-layout-sidebar"
-				viewBox="0 0 16 16"
-			>
-				<path
-					d="M0 3a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm5-1v12h9a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM4 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h2z"
-				/>
-			</svg>
+			+ New issue
 		</button>
-		<h1 class="text-sm font-normal text-neutral-700">My issues</h1>
 	</div>
 	<div class="flex items-center justify-between px-6 py-2">
 		<div class="flex items-center gap-2">
@@ -310,3 +457,141 @@
 		</div>
 	{/if}
 </div>
+
+{#if showNewIssueModal}
+	<div
+		class="fixed inset-0 z-40 bg-neutral-900/20"
+		transition:fade={{ duration: 120 }}
+		on:click={closeNewIssueModal}
+	></div>
+	<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-4">
+		<div
+			class="pointer-events-auto w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl"
+			transition:scale={{ duration: 140, start: 0.9 }}
+			on:click|stopPropagation
+			role="dialog"
+			aria-modal="true"
+		>
+			<form on:submit|preventDefault={handleCreateIssue}>
+				<div class="flex items-center justify-between">
+					<div class="text-lg font-medium text-neutral-800">New issue</div>
+					<button
+						class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
+						on:click={closeNewIssueModal}
+						type="button"
+						aria-label="Close"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="24"
+							height="24"
+							fill="currentColor"
+							viewBox="0 0 16 16"
+						>
+							<path
+								d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"
+							/>
+						</svg>
+					</button>
+				</div>
+				<div class="mt-5 flex flex-col gap-3">
+					{#if createIssueError}
+						<p class="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-600">
+							{createIssueError}
+						</p>
+					{/if}
+					<input
+						class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+						placeholder="Issue title"
+						name="name"
+						bind:value={newIssueTitle}
+						required
+						type="text"
+					/>
+					<textarea
+						class="min-h-[96px] rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+						placeholder="Description (optional)"
+						name="description"
+						bind:value={newIssueDescription}
+					></textarea>
+					<div>
+						<label class="text-xs text-neutral-500">Property</label>
+						<select
+							class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							bind:value={newIssuePropertyId}
+							on:change={handlePropertyChange}
+							required
+							disabled={!properties.length}
+						>
+							<option value="" disabled>
+								{properties.length ? 'Select a property' : 'No properties available'}
+							</option>
+							{#each properties as property}
+								<option value={property.id}>{property.name}</option>
+							{/each}
+						</select>
+					</div>
+					<div>
+						<label class="text-xs text-neutral-500">Unit</label>
+						<select
+							class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							bind:value={newIssueUnitId}
+							disabled={!availableUnits.length}
+						>
+							<option value="" disabled>
+								{availableUnits.length ? 'Select a unit' : 'No units available'}
+							</option>
+							{#each availableUnits as unit}
+								<option value={unit.id}>{unit.name}</option>
+							{/each}
+						</select>
+					</div>
+					<div class="grid gap-3 sm:grid-cols-2">
+						<div>
+							<label class="text-xs text-neutral-500">Status</label>
+							<select
+								class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+								bind:value={newIssueStatus}
+								required
+							>
+								{#each statusOptions as option}
+									<option value={option.value}>{option.label}</option>
+								{/each}
+							</select>
+						</div>
+						<div>
+							<label class="text-xs text-neutral-500">Assignee</label>
+							<select
+								class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+								bind:value={newIssueAssigneeId}
+							>
+								<option value="">Unassigned</option>
+								{#each members as member}
+									<option value={member.user_id}>
+										{member.users?.name ?? member.name ?? 'Member'}
+									</option>
+								{/each}
+							</select>
+						</div>
+					</div>
+				</div>
+				<div class="mt-5 flex items-center justify-end gap-2">
+					<button
+						class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
+						on:click={closeNewIssueModal}
+						type="button"
+					>
+						Cancel
+					</button>
+					<button
+						class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+						disabled={creatingIssue || !newIssueTitle.trim() || !newIssuePropertyId}
+						type="submit"
+					>
+						{creatingIssue ? 'Creating...' : 'Create issue'}
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+{/if}
