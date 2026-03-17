@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { invalidate } from '$app/navigation';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
+	import { peopleCache } from '$lib/stores/peopleCache.js';
 
 	export let data;
 
@@ -14,15 +15,11 @@
 
 	$: workspaceSlug = $page.params.workspace;
 
-	let _resolvedPeople = null;
-	$: {
-		if (data.people instanceof Promise) {
-			data.people.then((d) => { _resolvedPeople = Array.isArray(d) ? d : []; });
-		} else {
-			_resolvedPeople = data.people ?? [];
-		}
-	}
-	$: owners = (_resolvedPeople ?? []).filter((person) => person.role === 'owner');
+	$: people =
+		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
+			? $peopleCache.data
+			: null;
+	$: owners = Array.isArray(people) ? people.filter((person) => person.role === 'owner') : [];
 
 	const formatRole = (role) => {
 		if (!role) return 'Member';
@@ -83,7 +80,7 @@
 
 <div class="space-y-2">
 	<div>
-		{#if _resolvedPeople === null}
+		{#if people === null}
 			<div>
 				{#each { length: 4 } as _}
 					<div class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3">
