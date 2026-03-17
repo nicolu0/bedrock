@@ -80,10 +80,31 @@
 	}
 
 	let _resolvedActivity = null;
+
+	// Defined as a plain function (not inside a $: block) so Svelte's static
+	// dependency analysis doesn't treat `messagesByIssue` as a reactive dep of
+	// the block below — which would cause a _resolvedActivity → messagesByIssue
+	// → _resolvedActivity cycle.
+	function mergeAndSetActivity(d) {
+		// Preserve locally-added messages (from realtime) not yet in server data.
+		// This handles the race condition where the server queries the DB before
+		// the messages INSERT is visible, causing the sent email to disappear.
+		const serverIds = new Set(
+			Object.values(d.messagesByIssue ?? {}).flat().map((m) => m.id)
+		);
+		const mergedMessages = { ...d.messagesByIssue };
+		for (const [id, msgs] of Object.entries(messagesByIssue)) {
+			const localOnly = msgs.filter((m) => !serverIds.has(m.id));
+			if (localOnly.length) {
+				mergedMessages[id] = [...(mergedMessages[id] ?? []), ...localOnly];
+			}
+		}
+		_resolvedActivity = { ...d, messagesByIssue: mergedMessages };
+	}
+
 	$: {
 		if (data.activityData instanceof Promise) {
-			_resolvedActivity = null;
-			data.activityData.then((d) => { _resolvedActivity = d; });
+			data.activityData.then((d) => { if (d) mergeAndSetActivity(d); });
 		} else if (data.activityData) {
 			_resolvedActivity = data.activityData;
 		}
@@ -92,8 +113,7 @@
 	let _resolvedLogs = null;
 	$: {
 		if (data.activityLogsData instanceof Promise) {
-			_resolvedLogs = null;
-			data.activityLogsData.then((d) => { _resolvedLogs = d; });
+			data.activityLogsData.then((d) => { if (d) _resolvedLogs = d; });
 		} else if (data.activityLogsData) {
 			_resolvedLogs = data.activityLogsData;
 		}
