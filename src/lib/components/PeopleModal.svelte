@@ -2,6 +2,7 @@
 	import { fade, scale } from 'svelte/transition';
 	import { createEventDispatcher } from 'svelte';
 	import { page } from '$app/stores';
+	import { updatePersonInCache } from '$lib/stores/peopleCache.js';
 
 	/** @type {{ id?: string, name?: string, email?: string, role?: string, trade?: string, notes?: string } | null} */
 	export let person = null;
@@ -67,26 +68,54 @@
 				error = 'Something went wrong.';
 				return;
 			}
-			if (!isEdit) {
-				const tempId = globalThis.crypto?.randomUUID
-					? `temp-${globalThis.crypto.randomUUID()}`
-					: `temp-${Date.now()}`;
-				optimisticId = tempId;
-				dispatch('optimistic', {
-					id: tempId,
+			if (isEdit) {
+				const previousPerson = { ...person };
+				const optimisticPerson = {
+					...previousPerson,
 					name: trimmedName,
 					email: trimmedEmail,
 					role,
 					trade: role === 'vendor' ? trimmedTrade : null,
-					notes: trimmedNotes || null,
-					pending: inviteEligible
-				});
+					notes: trimmedNotes || null
+				};
+				updatePersonInCache(optimisticPerson);
+				close();
+				try {
+					const res = await fetch('/api/people', {
+						method: 'PATCH',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ id: personId, workspace: $page.params.workspace, name: trimmedName, email: trimmedEmail, role, trade: role === 'vendor' ? trimmedTrade : null, notes: trimmedNotes || null })
+					});
+					const json = await res.json();
+					if (res.ok) {
+						updatePersonInCache(json);
+					} else {
+						updatePersonInCache(previousPerson);
+					}
+				} catch {
+					updatePersonInCache(previousPerson);
+				} finally {
+					submitting = false;
+				}
+				return;
 			}
+			const tempId = globalThis.crypto?.randomUUID
+				? `temp-${globalThis.crypto.randomUUID()}`
+				: `temp-${Date.now()}`;
+			optimisticId = tempId;
+			dispatch('optimistic', {
+				id: tempId,
+				name: trimmedName,
+				email: trimmedEmail,
+				role,
+				trade: role === 'vendor' ? trimmedTrade : null,
+				notes: trimmedNotes || null,
+				pending: inviteEligible
+			});
 			const res = await fetch('/api/people', {
-				method: isEdit ? 'PATCH' : 'POST',
+				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					...(isEdit ? { id: personId } : {}),
 					workspace: $page.params.workspace,
 					name: trimmedName,
 					email: trimmedEmail,
@@ -103,12 +132,8 @@
 				}
 				error = json.error ?? 'Something went wrong.';
 			} else {
-				if (isEdit) {
-					dispatch('saved', json);
-				} else {
-					dispatch('saved', { person: json, tempId: optimisticId });
-					optimisticId = null;
-				}
+				dispatch('saved', { person: json, tempId: optimisticId });
+				optimisticId = null;
 				close();
 			}
 		} catch (e) {
