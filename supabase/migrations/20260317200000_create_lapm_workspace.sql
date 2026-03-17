@@ -1,3 +1,8 @@
+alter table public.workspaces
+  drop constraint if exists workspaces_admin_user_id_key;
+
+drop index if exists workspaces_admin_user_id_key;
+
 insert into public.workspaces (name, slug, admin_user_id)
 select 'LAPM', 'lapm', '089ed731-51c8-48a8-af30-8967841bf268'
 where not exists (
