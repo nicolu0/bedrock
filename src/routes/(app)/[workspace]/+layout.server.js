@@ -15,7 +15,7 @@ export const load = async ({ locals, params, depends }) => {
 			data: { session }
 		},
 		,
-		{ data: adminWorkspace }
+		{ data: workspaceBySlug }
 	] = await Promise.all([
 		locals.supabase.auth.getSession(),
 		ensureWorkspace(locals.supabase, locals.user),
@@ -23,20 +23,19 @@ export const load = async ({ locals, params, depends }) => {
 			.from('workspaces')
 			.select('id, name, slug, admin_user_id')
 			.eq('slug', params.workspace)
-			.eq('admin_user_id', locals.user.id)
 			.maybeSingle()
 	]);
-	if (adminWorkspace?.slug) {
+	if (workspaceBySlug?.admin_user_id === locals.user.id) {
 		const properties = loadPropertiesList(
 			locals.supabase,
 			supabaseAdmin,
-			adminWorkspace.id,
+			workspaceBySlug.id,
 			'admin',
 			locals.user.id
 		);
-		const units = loadUnitsList(locals.supabase, supabaseAdmin, adminWorkspace.id, 'admin');
+		const units = loadUnitsList(locals.supabase, supabaseAdmin, workspaceBySlug.id, 'admin');
 		return {
-			workspace: adminWorkspace,
+			workspace: workspaceBySlug,
 			properties,
 			units,
 			userId: locals.user.id,
@@ -48,18 +47,18 @@ export const load = async ({ locals, params, depends }) => {
 	}
 	const { data: memberWorkspace } = await supabaseAdmin
 		.from('people')
-		.select('role, workspaces:workspaces(id, name, slug)')
+		.select('role')
 		.eq('user_id', locals.user.id)
-		.eq('workspaces.slug', params.workspace)
+		.eq('workspace_id', workspaceBySlug?.id ?? '')
 		.maybeSingle();
-	if (memberWorkspace?.workspaces?.slug) {
+	if (memberWorkspace?.role && workspaceBySlug?.id) {
 		let ownerPersonId = null;
 		const normalizedRole = (memberWorkspace.role ?? '').toLowerCase();
 		if (normalizedRole === 'owner') {
 			const { data: ownerPerson } = await supabaseAdmin
 				.from('people')
 				.select('id')
-				.eq('workspace_id', memberWorkspace.workspaces.id)
+				.eq('workspace_id', workspaceBySlug.id)
 				.eq('user_id', locals.user.id)
 				.maybeSingle();
 			ownerPersonId = ownerPerson?.id ?? null;
@@ -68,19 +67,19 @@ export const load = async ({ locals, params, depends }) => {
 		const properties = loadPropertiesList(
 			locals.supabase,
 			supabaseAdmin,
-			memberWorkspace.workspaces.id,
+			workspaceBySlug.id,
 			normalizedRole,
 			ownerScopeId
 		);
 		const units = loadUnitsList(
 			locals.supabase,
 			supabaseAdmin,
-			memberWorkspace.workspaces.id,
+			workspaceBySlug.id,
 			normalizedRole,
 			ownerScopeId
 		);
 		return {
-			workspace: memberWorkspace.workspaces,
+			workspace: workspaceBySlug,
 			properties,
 			units,
 			userId: locals.user.id,
@@ -91,12 +90,7 @@ export const load = async ({ locals, params, depends }) => {
 		};
 	}
 	// Check if the workspace slug exists at all
-	const { data: existingWorkspace } = await supabaseAdmin
-		.from('workspaces')
-		.select('slug')
-		.eq('slug', params.workspace)
-		.maybeSingle();
-	if (!existingWorkspace) {
+	if (!workspaceBySlug) {
 		throw error(404, "This workspace doesn't exist.");
 	}
 	throw error(403, "You don't have access to this workspace.");
