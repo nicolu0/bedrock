@@ -106,23 +106,41 @@ export const GET = async ({ url }) => {
 			.eq('slug', slug)
 			.eq('admin_user_id', id)
 			.maybeSingle();
+		console.log('gmail-callback workspace-check admin', {
+			user_id: id,
+			slug,
+			workspace_id: adminWorkspace?.id ?? null
+		});
 		if (adminWorkspace?.id) return adminWorkspace.id;
-		const { data: memberWorkspace } = await supabaseAdmin
+		const { data: memberWorkspace, error: memberWorkspaceError } = await supabaseAdmin
 			.from('people')
-			.select('workspaces:workspaces(id, slug)')
+			.select('workspace_id, workspaces!inner(id, slug)')
 			.eq('user_id', id)
 			.eq('workspaces.slug', slug)
 			.maybeSingle();
+		console.log('gmail-callback workspace-check people', {
+			user_id: id,
+			slug,
+			workspace_id: memberWorkspace?.workspaces?.id ?? null,
+			error: memberWorkspaceError?.message ?? null
+		});
 		if (memberWorkspace?.workspaces?.id) return memberWorkspace.workspaces.id;
-		const { data: membershipWorkspace } = await supabaseAdmin
+		const { data: membershipWorkspace, error: membershipWorkspaceError } = await supabaseAdmin
 			.from('members')
-			.select('workspaces:workspaces(id, slug)')
+			.select('workspace_id, workspaces!inner(id, slug)')
 			.eq('user_id', id)
 			.eq('workspaces.slug', slug)
 			.maybeSingle();
+		console.log('gmail-callback workspace-check members', {
+			user_id: id,
+			slug,
+			workspace_id: membershipWorkspace?.workspaces?.id ?? null,
+			error: membershipWorkspaceError?.message ?? null
+		});
 		return membershipWorkspace?.workspaces?.id ?? null;
 	};
 
+	console.log('gmail-callback state parsed', { user_id: userId, workspace_slug: workspaceSlug });
 	const workspaceId = await resolveWorkspaceIdForUser(workspaceSlug, userId);
 	if (!workspaceId) {
 		return new Response('Workspace not found for user', { status: 400 });
@@ -131,22 +149,39 @@ export const GET = async ({ url }) => {
 	const { data: existingConnection } = await supabaseAdmin
 		.from('gmail_connections')
 		.select('id, refresh_token')
-		.eq('user_id', userId)
+		.eq('email', profile.emailAddress.toLowerCase())
 		.maybeSingle();
 
-	const { data: connectionRow, error: upsertError } = await supabaseAdmin
-		.from('gmail_connections')
-		.upsert({
-			user_id: userId,
-			workspace_id: workspaceId,
-			email: profile.emailAddress.toLowerCase(),
-			access_token: tokenData.access_token,
-			refresh_token: tokenData.refresh_token ?? existingConnection?.refresh_token ?? null,
-			expires_at: expiresAt,
-			updated_at: new Date().toISOString()
-		})
-		.select('id')
-		.single();
+	const connectionPayload = {
+		user_id: userId,
+		workspace_id: workspaceId,
+		email: profile.emailAddress.toLowerCase(),
+		access_token: tokenData.access_token,
+		refresh_token: tokenData.refresh_token ?? existingConnection?.refresh_token ?? null,
+		expires_at: expiresAt,
+		updated_at: new Date().toISOString()
+	};
+
+	let connectionRow = null;
+	let upsertError = null;
+	if (existingConnection?.id) {
+		const { data, error } = await supabaseAdmin
+			.from('gmail_connections')
+			.update(connectionPayload)
+			.eq('id', existingConnection.id)
+			.select('id')
+			.single();
+		connectionRow = data ?? null;
+		upsertError = error ?? null;
+	} else {
+		const { data, error } = await supabaseAdmin
+			.from('gmail_connections')
+			.insert(connectionPayload)
+			.select('id')
+			.single();
+		connectionRow = data ?? null;
+		upsertError = error ?? null;
+	}
 
 	if (upsertError) {
 		return new Response(`Failed to store Gmail tokens: ${upsertError.message}`, { status: 500 });
