@@ -10,7 +10,7 @@
 
 	export let data;
 
-	const tabs = ['All issues', 'Subscribed', 'Activity'];
+	const tabs = ['All issues'];
 	const sidebarControl = getContext('sidebarControl');
 	const openSidebar = () => sidebarControl?.open?.();
 	let showNewIssueModal = false;
@@ -22,6 +22,12 @@
 	let newIssueAssigneeId = '';
 	let createIssueError = '';
 	let creatingIssue = false;
+	let filterOpen = false;
+	let filterCategoryOpen = false;
+	let filterValueOpen = false;
+	let filterCategory = 'assignee';
+	let filterValue = 'any';
+	let filteredSections = [];
 
 	$: _resolvedIssues =
 		$issuesCache?.workspace === $page.params.workspace && $issuesCache?.data
@@ -47,10 +53,31 @@
 	}
 
 	$: sections = _resolvedIssues?.sections ?? [];
+	const normalizeStatusKey = (value) => {
+		if (!value) return 'todo';
+		const normalized = value
+			.toString()
+			.toLowerCase()
+			.trim()
+			.replace(/\s+/g, '_')
+			.replace(/-/g, '_');
+		if (normalized === 'in_progress') return 'in_progress';
+		if (normalized === 'done' || normalized === 'completed' || normalized === 'complete')
+			return 'done';
+		if (normalized === 'todo' || normalized === 'to_do' || normalized === 'backlog') return 'todo';
+		return normalized;
+	};
+
 	$: expandedSections = sections.map((section) => {
 		const rows = section.items.flatMap((item) => {
 			const subRows = (item.subIssues ?? []).map((subIssue) => {
 				const assigneeId = subIssue.assigneeId ?? subIssue.assignee_id ?? null;
+				const propertyId =
+					subIssue.propertyId ??
+					subIssue.property_id ??
+					item.propertyId ??
+					item.property_id ??
+					null;
 				return {
 					...subIssue,
 					issueId: subIssue.issueId ?? item.issueId,
@@ -59,16 +86,23 @@
 					assigneeId,
 					assigneeBadge: getAssigneeBadge(assigneeId, membersByUserId),
 					property: subIssue.property ?? item.property,
+					propertyId,
+					property_id: propertyId,
 					unit: subIssue.unit ?? item.unit,
+					status: normalizeStatusKey(subIssue.status ?? item.status ?? section.id),
 					isSubIssue: true
 				};
 			});
 			const assigneeId = item.assigneeId ?? item.assignee_id ?? null;
+			const propertyId = item.propertyId ?? item.property_id ?? null;
 			return [
 				{
 					...item,
 					assigneeId,
 					assigneeBadge: getAssigneeBadge(assigneeId, membersByUserId),
+					propertyId,
+					property_id: propertyId,
+					status: normalizeStatusKey(item.status ?? section.id),
 					isSubIssue: item.isSubIssue ?? false
 				},
 				...subRows
@@ -138,6 +172,11 @@
 		{ value: 'in_progress', label: 'In Progress' },
 		{ value: 'done', label: 'Done' }
 	];
+	const filterCategories = [
+		{ value: 'assignee', label: 'Assignee' },
+		{ value: 'status', label: 'Status' },
+		{ value: 'building', label: 'Building' }
+	];
 
 	const slugify = (value) => {
 		if (!value) return 'issue';
@@ -197,6 +236,71 @@
 		return '';
 	};
 
+	let filterValueOptions = [];
+	$: {
+		if (filterCategory === 'assignee') {
+			const assigneeOptions = [...members]
+				.filter((member) => {
+					const role = (member?.role ?? '').toLowerCase();
+					return Boolean(member?.user_id) && (role === 'admin' || role === 'member');
+				})
+				.map((member) => ({
+					value: member.user_id,
+					label: member.users?.name ?? member.name ?? 'Member'
+				}))
+				.sort((a, b) => a.label.localeCompare(b.label));
+			filterValueOptions = [
+				{ value: 'any', label: 'Any assignee' },
+				{ value: 'unassigned', label: 'Unassigned' },
+				...assigneeOptions
+			].filter((option) => option.value);
+		} else if (filterCategory === 'status') {
+			filterValueOptions = [{ value: 'any', label: 'Any status' }, ...statusOptions];
+		} else if (filterCategory === 'building') {
+			filterValueOptions = [
+				{ value: 'any', label: 'Any building' },
+				...properties.map((property) => ({
+					value: property.id,
+					label: property.name
+				}))
+			].filter((option) => option.value);
+		} else {
+			filterValueOptions = [{ value: 'any', label: 'Any' }];
+		}
+	}
+	$: selectedCategory =
+		filterCategories.find((option) => option.value === filterCategory) ?? filterCategories[0];
+	$: {
+		if (!filterValueOptions.some((option) => option.value === filterValue)) {
+			filterValue = filterValueOptions[0]?.value ?? 'any';
+		}
+	}
+	$: selectedValue =
+		filterValueOptions.find((option) => option.value === filterValue) ?? filterValueOptions[0];
+
+	$: filteredSections = expandedSections
+		.map((section) => {
+			const rows = (section.rows ?? []).filter((row) => {
+				if (filterCategory === 'assignee') {
+					if (filterValue === 'any') return true;
+					if (filterValue === 'unassigned') return !row.assigneeId;
+					return String(row.assigneeId ?? '') === String(filterValue);
+				}
+				if (filterCategory === 'status') {
+					if (filterValue === 'any') return true;
+					return String(row.status ?? '') === String(filterValue);
+				}
+				if (filterCategory === 'building') {
+					if (filterValue === 'any') return true;
+					return String(row.propertyId ?? row.property_id ?? '') === String(filterValue);
+				}
+				return true;
+			});
+			return { ...section, rows, count: rows.length };
+		})
+		.filter((section) => section.rows.length > 0);
+	$: hasActiveFilter = filterValue !== 'any';
+
 	const openNewIssueModal = () => {
 		showNewIssueModal = true;
 		createIssueError = '';
@@ -220,6 +324,28 @@
 		newIssueAssigneeId = '';
 		createIssueError = '';
 		document.activeElement?.blur();
+	};
+
+	const closeFilterMenus = () => {
+		filterOpen = false;
+		filterCategoryOpen = false;
+		filterValueOpen = false;
+	};
+
+	const handleFilterCategorySelect = (next) => {
+		filterCategory = next;
+		filterValue = 'any';
+		filterCategoryOpen = false;
+		filterValueOpen = false;
+	};
+
+	const handleFilterValueSelect = (next) => {
+		filterValue = next;
+		filterValueOpen = false;
+	};
+
+	const onWindowClick = () => {
+		if (filterOpen || filterCategoryOpen || filterValueOpen) closeFilterMenus();
 	};
 
 	const handlePropertyChange = (event) => {
@@ -280,7 +406,7 @@
 	};
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window on:click={onWindowClick} on:keydown={onKeydown} />
 
 <div>
 	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
@@ -330,34 +456,134 @@
 			{/each}
 		</div>
 		<div class="flex items-center gap-4 text-xs text-neutral-500">
-			<button class="inline-flex items-center gap-2 hover:text-neutral-800" type="button">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="16"
-					height="16"
-					fill="currentColor"
-					viewBox="0 0 16 16"
+			<div class="relative" on:click|stopPropagation>
+				<button
+					class="inline-flex items-center gap-2 hover:text-neutral-800"
+					type="button"
+					aria-expanded={filterOpen}
+					on:click|stopPropagation={() => {
+						filterOpen = !filterOpen;
+						filterCategoryOpen = false;
+						filterValueOpen = false;
+					}}
 				>
-					<path
-						d="M6 10.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5m-2-3a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5m-2-3a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5"
-					/>
-				</svg>
-				Filter
-			</button>
-			<button class="inline-flex items-center gap-2 hover:text-neutral-800" type="button">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="16"
-					height="16"
-					fill="currentColor"
-					viewBox="0 0 16 16"
-				>
-					<path
-						d="M4 3.5a.5.5 0 0 1 .5-.5H12a.5.5 0 0 1 0 1H4.5a.5.5 0 0 1-.5-.5m0 9a.5.5 0 0 1 .5-.5H12a.5.5 0 0 1 0 1H4.5a.5.5 0 0 1-.5-.5m0-4.5a.5.5 0 0 1 .5-.5H12a.5.5 0 0 1 0 1H4.5a.5.5 0 0 1-.5-.5m-2.5-3a1 1 0 1 1 0-2 1 1 0 0 1 0 2m0 9a1 1 0 1 1 0-2 1 1 0 0 1 0 2m0-4.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2"
-					/>
-				</svg>
-				Display
-			</button>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="16"
+						height="16"
+						fill="currentColor"
+						viewBox="0 0 16 16"
+					>
+						<path
+							d="M6 10.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5m-2-3a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5m-2-3a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5"
+						/>
+					</svg>
+					Filter
+				</button>
+				{#if filterOpen}
+					<div
+						class="absolute right-0 z-20 mt-2 w-72 origin-top-right rounded-md border border-neutral-200 bg-white py-2 text-xs text-neutral-700 shadow-lg"
+						on:click|stopPropagation
+					>
+						<div class="flex items-center gap-2 px-3 py-2">
+							<div class="relative flex-1">
+								<button
+									type="button"
+									class="flex w-full items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white px-2.5 py-1 text-left text-xs text-neutral-700 transition hover:bg-neutral-50"
+									on:click|stopPropagation={() => {
+										filterCategoryOpen = !filterCategoryOpen;
+										filterValueOpen = false;
+									}}
+								>
+									<span class="truncate">{selectedCategory?.label ?? 'Category'}</span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="12"
+										height="12"
+										fill="currentColor"
+										viewBox="0 0 16 16"
+									>
+										<path
+											d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+										/>
+									</svg>
+								</button>
+								{#if filterCategoryOpen}
+									<div
+										class="absolute left-0 z-30 mt-2 w-full rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+										on:click|stopPropagation
+									>
+										{#each filterCategories as option}
+											<button
+												type="button"
+												class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+													filterCategory === option.value ? 'bg-neutral-50' : ''
+												}`}
+												on:click|stopPropagation={() => handleFilterCategorySelect(option.value)}
+											>
+												<span>{option.label}</span>
+												{#if filterCategory === option.value}
+													<span class="text-[10px] text-neutral-400">Selected</span>
+												{/if}
+											</button>
+										{/each}
+									</div>
+								{/if}
+							</div>
+							<div class="relative flex-1">
+								<button
+									type="button"
+									disabled={!filterValueOptions.length}
+									class={`flex w-full items-center justify-between gap-2 rounded-md border border-neutral-200 bg-white px-2.5 py-1 text-left text-xs text-neutral-700 transition hover:bg-neutral-50 ${
+										filterValueOptions.length ? '' : 'cursor-not-allowed opacity-60'
+									}`}
+									on:click|stopPropagation={() => {
+										if (!filterValueOptions.length) return;
+										filterValueOpen = !filterValueOpen;
+										filterCategoryOpen = false;
+									}}
+								>
+									<span class="truncate">{selectedValue?.label ?? 'Value'}</span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="12"
+										height="12"
+										fill="currentColor"
+										viewBox="0 0 16 16"
+									>
+										<path
+											d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+										/>
+									</svg>
+								</button>
+								{#if filterValueOpen}
+									{#key filterCategory}
+										<div
+											class="absolute left-0 z-30 mt-2 w-full rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+											on:click|stopPropagation
+										>
+											{#each filterValueOptions as option}
+												<button
+													type="button"
+													class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+														filterValue === option.value ? 'bg-neutral-50' : ''
+													}`}
+													on:click={() => handleFilterValueSelect(option.value)}
+												>
+													<span>{option.label}</span>
+													{#if filterValue === option.value}
+														<span class="text-[10px] text-neutral-400">Selected</span>
+													{/if}
+												</button>
+											{/each}
+										</div>
+									{/key}
+								{/if}
+							</div>
+						</div>
+					</div>
+				{/if}
+			</div>
 		</div>
 	</div>
 
@@ -372,11 +598,13 @@
 				</div>
 			{/each}
 		</div>
-	{:else if sections.length === 0}
-		<div class="px-6 py-8 text-sm text-neutral-400">No issues assigned to you.</div>
+	{:else if filteredSections.length === 0}
+		<div class="px-6 py-8 text-sm text-neutral-400">
+			{hasActiveFilter ? 'No issues match the current filter.' : 'No issues assigned to you.'}
+		</div>
 	{:else}
 		<div class="divide-y divide-neutral-100">
-			{#each expandedSections as section}
+			{#each filteredSections as section}
 				<div>
 					<div
 						class="flex items-center justify-between border-y border-neutral-200 bg-stone-50 px-6 py-2 text-sm text-neutral-600"

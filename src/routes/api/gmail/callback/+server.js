@@ -98,6 +98,36 @@ export const GET = async ({ url }) => {
 	const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 	const [userId, workspaceSlug] = state.split(':');
 
+	const resolveWorkspaceIdForUser = async (slug, id) => {
+		if (!slug || !id) return null;
+		const { data: adminWorkspace } = await supabaseAdmin
+			.from('workspaces')
+			.select('id')
+			.eq('slug', slug)
+			.eq('admin_user_id', id)
+			.maybeSingle();
+		if (adminWorkspace?.id) return adminWorkspace.id;
+		const { data: memberWorkspace } = await supabaseAdmin
+			.from('people')
+			.select('workspaces:workspaces(id, slug)')
+			.eq('user_id', id)
+			.eq('workspaces.slug', slug)
+			.maybeSingle();
+		if (memberWorkspace?.workspaces?.id) return memberWorkspace.workspaces.id;
+		const { data: membershipWorkspace } = await supabaseAdmin
+			.from('members')
+			.select('workspaces:workspaces(id, slug)')
+			.eq('user_id', id)
+			.eq('workspaces.slug', slug)
+			.maybeSingle();
+		return membershipWorkspace?.workspaces?.id ?? null;
+	};
+
+	const workspaceId = await resolveWorkspaceIdForUser(workspaceSlug, userId);
+	if (!workspaceId) {
+		return new Response('Workspace not found for user', { status: 400 });
+	}
+
 	const { data: existingConnection } = await supabaseAdmin
 		.from('gmail_connections')
 		.select('id, refresh_token')
@@ -108,6 +138,7 @@ export const GET = async ({ url }) => {
 		.from('gmail_connections')
 		.upsert({
 			user_id: userId,
+			workspace_id: workspaceId,
 			email: profile.emailAddress.toLowerCase(),
 			access_token: tokenData.access_token,
 			refresh_token: tokenData.refresh_token ?? existingConnection?.refresh_token ?? null,

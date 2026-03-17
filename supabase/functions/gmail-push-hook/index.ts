@@ -368,7 +368,14 @@ const getWorkspaceIdForUser = async (userId: string) => {
 		.eq('user_id', userId)
 		.in('role', ['admin', 'member', 'owner'])
 		.maybeSingle();
-	return data?.workspace_id ?? null;
+	if (data?.workspace_id) return data.workspace_id;
+	const { data: member } = await supabase
+		.from('members')
+		.select('workspace_id')
+		.eq('user_id', userId)
+		.in('role', ['admin', 'member', 'owner'])
+		.maybeSingle();
+	return member?.workspace_id ?? null;
 };
 
 const getWorkspacePersonMatch = async ({
@@ -1699,7 +1706,8 @@ const processMessage = async ({
 	const normalizedBody = html ? stripHtml(decodedBody) : decodedBody.trim();
 	const cleanedBody = trimQuotedReply(normalizedBody);
 
-	const workspaceIdForConnection = await getWorkspaceIdForUser(connection.user_id);
+	const workspaceIdForConnection =
+		connection.workspace_id ?? (await getWorkspaceIdForUser(connection.user_id));
 	if (!workspaceIdForConnection) {
 		await logError(connection.user_id, `Workspace lookup failed for user ${connection.user_id}`);
 		return;

@@ -162,7 +162,14 @@ const getWorkspaceIdForUser = async (userId) => {
 		.eq('user_id', userId)
 		.in('role', ['admin', 'member', 'owner'])
 		.maybeSingle();
-	return data?.workspace_id ?? null;
+	if (data?.workspace_id) return data.workspace_id;
+	const { data: member } = await supabase
+		.from('members')
+		.select('workspace_id')
+		.eq('user_id', userId)
+		.in('role', ['admin', 'member', 'owner'])
+		.maybeSingle();
+	return member?.workspace_id ?? null;
 };
 
 const getWorkspacePersonMatch = async ({ workspaceId, senderEmail }) => {
@@ -211,6 +218,10 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 	const { subject: messageSubject, from: messageFrom } = extractHeaders(messageHeaders);
 	const senderEmail = normalizeEmail(extractEmail(messageFrom));
 	if (pmEmail && senderEmail === pmEmail) {
+		console.log('gmail-push skip-self', {
+			email: pmEmail,
+			sender_email: senderEmail
+		});
 		await insertIngestionLog({
 			userId: connection.user_id,
 			source: 'gmail-push',
@@ -230,6 +241,9 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 		.maybeSingle();
 
 	if (existingMessage?.id) {
+		console.log('gmail-push skip-duplicate-message', {
+			external_id: message.id
+		});
 		await insertIngestionLog({
 			userId: connection.user_id,
 			source: 'gmail-push',
@@ -248,8 +262,12 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 	const normalizedBody = html ? stripHtml(decodedBody) : decodedBody.trim();
 	const cleanedBody = trimQuotedReply(normalizedBody);
 
-	const workspaceIdForConnection = await getWorkspaceIdForUser(connection.user_id);
+	const workspaceIdForConnection =
+		connection.workspace_id ?? (await getWorkspaceIdForUser(connection.user_id));
 	if (!workspaceIdForConnection) {
+		console.log('gmail-push skip-missing-workspace', {
+			user_id: connection.user_id
+		});
 		await logError(connection.user_id, `Workspace lookup failed for user ${connection.user_id}`);
 		return;
 	}
@@ -264,6 +282,9 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 		senderEmail
 	});
 	if (blockPolicy) {
+		console.log('gmail-push skip-blocked-sender', {
+			sender_email: senderEmail
+		});
 		await insertIngestionLog({
 			userId: connection.user_id,
 			source: 'gmail-push',
@@ -277,6 +298,9 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 
 	const isBulk = isBulkMessage(messageHeaders);
 	if (isBulk && !allowPolicy) {
+		console.log('gmail-push skip-bulk', {
+			sender_email: senderEmail
+		});
 		await insertIngestionLog({
 			userId: connection.user_id,
 			source: 'gmail-push',
@@ -290,6 +314,9 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 
 	const isRelevant = allowPolicy || isRelevantEmail(messageSubject, cleanedBody);
 	if (!isRelevant) {
+		console.log('gmail-push skip-nonrelevant', {
+			sender_email: senderEmail
+		});
 		await insertIngestionLog({
 			userId: connection.user_id,
 			source: 'gmail-push',
@@ -310,6 +337,9 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 
 	if (!tenant?.id || !tenant.unit_id) {
 		if (!isKnownSender) {
+			console.log('gmail-push skip-unknown-sender', {
+				sender_email: senderEmail
+			});
 			await insertIngestionLog({
 				userId: connection.user_id,
 				source: 'gmail-push',
@@ -396,6 +426,10 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 			lockAcquired = Boolean(staleLockRow?.id);
 		}
 		if (!lockAcquired) {
+			console.log('gmail-push lock-skip', {
+				thread_id: threadRow.id,
+				external_thread_id: threadExternalId
+			});
 			await insertIngestionLog({
 				userId: connection.user_id,
 				source: 'gmail-push',
@@ -494,28 +528,71 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 			const userName = userProfile?.name ?? 'Bedrock';
 			const workspaceUnits = await listWorkspaceUnitsForAgent(workspaceIdForConnection);
 
-			const created = await runAgent({
-				subject: messageSubject,
-				body: cleanedBody,
-				senderEmail,
-				unitId: null,
-				unitName: null,
-				workspaceId: workspaceIdForConnection,
-				propertyName: null,
-				threadId: threadRow.id,
+			await insertIngestionLog({
 				userId: connection.user_id,
-				policyText,
-				tenantName: null,
-				tenantEmail: null,
-				userName,
-				defaultSenderEmail: connection.email ?? null,
-				replyMessageId: inboundMessageId,
-				rootIssueId: rootIssueIdForAgent,
-				threadIssueId: issueId,
-				relatedIssues,
-				workspaceUnits
+				source: 'gmail-push',
+				detail: JSON.stringify({
+					phase: 'agent-start',
+					thread_id: threadRow.id,
+					external_id: message.id,
+					workspace_id: workspaceIdForConnection,
+					sender_email: senderEmail
+				})
 			});
+			console.log('gmail-push agent-start', {
+				thread_id: threadRow.id,
+				external_id: message.id,
+				workspace_id: workspaceIdForConnection,
+				sender_email: senderEmail
+			});
+
+			let created = null;
+			try {
+				created = await runAgent({
+					subject: messageSubject,
+					body: cleanedBody,
+					senderEmail,
+					unitId: null,
+					unitName: null,
+					workspaceId: workspaceIdForConnection,
+					propertyName: null,
+					threadId: threadRow.id,
+					userId: connection.user_id,
+					policyText,
+					tenantName: null,
+					tenantEmail: null,
+					userName,
+					defaultSenderEmail: connection.email ?? null,
+					replyMessageId: inboundMessageId,
+					rootIssueId: rootIssueIdForAgent,
+					threadIssueId: issueId,
+					relatedIssues,
+					workspaceUnits
+				});
+			} catch (err) {
+				await insertIngestionLog({
+					userId: connection.user_id,
+					source: 'gmail-agent-error',
+					detail: JSON.stringify({
+						phase: 'agent-run-failed',
+						thread_id: threadRow.id,
+						external_id: message.id,
+						error: err?.message ?? 'unknown'
+					})
+				});
+				throw err;
+			}
 			issueId = created?.issueId ?? issueId;
+			await insertIngestionLog({
+				userId: connection.user_id,
+				source: 'gmail-push',
+				detail: JSON.stringify({
+					phase: 'agent-complete',
+					thread_id: threadRow.id,
+					external_id: message.id,
+					issue_id: issueId ?? null
+				})
+			});
 
 			if (issueId) {
 				await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
@@ -534,6 +611,9 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 		.maybeSingle();
 
 	if (!unitRow?.id || !unitRow.property_id) {
+		console.log('gmail-push skip-missing-unit', {
+			tenant_id: tenant.id
+		});
 		await logError(connection.user_id, `Unit lookup failed for tenant ${tenant.id}`);
 		return;
 	}
@@ -545,6 +625,9 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 		.maybeSingle();
 
 	if (!propertyRow?.workspace_id) {
+		console.log('gmail-push skip-missing-property-workspace', {
+			unit_id: unitRow.id
+		});
 		await logError(connection.user_id, `Workspace lookup failed for unit ${unitRow.id}`);
 		return;
 	}
@@ -627,6 +710,10 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 		lockAcquired = Boolean(staleLockRow?.id);
 	}
 	if (!lockAcquired) {
+		console.log('gmail-push lock-skip', {
+			thread_id: threadRow.id,
+			external_thread_id: threadExternalId
+		});
 		await insertIngestionLog({
 			userId: connection.user_id,
 			source: 'gmail-push',
@@ -719,28 +806,83 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 			.maybeSingle();
 		const userName = userProfile?.name ?? 'Bedrock';
 		const workspaceUnits = await listWorkspaceUnitsForAgent(propertyRow.workspace_id);
-		const created = await runAgent({
-			subject: messageSubject,
-			body: cleanedBody,
-			senderEmail,
-			unitId: unitRow.id,
-			unitName: unitRow.name ?? null,
-			workspaceId: propertyRow.workspace_id,
-			propertyName: propertyRow.name ?? null,
-			threadId: threadRow.id,
+		await insertIngestionLog({
 			userId: connection.user_id,
-			policyText,
-			tenantName: tenant.name ?? null,
-			tenantEmail: tenant.email ?? null,
-			userName,
-			defaultSenderEmail: connection.email ?? null,
-			replyMessageId: inboundMessageId,
-			rootIssueId: rootIssueIdForAgent,
-			threadIssueId: issueId,
-			relatedIssues,
-			workspaceUnits
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'agent-start',
+				thread_id: threadRow.id,
+				external_id: message.id,
+				workspace_id: propertyRow.workspace_id,
+				sender_email: senderEmail,
+				tenant_id: tenant.id
+			})
 		});
+		console.log('gmail-push agent-start', {
+			thread_id: threadRow.id,
+			external_id: message.id,
+			workspace_id: propertyRow.workspace_id,
+			sender_email: senderEmail,
+			tenant_id: tenant.id
+		});
+
+		let created = null;
+		try {
+			created = await runAgent({
+				subject: messageSubject,
+				body: cleanedBody,
+				senderEmail,
+				unitId: unitRow.id,
+				unitName: unitRow.name ?? null,
+				workspaceId: propertyRow.workspace_id,
+				propertyName: propertyRow.name ?? null,
+				threadId: threadRow.id,
+				userId: connection.user_id,
+				policyText,
+				tenantName: tenant.name ?? null,
+				tenantEmail: tenant.email ?? null,
+				userName,
+				defaultSenderEmail: connection.email ?? null,
+				replyMessageId: inboundMessageId,
+				rootIssueId: rootIssueIdForAgent,
+				threadIssueId: issueId,
+				relatedIssues,
+				workspaceUnits
+			});
+		} catch (err) {
+			await insertIngestionLog({
+				userId: connection.user_id,
+				source: 'gmail-agent-error',
+				detail: JSON.stringify({
+					phase: 'agent-run-failed',
+					thread_id: threadRow.id,
+					external_id: message.id,
+					error: err?.message ?? 'unknown'
+				})
+			});
+			console.log('gmail-push agent-run-failed', {
+				thread_id: threadRow.id,
+				external_id: message.id,
+				error: err?.message ?? 'unknown'
+			});
+			throw err;
+		}
 		issueId = created?.issueId ?? issueId;
+		await insertIngestionLog({
+			userId: connection.user_id,
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'agent-complete',
+				thread_id: threadRow.id,
+				external_id: message.id,
+				issue_id: issueId ?? null
+			})
+		});
+		console.log('gmail-push agent-complete', {
+			thread_id: threadRow.id,
+			external_id: message.id,
+			issue_id: issueId ?? null
+		});
 
 		if (issueId) {
 			await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
@@ -842,6 +984,9 @@ export const handleGmailPubsub = async ({ body, runAgent }) => {
 		.maybeSingle();
 
 	if (!connection) {
+		console.log('gmail-push skip-no-connection', {
+			email: normalizedEmail
+		});
 		return { status: 200, body: { status: 'ignored' } };
 	}
 
@@ -857,6 +1002,10 @@ export const handleGmailPubsub = async ({ body, runAgent }) => {
 	});
 
 	if (connection.mode === 'write') {
+		console.log('gmail-push skip-write-mode', {
+			email: normalizedEmail,
+			connection_id: connection.id
+		});
 		return { status: 200, body: { status: 'skip' } };
 	}
 
@@ -902,6 +1051,16 @@ export const handleGmailPubsub = async ({ body, runAgent }) => {
 			});
 			return { status: 200, body: { status: 'reset' } };
 		}
+		await insertIngestionLog({
+			userId: connection.user_id,
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'history-error',
+				history_id: historyId,
+				stored_history_id: storedHistoryId,
+				error: err?.message ?? 'unknown'
+			})
+		});
 		console.error('gmail-push history error', err);
 		throw err;
 	}
@@ -917,6 +1076,10 @@ export const handleGmailPubsub = async ({ body, runAgent }) => {
 	}
 
 	if (!messageIds.size) {
+		console.log('gmail-push history-empty', {
+			history_id: historyId,
+			stored_history_id: storedHistoryId
+		});
 		await insertIngestionLog({
 			userId: connection.user_id,
 			source: 'gmail-push',
@@ -929,11 +1092,27 @@ export const handleGmailPubsub = async ({ body, runAgent }) => {
 	}
 
 	for (const messageId of messageIds) {
-		const message = await fetchMessage(accessToken, messageId);
-		if (!message) {
-			continue;
+		try {
+			const message = await fetchMessage(accessToken, messageId);
+			if (!message) {
+				continue;
+			}
+			await processMessage({ connection, accessToken, message, runAgent });
+		} catch (err) {
+			console.log('gmail-push process-message-failed', {
+				message_id: messageId,
+				error: err?.message ?? 'unknown'
+			});
+			await insertIngestionLog({
+				userId: connection.user_id,
+				source: 'gmail-agent-error',
+				detail: JSON.stringify({
+					phase: 'process-message-failed',
+					message_id: messageId,
+					error: err?.message ?? 'unknown'
+				})
+			});
 		}
-		await processMessage({ connection, accessToken, message, runAgent });
 	}
 
 	console.log('gmail-push processed', {

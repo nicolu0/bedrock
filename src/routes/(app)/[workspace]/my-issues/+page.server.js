@@ -8,9 +8,7 @@ export const load = async ({ parent, depends }) => {
 	const parentData = await parent();
 	const { workspace, userId, role, ownerPersonId } = parentData;
 
-	const canViewPeople = role === 'admin' || role === 'member';
-
-	const members = canViewPeople ? loadPeopleMembers(workspace.id) : [];
+	const members = loadPeopleMembers(workspace.id);
 	const issuesData = loadIssuesData(workspace.id, userId, role, ownerPersonId);
 
 	return { issuesData, members };

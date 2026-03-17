@@ -124,11 +124,8 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 
 	const normalizedIssues = (issues ?? []).map((issue) => {
 		const unit = unitMap.get(issue.unit_id);
-		const property = unit
-			? propertyMap.get(unit.property_id)
-			: issue.property_id
-				? propertyMap.get(issue.property_id)
-				: null;
+		const resolvedPropertyId = issue.property_id ?? unit?.property_id ?? null;
+		const property = resolvedPropertyId ? propertyMap.get(resolvedPropertyId) : null;
 		const status = _normalizeStatus(issue.status);
 		return {
 			id: issue.id,
@@ -140,8 +137,8 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 			assigneeId: issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? null,
 			property: property?.name ?? 'Unknown',
-			propertyId: issue.property_id ?? null,
-			property_id: issue.property_id ?? null,
+			propertyId: resolvedPropertyId,
+			property_id: resolvedPropertyId,
 			unit: unit?.name ?? 'Unknown',
 			issueNumber: issue.issue_number ?? null,
 			readableId: issue.readable_id ?? null,
@@ -184,6 +181,8 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 				title: subIssue.title,
 				parentTitle: issue.title,
 				property: subIssue.property,
+				propertyId: subIssue.propertyId ?? subIssue.property_id ?? null,
+				property_id: subIssue.property_id ?? subIssue.propertyId ?? null,
 				unit: subIssue.unit,
 				issueNumber: subIssue.issueNumber,
 				readableId: subIssue.readableId,
@@ -199,6 +198,8 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
 			property: issue.property,
+			propertyId: issue.propertyId ?? issue.property_id ?? null,
+			property_id: issue.property_id ?? issue.propertyId ?? null,
 			unit: issue.unit,
 			issueNumber: issue.issueNumber,
 			readableId: issue.readableId,
@@ -221,6 +222,8 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
 			property: issue.property,
+			propertyId: issue.propertyId ?? issue.property_id ?? null,
+			property_id: issue.property_id ?? issue.propertyId ?? null,
 			unit: issue.unit,
 			issueNumber: issue.issueNumber,
 			readableId: issue.readableId,
