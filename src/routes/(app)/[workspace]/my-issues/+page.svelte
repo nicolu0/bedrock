@@ -10,7 +10,7 @@
 
 	export let data;
 
-	const tabs = ['All issues', 'Subscribed', 'Activity'];
+	const tabs = ['All issues'];
 	const sidebarControl = getContext('sidebarControl');
 	const openSidebar = () => sidebarControl?.open?.();
 	let showNewIssueModal = false;
@@ -343,20 +343,6 @@
 					/>
 				</svg>
 				Filter
-			</button>
-			<button class="inline-flex items-center gap-2 hover:text-neutral-800" type="button">
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="16"
-					height="16"
-					fill="currentColor"
-					viewBox="0 0 16 16"
-				>
-					<path
-						d="M4 3.5a.5.5 0 0 1 .5-.5H12a.5.5 0 0 1 0 1H4.5a.5.5 0 0 1-.5-.5m0 9a.5.5 0 0 1 .5-.5H12a.5.5 0 0 1 0 1H4.5a.5.5 0 0 1-.5-.5m0-4.5a.5.5 0 0 1 .5-.5H12a.5.5 0 0 1 0 1H4.5a.5.5 0 0 1-.5-.5m-2.5-3a1 1 0 1 1 0-2 1 1 0 0 1 0 2m0 9a1 1 0 1 1 0-2 1 1 0 0 1 0 2m0-4.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2"
-					/>
-				</svg>
-				Display
 			</button>
 		</div>
 	</div>
