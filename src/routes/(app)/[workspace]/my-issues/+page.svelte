@@ -1,6 +1,5 @@
 <script>
 	// @ts-nocheck
-	import { get } from 'svelte/store';
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
@@ -14,19 +13,17 @@
 	const sidebarControl = getContext('sidebarControl');
 	const openSidebar = () => sidebarControl?.open?.();
 
-	const _cachedState = browser ? get(issuesCache) : null;
-	let _resolvedIssues =
-		_cachedState?.workspace === $page.params.workspace && _cachedState?.data
-			? _cachedState.data
+	$: _resolvedIssues =
+		$issuesCache?.workspace === $page.params.workspace && $issuesCache?.data
+			? $issuesCache.data
 			: null;
 	$: {
 		if (data.issuesData instanceof Promise) {
+			const loadStartedAt = Date.now();
 			data.issuesData.then((d) => {
-				_resolvedIssues = d;
-				if (browser) primeIssuesCache($page.params.workspace, d);
+				if (browser) primeIssuesCache($page.params.workspace, d, loadStartedAt);
 			});
 		} else if (data.issuesData) {
-			_resolvedIssues = data.issuesData;
 			if (browser) primeIssuesCache($page.params.workspace, data.issuesData);
 		}
 	}

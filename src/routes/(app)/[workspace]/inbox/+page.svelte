@@ -2,7 +2,8 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { invalidate } from '$app/navigation';
-	import { updateNotificationInCache } from '$lib/stores/notificationsCache';
+	import { browser } from '$app/environment';
+	import { notificationsCache, updateNotificationInCache, primeNotificationsCache } from '$lib/stores/notificationsCache';
 	import IssuePanel from '$lib/components/IssuePanel.svelte';
 	import PolicyPanel from '$lib/components/PolicyPanel.svelte';
 	import { fly } from 'svelte/transition';
@@ -17,12 +18,18 @@
 	let localReadIds = new Set();
 	let localResolvedIds = new Set();
 
-	let _resolvedNotifications = null;
+	$: _resolvedNotifications =
+		$notificationsCache?.workspace === $page.params.workspace && $notificationsCache?.data
+			? $notificationsCache.data
+			: null;
 	$: {
 		if (data.notificationsData instanceof Promise) {
-			data.notificationsData.then((d) => { _resolvedNotifications = d; });
+			const loadStartedAt = Date.now();
+			data.notificationsData.then((d) => {
+				if (browser) primeNotificationsCache($page.params.workspace, d, loadStartedAt);
+			});
 		} else if (data.notificationsData) {
-			_resolvedNotifications = data.notificationsData;
+			if (browser) primeNotificationsCache($page.params.workspace, data.notificationsData);
 		}
 	}
 
@@ -57,10 +64,15 @@
 		is_resolved: n.is_resolved || localResolvedIds.has(n.id)
 	}));
 
-	// Reset local optimistic sets when server data changes
-	$: if (notifications) {
-		localReadIds = new Set();
-		localResolvedIds = new Set();
+	// Reset local optimistic sets only when notification IDs actually change
+	let _prevNotifIds = '';
+	$: {
+		const ids = (notifications ?? []).map((n) => n.id).join(',');
+		if (ids !== _prevNotifIds) {
+			_prevNotifIds = ids;
+			localReadIds = new Set();
+			localResolvedIds = new Set();
+		}
 	}
 
 	$: filtered =

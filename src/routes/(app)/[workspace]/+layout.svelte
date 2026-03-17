@@ -7,6 +7,7 @@
 	import { browser } from '$app/environment';
 	import { goto, invalidate } from '$app/navigation';
 	import { issuesCache, ensureIssuesCache } from '$lib/stores/issuesCache';
+	import { notificationsCache, ensureNotificationsCache } from '$lib/stores/notificationsCache';
 	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
 import { pageReady } from '$lib/stores/pageReady';
@@ -258,6 +259,7 @@ import { pageReady } from '$lib/stores/pageReady';
 
 	$: if (browser && workspaceSlug) {
 		ensureIssuesCache(workspaceSlug);
+		ensureNotificationsCache(workspaceSlug);
 		if (canViewPeople) {
 			ensurePeopleMembersCache(workspaceSlug);
 			ensurePeopleCache(workspaceSlug);
@@ -272,8 +274,8 @@ import { pageReady } from '$lib/stores/pageReady';
 	let _rtActivityV = 0, _doneActivityV = 0;
 	let _rtLogsV = 0, _doneLogsV = 0;
 
-	$: if (_rtIssuesV > _doneIssuesV) { _doneIssuesV = _rtIssuesV; invalidate('app:issues'); }
-	$: if (_rtNotifsV > _doneNotifsV) { _doneNotifsV = _rtNotifsV; invalidate('app:notifications'); }
+	$: if (_rtIssuesV > _doneIssuesV) { _doneIssuesV = _rtIssuesV; invalidate('app:issues'); if (browser) ensureIssuesCache(workspaceSlug, { force: true }); }
+	$: if (_rtNotifsV > _doneNotifsV) { _doneNotifsV = _rtNotifsV; invalidate('app:notifications'); if (browser) ensureNotificationsCache(workspaceSlug, { force: true }); }
 	$: if (_rtActivityV > _doneActivityV) { _doneActivityV = _rtActivityV; invalidate('app:activity'); }
 	$: if (_rtLogsV > _doneLogsV) { _doneLogsV = _rtLogsV; invalidate('app:activityLogs'); }
 

@@ -2,6 +2,7 @@ import { browser } from '$app/environment';
 
 const CACHE_KEYS = [
 	'issues-cache-v4',
+	'notifications-cache-v1',
 	'people-cache-v1',
 	'people-cache-deleted-v1',
 	'people-members-cache-v2'
