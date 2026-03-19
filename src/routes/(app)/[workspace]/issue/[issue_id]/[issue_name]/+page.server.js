@@ -50,12 +50,13 @@ export const load = async ({ parent, params, depends }) => {
 		const { data } = await supabaseAdmin
 			.from('issues')
 			.select(
-				'id, name, status, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, properties(name), units(name, property_id, properties(name))'
+				'id, name, description, status, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, properties(name), units(name, property_id, properties(name))'
 			)
 			.eq('parent_id', issue.id);
 		return (data ?? []).map((s) => ({
 			id: s.id,
 			name: s.name,
+			description: s.description ?? null,
 			status: s.status,
 			issueNumber: s.issue_number ?? null,
 			readableId: s.readable_id ?? null,
