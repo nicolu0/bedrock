@@ -199,7 +199,7 @@
 				const payload = await response.json().catch(() => null);
 				sentMessage = payload?.message ?? null;
 				isSent = true;
-				dispatch('sent', { issueId: draft.issue_id ?? null });
+				dispatch('sent', { issueId: draft.issue_id ?? null, message: sentMessage });
 			}
 		} catch {
 			// ignore send failures

@@ -23,27 +23,9 @@ const _normalizeStatus = (value) => {
 };
 
 export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonId) => {
-	console.log(
-		'[loadIssuesData] called — workspaceId:',
-		workspaceId,
-		'userId:',
-		userId,
-		'role:',
-		userRole,
-		'ownerPersonId:',
-		ownerPersonId ?? null
-	);
-	console.log('[loadIssuesData] fetching directly from Supabase (no cache)');
-
 	const role = (userRole ?? '').toLowerCase();
 	const isAssigneeScoped = role === 'member' || role === 'vendor';
 	const isOwnerScoped = role === 'owner';
-	console.log(
-		'[loadIssuesData] filter mode — isAssigneeScoped:',
-		isAssigneeScoped,
-		'isOwnerScoped:',
-		isOwnerScoped
-	);
 
 	let ownerUnitIds = [];
 	if (isOwnerScoped && ownerPersonId) {
@@ -73,7 +55,6 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 	};
 
 	let { data: issues } = await buildIssuesQuery();
-	console.log('[loadIssuesData] primary query returned', issues?.length ?? 0, 'issues');
 
 	if (!issues?.length) {
 		const { data: fallbackUnits } = await supabaseAdmin
@@ -101,7 +82,6 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 			}
 			const { data: fallbackIssues } = await fallbackQuery;
 			issues = fallbackIssues ?? [];
-			console.log('[loadIssuesData] fallback query returned', issues.length, 'issues');
 		}
 	}
 
@@ -253,18 +233,6 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 		.select('id, name')
 		.eq('id', userId)
 		.maybeSingle();
-
-	const sampleTitles = normalizedIssues
-		.slice(0, 3)
-		.map((i) => `${i.readableId ?? i.id}:"${i.title}"`);
-	console.log(
-		'[loadIssuesData] returning — totalIssues:',
-		normalizedIssues.length,
-		'filteredSections:',
-		filteredSections.length,
-		'samples:',
-		sampleTitles
-	);
 
 	return { sections: filteredSections, issues: normalizedIssues, assignee, workspaceId };
 };

@@ -1,8 +1,45 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import DispatchVendorsDemo from '$lib/components/DispatchVendorsDemo.svelte';
 	import ProcessInvoicesDemo from '$lib/components/ProcessInvoicesDemo.svelte';
 	import TriageIssuesDemo from '$lib/components/TriageIssuesDemo.svelte';
 	import skyline from '$lib/assets/skyline.png';
+
+	const CAL_LINK = 'nicoluo/30min';
+
+	onMount(() => {
+		// Cal.com requires its stub queue to exist before the script loads.
+		// The stub intercepts calls made before load and replays them once ready.
+		const p = (a: { q: unknown[][] }, ar: unknown[]) => a.q.push(ar);
+		window.Cal =
+			window.Cal ||
+			function (...args: unknown[]) {
+				const cal = window.Cal;
+				if (!cal.loaded) {
+					cal.ns = {};
+					cal.q = cal.q || [];
+					document.head.appendChild(document.createElement('script')).src =
+						'https://app.cal.com/embed/embed.js';
+					cal.loaded = true;
+				}
+				if (args[0] === 'init') {
+					const api = Object.assign((...a: unknown[]) => p(api as unknown as { q: unknown[][] }, a), { q: [] as unknown[][] });
+					const namespace = args[1];
+					typeof namespace === 'string'
+						? ((cal.ns![namespace] = api) && p(api, args))
+						: p(cal as unknown as { q: unknown[][] }, args);
+					return;
+				}
+				p(cal as unknown as { q: unknown[][] }, args);
+			};
+
+		window.Cal('init', { origin: 'https://cal.com' });
+		window.Cal('ui', {
+			styles: { branding: { brandColor: '#292524' } },
+			hideEventTypeDetails: false,
+			layout: 'month_view'
+		});
+	});
 
 	type DemoItem = {
 		id: string;
@@ -106,14 +143,13 @@
 			</nav>
 			<div class="flex items-center gap-4">
 				<a class="text-sm text-neutral-600 hover:text-neutral-900" href="/login">Log in</a>
-				<a
+				<button
+					data-cal-link={CAL_LINK}
+					data-cal-namespace=""
 					class="rounded-xl bg-stone-800 px-4 py-2 text-xs text-neutral-200 transition-colors hover:bg-stone-700"
-					href="https://calendly.com/21andrewch/30min"
-					target="_blank"
-					rel="noreferrer"
 				>
 					Book a demo
-				</a>
+				</button>
 			</div>
 		</div>
 	</header>
@@ -130,14 +166,13 @@
 					>
 				</p>
 				<div class="anim-cta mt-7 flex items-center gap-3">
-					<a
-						href="https://calendly.com/21andrewch/30min"
-						target="_blank"
-						rel="noreferrer"
+					<button
+						data-cal-link={CAL_LINK}
+						data-cal-namespace=""
 						class="inline-flex flex-row items-center gap-1 rounded-xl bg-stone-800 px-4.5 py-2 text-[15px] text-neutral-200 transition-colors hover:bg-stone-700"
 					>
 						Book a demo
-					</a>
+					</button>
 					<a
 						href="/signup"
 						class="inline-flex flex-row items-center gap-1 rounded-xl border border-stone-300 bg-white px-4.5 py-2 text-[15px] text-stone-800 transition-colors hover:bg-stone-100"
@@ -546,14 +581,13 @@
 			class="relative z-10 mx-auto flex min-h-[450px] max-w-7xl flex-col items-center justify-center px-6 py-20 text-center"
 		>
 			<h2 class="text-6xl font-medium text-stone-800">Try Bedrock now.</h2>
-			<a
+			<button
+				data-cal-link={CAL_LINK}
+				data-cal-namespace=""
 				class="mt-6 rounded-xl bg-stone-800 px-6 py-2.5 text-sm text-neutral-100 transition-colors hover:bg-stone-700"
-				href="https://calendly.com/21andrewch/30min"
-				target="_blank"
-				rel="noreferrer"
 			>
 				Contact us
-			</a>
+			</button>
 		</div>
 		<div class="absolute inset-x-0 bottom-8 z-10 text-center text-sm text-stone-500">
 			© {new Date().getFullYear()} Bedrock

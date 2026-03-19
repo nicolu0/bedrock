@@ -279,11 +279,13 @@
 		_doneLogsV = 0;
 
 	$: if (_rtIssuesV > _doneIssuesV) {
+		console.log('[RT] invalidating issues, v:', _rtIssuesV);
 		_doneIssuesV = _rtIssuesV;
 		invalidate('app:issues');
 		if (browser) ensureIssuesCache(workspaceSlug, { force: true });
 	}
 	$: if (_rtNotifsV > _doneNotifsV) {
+		console.log('[RT] invalidating notifications, v:', _rtNotifsV);
 		_doneNotifsV = _rtNotifsV;
 		invalidate('app:notifications');
 		if (browser) ensureNotificationsCache(workspaceSlug, { force: true });
@@ -316,6 +318,7 @@
 				'postgres_changes',
 				{ event: '*', schema: 'public', table: 'issues', filter: `workspace_id=eq.${wid}` },
 				() => {
+					console.log('[RT] issues event');
 					_rtIssuesV++;
 				}
 			)
@@ -324,6 +327,7 @@
 				'postgres_changes',
 				{ event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` },
 				() => {
+					console.log('[RT] notifications event');
 					_rtNotifsV++;
 				}
 			)
@@ -353,6 +357,7 @@
 			)
 
 			.subscribe((status) => {
+				console.log('[RT] channel status:', status);
 				if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
 					_rtIssuesV++;
 					_rtNotifsV++;

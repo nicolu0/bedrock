@@ -2,7 +2,7 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
-	import { goto, invalidate } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
 	import {
 		addPersonToCache,
@@ -52,7 +52,6 @@
 			updatePersonInCache(person);
 		}
 		closeNewPersonModal();
-		invalidate('app:people');
 	};
 </script>
 

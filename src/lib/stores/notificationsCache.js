@@ -73,17 +73,19 @@ export const ensureNotificationsCache = async (workspaceSlug, options = {}) => {
 		return cached.data;
 	}
 
-	// Deduplicate concurrent fetches
-	if (inFlight) return inFlight;
+	// Deduplicate concurrent fetches (but allow force to bypass)
+	if (!force && inFlight) return inFlight;
 
 	notificationsCache.update((s) => ({ ...s, loading: true }));
 
 	inFlight = (async () => {
 		try {
+			console.log('[RT] notificationsCache: fetching (force:', force, ')');
 			const res = await fetcher(`/api/notifications-cache?workspace=${workspaceSlug}`);
 			if (!res.ok) throw new Error('Notifications cache fetch failed');
 			const data = await res.json();
 			if (data?.notifications) {
+				console.log('[RT] notificationsCache: fetch complete, count:', data.notifications.length);
 				const fetchedAt = Date.now();
 				notificationsCache.set({
 					workspace: workspaceSlug,
@@ -124,6 +126,8 @@ export const updateNotificationInCache = (notification) => {
 		const notifications = state.data.notifications.map((n) =>
 			n.id === notification.id ? { ...n, ...notification } : n
 		);
-		return { ...state, data: { ...state.data, notifications } };
+		const newState = { ...state, data: { ...state.data, notifications } };
+		writeSessionCache({ workspace: newState.workspace, data: newState.data, fetchedAt: newState.fetchedAt });
+		return newState;
 	});
 };

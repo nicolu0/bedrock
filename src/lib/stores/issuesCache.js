@@ -244,6 +244,7 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 		return inFlight;
 	}
 	if (force && inFlight) {
+		console.log('[RT] issuesCache: force fetch bypassing inFlight');
 	}
 
 	issuesCache.set({
@@ -256,6 +257,7 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 
 	inFlight = (async () => {
 		try {
+			console.log('[RT] issuesCache: fetching (force:', force, ')');
 			const response = await fetcher(`/api/issues-cache?workspace=${workspaceSlug}`);
 			if (!response.ok) {
 				throw new Error('Issues cache fetch failed');
@@ -272,6 +274,7 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 			if (!shouldOverwrite) {
 			}
 			if (shouldOverwrite) {
+				console.log('[RT] issuesCache: fetch complete, sections:', nextSections, 'issues:', nextIssues);
 				primeIssuesCache(workspaceSlug, data, payload.fetchedAt);
 				return data;
 			}

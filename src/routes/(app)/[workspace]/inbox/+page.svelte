@@ -1,7 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
-	import { invalidate } from '$app/navigation';
+
 	import { browser } from '$app/environment';
 	import {
 		notificationsCache,
@@ -102,7 +102,6 @@
 		updateNotificationInCache({ id: selectedNotification.id, is_resolved: true });
 		if (next) handleClick(next);
 		else selectedNotification = null;
-		invalidate('app:notifications');
 	}
 
 	let _resolvedVendors = [];
@@ -148,6 +147,7 @@
 		selectedNotification = n;
 		if (!n.is_read && !localReadIds.has(n.id)) {
 			localReadIds = new Set([...localReadIds, n.id]);
+			updateNotificationInCache({ id: n.id, is_read: true });
 			fetch('/api/notifications/mark-read', {
 				method: 'POST',
 				keepalive: true,

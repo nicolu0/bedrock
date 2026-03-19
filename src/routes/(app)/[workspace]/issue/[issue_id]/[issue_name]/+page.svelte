@@ -80,12 +80,28 @@
 	}
 
 	let _resolvedActivity = null;
+
+	// Defined as a plain function (not inside a $: block) so Svelte's static
+	// dependency analysis doesn't treat `messagesByIssue` as a reactive dep of
+	// the block below — which would cause a _resolvedActivity → messagesByIssue
+	// → _resolvedActivity cycle.
+	function mergeAndSetActivity(d) {
+		const serverIds = new Set(
+			Object.values(d.messagesByIssue ?? {}).flat().map((m) => m.id)
+		);
+		const mergedMessages = { ...d.messagesByIssue };
+		for (const [id, msgs] of Object.entries(messagesByIssue)) {
+			const localOnly = msgs.filter((m) => !serverIds.has(m.id));
+			if (localOnly.length) {
+				mergedMessages[id] = [...(mergedMessages[id] ?? []), ...localOnly];
+			}
+		}
+		_resolvedActivity = { ...d, messagesByIssue: mergedMessages };
+	}
+
 	$: {
 		if (data.activityData instanceof Promise) {
-			_resolvedActivity = null;
-			data.activityData.then((d) => {
-				_resolvedActivity = d;
-			});
+			data.activityData.then((d) => { if (d) mergeAndSetActivity(d); });
 		} else if (data.activityData) {
 			_resolvedActivity = data.activityData;
 		}
@@ -95,9 +111,7 @@
 	$: {
 		if (data.activityLogsData instanceof Promise) {
 			_resolvedLogs = null;
-			data.activityLogsData.then((d) => {
-				_resolvedLogs = d;
-			});
+			data.activityLogsData.then((d) => { if (d) _resolvedLogs = d; });
 		} else if (data.activityLogsData) {
 			_resolvedLogs = data.activityLogsData;
 		}
@@ -794,8 +808,8 @@
 		return (statusConfig[nextStatus]?.label ?? nextStatus).toString();
 	};
 
-	const collectMessagesForIssue = (id) => {
-		const messages = messagesByIssue[id] ?? [];
+	const collectMessagesForIssue = (mbi, id) => {
+		const messages = mbi[id] ?? [];
 		return [...messages].sort((a, b) => {
 			const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
 			const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
@@ -817,7 +831,7 @@
 
 	const getThreadSubject = (id) => {
 		if (!id) return '';
-		const messages = collectMessagesForIssue(id);
+		const messages = collectMessagesForIssue(messagesByIssue, id);
 		const messageSubject = messages.find((msg) => msg?.subject)?.subject ?? '';
 		const draftSubject = (draftsByIssue[id] ?? []).find((draft) => draft?.subject)?.subject ?? '';
 		return messageSubject || draftSubject || '';
@@ -1257,7 +1271,7 @@
 											</div>
 										{/if}
 										<div class="space-y-3 pl-11">
-											{#each collectMessagesForIssue(issueId) as message}
+											{#each collectMessagesForIssue(messagesByIssue, issueId) as message}
 												<EmailMessageWithDraft
 													message={{
 														...message,
@@ -1278,6 +1292,7 @@
 													}}
 													{draft}
 													{vendors}
+													on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
 												/>
 											{/each}
 										</div>
@@ -1317,6 +1332,7 @@
 													}}
 													{draft}
 													{vendors}
+													on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
 												/>
 											{/each}
 										</div>
@@ -1528,7 +1544,7 @@
 																</div>
 															{/if}
 															<div class="space-y-3 pl-11">
-																{#each collectMessagesForIssue(subIssue.id) as message}
+																{#each collectMessagesForIssue(messagesByIssue, subIssue.id) as message}
 																	<EmailMessageWithDraft
 																		message={{
 																			...message,
@@ -1549,6 +1565,7 @@
 																		}}
 																		{draft}
 																		{vendors}
+																		on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
 																	/>
 																{/each}
 															</div>
@@ -1590,6 +1607,7 @@
 																		}}
 																		{draft}
 																		{vendors}
+																		on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
 																	/>
 																{/each}
 															</div>

@@ -279,17 +279,21 @@
 	async function deleteProperty(property) {
 		if (!property?.id) return;
 		openRowMenu = null;
+
+		const previous = _properties;
+		_properties = _properties.filter((p) => p.id !== property.id);
+
 		try {
 			const res = await fetch('/api/properties', {
 				method: 'DELETE',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ id: property.id, workspace: workspaceSlug })
 			});
-			if (!res.ok) {
-				throw new Error('Failed to delete property');
-			}
+			if (!res.ok) throw new Error('Failed to delete property');
+			invalidate('app:properties');
 		} catch (error) {
 			console.error(error);
+			_properties = previous;
 		}
 	}
 	function getInitials(name) {
