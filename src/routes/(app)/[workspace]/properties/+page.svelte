@@ -5,6 +5,7 @@
 	import { getContext, onMount } from 'svelte';
 	import { invalidate } from '$app/navigation';
 	import { peopleCache } from '$lib/stores/peopleCache.js';
+	import { propertiesCache } from '$lib/stores/propertiesCache.js';
 
 	export let data;
 
@@ -22,18 +23,18 @@
 				: `${ownerFallbackName} (You)`
 			: '';
 
-	// data.properties from layout may be a streaming Promise
-	let _properties = [];
+	// data.properties from layout may be a streaming Promise; sync into shared store
 	$: {
 		const propData = data.properties;
 		if (propData instanceof Promise) {
 			propData.then((list) => {
-				if (Array.isArray(list)) _properties = list;
+				if (Array.isArray(list)) propertiesCache.set(list);
 			});
 		} else if (Array.isArray(propData)) {
-			_properties = propData;
+			propertiesCache.set(propData);
 		}
 	}
+	$: _properties = $propertiesCache ?? [];
 	$: properties = _properties;
 
 	$: owners = data.owners ?? [];
@@ -245,34 +246,41 @@
 	async function handleUpdateProperty(e) {
 		updatePropertyError = '';
 		if (!editingProperty?.id) return;
-		updating = true;
+
+		const previous = _properties;
+		const updated = {
+			...editingProperty,
+			name: editPropertyName.trim(),
+			address: editPropertyAddress.trim(),
+			city: editPropertyCity.trim(),
+			state: editPropertyState.trim(),
+			postal_code: editPropertyPostalCode.trim(),
+			country: editPropertyCountry.trim(),
+			owner_id: editPropertyOwnerId?.trim() ? editPropertyOwnerId.trim() : null
+		};
+		propertiesCache.set(_properties.map((p) => (p.id === editingProperty.id ? updated : p)));
+		closeEditPropertyModal();
+
 		try {
 			const res = await fetch('/api/properties', {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					workspace: workspaceSlug,
-					propertyId: editingProperty.id,
-					name: editPropertyName.trim(),
-					address: editPropertyAddress.trim(),
-					city: editPropertyCity.trim(),
-					state: editPropertyState.trim(),
-					postalCode: editPropertyPostalCode.trim(),
-					country: editPropertyCountry.trim(),
-					ownerId: editPropertyOwnerId?.trim() ? editPropertyOwnerId.trim() : null
+					propertyId: updated.id,
+					name: updated.name,
+					address: updated.address,
+					city: updated.city,
+					state: updated.state,
+					postalCode: updated.postal_code,
+					country: updated.country,
+					ownerId: updated.owner_id
 				})
 			});
-			const result = await res.json();
-			if (!res.ok) {
-				updatePropertyError = result?.error ?? 'Unable to update property.';
-				return;
-			}
-			closeEditPropertyModal();
+			if (!res.ok) throw new Error('Failed to update property');
 			invalidate('app:properties');
 		} catch {
-			updatePropertyError = 'Unable to update property.';
-		} finally {
-			updating = false;
+			propertiesCache.set(previous);
 		}
 	}
 
@@ -281,7 +289,7 @@
 		openRowMenu = null;
 
 		const previous = _properties;
-		_properties = _properties.filter((p) => p.id !== property.id);
+		propertiesCache.set(_properties.filter((p) => p.id !== property.id));
 
 		try {
 			const res = await fetch('/api/properties', {
@@ -293,7 +301,7 @@
 			invalidate('app:properties');
 		} catch (error) {
 			console.error(error);
-			_properties = previous;
+			propertiesCache.set(previous);
 		}
 	}
 	function getInitials(name) {
