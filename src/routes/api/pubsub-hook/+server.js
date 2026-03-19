@@ -13,6 +13,20 @@ const decodeBase64Url = (input) => {
 	return Buffer.from(normalized + pad, 'base64').toString('utf-8');
 };
 
+const isGreaterHistoryId = (nextValue, currentValue) => {
+	if (!nextValue || !currentValue) return Boolean(nextValue);
+	try {
+		const next = BigInt(nextValue);
+		const current = BigInt(currentValue);
+		return next > current;
+	} catch {
+		if (nextValue.length !== currentValue.length) {
+			return nextValue.length > currentValue.length;
+		}
+		return nextValue > currentValue;
+	}
+};
+
 const isPubsubSecretValid = (request) => {
 	if (!AGENT_WEBHOOK_SECRET) return false;
 	const headerSecret = request.headers.get(agentSecretHeader) ?? '';
@@ -28,13 +42,24 @@ const kickAgent = ({ jobId }) => {
 	void fetch(url, {
 		method: 'POST',
 		headers: {
+			apikey: SUPABASE_SERVICE_ROLE_KEY,
 			Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
 			'Content-Type': 'application/json'
 		},
 		body: JSON.stringify(payload)
-	}).catch((err) => {
-		console.error('pubsub-hook kick failed', err);
-	});
+	})
+		.then(async (response) => {
+			if (!response.ok) {
+				const detail = await response.text().catch(() => '');
+				console.error('pubsub-hook kick failed', {
+					status: response.status,
+					detail
+				});
+			}
+		})
+		.catch((err) => {
+			console.error('pubsub-hook kick failed', err);
+		});
 };
 
 export const POST = async ({ request }) => {
@@ -78,6 +103,43 @@ export const POST = async ({ request }) => {
 		return json({ error: 'Invalid Pub/Sub payload' }, { status: 400 });
 	}
 
+	console.log('pubsub-hook received', {
+		email,
+		history_id: historyId
+	});
+
+	const { data: existingPending } = await supabaseAdmin
+		.from('jobs')
+		.select('id, payload')
+		.eq('source', 'gmail')
+		.eq('status', 'pending')
+		.eq('payload->>email', email)
+		.order('created_at', { ascending: false })
+		.limit(1)
+		.maybeSingle();
+
+	if (existingPending?.id) {
+		const existingHistoryId = existingPending.payload?.history_id
+			? String(existingPending.payload.history_id)
+			: '';
+		if (isGreaterHistoryId(historyId, existingHistoryId)) {
+			await supabaseAdmin
+				.from('jobs')
+				.update({
+					payload: { email, history_id: historyId },
+					updated_at: new Date().toISOString()
+				})
+				.eq('id', existingPending.id);
+		}
+		console.log('pubsub-hook coalesced', {
+			job_id: existingPending.id,
+			email,
+			history_id: historyId
+		});
+		kickAgent({ jobId: existingPending.id });
+		return json({ status: 'coalesced', job_id: existingPending.id }, { status: 200 });
+	}
+
 	const { data: jobRow, error: jobError } = await supabaseAdmin
 		.from('jobs')
 		.insert({
@@ -97,9 +159,28 @@ export const POST = async ({ request }) => {
 		return json({ error: 'Job insert failed' }, { status: 500 });
 	}
 
+	console.log('pubsub-hook job-queued', {
+		job_id: jobRow?.id ?? null,
+		email,
+		history_id: historyId
+	});
+
+	if (jobRow?.id) {
+		await supabaseAdmin
+			.from('jobs')
+			.delete()
+			.eq('status', 'pending')
+			.eq('source', 'gmail')
+			.eq('payload->>email', email)
+			.neq('id', jobRow.id);
+	}
+
 	if (jobRow?.id) {
 		kickAgent({ jobId: jobRow.id });
 	}
 
+	console.log('pubsub-hook ack', {
+		job_id: jobRow?.id ?? null
+	});
 	return json({ status: 'queued', job_id: jobRow?.id ?? null }, { status: 200 });
 };

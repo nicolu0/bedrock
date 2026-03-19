@@ -2262,6 +2262,7 @@ export const POST = async ({ request, locals }) => {
 	const response = await fetch(`${PUBLIC_SUPABASE_URL}/functions/v1/agent`, {
 		method: 'POST',
 		headers: {
+			apikey: SUPABASE_SERVICE_ROLE_KEY,
 			Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
 			'Content-Type': 'application/json'
 		},

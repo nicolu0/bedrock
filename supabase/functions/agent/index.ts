@@ -1692,11 +1692,6 @@ const processMessage = async ({
 		return;
 	}
 
-	const personMatch = await getWorkspacePersonMatch({
-		workspaceId: workspaceIdForConnection,
-		senderEmail
-	});
-
 	const { allow: allowPolicy, block: blockPolicy } = await getPolicyMatch({
 		workspaceId: workspaceIdForConnection,
 		senderEmail
@@ -1744,224 +1739,15 @@ const processMessage = async ({
 		.select('id, unit_id, email, name')
 		.ilike('email', senderEmail)
 		.maybeSingle();
-	const isKnownSender = Boolean(tenant?.id) || Boolean(personMatch?.id);
-
 	if (!tenant?.id || !tenant.unit_id) {
-		if (!isKnownSender) {
-			await insertIngestionLog({
-				userId: connection.user_id,
-				source: 'gmail-push',
-				detail: JSON.stringify({
-					phase: 'skip-unknown-sender',
-					sender_email: senderEmail
-				})
-			});
-			return;
-		}
-		const threadExternalId = message.threadId ?? null;
-		let threadRow = null;
-		if (threadExternalId) {
-			const { error: insertError } = await supabase.from('threads').upsert(
-				{
-					tenant_id: null,
-					participant_type: 'unknown',
-					participant_id: null,
-					name: messageSubject || 'Gmail thread',
-					external_id: threadExternalId,
-					connection_id: connection.id,
-					workspace_id: workspaceIdForConnection
-				},
-				{ onConflict: 'external_id', ignoreDuplicates: true }
-			);
-			if (insertError) {
-				await logError(
-					connection.user_id,
-					`Unknown thread upsert failed: ${insertError?.message ?? 'unknown'}`
-				);
-				return;
-			}
-			const { data: existingThread } = await supabase
-				.from('threads')
-				.select('id, issue_id')
-				.eq('external_id', threadExternalId)
-				.maybeSingle();
-			threadRow = existingThread ?? null;
-		}
-
-		if (!threadRow?.id) {
-			const { data: createdThread, error: threadError } = await supabase
-				.from('threads')
-				.insert({
-					tenant_id: null,
-					participant_type: 'unknown',
-					participant_id: null,
-					issue_id: null,
-					name: messageSubject || 'Gmail thread',
-					external_id: threadExternalId,
-					connection_id: connection.id,
-					workspace_id: workspaceIdForConnection
-				})
-				.select('id')
-				.single();
-			if (threadError || !createdThread?.id) {
-				await logError(
-					connection.user_id,
-					`Unknown thread insert failed: ${threadError?.message ?? 'unknown'}`
-				);
-				return;
-			}
-			threadRow = createdThread;
-		}
-
-		const lockCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-		const lockTime = new Date().toISOString();
-		const { data: lockRow } = await supabase
-			.from('threads')
-			.update({ processing_at: lockTime })
-			.eq('id', threadRow.id)
-			.is('processing_at', null)
-			.select('id')
-			.maybeSingle();
-		let lockAcquired = Boolean(lockRow?.id);
-		if (!lockAcquired) {
-			const { data: staleLockRow } = await supabase
-				.from('threads')
-				.update({ processing_at: lockTime })
-				.eq('id', threadRow.id)
-				.lt('processing_at', lockCutoff)
-				.select('id')
-				.maybeSingle();
-			lockAcquired = Boolean(staleLockRow?.id);
-		}
-		if (!lockAcquired) {
-			await insertIngestionLog({
-				userId: connection.user_id,
-				source: 'gmail-push',
-				detail: JSON.stringify({
-					phase: 'lock-skip',
-					thread_id: threadRow.id,
-					external_thread_id: threadExternalId
-				})
-			});
-			return;
-		}
-
-		try {
-			const internalDate = Number(message.internalDate ?? 0);
-			const { data: inboundMessage, error: inboundInsertError } = await supabase
-				.from('messages')
-				.insert({
-					thread_id: threadRow.id,
-					external_id: message.id,
-					message: cleanedBody,
-					sender: 'unknown',
-					subject: messageSubject,
-					timestamp: new Date(internalDate || Date.now()).toISOString(),
-					channel: 'gmail',
-					direction: 'inbound',
-					delivery_status: 'received',
-					connection_id: connection.id,
-					issue_id: threadRow.issue_id ?? null,
-					thread_external_id: threadExternalId,
-					workspace_id: workspaceIdForConnection,
-					metadata: { sender_email: senderEmail }
-				})
-				.select('id')
-				.maybeSingle();
-
-			let inboundMessageId = inboundMessage?.id ?? null;
-			if (inboundInsertError) {
-				if (inboundInsertError.code === '23505') {
-					const { data: existingInboundMessage } = await supabase
-						.from('messages')
-						.select('id')
-						.eq('external_id', message.id)
-						.maybeSingle();
-					inboundMessageId = existingInboundMessage?.id ?? null;
-					if (!inboundMessageId) {
-						return;
-					}
-				} else {
-					await logError(
-						connection.user_id,
-						`Inbound insert failed: ${inboundInsertError.message}`
-					);
-					return;
-				}
-			}
-
-			const { data: refreshedThread } = await supabase
-				.from('threads')
-				.select('issue_id')
-				.eq('id', threadRow.id)
-				.maybeSingle();
-
-			let issueId = refreshedThread?.issue_id ?? threadRow.issue_id ?? null;
-			let rootIssueIdForAgent = issueId;
-			let relatedIssues = [];
-			if (issueId) {
-				const { data: issueRow } = await supabase
-					.from('issues')
-					.select('id, name, status, parent_id')
-					.eq('id', issueId)
-					.maybeSingle();
-				rootIssueIdForAgent = issueRow?.parent_id ?? issueRow?.id ?? issueId;
-				if (rootIssueIdForAgent) {
-					const { data: related } = await supabase
-						.from('issues')
-						.select('id, name, status, parent_id')
-						.or(`id.eq.${rootIssueIdForAgent},parent_id.eq.${rootIssueIdForAgent}`);
-					relatedIssues = related ?? [];
-				}
-			}
-
-			const { data: policyRow } = await supabase
-				.from('workspace_policies')
-				.select('policy_text')
-				.eq('workspace_id', workspaceIdForConnection)
-				.in('type', ['behavior', 'allow'])
-				.order('updated_at', { ascending: false })
-				.limit(1)
-				.maybeSingle();
-			const policyText = policyRow?.policy_text ?? '';
-			const { data: userProfile } = await supabase
-				.from('users')
-				.select('name')
-				.eq('id', connection.user_id)
-				.maybeSingle();
-			const userName = userProfile?.name ?? 'Bedrock';
-			const workspaceUnits = await listWorkspaceUnitsForAgent(workspaceIdForConnection);
-
-			const created = await runIssueAgent({
-				subject: messageSubject,
-				body: cleanedBody,
-				senderEmail,
-				unitId: null,
-				unitName: null,
-				workspaceId: workspaceIdForConnection,
-				propertyName: null,
-				threadId: threadRow.id,
-				userId: connection.user_id,
-				policyText,
-				tenantName: null,
-				tenantEmail: null,
-				userName,
-				defaultSenderEmail: connection.email ?? null,
-				replyMessageId: inboundMessageId,
-				rootIssueId: rootIssueIdForAgent,
-				threadIssueId: issueId,
-				relatedIssues,
-				workspaceUnits
-			});
-			issueId = created?.issueId ?? issueId;
-
-			if (issueId) {
-				await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
-				await supabase.from('messages').update({ issue_id: issueId }).eq('thread_id', threadRow.id);
-			}
-		} finally {
-			await supabase.from('threads').update({ processing_at: null }).eq('id', threadRow.id);
-		}
+		await insertIngestionLog({
+			userId: connection.user_id,
+			source: 'gmail-push',
+			detail: JSON.stringify({
+				phase: 'skip-non-tenant',
+				sender_email: senderEmail
+			})
+		});
 		return;
 	}
 
@@ -2274,6 +2060,20 @@ const claimJob = async (jobId: string | null) => {
 	return data ?? null;
 };
 
+const resetStaleJobs = async () => {
+	const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+	const now = new Date().toISOString();
+	const { data } = await supabase
+		.from('jobs')
+		.update({ status: 'pending', updated_at: now })
+		.eq('status', 'processing')
+		.lt('updated_at', cutoff)
+		.select('id');
+	if (data?.length) {
+		console.log('agent job reset-stale', { count: data.length });
+	}
+};
+
 serve(async (req) => {
 	let currentJobId: string | null = null;
 	try {
@@ -2281,6 +2081,7 @@ serve(async (req) => {
 			return new Response('Method not allowed', { status: 405 });
 		}
 
+		await resetStaleJobs();
 		const body = await req.json().catch(() => null);
 		const jobId = typeof body?.job_id === 'string' ? body.job_id : null;
 		const directSource = typeof body?.source === 'string' ? body.source : null;
@@ -2294,6 +2095,11 @@ serve(async (req) => {
 			});
 		}
 		currentJobId = job.id;
+		console.log('agent job claimed', {
+			job_id: job.id,
+			source: job.source,
+			payload: job.payload
+		});
 
 		const source = typeof job.source === 'string' ? job.source : 'gmail';
 		if (source !== 'gmail') {
@@ -2320,6 +2126,10 @@ serve(async (req) => {
 			.maybeSingle();
 
 		if (!connection) {
+			console.log('agent job no-connection', {
+				job_id: job.id,
+				email: normalizedEmail
+			});
 			await markJobDone(job.id);
 			return new Response(JSON.stringify({ status: 'ignored' }), {
 				headers: { 'Content-Type': 'application/json' }
@@ -2328,6 +2138,10 @@ serve(async (req) => {
 
 		const lockAcquired = await acquireConnectionLock(connection.id);
 		if (!lockAcquired) {
+			console.log('agent job lock-skip', {
+				job_id: job.id,
+				connection_id: connection.id
+			});
 			await resetJob(job.id);
 			return new Response(JSON.stringify({ status: 'locked' }), {
 				headers: { 'Content-Type': 'application/json' }
@@ -2443,6 +2257,11 @@ serve(async (req) => {
 			}
 
 			const historyItems = historyResponse.history ?? [];
+			console.log('agent job history', {
+				job_id: job.id,
+				history_id: historyId,
+				items: historyItems.length
+			});
 			const messageIds = new Set<string>();
 			for (const item of historyItems) {
 				for (const msg of item.messagesAdded ?? []) {
@@ -2451,6 +2270,10 @@ serve(async (req) => {
 					}
 				}
 			}
+			console.log('agent job messages', {
+				job_id: job.id,
+				message_count: messageIds.size
+			});
 
 			if (!messageIds.size) {
 				await insertIngestionLog({
@@ -2481,6 +2304,7 @@ serve(async (req) => {
 			});
 
 			await markJobDone(job.id);
+			console.log('agent job done', { job_id: job.id });
 			return new Response(JSON.stringify({ status: 'ok' }), {
 				headers: { 'Content-Type': 'application/json' }
 			});
