@@ -27,6 +27,7 @@
 	let _completedFetches = 0;
 	let _navActive = false;
 	let _navLocked = false;
+	let _navGeneration = 0;
 	let _origFetch;
 
 	function _updateNavProgress() {
@@ -57,20 +58,26 @@
 	}
 
 	beforeNavigate(() => {
-		// If the bar is still visible/fading, ignore this navigation
 		if (_navLocked) return;
 		clearTimeout(_navShowTimer);
 		_stopCreep();
 		_navActive = true;
+		_navGeneration++;
 		_pendingFetches = 0;
 		_completedFetches = 0;
-		_navProgress = 10;
-		// Only show bar if navigation takes longer than 100ms
-		_navShowTimer = setTimeout(() => {
-			_navShowTimer = null;
-			_navVisible = true;
+		if (_navVisible) {
+			// Bar is already showing — reset to start to signal a new navigation
+			_navProgress = 10;
 			_startCreep();
-		}, 100);
+		} else {
+			_navProgress = 10;
+			// Only show bar if navigation takes longer than 100ms
+			_navShowTimer = setTimeout(() => {
+				_navShowTimer = null;
+				_navVisible = true;
+				_startCreep();
+			}, 100);
+		}
 	});
 
 	afterNavigate(() => {
@@ -164,16 +171,17 @@
 		window.fetch = async (input, init) => {
 			const url = input instanceof Request ? input.url : String(input);
 			const isDataReq = url.includes('__data.json');
+			const gen = _navGeneration;
 			if (_navActive && isDataReq) {
 				_pendingFetches++;
 				_updateNavProgress();
 			}
 			try {
 				const res = await _origFetch(input, init);
-				if (_navActive && isDataReq) { _completedFetches++; _updateNavProgress(); }
+				if (_navActive && isDataReq && gen === _navGeneration) { _completedFetches++; _updateNavProgress(); }
 				return res;
 			} catch (e) {
-				if (_navActive && isDataReq) { _completedFetches++; _updateNavProgress(); }
+				if (_navActive && isDataReq && gen === _navGeneration) { _completedFetches++; _updateNavProgress(); }
 				throw e;
 			}
 		};
