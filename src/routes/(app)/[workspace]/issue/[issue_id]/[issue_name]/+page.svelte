@@ -22,11 +22,11 @@
 	const statusConfig = {
 		in_progress: {
 			label: 'In Progress',
-			statusClass: 'border-amber-300 text-amber-600'
+			statusClass: 'border-orange-500 text-orange-600'
 		},
 		todo: {
 			label: 'Todo',
-			statusClass: 'border-neutral-300 text-neutral-600'
+			statusClass: 'border-neutral-500 text-neutral-700'
 		},
 		done: {
 			label: 'Done',
@@ -110,6 +110,7 @@
 	let _resolvedLogs = null;
 	$: {
 		if (data.activityLogsData instanceof Promise) {
+			_resolvedLogs = null;
 			data.activityLogsData.then((d) => { if (d) _resolvedLogs = d; });
 		} else if (data.activityLogsData) {
 			_resolvedLogs = data.activityLogsData;
@@ -119,7 +120,9 @@
 	let _resolvedMembers = [];
 	$: {
 		if (data.members instanceof Promise) {
-			data.members.then((m) => { _resolvedMembers = m ?? []; });
+			data.members.then((m) => {
+				_resolvedMembers = m ?? [];
+			});
 		} else {
 			_resolvedMembers = data.members ?? [];
 		}
@@ -128,9 +131,35 @@
 	let _resolvedVendors = [];
 	$: {
 		if (data.vendors instanceof Promise) {
-			data.vendors.then((v) => { _resolvedVendors = v ?? []; });
+			data.vendors.then((v) => {
+				_resolvedVendors = v ?? [];
+			});
 		} else {
 			_resolvedVendors = data.vendors ?? [];
+		}
+	}
+
+	let _resolvedProperties = [];
+	$: {
+		const propsData = $page.data?.properties;
+		if (propsData instanceof Promise) {
+			propsData.then((list) => {
+				_resolvedProperties = Array.isArray(list) ? list : [];
+			});
+		} else {
+			_resolvedProperties = Array.isArray(propsData) ? propsData : [];
+		}
+	}
+
+	let _resolvedUnits = [];
+	$: {
+		const unitsData = $page.data?.units;
+		if (unitsData instanceof Promise) {
+			unitsData.then((list) => {
+				_resolvedUnits = Array.isArray(list) ? list : [];
+			});
+		} else {
+			_resolvedUnits = Array.isArray(unitsData) ? unitsData : [];
 		}
 	}
 
@@ -141,6 +170,8 @@
 	$: logsByIssue = _resolvedLogs?.logsByIssue ?? {};
 	$: members = _resolvedMembers;
 	$: vendors = _resolvedVendors;
+	$: properties = _resolvedProperties;
+	$: units = _resolvedUnits;
 
 	// Handle streaming data.issue (always a Promise from server)
 	$: if (data.issue instanceof Promise && data.issue !== _subscribedIssuePromise) {
@@ -183,6 +214,31 @@
 	$: statusKey = issue?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
 	$: issueReadableId = issue?.readableId ?? issueKey;
+	let issuePropertyId = issue?.property_id ?? issue?.propertyId ?? null;
+	let issueUnitId = issue?.unit_id ?? issue?.unitId ?? null;
+	$: if (issue) {
+		issuePropertyId = issue.property_id ?? issue.propertyId ?? null;
+		issueUnitId = issue.unit_id ?? issue.unitId ?? null;
+	}
+	$: propertiesById = properties.reduce((acc, property) => {
+		if (!property?.id) return acc;
+		acc[property.id] = property;
+		return acc;
+	}, {});
+	$: unitsById = units.reduce((acc, unit) => {
+		if (!unit?.id) return acc;
+		acc[unit.id] = unit;
+		return acc;
+	}, {});
+	$: availableUnits = issuePropertyId
+		? units.filter((unit) => unit.property_id === issuePropertyId)
+		: units;
+	$: propertyName = issuePropertyId
+		? (propertiesById[issuePropertyId]?.name ?? issue?.property ?? 'Unknown property')
+		: 'No property';
+	$: unitName = issueUnitId
+		? (unitsById[issueUnitId]?.name ?? issue?.unit ?? 'Unknown unit')
+		: 'No unit';
 
 	$: if (issue) pageReady.set(true);
 
@@ -281,7 +337,6 @@
 		});
 		return acc;
 	}, {});
-
 
 	// ── Local mutation helpers ───────────────────────────────────────────────────
 
@@ -557,6 +612,8 @@
 
 	let statusOpen = false;
 	let assigneeOpen = false;
+	let propertyOpen = false;
+	let unitOpen = false;
 
 	const handleAssigneeSelect = async (member) => {
 		if (!canEditIssue) return;
@@ -592,6 +649,79 @@
 			fromValue: prevAssigneeId,
 			toValue: nextId
 		});
+	};
+
+	const handlePropertySelect = async (propertyId) => {
+		if (!canEditIssue) return;
+		if (!issueId) return;
+		const nextPropertyId = propertyId ?? null;
+		const prevIssue = { ...issue };
+		const nextPropertyName = nextPropertyId
+			? (propertiesById[nextPropertyId]?.name ?? 'Unknown property')
+			: null;
+		issue = {
+			...issue,
+			property_id: nextPropertyId,
+			propertyId: nextPropertyId,
+			property: nextPropertyName,
+			unit_id: null,
+			unitId: null,
+			unit: null
+		};
+		issuePropertyId = nextPropertyId;
+		issueUnitId = null;
+		propertyOpen = false;
+		unitOpen = false;
+		const { error } = await supabase
+			.from('issues')
+			.update({ property_id: nextPropertyId, unit_id: null })
+			.eq('id', issueId);
+		if (error) {
+			issue = prevIssue;
+			issuePropertyId = prevIssue.property_id ?? prevIssue.propertyId ?? null;
+			issueUnitId = prevIssue.unit_id ?? prevIssue.unitId ?? null;
+		}
+	};
+
+	const handleUnitSelect = async (unitId) => {
+		if (!canEditIssue) return;
+		if (!issueId) return;
+		const nextUnitId = unitId ?? null;
+		const prevIssue = { ...issue };
+		let nextPropertyId = issuePropertyId ?? null;
+		let nextPropertyName = issue?.property ?? null;
+		let nextUnitName = null;
+		if (nextUnitId) {
+			const unit = unitsById[nextUnitId];
+			if (!unit) return;
+			nextUnitName = unit.name ?? null;
+			if (unit.property_id) {
+				nextPropertyId = unit.property_id;
+				nextPropertyName = propertiesById[nextPropertyId]?.name ?? nextPropertyName;
+			}
+		}
+		issue = {
+			...issue,
+			unit_id: nextUnitId,
+			unitId: nextUnitId,
+			unit: nextUnitName,
+			property_id: nextPropertyId,
+			propertyId: nextPropertyId,
+			property: nextPropertyName
+		};
+		issuePropertyId = nextPropertyId;
+		issueUnitId = nextUnitId;
+		unitOpen = false;
+		propertyOpen = false;
+		const { error } = await supabase
+			.from('issues')
+			.update({ unit_id: nextUnitId, property_id: nextPropertyId })
+			.eq('id', issueId);
+		if (error) {
+			issue = prevIssue;
+			issuePropertyId = prevIssue.property_id ?? prevIssue.propertyId ?? null;
+			issueUnitId = prevIssue.unit_id ?? prevIssue.unitId ?? null;
+		}
 	};
 
 	// ── Utility functions ────────────────────────────────────────────────────────
@@ -900,6 +1030,8 @@
 	function onWindowClick() {
 		if (statusOpen) statusOpen = false;
 		if (assigneeOpen) assigneeOpen = false;
+		if (propertyOpen) propertyOpen = false;
+		if (unitOpen) unitOpen = false;
 	}
 </script>
 
@@ -1279,9 +1411,13 @@
 												<div class="flex min-w-0 items-start justify-between gap-4">
 													<p class="flex-1 text-sm text-neutral-700">
 														{#if log.type === 'status_change'}
-															{getActivityActor(log).name} changed status to {getStatusLabelFromLog(log)}
+															{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
+																log
+															)}
 														{:else if log.type === 'assignee_change'}
-															{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(log)}
+															{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
+																log
+															)}
 														{/if}
 													</p>
 													<span class="shrink-0 text-xs text-neutral-400">
@@ -1549,9 +1685,13 @@
 																		<div class="flex min-w-0 items-start justify-between gap-4">
 																			<p class="flex-1 text-sm text-neutral-700">
 																				{#if log.type === 'status_change'}
-																					{getActivityActor(log).name} changed status to {getStatusLabelFromLog(log)}
+																					{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
+																						log
+																					)}
 																				{:else if log.type === 'assignee_change'}
-																					{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(log)}
+																					{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
+																						log
+																					)}
 																				{/if}
 																			</p>
 																			<span class="shrink-0 text-xs text-neutral-400">
@@ -1641,6 +1781,140 @@
 					</button>
 				</div>
 				<div class="space-y-2 py-4 text-sm text-neutral-600">
+					<div class="relative">
+						<button
+							type="button"
+							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
+								canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+							}`}
+							disabled={!canEditIssue}
+							aria-disabled={!canEditIssue}
+							on:click|stopPropagation={() => {
+								if (!canEditIssue) return;
+								propertyOpen = !propertyOpen;
+								unitOpen = false;
+								statusOpen = false;
+								assigneeOpen = false;
+							}}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="14"
+								height="14"
+								fill="currentColor"
+								class="text-neutral-400"
+								viewBox="0 0 16 16"
+							>
+								<path
+									d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
+								/>
+							</svg>
+							<span class="truncate text-neutral-700">{propertyName}</span>
+						</button>
+						{#if propertyOpen && canEditIssue}
+							<div
+								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+								on:click|stopPropagation
+							>
+								<button
+									type="button"
+									class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+										!issuePropertyId ? 'bg-neutral-50' : ''
+									}`}
+									on:click={() => handlePropertySelect(null)}
+								>
+									<span>No property</span>
+									{#if !issuePropertyId}
+										<span class="text-xs text-neutral-400">Selected</span>
+									{/if}
+								</button>
+								<div class="my-1 h-px bg-neutral-100"></div>
+								{#each properties as property}
+									<button
+										type="button"
+										class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+											issuePropertyId === property.id ? 'bg-neutral-50' : ''
+										}`}
+										on:click={() => handlePropertySelect(property.id)}
+									>
+										<span class="truncate">{property.name}</span>
+										{#if issuePropertyId === property.id}
+											<span class="text-xs text-neutral-400">Selected</span>
+										{/if}
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+					<div class="relative">
+						<button
+							type="button"
+							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
+								canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+							}`}
+							disabled={!canEditIssue}
+							aria-disabled={!canEditIssue}
+							on:click|stopPropagation={() => {
+								if (!canEditIssue) return;
+								unitOpen = !unitOpen;
+								propertyOpen = false;
+								statusOpen = false;
+								assigneeOpen = false;
+							}}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="14"
+								height="14"
+								fill="currentColor"
+								class="text-neutral-400"
+								viewBox="0 0 16 16"
+							>
+								<path
+									d="M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5"
+								/>
+							</svg>
+							<span class="truncate text-neutral-700">{unitName}</span>
+						</button>
+						{#if unitOpen && canEditIssue}
+							<div
+								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+								on:click|stopPropagation
+							>
+								<button
+									type="button"
+									class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+										!issueUnitId ? 'bg-neutral-50' : ''
+									}`}
+									on:click={() => handleUnitSelect(null)}
+								>
+									<span>No unit</span>
+									{#if !issueUnitId}
+										<span class="text-xs text-neutral-400">Selected</span>
+									{/if}
+								</button>
+								<div class="my-1 h-px bg-neutral-100"></div>
+								{#if availableUnits.length}
+									{#each availableUnits as unit}
+										<button
+											type="button"
+											class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+												issueUnitId === unit.id ? 'bg-neutral-50' : ''
+											}`}
+											on:click={() => handleUnitSelect(unit.id)}
+										>
+											<span class="truncate">{unit.name}</span>
+											{#if issueUnitId === unit.id}
+												<span class="text-xs text-neutral-400">Selected</span>
+											{/if}
+										</button>
+									{/each}
+								{:else}
+									<div class="px-3 py-2 text-neutral-400">No units available.</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
 					<div class="relative">
 						<button
 							type="button"
@@ -1800,7 +2074,7 @@
 		</div>
 		<div class="flex-1 px-10 pt-8">
 			<div class="skeleton h-7 w-2/3 rounded"></div>
-			<div class="mt-3 skeleton h-4 w-1/2 rounded"></div>
+			<div class="skeleton mt-3 h-4 w-1/2 rounded"></div>
 			<div class="mt-8 space-y-3">
 				{#each { length: 3 } as _}
 					<div class="skeleton h-4 w-full rounded"></div>

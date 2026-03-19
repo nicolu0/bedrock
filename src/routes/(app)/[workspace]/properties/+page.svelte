@@ -27,7 +27,9 @@
 	$: {
 		const propData = data.properties;
 		if (propData instanceof Promise) {
-			propData.then((list) => { if (Array.isArray(list)) _properties = list; });
+			propData.then((list) => {
+				if (Array.isArray(list)) _properties = list;
+			});
 		} else if (Array.isArray(propData)) {
 			_properties = propData;
 		}
@@ -348,90 +350,89 @@
 		>
 			All properties
 		</button>
-		<button class="rounded-md px-2 py-1 text-xs text-neutral-400">+ New view</button>
 	</div>
 	<div>
 		{#if properties.length}
+			<div
+				class="grid grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr_2rem] gap-4 px-6 pb-2 text-xs text-neutral-500"
+			>
+				<div>Name</div>
+				<div>Units</div>
+				<div>Issues</div>
+				<div>Owner</div>
+				<div></div>
+			</div>
+			<div class="border-t border-neutral-200"></div>
+			{#each properties as property}
 				<div
-					class="grid grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr_2rem] gap-4 px-6 pb-2 text-xs text-neutral-500"
+					class="group grid cursor-pointer grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
+					on:mouseenter={() => (hoveredRow = property.id)}
+					on:mouseleave={() => (hoveredRow = null)}
+					on:click={(e) => {
+						e.currentTarget.blur();
+						openRowMenu = null;
+						openEditPropertyModal(property);
+					}}
+					role="button"
+					tabindex="0"
+					on:keydown={(e) => e.key === 'Enter' && openEditPropertyModal(property)}
 				>
-					<div>Name</div>
-					<div>Units</div>
-					<div>Issues</div>
-					<div>Owner</div>
-					<div></div>
-				</div>
-				<div class="border-t border-neutral-200"></div>
-				{#each properties as property}
-					<div
-						class="group grid cursor-pointer grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr_2rem] gap-4 px-6 py-3 text-sm text-neutral-700 hover:bg-neutral-50"
-						on:mouseenter={() => (hoveredRow = property.id)}
-						on:mouseleave={() => (hoveredRow = null)}
-						on:click={(e) => {
-							e.currentTarget.blur();
-							openRowMenu = null;
-							openEditPropertyModal(property);
-						}}
-						role="button"
-						tabindex="0"
-						on:keydown={(e) => e.key === 'Enter' && openEditPropertyModal(property)}
-					>
-						<div class="truncate">{property.name}</div>
-						<div class="text-neutral-500">{property.unit_count ?? 0}</div>
-						<div class="text-neutral-500">{property.issue_count ?? 0}</div>
-						<div class="flex items-center">
-							<div
-								class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600"
-							>
-								{getInitials(getOwnerLabel(owners, property.owner_id, ownerFallbackName))}
-							</div>
-						</div>
-						<div class="relative flex items-center justify-end">
-							<button
-								data-row-menu-toggle="true"
-								class={`rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 ${
-									hoveredRow === property.id || openRowMenu === property.id
-										? 'opacity-100'
-										: 'opacity-0'
-								} group-hover:opacity-100`}
-								on:click|stopPropagation={() =>
-									(openRowMenu = openRowMenu === property.id ? null : property.id)}
-								type="button"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="16"
-									height="16"
-									fill="currentColor"
-									class="bi bi-three-dots"
-									viewBox="0 0 16 16"
-								>
-									<path
-										d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"
-									/>
-								</svg>
-							</button>
-							{#if openRowMenu === property.id}
-								<div
-									data-row-menu="true"
-									class="absolute top-full right-0 z-20 mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
-									on:click|stopPropagation
-								>
-									<button
-										class="flex w-full px-3 py-2 text-left text-rose-600 hover:bg-neutral-50"
-										on:click={() => deleteProperty(property)}
-										type="button"
-									>
-										Delete
-									</button>
-								</div>
-							{/if}
+					<div class="truncate">{property.name}</div>
+					<div class="text-neutral-500">{property.unit_count ?? 0}</div>
+					<div class="text-neutral-500">{property.issue_count ?? 0}</div>
+					<div class="flex items-center">
+						<div
+							class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600"
+						>
+							{getInitials(getOwnerLabel(owners, property.owner_id, ownerFallbackName))}
 						</div>
 					</div>
-				{/each}
-			{:else}
-				<div class="px-6 py-3 text-sm text-neutral-400">No properties yet.</div>
-			{/if}
+					<div class="relative flex items-center justify-end">
+						<button
+							data-row-menu-toggle="true"
+							class={`rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 ${
+								hoveredRow === property.id || openRowMenu === property.id
+									? 'opacity-100'
+									: 'opacity-0'
+							} group-hover:opacity-100`}
+							on:click|stopPropagation={() =>
+								(openRowMenu = openRowMenu === property.id ? null : property.id)}
+							type="button"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								fill="currentColor"
+								class="bi bi-three-dots"
+								viewBox="0 0 16 16"
+							>
+								<path
+									d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"
+								/>
+							</svg>
+						</button>
+						{#if openRowMenu === property.id}
+							<div
+								data-row-menu="true"
+								class="absolute top-full right-0 z-20 mt-2 w-28 rounded-lg border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-sm"
+								on:click|stopPropagation
+							>
+								<button
+									class="flex w-full px-3 py-2 text-left text-rose-600 hover:bg-neutral-50"
+									on:click={() => deleteProperty(property)}
+									type="button"
+								>
+									Delete
+								</button>
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/each}
+		{:else}
+			<div class="px-6 py-3 text-sm text-neutral-400">No properties yet.</div>
+		{/if}
 	</div>
 </div>
 
@@ -486,70 +487,70 @@
 						type="text"
 					/>
 					{#if canViewPeople}
-					<div class="owner-dropdown relative">
-						<label class="text-xs text-neutral-500">Owner</label>
-						<button
-							type="button"
-							class="mt-1 flex w-full items-center justify-between rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 transition hover:bg-neutral-50"
-							on:click|stopPropagation={() => {
-								newOwnerOpen = !newOwnerOpen;
-								editOwnerOpen = false;
-							}}
-							aria-expanded={newOwnerOpen}
-						>
-							<span>{getOwnerLabel(owners, newPropertyOwnerId, ownerFallbackName)}</span>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="16"
-								height="16"
-								fill="currentColor"
-								class={`text-neutral-400 transition ${newOwnerOpen ? 'rotate-180' : ''}`}
-								viewBox="0 0 16 16"
+						<div class="owner-dropdown relative">
+							<label class="text-xs text-neutral-500">Owner</label>
+							<button
+								type="button"
+								class="mt-1 flex w-full items-center justify-between rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 transition hover:bg-neutral-50"
+								on:click|stopPropagation={() => {
+									newOwnerOpen = !newOwnerOpen;
+									editOwnerOpen = false;
+								}}
+								aria-expanded={newOwnerOpen}
 							>
-								<path
-									d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-								/>
-							</svg>
-						</button>
-						<input type="hidden" name="ownerId" value={newPropertyOwnerId} />
-						{#if newOwnerOpen}
-							<div
-								class="absolute z-10 mt-2 w-full rounded-xl border border-stone-200 bg-white py-1 shadow-lg"
-							>
-								<button
-									class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
-										!newPropertyOwnerId ? 'bg-neutral-50 text-neutral-900' : 'hover:bg-neutral-50'
-									}`}
-									type="button"
-									on:click={() => {
-										newPropertyOwnerId = '';
-										newOwnerOpen = false;
-									}}
+								<span>{getOwnerLabel(owners, newPropertyOwnerId, ownerFallbackName)}</span>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									fill="currentColor"
+									class={`text-neutral-400 transition ${newOwnerOpen ? 'rotate-180' : ''}`}
+									viewBox="0 0 16 16"
 								>
-									<span>Not Selected</span>
-									{#if !newPropertyOwnerId}
-										<span class="text-xs text-neutral-400">Selected</span>
-									{/if}
-								</button>
-								{#each owners as owner}
+									<path
+										d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+									/>
+								</svg>
+							</button>
+							<input type="hidden" name="ownerId" value={newPropertyOwnerId} />
+							{#if newOwnerOpen}
+								<div
+									class="absolute z-10 mt-2 w-full rounded-xl border border-stone-200 bg-white py-1 shadow-lg"
+								>
 									<button
 										class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
-											owner.id === newPropertyOwnerId
-												? 'bg-neutral-50 text-neutral-900'
-												: 'hover:bg-neutral-50'
+											!newPropertyOwnerId ? 'bg-neutral-50 text-neutral-900' : 'hover:bg-neutral-50'
 										}`}
 										type="button"
 										on:click={() => {
-											newPropertyOwnerId = owner.id ?? '';
+											newPropertyOwnerId = '';
 											newOwnerOpen = false;
 										}}
 									>
-										<span>{owner.name ?? 'Unnamed owner'}</span>
-										{#if owner.id === newPropertyOwnerId}
+										<span>Not Selected</span>
+										{#if !newPropertyOwnerId}
 											<span class="text-xs text-neutral-400">Selected</span>
 										{/if}
 									</button>
-								{/each}
+									{#each owners as owner}
+										<button
+											class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
+												owner.id === newPropertyOwnerId
+													? 'bg-neutral-50 text-neutral-900'
+													: 'hover:bg-neutral-50'
+											}`}
+											type="button"
+											on:click={() => {
+												newPropertyOwnerId = owner.id ?? '';
+												newOwnerOpen = false;
+											}}
+										>
+											<span>{owner.name ?? 'Unnamed owner'}</span>
+											{#if owner.id === newPropertyOwnerId}
+												<span class="text-xs text-neutral-400">Selected</span>
+											{/if}
+										</button>
+									{/each}
 								</div>
 							{/if}
 						</div>
@@ -722,72 +723,78 @@
 						type="text"
 					/>
 					{#if canViewPeople}
-					<div class="owner-dropdown relative">
-						<label class="text-xs text-neutral-500">Owner</label>
-						<button
-							type="button"
-							class="mt-1 flex w-full items-center justify-between rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 transition hover:bg-neutral-50"
-							on:click|stopPropagation={() => {
-								editOwnerOpen = !editOwnerOpen;
-								newOwnerOpen = false;
-							}}
-							aria-expanded={editOwnerOpen}
-						>
-							<span>{getOwnerLabel(owners, editPropertyOwnerId, isOwnerRole ? ownerFallbackName : editPropertyOwnerName)}</span>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="16"
-								height="16"
-								fill="currentColor"
-								class={`text-neutral-400 transition ${editOwnerOpen ? 'rotate-180' : ''}`}
-								viewBox="0 0 16 16"
+						<div class="owner-dropdown relative">
+							<label class="text-xs text-neutral-500">Owner</label>
+							<button
+								type="button"
+								class="mt-1 flex w-full items-center justify-between rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 transition hover:bg-neutral-50"
+								on:click|stopPropagation={() => {
+									editOwnerOpen = !editOwnerOpen;
+									newOwnerOpen = false;
+								}}
+								aria-expanded={editOwnerOpen}
 							>
-								<path
-									d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-								/>
-							</svg>
-						</button>
-						<input type="hidden" name="ownerId" value={editPropertyOwnerId} />
-						{#if editOwnerOpen}
-							<div
-								class="absolute z-10 mt-2 w-full rounded-xl border border-stone-200 bg-white py-1 shadow-lg"
-							>
-								<button
-									class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
-										!editPropertyOwnerId
-											? 'bg-neutral-50 text-neutral-900'
-											: 'hover:bg-neutral-50'
-									}`}
-									type="button"
-									on:click={() => {
-										editPropertyOwnerId = '';
-										editOwnerOpen = false;
-									}}
+								<span
+									>{getOwnerLabel(
+										owners,
+										editPropertyOwnerId,
+										isOwnerRole ? ownerFallbackName : editPropertyOwnerName
+									)}</span
 								>
-									<span>Not Selected</span>
-									{#if !editPropertyOwnerId}
-										<span class="text-xs text-neutral-400">Selected</span>
-									{/if}
-								</button>
-								{#each owners as owner}
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									fill="currentColor"
+									class={`text-neutral-400 transition ${editOwnerOpen ? 'rotate-180' : ''}`}
+									viewBox="0 0 16 16"
+								>
+									<path
+										d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+									/>
+								</svg>
+							</button>
+							<input type="hidden" name="ownerId" value={editPropertyOwnerId} />
+							{#if editOwnerOpen}
+								<div
+									class="absolute z-10 mt-2 w-full rounded-xl border border-stone-200 bg-white py-1 shadow-lg"
+								>
 									<button
 										class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
-											owner.id === editPropertyOwnerId
+											!editPropertyOwnerId
 												? 'bg-neutral-50 text-neutral-900'
 												: 'hover:bg-neutral-50'
 										}`}
 										type="button"
 										on:click={() => {
-											editPropertyOwnerId = owner.id ?? '';
+											editPropertyOwnerId = '';
 											editOwnerOpen = false;
 										}}
 									>
-										<span>{owner.name ?? 'Unnamed owner'}</span>
-										{#if owner.id === editPropertyOwnerId}
+										<span>Not Selected</span>
+										{#if !editPropertyOwnerId}
 											<span class="text-xs text-neutral-400">Selected</span>
 										{/if}
 									</button>
-								{/each}
+									{#each owners as owner}
+										<button
+											class={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm ${
+												owner.id === editPropertyOwnerId
+													? 'bg-neutral-50 text-neutral-900'
+													: 'hover:bg-neutral-50'
+											}`}
+											type="button"
+											on:click={() => {
+												editPropertyOwnerId = owner.id ?? '';
+												editOwnerOpen = false;
+											}}
+										>
+											<span>{owner.name ?? 'Unnamed owner'}</span>
+											{#if owner.id === editPropertyOwnerId}
+												<span class="text-xs text-neutral-400">Selected</span>
+											{/if}
+										</button>
+									{/each}
 								</div>
 							{/if}
 						</div>

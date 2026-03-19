@@ -10,12 +10,12 @@ const statusConfig = {
 	in_progress: {
 		id: 'in-progress',
 		label: 'In Progress',
-		statusClass: 'border-amber-300 text-amber-600'
+		statusClass: 'border-orange-500 text-orange-600'
 	},
 	todo: {
 		id: 'todo',
 		label: 'Todo',
-		statusClass: 'border-neutral-300 text-neutral-600'
+		statusClass: 'border-neutral-500 text-neutral-700'
 	},
 	done: {
 		id: 'done',
@@ -196,7 +196,6 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 	const fetcher = options.fetch ?? fetch;
 	const force = options.force ?? false;
 
-
 	if (isHardReload()) {
 		clearSessionCache();
 	}
@@ -331,6 +330,8 @@ export const applyIssueInsert = (
 			assigneeId: rawIssue.assignee_id ?? null,
 			assignee_id: rawIssue.assignee_id ?? null,
 			property: propertyName,
+			propertyId: rawIssue.property_id ?? null,
+			property_id: rawIssue.property_id ?? null,
 			unit: unitName,
 			issueNumber: rawIssue.issue_number ?? null,
 			readableId: rawIssue.readable_id ?? null,
