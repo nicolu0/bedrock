@@ -994,6 +994,17 @@ export const handleGmailPubsub = async ({ body, runAgent }) => {
 		userId: connection.user_id,
 		source: 'gmail-push',
 		detail: JSON.stringify({
+			phase: 'received',
+			payload_email: normalizedEmail,
+			connection_email: connection.email,
+			history_id: historyId
+		})
+	});
+
+	await insertIngestionLog({
+		userId: connection.user_id,
+		source: 'gmail-push',
+		detail: JSON.stringify({
 			phase: 'invoke',
 			payload_email: normalizedEmail,
 			connection_email: connection.email,
@@ -1093,6 +1104,15 @@ export const handleGmailPubsub = async ({ body, runAgent }) => {
 
 	for (const messageId of messageIds) {
 		try {
+			await insertIngestionLog({
+				userId: connection.user_id,
+				source: 'gmail-push',
+				detail: JSON.stringify({
+					phase: 'message-received',
+					message_id: messageId,
+					history_id: historyId
+				})
+			});
 			const message = await fetchMessage(accessToken, messageId);
 			if (!message) {
 				continue;
