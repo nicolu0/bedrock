@@ -4,8 +4,6 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-const agentApiUrl = Deno.env.get('AGENT_API_URL');
-const agentWebhookSecret = Deno.env.get('AGENT_WEBHOOK_SECRET');
 
 if (!supabaseUrl || !supabaseServiceKey) {
 	throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
@@ -294,25 +292,6 @@ const logLlmOutput = async (userId: string, payload: unknown, runId: string, ste
 	} catch (err) {
 		console.error('gmail-push-hook llm log failed', err);
 	}
-};
-
-const callAgentApi = async (payload: Record<string, unknown>) => {
-	if (!agentApiUrl || !agentWebhookSecret) {
-		throw new Error('Missing AGENT_API_URL or AGENT_WEBHOOK_SECRET');
-	}
-	const response = await fetch(agentApiUrl, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'X-Agent-Secret': agentWebhookSecret
-		},
-		body: JSON.stringify({ source: 'gmail', ...payload })
-	});
-	if (!response.ok) {
-		throw new Error(await response.text());
-	}
-	const data = await response.json().catch(() => ({}));
-	return data ?? {};
 };
 
 const listOpenIssues = async (unitId: string | null) => {
@@ -1953,26 +1932,26 @@ const processMessage = async ({
 			const userName = userProfile?.name ?? 'Bedrock';
 			const workspaceUnits = await listWorkspaceUnitsForAgent(workspaceIdForConnection);
 
-			const created = await callAgentApi({
+			const created = await runIssueAgent({
 				subject: messageSubject,
 				body: cleanedBody,
-				sender_email: senderEmail,
-				unit_id: null,
-				unit_name: null,
-				workspace_id: workspaceIdForConnection,
-				property_name: null,
-				thread_id: threadRow.id,
-				user_id: connection.user_id,
-				policy_text: policyText,
-				tenant_name: null,
-				tenant_email: null,
-				user_name: userName,
-				default_sender_email: connection.email ?? null,
-				reply_message_id: inboundMessageId,
-				root_issue_id: rootIssueIdForAgent,
-				thread_issue_id: issueId,
-				related_issues: relatedIssues,
-				workspace_units: workspaceUnits
+				senderEmail,
+				unitId: null,
+				unitName: null,
+				workspaceId: workspaceIdForConnection,
+				propertyName: null,
+				threadId: threadRow.id,
+				userId: connection.user_id,
+				policyText,
+				tenantName: null,
+				tenantEmail: null,
+				userName,
+				defaultSenderEmail: connection.email ?? null,
+				replyMessageId: inboundMessageId,
+				rootIssueId: rootIssueIdForAgent,
+				threadIssueId: issueId,
+				relatedIssues,
+				workspaceUnits
 			});
 			issueId = created?.issueId ?? issueId;
 
@@ -2178,26 +2157,26 @@ const processMessage = async ({
 			.maybeSingle();
 		const userName = userProfile?.name ?? 'Bedrock';
 		const workspaceUnits = await listWorkspaceUnitsForAgent(propertyRow.workspace_id);
-		const created = await callAgentApi({
+		const created = await runIssueAgent({
 			subject: messageSubject,
 			body: cleanedBody,
-			sender_email: senderEmail,
-			unit_id: unitRow.id,
-			unit_name: unitRow.name ?? null,
-			workspace_id: propertyRow.workspace_id,
-			property_name: propertyRow.name ?? null,
-			thread_id: threadRow.id,
-			user_id: connection.user_id,
-			policy_text: policyText,
-			tenant_name: tenant.name ?? null,
-			tenant_email: tenant.email ?? null,
-			user_name: userName,
-			default_sender_email: connection.email ?? null,
-			reply_message_id: inboundMessageId,
-			root_issue_id: rootIssueIdForAgent,
-			thread_issue_id: issueId,
-			related_issues: relatedIssues,
-			workspace_units: workspaceUnits
+			senderEmail,
+			unitId: unitRow.id,
+			unitName: unitRow.name ?? null,
+			workspaceId: propertyRow.workspace_id,
+			propertyName: propertyRow.name ?? null,
+			threadId: threadRow.id,
+			userId: connection.user_id,
+			policyText,
+			tenantName: tenant.name ?? null,
+			tenantEmail: tenant.email ?? null,
+			userName,
+			defaultSenderEmail: connection.email ?? null,
+			replyMessageId: inboundMessageId,
+			rootIssueId: rootIssueIdForAgent,
+			threadIssueId: issueId,
+			relatedIssues,
+			workspaceUnits
 		});
 		issueId = created?.issueId ?? issueId;
 
@@ -2211,25 +2190,126 @@ const processMessage = async ({
 	}
 };
 
+const markJobDone = async (jobId: string) => {
+	await supabase
+		.from('jobs')
+		.update({ status: 'done', updated_at: new Date().toISOString() })
+		.eq('id', jobId);
+};
+
+const markJobError = async (jobId: string, attempts: number, error: string) => {
+	await supabase
+		.from('jobs')
+		.update({
+			status: 'error',
+			attempts,
+			error,
+			updated_at: new Date().toISOString()
+		})
+		.eq('id', jobId);
+};
+
+const resetJob = async (jobId: string) => {
+	await supabase
+		.from('jobs')
+		.update({ status: 'pending', updated_at: new Date().toISOString() })
+		.eq('id', jobId);
+};
+
+const acquireConnectionLock = async (connectionId: string) => {
+	const lockCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+	const lockTime = new Date().toISOString();
+	const { data: lockRow } = await supabase
+		.from('gmail_connections')
+		.update({ processing_at: lockTime })
+		.eq('id', connectionId)
+		.is('processing_at', null)
+		.select('id')
+		.maybeSingle();
+	let lockAcquired = Boolean(lockRow?.id);
+	if (!lockAcquired) {
+		const { data: staleLockRow } = await supabase
+			.from('gmail_connections')
+			.update({ processing_at: lockTime })
+			.eq('id', connectionId)
+			.lt('processing_at', lockCutoff)
+			.select('id')
+			.maybeSingle();
+		lockAcquired = Boolean(staleLockRow?.id);
+	}
+	return lockAcquired;
+};
+
+const releaseConnectionLock = async (connectionId: string) => {
+	await supabase.from('gmail_connections').update({ processing_at: null }).eq('id', connectionId);
+};
+
+const claimJob = async (jobId: string | null) => {
+	const now = new Date().toISOString();
+	if (jobId) {
+		const { data } = await supabase
+			.from('jobs')
+			.update({ status: 'processing', updated_at: now })
+			.eq('id', jobId)
+			.eq('status', 'pending')
+			.select('*')
+			.maybeSingle();
+		return data ?? null;
+	}
+	const { data: nextJob } = await supabase
+		.from('jobs')
+		.select('*')
+		.eq('status', 'pending')
+		.order('created_at', { ascending: true })
+		.limit(1)
+		.maybeSingle();
+	if (!nextJob?.id) return null;
+	const { data } = await supabase
+		.from('jobs')
+		.update({ status: 'processing', updated_at: now })
+		.eq('id', nextJob.id)
+		.eq('status', 'pending')
+		.select('*')
+		.maybeSingle();
+	return data ?? null;
+};
+
 serve(async (req) => {
+	let currentJobId: string | null = null;
 	try {
 		if (req.method !== 'POST') {
 			return new Response('Method not allowed', { status: 405 });
 		}
 
 		const body = await req.json().catch(() => null);
-		const data = body?.message?.data;
-		if (!data) {
-			return new Response('Missing Pub/Sub message', { status: 400 });
+		const jobId = typeof body?.job_id === 'string' ? body.job_id : null;
+		const directSource = typeof body?.source === 'string' ? body.source : null;
+		if (!jobId && directSource && directSource !== 'gmail') {
+			return new Response('Direct comment processing not implemented', { status: 501 });
+		}
+		const job = await claimJob(jobId);
+		if (!job?.id) {
+			return new Response(JSON.stringify({ status: 'empty' }), {
+				headers: { 'Content-Type': 'application/json' }
+			});
+		}
+		currentJobId = job.id;
+
+		const source = typeof job.source === 'string' ? job.source : 'gmail';
+		if (source !== 'gmail') {
+			await markJobDone(job.id);
+			return new Response(JSON.stringify({ status: 'skipped' }), {
+				headers: { 'Content-Type': 'application/json' }
+			});
 		}
 
-		const decoded = decodeBase64Url(data);
-		const payload = JSON.parse(decoded);
-		const emailAddress = payload.emailAddress;
-		const historyId = payload.historyId;
+		const payload = job.payload ?? {};
+		const emailAddress = typeof payload.email === 'string' ? payload.email : '';
+		const historyId = payload.history_id ? String(payload.history_id) : '';
 		const normalizedEmail = emailAddress ? normalizeEmail(emailAddress) : null;
 
 		if (!normalizedEmail || !historyId) {
+			await markJobError(job.id, (job.attempts ?? 0) + 1, 'Invalid job payload');
 			return new Response('Invalid payload', { status: 400 });
 		}
 
@@ -2240,157 +2320,182 @@ serve(async (req) => {
 			.maybeSingle();
 
 		if (!connection) {
+			await markJobDone(job.id);
 			return new Response(JSON.stringify({ status: 'ignored' }), {
 				headers: { 'Content-Type': 'application/json' }
 			});
 		}
 
-		await insertIngestionLog({
-			userId: connection.user_id,
-			source: 'gmail-push',
-			detail: JSON.stringify({
-				phase: 'invoke',
-				payload_email: normalizedEmail,
-				connection_email: connection.email,
-				history_id: historyId
-			})
-		});
-
-		if (connection.mode === 'write') {
-			return new Response(JSON.stringify({ status: 'skip' }), {
+		const lockAcquired = await acquireConnectionLock(connection.id);
+		if (!lockAcquired) {
+			await resetJob(job.id);
+			return new Response(JSON.stringify({ status: 'locked' }), {
 				headers: { 'Content-Type': 'application/json' }
 			});
 		}
 
-		let accessToken = connection.access_token;
-		const expiresAt = new Date(connection.expires_at).getTime();
-		const refreshNeeded = Number.isNaN(expiresAt) || expiresAt - Date.now() < 120000;
-
-		if (refreshNeeded) {
-			const refreshBody = new URLSearchParams({
-				client_id: Deno.env.get('GOOGLE_CLIENT_ID') ?? '',
-				client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '',
-				refresh_token: connection.refresh_token,
-				grant_type: 'refresh_token'
-			});
-
-			const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-				body: refreshBody
-			});
-
-			if (!refreshResponse.ok) {
-				const detail = await refreshResponse.text();
-				console.error('gmail-push-hook refresh failed', detail);
-				if (detail.includes('invalid_grant')) {
-					await supabase
-						.from('gmail_connections')
-						.update({
-							access_token: null,
-							refresh_token: null,
-							expires_at: new Date(0).toISOString(),
-							mode: 'write',
-							updated_at: new Date().toISOString()
-						})
-						.eq('id', connection.id);
-					await logError(
-						connection.user_id,
-						`Gmail token revoked for ${connection.email}. Please reconnect.`
-					);
-					return new Response('Token revoked', { status: 200 });
-				}
-				return new Response(detail, { status: 500 });
-			}
-
-			const refreshed = await refreshResponse.json();
-			accessToken = refreshed.access_token;
-			const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-			await supabase
-				.from('gmail_connections')
-				.update({
-					access_token: accessToken,
-					expires_at: newExpiresAt,
-					updated_at: new Date().toISOString()
-				})
-				.eq('id', connection.id);
-		}
-
-		const { data: state } = await supabase
-			.from('email_ingestion_state')
-			.select('last_history_id')
-			.eq('connection_id', connection.id)
-			.maybeSingle();
-
-		let storedHistoryId = state?.last_history_id ?? null;
-		if (storedHistoryId && storedHistoryId.length >= 13) {
-			storedHistoryId = null;
-		}
-
-		let historyResponse;
 		try {
-			historyResponse = await fetchHistory(accessToken, storedHistoryId ?? historyId);
-		} catch (err) {
-			const status = err && typeof err === 'object' ? err.status : null;
-			if (status === 404) {
-				const profile = await fetchProfile(accessToken);
-				await supabase.from('email_ingestion_state').upsert({
-					user_id: connection.user_id,
-					connection_id: connection.id,
-					last_history_id: String(profile.historyId),
-					updated_at: new Date().toISOString()
-				});
-				return new Response(JSON.stringify({ status: 'reset' }), {
-					headers: { 'Content-Type': 'application/json' }
-				});
-			}
-			console.error('gmail-push-hook history error', err);
-			throw err;
-		}
-
-		const historyItems = historyResponse.history ?? [];
-		const messageIds = new Set<string>();
-		for (const item of historyItems) {
-			for (const msg of item.messagesAdded ?? []) {
-				if (msg.message?.id) {
-					messageIds.add(msg.message.id);
-				}
-			}
-		}
-
-		if (!messageIds.size) {
 			await insertIngestionLog({
 				userId: connection.user_id,
 				source: 'gmail-push',
 				detail: JSON.stringify({
-					phase: 'history-empty',
-					history_id: historyId,
-					stored_history_id: storedHistoryId
+					phase: 'invoke',
+					payload_email: normalizedEmail,
+					connection_email: connection.email,
+					history_id: historyId
 				})
 			});
-		}
 
-		for (const messageId of messageIds) {
-			const message = await fetchMessage(accessToken, messageId);
-			if (!message) {
-				continue;
+			if (connection.mode === 'write') {
+				await markJobDone(job.id);
+				return new Response(JSON.stringify({ status: 'skip' }), {
+					headers: { 'Content-Type': 'application/json' }
+				});
 			}
-			await processMessage({ connection, accessToken, message });
+
+			let accessToken = connection.access_token;
+			const expiresAt = new Date(connection.expires_at).getTime();
+			const refreshNeeded = Number.isNaN(expiresAt) || expiresAt - Date.now() < 120000;
+
+			if (refreshNeeded) {
+				const refreshBody = new URLSearchParams({
+					client_id: Deno.env.get('GOOGLE_CLIENT_ID') ?? '',
+					client_secret: Deno.env.get('GOOGLE_CLIENT_SECRET') ?? '',
+					refresh_token: connection.refresh_token,
+					grant_type: 'refresh_token'
+				});
+
+				const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+					body: refreshBody
+				});
+
+				if (!refreshResponse.ok) {
+					const detail = await refreshResponse.text();
+					console.error('agent refresh failed', detail);
+					if (detail.includes('invalid_grant')) {
+						await supabase
+							.from('gmail_connections')
+							.update({
+								access_token: null,
+								refresh_token: null,
+								expires_at: new Date(0).toISOString(),
+								mode: 'write',
+								updated_at: new Date().toISOString()
+							})
+							.eq('id', connection.id);
+						await logError(
+							connection.user_id,
+							`Gmail token revoked for ${connection.email}. Please reconnect.`
+						);
+						await markJobDone(job.id);
+						return new Response('Token revoked', { status: 200 });
+					}
+					await markJobError(job.id, (job.attempts ?? 0) + 1, detail);
+					return new Response(detail, { status: 500 });
+				}
+
+				const refreshed = await refreshResponse.json();
+				accessToken = refreshed.access_token;
+				const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
+				await supabase
+					.from('gmail_connections')
+					.update({
+						access_token: accessToken,
+						expires_at: newExpiresAt,
+						updated_at: new Date().toISOString()
+					})
+					.eq('id', connection.id);
+			}
+
+			const { data: state } = await supabase
+				.from('email_ingestion_state')
+				.select('last_history_id')
+				.eq('connection_id', connection.id)
+				.maybeSingle();
+
+			let storedHistoryId = state?.last_history_id ?? null;
+			if (storedHistoryId && storedHistoryId.length >= 13) {
+				storedHistoryId = null;
+			}
+
+			let historyResponse;
+			try {
+				historyResponse = await fetchHistory(accessToken, storedHistoryId ?? historyId);
+			} catch (err) {
+				const status = err && typeof err === 'object' ? err.status : null;
+				if (status === 404) {
+					const profile = await fetchProfile(accessToken);
+					await supabase.from('email_ingestion_state').upsert({
+						user_id: connection.user_id,
+						connection_id: connection.id,
+						last_history_id: String(profile.historyId),
+						updated_at: new Date().toISOString()
+					});
+					await markJobDone(job.id);
+					return new Response(JSON.stringify({ status: 'reset' }), {
+						headers: { 'Content-Type': 'application/json' }
+					});
+				}
+				console.error('agent history error', err);
+				throw err;
+			}
+
+			const historyItems = historyResponse.history ?? [];
+			const messageIds = new Set<string>();
+			for (const item of historyItems) {
+				for (const msg of item.messagesAdded ?? []) {
+					if (msg.message?.id) {
+						messageIds.add(msg.message.id);
+					}
+				}
+			}
+
+			if (!messageIds.size) {
+				await insertIngestionLog({
+					userId: connection.user_id,
+					source: 'gmail-push',
+					detail: JSON.stringify({
+						phase: 'history-empty',
+						history_id: historyId,
+						stored_history_id: storedHistoryId
+					})
+				});
+			}
+
+			for (const messageId of messageIds) {
+				const message = await fetchMessage(accessToken, messageId);
+				if (!message) {
+					continue;
+				}
+				await processMessage({ connection, accessToken, message });
+			}
+
+			const newHistoryId = historyResponse.historyId ?? historyId;
+			await supabase.from('email_ingestion_state').upsert({
+				user_id: connection.user_id,
+				connection_id: connection.id,
+				last_history_id: String(newHistoryId),
+				updated_at: new Date().toISOString()
+			});
+
+			await markJobDone(job.id);
+			return new Response(JSON.stringify({ status: 'ok' }), {
+				headers: { 'Content-Type': 'application/json' }
+			});
+		} finally {
+			await releaseConnectionLock(connection.id);
 		}
-
-		const newHistoryId = historyResponse.historyId ?? historyId;
-		await supabase.from('email_ingestion_state').upsert({
-			user_id: connection.user_id,
-			connection_id: connection.id,
-			last_history_id: String(newHistoryId),
-			updated_at: new Date().toISOString()
-		});
-
-		return new Response(JSON.stringify({ status: 'ok' }), {
-			headers: { 'Content-Type': 'application/json' }
-		});
 	} catch (err) {
-		console.error('gmail-push-hook error', err);
+		console.error('agent error', err);
+		try {
+			if (currentJobId) {
+				await markJobError(currentJobId, 1, err instanceof Error ? err.message : 'Internal error');
+			}
+		} catch {
+			// ignore
+		}
 		return new Response('Internal error', { status: 500 });
 	}
 });

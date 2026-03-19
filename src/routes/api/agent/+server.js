@@ -1,16 +1,11 @@
 // @ts-nocheck
 import { json } from '@sveltejs/kit';
-import {
-	AGENT_WEBHOOK_SECRET,
-	OPENAI_API_KEY,
-	SUPABASE_SERVICE_ROLE_KEY
-} from '$env/static/private';
+import { AGENT_WEBHOOK_SECRET, SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
+import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
-import { handleGmailPubsub } from '$lib/server/gmailPush';
 
 const openaiModel = 'gpt-5-mini-2025-08-07';
 const agentSecretHeader = 'x-agent-secret';
-const pubsubSecretParam = 'secret';
 
 const isUuid = (value) =>
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -2248,56 +2243,35 @@ const isAgentSecretValid = (request) => {
 	return provided === AGENT_WEBHOOK_SECRET;
 };
 
-const isPubsubSecretValid = (request) => {
-	if (!AGENT_WEBHOOK_SECRET) return false;
-	const headerSecret = request.headers.get(agentSecretHeader) ?? '';
-	const url = new URL(request.url);
-	const querySecret = url.searchParams.get(pubsubSecretParam) ?? '';
-	console.log('agent-route pubsub-secret-check', {
-		has_env_secret: Boolean(AGENT_WEBHOOK_SECRET),
-		has_header_secret: Boolean(headerSecret),
-		has_query_secret: Boolean(querySecret),
-		header_len: headerSecret.length,
-		query_len: querySecret.length,
-		env_len: AGENT_WEBHOOK_SECRET.length,
-		match_header: headerSecret === AGENT_WEBHOOK_SECRET,
-		match_query: querySecret === AGENT_WEBHOOK_SECRET
-	});
-	return headerSecret === AGENT_WEBHOOK_SECRET || querySecret === AGENT_WEBHOOK_SECRET;
-};
-
 export const POST = async ({ request, locals }) => {
-	if (!OPENAI_API_KEY) return json({ error: 'Missing OPENAI_API_KEY' }, { status: 500 });
 	if (!SUPABASE_SERVICE_ROLE_KEY)
 		return json({ error: 'Missing SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 });
+	if (!PUBLIC_SUPABASE_URL) return json({ error: 'Missing PUBLIC_SUPABASE_URL' }, { status: 500 });
+
+	if (!locals?.user) {
+		return json({ error: 'Unauthorized' }, { status: 401 });
+	}
 
 	const payload = await request.json().catch(() => null);
+	const body = {
+		source: typeof payload?.source === 'string' ? payload.source : 'comment',
+		...payload,
+		user_id: payload?.user_id ?? locals.user.id
+	};
 
-	if (payload?.message?.data) {
-		console.log('agent-route pubsub', {
-			has_secret: isPubsubSecretValid(request)
-		});
-		if (!isPubsubSecretValid(request)) {
-			return json({ error: 'Unauthorized' }, { status: 401 });
-		}
-		const result = await handleGmailPubsub({
-			body: payload,
-			runAgent: (args) => runGmailIssueAgent(args)
-		});
-		return json(result.body, { status: result.status });
-	}
-
-	console.log('agent-route issue', {
-		has_user: Boolean(locals?.user)
+	const response = await fetch(`${PUBLIC_SUPABASE_URL}/functions/v1/agent`, {
+		method: 'POST',
+		headers: {
+			Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify(body)
 	});
 
-	const source = typeof payload?.source === 'string' ? payload.source : 'issue';
-	if (source === 'gmail') {
-		if (!isAgentSecretValid(request)) {
-			return json({ error: 'Unauthorized' }, { status: 401 });
-		}
-		return handleGmailAgent({ payload });
+	if (!response.ok) {
+		return json({ error: await response.text() }, { status: response.status });
 	}
 
-	return handleIssueAgent({ payload, locals });
+	const data = await response.json().catch(() => ({}));
+	return json(data, { status: 200 });
 };
