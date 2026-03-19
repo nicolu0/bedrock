@@ -57,6 +57,9 @@
 
 	const _initCached = browser ? getIssueDetailByReadableId($page.params.issue_id) : null;
 	let issue = _initCached?.issue ?? (data.issue instanceof Promise ? null : data.issue) ?? null;
+	// True while waiting for the server's issue data — shown even on cache hits so
+	// title/description/breadcrumb only reveal when fully resolved (no stagger).
+	let _issueLoading = browser && !_initCached && data.issue instanceof Promise;
 	let assignee = null;
 	let issueAssigneeId = issue?.assignee_id ?? null;
 	// Tracks which Promise we've already subscribed to — prevents the reactive block from
@@ -68,14 +71,22 @@
 	// ── Streaming resolution for secondary data ───────────────────────────────
 
 	let _resolvedSubIssues = _initCached?.subIssues ?? [];
+	let _subIssuesLoading = false;
 	$: {
 		if (data.subIssues instanceof Promise) {
+			_subIssuesLoading = true;
 			data.subIssues.then((d) => {
 				_resolvedSubIssues = d ?? [];
-				if (browser && issue) seedIssueDetail(issue, d ?? []);
+				_subIssuesLoading = false;
+				if (browser && issue) {
+					seedIssueDetail(issue, d ?? []);
+					// Seed each subissue individually so navigating into one gets a cache hit.
+					for (const sub of d ?? []) seedIssueDetail(sub, []);
+				}
 			});
 		} else {
 			_resolvedSubIssues = data.subIssues ?? [];
+			_subIssuesLoading = false;
 		}
 	}
 
@@ -178,6 +189,7 @@
 		_subscribedIssuePromise = data.issue;
 		// On navigation to a different issue: switch to cache or clear
 		if (issue?.readableId && issue.readableId !== $page.params.issue_id) {
+			_issueLoading = true;
 			const cached = browser ? getIssueDetailByReadableId($page.params.issue_id) : null;
 			issue = cached?.issue ?? null;
 			_resolvedSubIssues = cached?.subIssues ?? [];
@@ -189,6 +201,7 @@
 		data.issue.then((d) => {
 			if (!d || (d.readableId && d.readableId !== $page.params.issue_id)) return;
 			issue = d;
+			_issueLoading = false;
 			issueAssigneeId = d.assignee_id ?? null;
 			assignee = null;
 			if (browser) seedIssueDetail(d);
@@ -867,7 +880,8 @@
 		const fromId = issueReadableId ?? issueKey;
 		const fromSlug = issueNameSlug;
 		const fromTitle = encodeURIComponent(issueName);
-		return `/${$page.params.workspace}/issue/${readableId}/${slug}?fromIssueId=${fromId}&fromIssueSlug=${fromSlug}&fromIssueTitle=${fromTitle}`;
+		const toTitle = encodeURIComponent(subIssue.name ?? '');
+		return `/${$page.params.workspace}/issue/${readableId}/${slug}?fromIssueId=${fromId}&fromIssueSlug=${fromSlug}&fromIssueTitle=${fromTitle}&toIssueTitle=${toTitle}`;
 	};
 
 	const copyIssueLink = async () => {
@@ -1004,9 +1018,14 @@
 	$: fromIssueId = $page.url.searchParams.get('fromIssueId');
 	$: fromIssueSlug = $page.url.searchParams.get('fromIssueSlug');
 	$: fromIssueTitle = $page.url.searchParams.get('fromIssueTitle');
+	$: toIssueTitle = $page.url.searchParams.get('toIssueTitle');
+	// Only use issueName when the loaded issue matches the current URL — if it's
+	// stale from the previous page it would briefly show the wrong title.
+	$: breadcrumbIssueName =
+		(issue?.readableId === $page.params.issue_id ? issueName : null) || toIssueTitle || '';
 
 	$: backHref = fromIssueId
-		? `/${$page.params.workspace}/issue/${fromIssueId}/${fromIssueSlug}`
+		? `/${$page.params.workspace}/issue/${fromIssueId}/${fromIssueSlug}?toIssueTitle=${encodeURIComponent(fromIssueTitle ?? '')}`
 		: fromParam === 'inbox'
 			? `/${$page.params.workspace}/inbox`
 			: `/${$page.params.workspace}/my-issues`;
@@ -1037,7 +1056,7 @@
 
 <svelte:window on:keydown={onKeydown} on:click={onWindowClick} />
 
-{#if issue}
+{#if issue || _issueLoading}
 	<div class="flex h-full">
 		<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 			<div
@@ -1050,7 +1069,11 @@
 					<a href={backHref} class="text-neutral-700 hover:underline">{backLabel}</a>
 					<span class="text-neutral-300">›</span>
 					<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${statusMeta.statusClass}`}></span>
-					<span class="text-neutral-500">{issueName}</span>
+					{#if _issueLoading && !breadcrumbIssueName}
+						<span class="h-3.5 w-24 animate-pulse rounded bg-neutral-200"></span>
+					{:else}
+						<span class="text-neutral-500">{breadcrumbIssueName}</span>
+					{/if}
 				</div>
 				<div
 					class="flex items-center gap-2 transition-opacity duration-150"
@@ -1108,16 +1131,21 @@
 			>
 				<div class="flex flex-wrap items-start justify-between gap-6">
 					<div class="min-w-0">
-						<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
-						<div class="mt-2 text-sm text-neutral-500">
-							{issueDescription || 'Add description...'}
-						</div>
+						{#if !_issueLoading && issue}
+							<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
+							<div class="mt-2 text-sm text-neutral-500">
+								{issueDescription || 'Add description...'}
+							</div>
+						{:else}
+							<div class="h-7 w-56 animate-pulse rounded bg-neutral-200"></div>
+							<div class="mt-2 h-4 w-80 animate-pulse rounded bg-neutral-100"></div>
+						{/if}
 					</div>
 					<div></div>
 				</div>
 				<div class="mt-6"></div>
 
-				{#if subIssues.length}
+				{#if !_subIssuesLoading && subIssues.length}
 					<div class="mt-8">
 						<div class="flex items-center gap-2 text-sm text-neutral-600">
 							<button

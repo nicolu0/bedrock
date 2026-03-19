@@ -7,6 +7,7 @@
 	import { browser } from '$app/environment';
 	import { goto, invalidate } from '$app/navigation';
 	import { issuesCache, ensureIssuesCache } from '$lib/stores/issuesCache';
+	import { propertiesCache } from '$lib/stores/propertiesCache';
 	import { notificationsCache, ensureNotificationsCache } from '$lib/stores/notificationsCache';
 	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
@@ -205,13 +206,17 @@
 		const propData = data.properties;
 		if (propData instanceof Promise) {
 			propData.then((list) => {
-				if (Array.isArray(list)) _resolvedProperties = list;
+				if (Array.isArray(list)) {
+					_resolvedProperties = list;
+					propertiesCache.set(list);
+				}
 			});
 		} else if (Array.isArray(propData)) {
 			_resolvedProperties = propData;
+			propertiesCache.set(propData);
 		}
 	}
-	$: properties = _resolvedProperties;
+	$: properties = $propertiesCache ?? _resolvedProperties;
 
 	// Resolve streaming units promise for search
 	let _resolvedUnits = null;

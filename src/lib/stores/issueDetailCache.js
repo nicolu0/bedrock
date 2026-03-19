@@ -13,11 +13,15 @@ const byReadableId = new Map();
 export const seedIssueDetail = (issue, subIssues = []) => {
 	if (!issue?.id) return;
 	const rid = issue.readableId ?? issue.readable_id ?? null;
+	const existing = memoryCache.get(issue.id);
 	const normalizedIssue = {
 		id: issue.id,
 		name: issue.name ?? issue.title,
 		status: issue.status,
-		description: issue.description ?? null,
+		// Preserve an existing cached description if the incoming data doesn't
+		// have one — section items from the issues list don't carry description,
+		// and we don't want them to wipe a value set by a more complete fetch.
+		description: issue.description ?? existing?.issue?.description ?? null,
 		property: issue.property ?? null,
 		unit: issue.unit ?? null,
 		issueNumber: issue.issueNumber ?? null,
