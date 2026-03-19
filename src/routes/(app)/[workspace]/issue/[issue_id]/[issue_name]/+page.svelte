@@ -86,9 +86,6 @@
 	// the block below — which would cause a _resolvedActivity → messagesByIssue
 	// → _resolvedActivity cycle.
 	function mergeAndSetActivity(d) {
-		// Preserve locally-added messages (from realtime) not yet in server data.
-		// This handles the race condition where the server queries the DB before
-		// the messages INSERT is visible, causing the sent email to disappear.
 		const serverIds = new Set(
 			Object.values(d.messagesByIssue ?? {}).flat().map((m) => m.id)
 		);
@@ -681,8 +678,8 @@
 		return (statusConfig[nextStatus]?.label ?? nextStatus).toString();
 	};
 
-	const collectMessagesForIssue = (id) => {
-		const messages = messagesByIssue[id] ?? [];
+	const collectMessagesForIssue = (mbi, id) => {
+		const messages = mbi[id] ?? [];
 		return [...messages].sort((a, b) => {
 			const timeA = a?.timestamp ? new Date(a.timestamp).getTime() : 0;
 			const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
@@ -704,7 +701,7 @@
 
 	const getThreadSubject = (id) => {
 		if (!id) return '';
-		const messages = collectMessagesForIssue(id);
+		const messages = collectMessagesForIssue(messagesByIssue, id);
 		const messageSubject = messages.find((msg) => msg?.subject)?.subject ?? '';
 		const draftSubject = (draftsByIssue[id] ?? []).find((draft) => draft?.subject)?.subject ?? '';
 		return messageSubject || draftSubject || '';
@@ -1142,7 +1139,7 @@
 											</div>
 										{/if}
 										<div class="space-y-3 pl-11">
-											{#each collectMessagesForIssue(issueId) as message}
+											{#each collectMessagesForIssue(messagesByIssue, issueId) as message}
 												<EmailMessageWithDraft
 													message={{
 														...message,
@@ -1163,6 +1160,7 @@
 													}}
 													{draft}
 													{vendors}
+													on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
 												/>
 											{/each}
 										</div>
@@ -1202,6 +1200,7 @@
 													}}
 													{draft}
 													{vendors}
+													on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
 												/>
 											{/each}
 										</div>
@@ -1409,7 +1408,7 @@
 																</div>
 															{/if}
 															<div class="space-y-3 pl-11">
-																{#each collectMessagesForIssue(subIssue.id) as message}
+																{#each collectMessagesForIssue(messagesByIssue, subIssue.id) as message}
 																	<EmailMessageWithDraft
 																		message={{
 																			...message,
@@ -1430,6 +1429,7 @@
 																		}}
 																		{draft}
 																		{vendors}
+																		on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
 																	/>
 																{/each}
 															</div>
@@ -1471,6 +1471,7 @@
 																		}}
 																		{draft}
 																		{vendors}
+																		on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
 																	/>
 																{/each}
 															</div>
