@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { getContext, onMount } from 'svelte';
+	import { AsYouType } from 'libphonenumber-js';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import { fade, scale } from 'svelte/transition';
@@ -14,11 +15,13 @@
 	let newUnitName = '';
 	let newUnitTenantName = '';
 	let newUnitTenantEmail = '';
+	let newUnitTenantPhone = '';
 	let createUnitError = '';
 	let editingUnit = null;
 	let editUnitName = '';
 	let editUnitTenantName = '';
 	let editUnitTenantEmail = '';
+	let editUnitTenantPhone = '';
 	let editUnitTenantId = '';
 	let updateUnitError = '';
 	let openRowMenu = null;
@@ -43,6 +46,7 @@
 		newUnitName = '';
 		newUnitTenantName = '';
 		newUnitTenantEmail = '';
+		newUnitTenantPhone = '';
 		createUnitError = '';
 		document.activeElement?.blur();
 	};
@@ -52,6 +56,7 @@
 		editUnitName = unit?.name ?? '';
 		editUnitTenantName = unit?.tenant?.name ?? '';
 		editUnitTenantEmail = unit?.tenant?.email ?? '';
+		editUnitTenantPhone = unit?.tenant?.phone ?? '';
 		editUnitTenantId = unit?.tenant?.id ?? '';
 		updateUnitError = '';
 	};
@@ -61,6 +66,7 @@
 		editUnitName = '';
 		editUnitTenantName = '';
 		editUnitTenantEmail = '';
+		editUnitTenantPhone = '';
 		editUnitTenantId = '';
 		updateUnitError = '';
 		document.activeElement?.blur();
@@ -122,6 +128,16 @@
 		const parts = name.trim().split(/\s+/);
 		if (parts.length === 1) return parts[0][0].toUpperCase();
 		return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+	}
+
+	function phoneInput(e, setter) {
+		const raw = e.target.value;
+		let digits = raw.replace(/\D/g, '');
+		if (digits.startsWith('1')) digits = digits.slice(1);
+		digits = digits.slice(0, 10);
+		const formatted = new AsYouType('US').input(digits);
+		e.target.value = formatted;
+		setter(formatted);
 	}
 </script>
 
@@ -276,6 +292,14 @@
 							bind:value={newUnitTenantEmail}
 							type="email"
 						/>
+						<input
+							class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							placeholder="Phone"
+							name="tenantPhone"
+							value={newUnitTenantPhone}
+							on:input={(e) => phoneInput(e, (v) => (newUnitTenantPhone = v))}
+							type="tel"
+						/>
 					</div>
 				</div>
 				<div class="mt-5 flex items-center justify-end gap-2">
@@ -364,6 +388,14 @@
 							name="tenantEmail"
 							bind:value={editUnitTenantEmail}
 							type="email"
+						/>
+						<input
+							class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							placeholder="Phone"
+							name="tenantPhone"
+							value={editUnitTenantPhone}
+							on:input={(e) => phoneInput(e, (v) => (editUnitTenantPhone = v))}
+							type="tel"
 						/>
 					</div>
 				</div>
