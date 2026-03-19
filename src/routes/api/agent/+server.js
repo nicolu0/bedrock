@@ -2253,6 +2253,16 @@ const isPubsubSecretValid = (request) => {
 	const headerSecret = request.headers.get(agentSecretHeader) ?? '';
 	const url = new URL(request.url);
 	const querySecret = url.searchParams.get(pubsubSecretParam) ?? '';
+	console.log('agent-route pubsub-secret-check', {
+		has_env_secret: Boolean(AGENT_WEBHOOK_SECRET),
+		has_header_secret: Boolean(headerSecret),
+		has_query_secret: Boolean(querySecret),
+		header_len: headerSecret.length,
+		query_len: querySecret.length,
+		env_len: AGENT_WEBHOOK_SECRET.length,
+		match_header: headerSecret === AGENT_WEBHOOK_SECRET,
+		match_query: querySecret === AGENT_WEBHOOK_SECRET
+	});
 	return headerSecret === AGENT_WEBHOOK_SECRET || querySecret === AGENT_WEBHOOK_SECRET;
 };
 
