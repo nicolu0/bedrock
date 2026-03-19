@@ -33,7 +33,7 @@ export const load = async ({ parent, params, depends }) => {
 
 	const { data: units } = await supabaseAdmin
 		.from('units')
-		.select('id, name, property_id, tenants(id, name, email, unit_id)')
+		.select('id, name, property_id, tenants(id, name, email, phone, unit_id)')
 		.eq('property_id', property.id)
 		.order('name', { ascending: true });
 
@@ -54,9 +54,11 @@ export const actions = {
 		const name = form.get('name');
 		const tenantName = form.get('tenantName');
 		const tenantEmail = form.get('tenantEmail');
+		const tenantPhone = form.get('tenantPhone');
 		const hasTenantInfo =
 			(typeof tenantName === 'string' && tenantName.trim()) ||
-			(typeof tenantEmail === 'string' && tenantEmail.trim());
+			(typeof tenantEmail === 'string' && tenantEmail.trim()) ||
+			(typeof tenantPhone === 'string' && tenantPhone.trim());
 
 		if (!name || typeof name !== 'string' || !name.trim()) {
 			return fail(400, { error: 'Unit number is required.' });
@@ -104,7 +106,9 @@ export const actions = {
 				email:
 					typeof tenantEmail === 'string' && tenantEmail.trim()
 						? tenantEmail.trim().toLowerCase()
-						: null
+						: null,
+				phone:
+					typeof tenantPhone === 'string' && tenantPhone.trim() ? tenantPhone.trim() : null
 			});
 			if (tenantError) return fail(500, { error: tenantError.message });
 		}
@@ -118,9 +122,11 @@ export const actions = {
 		const name = form.get('name');
 		const tenantName = form.get('tenantName');
 		const tenantEmail = form.get('tenantEmail');
+		const tenantPhone = form.get('tenantPhone');
 		const hasTenantInfo =
 			(typeof tenantName === 'string' && tenantName.trim()) ||
-			(typeof tenantEmail === 'string' && tenantEmail.trim());
+			(typeof tenantEmail === 'string' && tenantEmail.trim()) ||
+			(typeof tenantPhone === 'string' && tenantPhone.trim());
 
 		if (!unitId || typeof unitId !== 'string') {
 			return fail(400, { error: 'Unit ID is required.' });
@@ -174,6 +180,8 @@ export const actions = {
 							typeof tenantEmail === 'string' && tenantEmail.trim()
 								? tenantEmail.trim().toLowerCase()
 								: null,
+						phone:
+							typeof tenantPhone === 'string' && tenantPhone.trim() ? tenantPhone.trim() : null,
 						updated_at: new Date().toISOString()
 					})
 					.eq('id', tenantId)
@@ -187,7 +195,9 @@ export const actions = {
 					email:
 						typeof tenantEmail === 'string' && tenantEmail.trim()
 							? tenantEmail.trim().toLowerCase()
-							: null
+							: null,
+					phone:
+						typeof tenantPhone === 'string' && tenantPhone.trim() ? tenantPhone.trim() : null
 				});
 				if (tenantError) return fail(500, { error: tenantError.message });
 			}

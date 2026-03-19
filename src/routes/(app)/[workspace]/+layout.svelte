@@ -5,7 +5,7 @@
 	import { get } from 'svelte/store';
 	import { page, navigating } from '$app/stores';
 	import { browser } from '$app/environment';
-	import { goto, invalidate } from '$app/navigation';
+	import { goto, invalidate, beforeNavigate, afterNavigate } from '$app/navigation';
 	import { issuesCache, ensureIssuesCache } from '$lib/stores/issuesCache';
 	import { propertiesCache } from '$lib/stores/propertiesCache';
 	import { notificationsCache, ensureNotificationsCache } from '$lib/stores/notificationsCache';
@@ -16,6 +16,91 @@
 	export let data;
 
 	let appMounted = false;
+
+	// Navigation loading bar
+	let _navProgress = 0;
+	let _navVisible = false;
+	let _navHideTimer;
+	let _navShowTimer;
+	let _navCreepTimer;
+	let _pendingFetches = 0;
+	let _completedFetches = 0;
+	let _navActive = false;
+	let _navLocked = false;
+	let _navGeneration = 0;
+	let _origFetch;
+
+	function _updateNavProgress() {
+		if (_pendingFetches === 0) return;
+		_navProgress = 10 + (_completedFetches / _pendingFetches) * 82;
+	}
+
+	function _startCreep() {
+		_stopCreep();
+		const tick = () => {
+			const cap = 85;
+			if (_navProgress < cap) {
+				// Random nudge between 3% and 8%
+				const nudge = 3 + Math.random() * 5;
+				_navProgress = Math.min(_navProgress + nudge, cap);
+			}
+			// Random delay between 600ms and 1200ms
+			const delay = 600 + Math.random() * 600;
+			_navCreepTimer = setTimeout(tick, delay);
+		};
+		const initialDelay = 600 + Math.random() * 600;
+		_navCreepTimer = setTimeout(tick, initialDelay);
+	}
+
+	function _stopCreep() {
+		clearTimeout(_navCreepTimer);
+		_navCreepTimer = null;
+	}
+
+	beforeNavigate(() => {
+		if (_navLocked) return;
+		clearTimeout(_navShowTimer);
+		_stopCreep();
+		_navActive = true;
+		_navGeneration++;
+		_pendingFetches = 0;
+		_completedFetches = 0;
+		if (_navVisible) {
+			// Bar is already showing — reset to start to signal a new navigation
+			_navProgress = 10;
+			_startCreep();
+		} else {
+			_navProgress = 10;
+			// Only show bar if navigation takes longer than 100ms
+			_navShowTimer = setTimeout(() => {
+				_navShowTimer = null;
+				_navVisible = true;
+				_startCreep();
+			}, 100);
+		}
+	});
+
+	afterNavigate(() => {
+		if (_navLocked) return;
+		_navActive = false;
+		_stopCreep();
+		// If the show timer hasn't fired yet, navigation was instant — suppress the bar
+		if (_navShowTimer) {
+			clearTimeout(_navShowTimer);
+			_navShowTimer = null;
+			_navProgress = 0;
+			return;
+		}
+		_navLocked = true;
+		_navProgress = 100;
+		_navHideTimer = setTimeout(() => {
+			_navVisible = false;
+			setTimeout(() => {
+				_navProgress = 0;
+				_navLocked = false;
+			}, 150);
+		}, 200);
+	});
 	let showSearchModal = false;
 	let searchInput;
 	let searchQuery = '';
@@ -81,6 +166,26 @@
 	};
 	onMount(() => {
 		appMounted = true;
+
+		_origFetch = window.fetch;
+		window.fetch = async (input, init) => {
+			const url = input instanceof Request ? input.url : String(input);
+			const isDataReq = url.includes('__data.json');
+			const gen = _navGeneration;
+			if (_navActive && isDataReq) {
+				_pendingFetches++;
+				_updateNavProgress();
+			}
+			try {
+				const res = await _origFetch(input, init);
+				if (_navActive && isDataReq && gen === _navGeneration) { _completedFetches++; _updateNavProgress(); }
+				return res;
+			} catch (e) {
+				if (_navActive && isDataReq && gen === _navGeneration) { _completedFetches++; _updateNavProgress(); }
+				throw e;
+			}
+		};
+
 		const onKeydown = (event) => {
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
 				event.preventDefault();
@@ -376,8 +481,15 @@
 
 	onDestroy(() => {
 		if (_workspaceChannel) supabase.removeChannel(_workspaceChannel);
+		if (_origFetch) window.fetch = _origFetch;
 	});
 </script>
+
+<div
+	class="pointer-events-none fixed top-0 left-0 z-[9999] h-[2px] bg-blue-500"
+	style="width: {_navProgress}%; opacity: {_navVisible ? 1 : 0};
+         transition: width 180ms ease-out, opacity 150ms ease;"
+></div>
 
 {#if isSettingsRoute}
 	<slot />
