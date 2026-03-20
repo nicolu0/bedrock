@@ -18,6 +18,7 @@ export const seedIssueDetail = (issue, subIssues = []) => {
 		id: issue.id,
 		name: issue.name ?? issue.title,
 		status: issue.status,
+		urgent: issue.urgent ?? existing?.issue?.urgent ?? false,
 		// Preserve an existing cached description if the incoming data doesn't
 		// have one — section items from the issues list don't carry description,
 		// and we don't want them to wipe a value set by a more complete fetch.
@@ -33,6 +34,7 @@ export const seedIssueDetail = (issue, subIssues = []) => {
 		id: s.id,
 		name: s.name ?? s.title,
 		status: s.status,
+		urgent: s.urgent ?? false,
 		parent_id: issue.id,
 		property: s.property ?? null,
 		unit: s.unit ?? null,

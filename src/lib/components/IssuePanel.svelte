@@ -36,6 +36,7 @@
 						id: seedIssue.id,
 						name: seedIssue.name,
 						status: seedIssue.status,
+						urgent: seedIssue.urgent ?? false,
 						description: null,
 						parent_id: seedIssue.parent_id ?? null
 					}
@@ -46,10 +47,10 @@
 		const [{ data: iss }, { data: subs }] = await Promise.all([
 			supabase
 				.from('issues')
-				.select('id, name, status, description, parent_id')
+				.select('id, name, status, urgent, description, parent_id')
 				.eq('id', id)
 				.maybeSingle(),
-			supabase.from('issues').select('id, name, status').eq('parent_id', id)
+			supabase.from('issues').select('id, name, status, urgent').eq('parent_id', id)
 		]);
 
 		console.log('[IssuePanel] DB result', { iss, subs });

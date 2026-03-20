@@ -19,7 +19,7 @@ export const load = async ({ parent, params, depends }) => {
 	const issueRowPromise = supabaseAdmin
 		.from('issues')
 		.select(
-			'id, name, description, status, issue_number, readable_id, assignee_id, unit_id, property_id, properties(name), units(name, property_id, properties(name))'
+			'id, name, description, status, urgent, issue_number, readable_id, assignee_id, unit_id, property_id, properties(name), units(name, property_id, properties(name))'
 		)
 		.eq('workspace_id', workspace.id)
 		.eq('readable_id', readableId)
@@ -32,6 +32,7 @@ export const load = async ({ parent, params, depends }) => {
 				name: issueRow.name,
 				description: issueRow.description ?? null,
 				status: issueRow.status,
+				urgent: issueRow.urgent ?? false,
 				issueNumber: issueRow.issue_number ?? null,
 				readableId: issueRow.readable_id ?? null,
 				assignee_id: issueRow.assignee_id ?? null,
@@ -50,7 +51,7 @@ export const load = async ({ parent, params, depends }) => {
 		const { data } = await supabaseAdmin
 			.from('issues')
 			.select(
-				'id, name, description, status, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, properties(name), units(name, property_id, properties(name))'
+				'id, name, description, status, urgent, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, properties(name), units(name, property_id, properties(name))'
 			)
 			.eq('parent_id', issue.id);
 		return (data ?? []).map((s) => ({
@@ -58,6 +59,7 @@ export const load = async ({ parent, params, depends }) => {
 			name: s.name,
 			description: s.description ?? null,
 			status: s.status,
+			urgent: s.urgent ?? false,
 			issueNumber: s.issue_number ?? null,
 			readableId: s.readable_id ?? null,
 			assigneeId: s.assignee_id ?? null,

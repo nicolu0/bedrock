@@ -629,10 +629,26 @@
 		});
 	};
 
+	const handleUrgentChange = async (nextUrgent) => {
+		if (!canEditIssue) return;
+		if (!issueId) return;
+		const prevUrgent = issue?.urgent ?? false;
+		issue = { ...issue, urgent: nextUrgent };
+		urgentOpen = false;
+		const { error } = await supabase
+			.from('issues')
+			.update({ urgent: nextUrgent })
+			.eq('id', issueId);
+		if (error) {
+			issue = { ...issue, urgent: prevUrgent };
+		}
+	};
+
 	let statusOpen = false;
 	let assigneeOpen = false;
 	let propertyOpen = false;
 	let unitOpen = false;
+	let urgentOpen = false;
 
 	const handleAssigneeSelect = async (member) => {
 		if (!canEditIssue) return;
@@ -1057,6 +1073,7 @@
 		if (assigneeOpen) assigneeOpen = false;
 		if (propertyOpen) propertyOpen = false;
 		if (unitOpen) unitOpen = false;
+		if (urgentOpen) urgentOpen = false;
 	}
 </script>
 
@@ -1837,6 +1854,7 @@
 								unitOpen = false;
 								statusOpen = false;
 								assigneeOpen = false;
+								urgentOpen = false;
 							}}
 						>
 							<svg
@@ -1902,6 +1920,7 @@
 								propertyOpen = false;
 								statusOpen = false;
 								assigneeOpen = false;
+								urgentOpen = false;
 							}}
 						>
 							<svg
@@ -1968,6 +1987,7 @@
 							on:click|stopPropagation={() => {
 								if (!canEditIssue) return;
 								statusOpen = !statusOpen;
+								urgentOpen = false;
 							}}
 						>
 							<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
@@ -2011,7 +2031,105 @@
 							aria-disabled={!canEditIssue}
 							on:click|stopPropagation={() => {
 								if (!canEditIssue) return;
+								urgentOpen = !urgentOpen;
+								statusOpen = false;
+								assigneeOpen = false;
+								propertyOpen = false;
+								unitOpen = false;
+							}}
+						>
+							{#if issue?.urgent}
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									fill="currentColor"
+									class="text-rose-600"
+									viewBox="0 0 16 16"
+								>
+									<path
+										d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+									/>
+								</svg>
+								<span>Urgent</span>
+							{:else}
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									fill="currentColor"
+									class="text-neutral-400"
+									viewBox="0 0 16 16"
+								>
+									<path
+										d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+									/>
+								</svg>
+								<span>Not urgent</span>
+							{/if}
+						</button>
+						{#if urgentOpen && canEditIssue}
+							<div
+								class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+								on:click|stopPropagation
+							>
+								<button
+									type="button"
+									class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+										issue?.urgent ? 'bg-neutral-50' : ''
+									}`}
+									on:click={() => handleUrgentChange(true)}
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="16"
+										height="16"
+										fill="currentColor"
+										class="text-rose-600"
+										viewBox="0 0 16 16"
+									>
+										<path
+											d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+										/>
+									</svg>
+									<span>Urgent</span>
+								</button>
+								<button
+									type="button"
+									class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+										!issue?.urgent ? 'bg-neutral-50' : ''
+									}`}
+									on:click={() => handleUrgentChange(false)}
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="16"
+										height="16"
+										fill="currentColor"
+										class="text-neutral-400"
+										viewBox="0 0 16 16"
+									>
+										<path
+											d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+										/>
+									</svg>
+									<span>Not urgent</span>
+								</button>
+							</div>
+						{/if}
+					</div>
+					<div class="relative">
+						<button
+							type="button"
+							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
+								canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+							}`}
+							disabled={!canEditIssue}
+							aria-disabled={!canEditIssue}
+							on:click|stopPropagation={() => {
+								if (!canEditIssue) return;
 								assigneeOpen = !assigneeOpen;
+								urgentOpen = false;
 							}}
 						>
 							{#if assignee}
