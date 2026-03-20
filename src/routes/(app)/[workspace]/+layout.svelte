@@ -339,6 +339,7 @@
 	const navItems = [
 		{ id: 'inbox', label: 'Inbox', href: 'inbox' },
 		{ id: 'my-issues', label: 'My issues', href: 'my-issues' },
+		{ id: 'policies', label: 'Policies', href: 'policies' },
 		{ id: 'people', label: 'People', href: 'people' }
 	];
 	const propertiesItem = { id: 'properties', label: 'Properties', href: 'properties' };
@@ -569,6 +570,19 @@
 										>
 											<path
 												d="M2 2v13.5a.5.5 0 0 0 .74.439L8 13.069l5.26 2.87A.5.5 0 0 0 14 15.5V2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2"
+											/>
+										</svg>
+									{:else if item.id === 'policies'}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="12"
+											height="12"
+											fill="currentColor"
+											class="shrink-0 text-neutral-600"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M9.5 0a.5.5 0 0 1 .5.5V2h2.5a.5.5 0 0 1 .354.854l-4 4a.5.5 0 0 1-.708 0l-4-4A.5.5 0 0 1 4.5 2H7V.5a.5.5 0 0 1 .5-.5zM2 8.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5z"
 											/>
 										</svg>
 									{:else if item.id === 'inbox'}

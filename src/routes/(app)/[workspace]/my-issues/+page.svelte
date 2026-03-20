@@ -647,7 +647,7 @@
 										</div>
 										{#if item.assigneeBadge}
 											<div
-												class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${item.assigneeBadge.color}`}
+												class={`flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-semibold text-neutral-700 ${item.assigneeBadge.color}`}
 												aria-label={item.assigneeBadge.name}
 												title={item.assigneeBadge.name}
 											>
@@ -655,7 +655,7 @@
 											</div>
 										{:else}
 											<div
-												class="flex h-5 w-5 items-center justify-center rounded-full text-neutral-300"
+												class="flex h-3.5 w-3.5 items-center justify-center rounded-full text-neutral-300"
 												aria-label="Unassigned"
 												title="Unassigned"
 											>

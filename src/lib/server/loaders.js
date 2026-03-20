@@ -237,6 +237,28 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 	return { sections: filteredSections, issues: normalizedIssues, assignee, workspaceId };
 };
 
+export const loadPoliciesData = async (workspaceId) => {
+	if (!workspaceId) return { policies: [] };
+	const { data: policies } = await supabaseAdmin
+		.from('workspace_policies')
+		.select('id, type, email, description, meta, created_at, created_by, users:created_by(name)')
+		.eq('workspace_id', workspaceId)
+		.order('created_at', { ascending: false });
+
+	const normalized = (policies ?? []).map((policy) => ({
+		id: policy.id,
+		type: policy.type ?? 'behavior',
+		email: policy.email ?? '',
+		description: policy.description ?? '',
+		meta: policy.meta ?? null,
+		createdAt: policy.created_at ?? null,
+		createdById: policy.created_by ?? null,
+		createdByName: policy.users?.name ?? 'Unknown'
+	}));
+
+	return { policies: normalized };
+};
+
 const normalizeRecipientList = (value) => {
 	if (!value) return [];
 	if (Array.isArray(value)) {

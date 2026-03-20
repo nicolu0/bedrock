@@ -98,7 +98,9 @@
 	// → _resolvedActivity cycle.
 	function mergeAndSetActivity(d) {
 		const serverIds = new Set(
-			Object.values(d.messagesByIssue ?? {}).flat().map((m) => m.id)
+			Object.values(d.messagesByIssue ?? {})
+				.flat()
+				.map((m) => m.id)
 		);
 		const mergedMessages = { ...d.messagesByIssue };
 		for (const [id, msgs] of Object.entries(messagesByIssue)) {
@@ -112,7 +114,9 @@
 
 	$: {
 		if (data.activityData instanceof Promise) {
-			data.activityData.then((d) => { if (d) mergeAndSetActivity(d); });
+			data.activityData.then((d) => {
+				if (d) mergeAndSetActivity(d);
+			});
 		} else if (data.activityData) {
 			_resolvedActivity = data.activityData;
 		}
@@ -122,7 +126,9 @@
 	$: {
 		if (data.activityLogsData instanceof Promise) {
 			_resolvedLogs = null;
-			data.activityLogsData.then((d) => { if (d) _resolvedLogs = d; });
+			data.activityLogsData.then((d) => {
+				if (d) _resolvedLogs = d;
+			});
 		} else if (data.activityLogsData) {
 			_resolvedLogs = data.activityLogsData;
 		}
@@ -1068,7 +1074,7 @@
 				>
 					<a href={backHref} class="text-neutral-700 hover:underline">{backLabel}</a>
 					<span class="text-neutral-300">›</span>
-					<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${statusMeta.statusClass}`}></span>
+					<span class={`h-4 w-4 rounded-full border-[1.5px] ${statusMeta.statusClass}`}></span>
 					{#if _issueLoading && !breadcrumbIssueName}
 						<span class="h-3.5 w-24 animate-pulse rounded bg-neutral-200"></span>
 					{:else}
@@ -1320,7 +1326,9 @@
 													}}
 													{draft}
 													{vendors}
-													on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
+													on:sent={(e) => {
+														if (e.detail.message) applyMessageDelta(e.detail.message);
+													}}
 												/>
 											{/each}
 										</div>
@@ -1360,7 +1368,9 @@
 													}}
 													{draft}
 													{vendors}
-													on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
+													on:sent={(e) => {
+														if (e.detail.message) applyMessageDelta(e.detail.message);
+													}}
 												/>
 											{/each}
 										</div>
@@ -1593,7 +1603,9 @@
 																		}}
 																		{draft}
 																		{vendors}
-																		on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
+																		on:sent={(e) => {
+																			if (e.detail.message) applyMessageDelta(e.detail.message);
+																		}}
 																	/>
 																{/each}
 															</div>
@@ -1635,7 +1647,9 @@
 																		}}
 																		{draft}
 																		{vendors}
-																		on:sent={(e) => { if (e.detail.message) applyMessageDelta(e.detail.message); }}
+																		on:sent={(e) => {
+																			if (e.detail.message) applyMessageDelta(e.detail.message);
+																		}}
 																	/>
 																{/each}
 															</div>
@@ -1977,7 +1991,7 @@
 										}}
 									>
 										<span
-											class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${
+											class={`h-4 w-4 rounded-full border-[1.5px] ${
 												(statusConfig[status] ?? statusConfig.todo).statusClass
 											}`}
 										></span>
@@ -2002,7 +2016,7 @@
 						>
 							{#if assignee}
 								<div
-									class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(assignee).color}`}
+									class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(assignee).color}`}
 									aria-label={getAssigneeAvatar(assignee).name}
 								>
 									{getAssigneeAvatar(assignee).initial}
@@ -2064,7 +2078,7 @@
 											on:click={() => handleAssigneeSelect(member)}
 										>
 											<div
-												class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getMemberAvatar(member).color}`}
+												class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getMemberAvatar(member).color}`}
 												aria-label={getMemberAvatar(member).name}
 											>
 												{getMemberAvatar(member).initial}
