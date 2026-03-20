@@ -9,6 +9,7 @@
 	import { issuesCache, ensureIssuesCache } from '$lib/stores/issuesCache';
 	import { propertiesCache } from '$lib/stores/propertiesCache';
 	import { notificationsCache, ensureNotificationsCache } from '$lib/stores/notificationsCache';
+	import { ensurePoliciesCache } from '$lib/stores/policiesCache';
 	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
 	import { pageReady } from '$lib/stores/pageReady';
@@ -377,6 +378,7 @@
 	$: if (browser && workspaceSlug) {
 		ensureIssuesCache(workspaceSlug);
 		ensureNotificationsCache(workspaceSlug);
+		ensurePoliciesCache(workspaceSlug);
 		if (canViewPeople) {
 			ensurePeopleMembersCache(workspaceSlug);
 			ensurePeopleCache(workspaceSlug);
@@ -413,6 +415,7 @@
 		console.log('[RT] invalidating policies, v:', _rtPoliciesV);
 		_donePoliciesV = _rtPoliciesV;
 		invalidate('app:policies');
+		if (browser) ensurePoliciesCache(workspaceSlug, { force: true });
 	}
 	$: if (_rtActivityV > _doneActivityV) {
 		_doneActivityV = _rtActivityV;

@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
+	import { applyPolicyInsert, policiesCache, primePoliciesCache } from '$lib/stores/policiesCache';
 
 	export let data;
 
@@ -24,9 +25,24 @@
 
 	$: workspaceSlug = $page.params.workspace;
 
+	$: _cachedPolicies =
+		$policiesCache?.workspace === $page.params.workspace && $policiesCache?.data
+			? $policiesCache.data
+			: null;
 	$: {
-		const policiesData = data.policies;
-		const list = policiesData?.policies ?? policiesData;
+		if (data.policies instanceof Promise) {
+			const loadStartedAt = Date.now();
+			data.policies.then((result) => {
+				if (result?.policies) {
+					primePoliciesCache($page.params.workspace, result, loadStartedAt);
+				}
+			});
+		} else if (data.policies) {
+			primePoliciesCache($page.params.workspace, data.policies);
+		}
+	}
+	$: {
+		const list = _cachedPolicies?.policies ?? _cachedPolicies ?? [];
 		_resolvedPolicies = Array.isArray(list) ? list : [];
 	}
 	$: policies = _resolvedPolicies ?? [];
@@ -149,8 +165,7 @@
 				createPolicyError = result?.error ?? 'Unable to create policy.';
 				return;
 			}
-			if (!Array.isArray(_resolvedPolicies)) _resolvedPolicies = [];
-			_resolvedPolicies = [result, ..._resolvedPolicies];
+			applyPolicyInsert(result);
 			closeNewPolicyModal();
 		} catch {
 			createPolicyError = 'Unable to create policy.';

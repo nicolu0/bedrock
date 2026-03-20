@@ -7,7 +7,7 @@ export const load = async ({ parent, depends }) => {
 	const parentData = await parent();
 	const { workspace } = parentData;
 
-	const policiesData = await loadPoliciesData(workspace.id);
+	const policiesData = loadPoliciesData(workspace.id);
 
-	return { policies: policiesData?.policies ?? [] };
+	return { policies: policiesData };
 };
