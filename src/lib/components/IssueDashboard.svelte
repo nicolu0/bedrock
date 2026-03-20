@@ -23,12 +23,6 @@
 	export let routeView = null;
 	export let workspaceName = null;
 
-	const urgencyBuckets = [
-		{ key: 'high', label: 'High', dot: 'bg-red-500' },
-		{ key: 'medium', label: 'Medium', dot: 'bg-amber-400' },
-		{ key: 'low', label: 'Low', dot: 'bg-emerald-500' }
-	];
-
 	const statusStyles = {
 		todo: 'bg-neutral-200 text-neutral-700 border-neutral-300',
 		in_progress: 'bg-sky-100 text-sky-800 border-sky-200',
@@ -370,7 +364,7 @@
 		return {
 			id: row.id,
 			name: row.name,
-			urgency: row.urgency ?? null,
+			urgent: row.urgent ?? false,
 			status: row.status,
 			description: row.description ?? null,
 			vendorId: row.vendor_id ?? null,
@@ -401,7 +395,7 @@
 			status: row.status,
 			createdAt: row.created_at,
 			issueName: issue?.name ?? 'Unknown issue',
-			issueUrgency: issue?.urgency ?? null,
+			issueUrgent: issue?.urgent ?? false,
 			issueStatus: issue?.status ?? null,
 			unit: issue?.unit ?? null,
 			building: issue?.building ?? null,
@@ -1331,9 +1325,33 @@
 										>
 											{#if editingRow?.type === 'issues' && editingRow?.id === issue.id}
 												<div class="flex flex-1 items-center gap-2">
-													<span
-														class={`h-2 w-2 flex-none rounded-full ${urgencyBuckets.find((bucket) => bucket.key === issue.urgency)?.dot ?? 'bg-neutral-300'}`}
-													></span>
+													{#if issue.urgent}
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															width="14"
+															height="14"
+															fill="currentColor"
+															class="flex-none text-rose-600"
+															viewBox="0 0 16 16"
+														>
+															<path
+																d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+															/>
+														</svg>
+													{:else}
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															width="14"
+															height="14"
+															fill="currentColor"
+															class="flex-none text-neutral-300"
+															viewBox="0 0 16 16"
+														>
+															<path
+																d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+															/>
+														</svg>
+													{/if}
 													<input
 														class="w-full bg-transparent p-0 text-sm text-neutral-900 outline-none"
 														bind:value={editValue}
@@ -1348,9 +1366,33 @@
 												</div>
 											{:else}
 												<button class="flex flex-1 items-center gap-2 text-left" type="button">
-													<span
-														class={`h-2 w-2 flex-none rounded-full ${urgencyBuckets.find((bucket) => bucket.key === issue.urgency)?.dot ?? 'bg-neutral-300'}`}
-													></span>
+													{#if issue.urgent}
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															width="14"
+															height="14"
+															fill="currentColor"
+															class="flex-none text-rose-600"
+															viewBox="0 0 16 16"
+														>
+															<path
+																d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+															/>
+														</svg>
+													{:else}
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															width="14"
+															height="14"
+															fill="currentColor"
+															class="flex-none text-neutral-300"
+															viewBox="0 0 16 16"
+														>
+															<path
+																d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+															/>
+														</svg>
+													{/if}
 													<span class="truncate">{issue.name}</span>
 												</button>
 											{/if}
@@ -2021,10 +2063,32 @@
 															on:click={() => handleActionIssueOpen(action.issueId)}
 															type="button"
 														>
-															{#if action.issueUrgency}
-																<span
-																	class={`h-2 w-2 flex-none rounded-full ${urgencyBuckets.find((bucket) => bucket.key === action.issueUrgency)?.dot ?? 'bg-neutral-300'}`}
-																></span>
+															{#if action.issueUrgent}
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="14"
+																	height="14"
+																	fill="currentColor"
+																	class="flex-none text-rose-600"
+																	viewBox="0 0 16 16"
+																>
+																	<path
+																		d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+																	/>
+																</svg>
+															{:else}
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="14"
+																	height="14"
+																	fill="currentColor"
+																	class="flex-none text-neutral-300"
+																	viewBox="0 0 16 16"
+																>
+																	<path
+																		d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+																	/>
+																</svg>
 															{/if}
 															<span>{action.issueName}</span>
 															{#if action.building || action.unit}
@@ -2041,10 +2105,32 @@
 														</button>
 													{:else}
 														<div class="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
-															{#if action.issueUrgency}
-																<span
-																	class={`h-2 w-2 flex-none rounded-full ${urgencyBuckets.find((bucket) => bucket.key === action.issueUrgency)?.dot ?? 'bg-neutral-300'}`}
-																></span>
+															{#if action.issueUrgent}
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="14"
+																	height="14"
+																	fill="currentColor"
+																	class="flex-none text-rose-600"
+																	viewBox="0 0 16 16"
+																>
+																	<path
+																		d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+																	/>
+																</svg>
+															{:else}
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="14"
+																	height="14"
+																	fill="currentColor"
+																	class="flex-none text-neutral-300"
+																	viewBox="0 0 16 16"
+																>
+																	<path
+																		d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+																	/>
+																</svg>
 															{/if}
 															<span>{action.issueName}</span>
 															{#if action.building || action.unit}

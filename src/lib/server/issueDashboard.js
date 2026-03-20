@@ -139,7 +139,7 @@ export const load = async ({ locals, params }) => {
 	const { data: issues } = await locals.supabase
 		.from('issues')
 		.select(
-			'id, name, urgency, status, description, vendor_id, suggested_vendor_id, unit_id, tenant_id'
+			'id, name, urgent, status, description, vendor_id, suggested_vendor_id, unit_id, tenant_id'
 		)
 		.eq('workspace_id', workspaceId)
 		.order('updated_at', { ascending: false });
@@ -205,7 +205,7 @@ export const load = async ({ locals, params }) => {
 		return {
 			id: issue.id,
 			name: issue.name,
-			urgency: issue.urgency,
+			urgent: issue.urgent ?? false,
 			status: issue.status,
 			description: issue.description,
 			vendorId: issue.vendor_id ?? null,

@@ -41,7 +41,7 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 		let query = supabaseAdmin
 			.from('issues')
 			.select(
-				'id, name, description, status, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id'
+				'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id'
 			)
 			.eq('workspace_id', workspaceId)
 			.order('updated_at', { ascending: false });
@@ -68,7 +68,7 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 			let fallbackQuery = supabaseAdmin
 				.from('issues')
 				.select(
-					'id, name, description, status, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id'
+					'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id'
 				)
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
@@ -113,6 +113,7 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 			title: issue.name,
 			name: issue.name,
 			description: issue.description ?? '',
+			urgent: issue.urgent ?? false,
 			assignees: 0,
 			assigneeId: issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? null,
@@ -235,6 +236,28 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 		.maybeSingle();
 
 	return { sections: filteredSections, issues: normalizedIssues, assignee, workspaceId };
+};
+
+export const loadPoliciesData = async (workspaceId) => {
+	if (!workspaceId) return { policies: [] };
+	const { data: policies } = await supabaseAdmin
+		.from('workspace_policies')
+		.select('id, type, email, description, meta, created_at, created_by, users:created_by(name)')
+		.eq('workspace_id', workspaceId)
+		.order('created_at', { ascending: false });
+
+	const normalized = (policies ?? []).map((policy) => ({
+		id: policy.id,
+		type: policy.type ?? 'behavior',
+		email: policy.email ?? '',
+		description: policy.description ?? '',
+		meta: policy.meta ?? null,
+		createdAt: policy.created_at ?? null,
+		createdById: policy.created_by ?? null,
+		createdByName: policy.users?.name ?? 'Unknown'
+	}));
+
+	return { policies: normalized };
 };
 
 const normalizeRecipientList = (value) => {
