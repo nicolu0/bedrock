@@ -23,19 +23,11 @@
 	let _resolvedPolicies = null;
 
 	$: workspaceSlug = $page.params.workspace;
-	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 
 	$: {
 		const policiesData = data.policies;
-		if (policiesData instanceof Promise) {
-			policiesData.then((result) => {
-				const list = result?.policies ?? result ?? [];
-				_resolvedPolicies = Array.isArray(list) ? list : [];
-			});
-		} else if (policiesData) {
-			const list = policiesData?.policies ?? policiesData;
-			_resolvedPolicies = Array.isArray(list) ? list : [];
-		}
+		const list = policiesData?.policies ?? policiesData;
+		_resolvedPolicies = Array.isArray(list) ? list : [];
 	}
 	$: policies = _resolvedPolicies ?? [];
 

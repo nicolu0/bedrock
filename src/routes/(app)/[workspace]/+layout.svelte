@@ -384,6 +384,8 @@
 		_doneIssuesV = 0;
 	let _rtNotifsV = 0,
 		_doneNotifsV = 0;
+	let _rtPoliciesV = 0,
+		_donePoliciesV = 0;
 	let _rtActivityV = 0,
 		_doneActivityV = 0;
 	let _rtLogsV = 0,
@@ -400,6 +402,11 @@
 		_doneNotifsV = _rtNotifsV;
 		invalidate('app:notifications');
 		if (browser) ensureNotificationsCache(workspaceSlug, { force: true });
+	}
+	$: if (_rtPoliciesV > _donePoliciesV) {
+		console.log('[RT] invalidating policies, v:', _rtPoliciesV);
+		_donePoliciesV = _rtPoliciesV;
+		invalidate('app:policies');
 	}
 	$: if (_rtActivityV > _doneActivityV) {
 		_doneActivityV = _rtActivityV;
@@ -445,6 +452,20 @@
 
 			.on(
 				'postgres_changes',
+				{
+					event: '*',
+					schema: 'public',
+					table: 'workspace_policies',
+					filter: `workspace_id=eq.${wid}`
+				},
+				() => {
+					console.log('[RT] policies event');
+					_rtPoliciesV++;
+				}
+			)
+
+			.on(
+				'postgres_changes',
 				{ event: '*', schema: 'public', table: 'messages', filter: `workspace_id=eq.${wid}` },
 				() => {
 					_rtActivityV++;
@@ -472,10 +493,12 @@
 				if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
 					_rtIssuesV++;
 					_rtNotifsV++;
+					_rtPoliciesV++;
 					_rtActivityV++;
 					_rtLogsV++;
 					invalidate('app:people');
 					invalidate('app:properties');
+					invalidate('app:policies');
 				}
 			});
 	});
