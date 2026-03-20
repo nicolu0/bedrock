@@ -178,10 +178,16 @@
 			}
 			try {
 				const res = await _origFetch(input, init);
-				if (_navActive && isDataReq && gen === _navGeneration) { _completedFetches++; _updateNavProgress(); }
+				if (_navActive && isDataReq && gen === _navGeneration) {
+					_completedFetches++;
+					_updateNavProgress();
+				}
 				return res;
 			} catch (e) {
-				if (_navActive && isDataReq && gen === _navGeneration) { _completedFetches++; _updateNavProgress(); }
+				if (_navActive && isDataReq && gen === _navGeneration) {
+					_completedFetches++;
+					_updateNavProgress();
+				}
 				throw e;
 			}
 		};
@@ -605,20 +611,20 @@
 											viewBox="0 0 16 16"
 										>
 											<path
-												d="M9.5 0a.5.5 0 0 1 .5.5V2h2.5a.5.5 0 0 1 .354.854l-4 4a.5.5 0 0 1-.708 0l-4-4A.5.5 0 0 1 4.5 2H7V.5a.5.5 0 0 1 .5-.5zM2 8.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5z"
+												d="M12.643 15C13.979 15 15 13.845 15 12.5V5H1v7.5C1 13.845 2.021 15 3.357 15zM5.5 7h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1M.8 1a.8.8 0 0 0-.8.8V3a.8.8 0 0 0 .8.8h14.4A.8.8 0 0 0 16 3V1.8a.8.8 0 0 0-.8-.8z"
 											/>
 										</svg>
 									{:else if item.id === 'inbox'}
 										<svg
 											xmlns="http://www.w3.org/2000/svg"
-											width="12"
-											height="12"
+											width="16"
+											height="16"
 											fill="currentColor"
 											class="shrink-0 text-neutral-600"
 											viewBox="0 0 16 16"
 										>
 											<path
-												d="M12.643 15C13.979 15 15 13.845 15 12.5V5H1v7.5C1 13.845 2.021 15 3.357 15zM5.5 7h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1M.8 1a.8.8 0 0 0-.8.8V3a.8.8 0 0 0 .8.8h14.4A.8.8 0 0 0 16 3V1.8a.8.8 0 0 0-.8-.8z"
+												d="M4.98 4a.5.5 0 0 0-.39.188L1.54 8H6a.5.5 0 0 1 .5.5 1.5 1.5 0 1 0 3 0A.5.5 0 0 1 10 8h4.46l-3.05-3.812A.5.5 0 0 0 11.02 4zm-1.17-.437A1.5 1.5 0 0 1 4.98 3h6.04a1.5 1.5 0 0 1 1.17.563l3.7 4.625a.5.5 0 0 1 .106.374l-.39 3.124A1.5 1.5 0 0 1 14.117 13H1.883a1.5 1.5 0 0 1-1.489-1.314l-.39-3.124a.5.5 0 0 1 .106-.374z"
 											/>
 										</svg>
 									{/if}
