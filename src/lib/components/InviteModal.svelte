@@ -5,6 +5,8 @@
 
 	const dispatch = createEventDispatcher();
 
+	export let workspaceId = '';
+
 	let rows = [{ email: '', role: 'member' }];
 	let submitting = false;
 	let error = '';
@@ -47,7 +49,7 @@
 			const res = await fetch('/api/invites', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ invites })
+				body: JSON.stringify({ invites, workspaceId })
 			});
 			const json = await res.json();
 			if (!res.ok) {

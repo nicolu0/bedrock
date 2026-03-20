@@ -7,20 +7,22 @@ export const POST = async ({ locals, request, url }) => {
 	const user = locals.user;
 	if (!user) return json({ error: 'Unauthorized' }, { status: 401 });
 
+	const body = await request.json();
+	const invites = body.invites ?? [];
+	const workspaceId = body.workspaceId;
+	const invited = [];
+
 	// Verify caller is an admin
-	const { data: member } = await supabaseAdmin
+	let query = supabaseAdmin
 		.from('people')
 		.select('workspace_id, role')
-		.eq('user_id', user.id)
-		.maybeSingle();
+		.eq('user_id', user.id);
+	if (workspaceId) query = query.eq('workspace_id', workspaceId);
+	const { data: member } = await query.maybeSingle();
 
 	if (!member || member.role !== 'admin') {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
-
-	const body = await request.json();
-	const invites = body.invites ?? [];
-	const invited = [];
 
 	for (const { email, role } of invites) {
 		if (!email || !role) continue;

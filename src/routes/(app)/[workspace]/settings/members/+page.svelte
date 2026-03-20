@@ -134,7 +134,7 @@
 </div>
 
 {#if showInviteModal}
-	<InviteModal on:close={() => (showInviteModal = false)} />
+	<InviteModal workspaceId={data.workspace.id} on:close={() => (showInviteModal = false)} />
 {/if}
 
 <style>
