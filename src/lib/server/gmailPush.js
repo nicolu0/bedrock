@@ -596,7 +596,10 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 
 			if (issueId) {
 				await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
-				await supabase.from('messages').update({ issue_id: issueId }).eq('thread_id', threadRow.id);
+				await supabase
+					.from('messages')
+					.update({ issue_id: issueId, workspace_id: workspaceIdForConnection })
+					.eq('thread_id', threadRow.id);
 			}
 		} finally {
 			await supabase.from('threads').update({ processing_at: null }).eq('id', threadRow.id);
@@ -886,7 +889,10 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 
 		if (issueId) {
 			await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
-			await supabase.from('messages').update({ issue_id: issueId }).eq('thread_id', threadRow.id);
+			await supabase
+				.from('messages')
+				.update({ issue_id: issueId, workspace_id: propertyRow.workspace_id })
+				.eq('thread_id', threadRow.id);
 		}
 	} finally {
 		await supabase.from('threads').update({ processing_at: null }).eq('id', threadRow.id);
