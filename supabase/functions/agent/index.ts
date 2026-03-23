@@ -51,6 +51,14 @@ const trimQuotedReply = (input: string) => {
 	return markerMatch[0].trim();
 };
 
+const normalizeSubjectTitle = (subject: string) => {
+	const cleaned = subject
+		.replace(/^\s*(re|fwd|fw)\s*:\s*/gi, '')
+		.replace(/^\s*\[[^\]]+\]\s*/g, '')
+		.trim();
+	return cleaned;
+};
+
 const isRelevantEmail = (subject: string, body: string) => {
 	const combined = `${subject || ''}\n${body || ''}`;
 	return RELEVANCE_REGEX.test(combined);
@@ -1863,6 +1871,33 @@ const processMessage = async ({
 		return;
 	}
 
+	if (!threadRow.issue_id) {
+		const workspaceAdminId = await getWorkspaceAdminId(propertyRow.workspace_id);
+		const adminName = workspaceAdminId ? await getUserNameById(workspaceAdminId) : null;
+		const titleCandidate = normalizeSubjectTitle(messageSubject || '');
+		const issueTitle = titleCandidate || 'Maintenance Issue';
+		const description = normalizeOneLine(
+			ensureSentence(
+				buildRootIssueDescriptionFallback({
+					reporterName: tenant.name ?? null,
+					assigneeName: adminName,
+					subject: messageSubject,
+					body: cleanedBody,
+					issueTitle
+				})
+			)
+		);
+		const issueId = await createIssue({
+			name: issueTitle,
+			unitId: unitRow.id,
+			workspaceId: propertyRow.workspace_id,
+			assigneeId: workspaceAdminId ?? undefined,
+			description
+		});
+		await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
+		threadRow.issue_id = issueId;
+	}
+
 	try {
 		const internalDate = Number(message.internalDate ?? 0);
 		const { data: inboundMessage, error: inboundInsertError } = await supabase
@@ -1879,6 +1914,7 @@ const processMessage = async ({
 				delivery_status: 'received',
 				connection_id: connection.id,
 				issue_id: threadRow.issue_id ?? null,
+				workspace_id: propertyRow.workspace_id,
 				thread_external_id: threadExternalId
 			})
 			.select('id')
@@ -1968,8 +2004,10 @@ const processMessage = async ({
 
 		if (issueId) {
 			await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
-
-			await supabase.from('messages').update({ issue_id: issueId }).eq('thread_id', threadRow.id);
+			await supabase
+				.from('messages')
+				.update({ issue_id: issueId, workspace_id: propertyRow.workspace_id })
+				.eq('thread_id', threadRow.id);
 		}
 	} finally {
 		await supabase.from('threads').update({ processing_at: null }).eq('id', threadRow.id);
