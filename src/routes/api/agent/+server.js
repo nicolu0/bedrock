@@ -48,7 +48,7 @@ const listWorkspaceAssignees = async (workspaceId) => {
 		.from('people')
 		.select('user_id, role')
 		.eq('workspace_id', workspaceId)
-		.in('role', ['admin', 'member', 'owner']);
+		.in('role', ['admin', 'bedrock', 'member', 'owner']);
 	const memberIds = (people ?? []).map((row) => row.user_id).filter((id) => typeof id === 'string');
 	if (!memberIds.length) return [];
 
@@ -913,7 +913,7 @@ const handleIssueAgent = async ({ payload, locals }) => {
 		.select('id')
 		.eq('workspace_id', issue.workspace_id)
 		.eq('user_id', locals.user.id)
-		.in('role', ['admin', 'member', 'owner'])
+		.in('role', ['admin', 'bedrock', 'member', 'owner'])
 		.maybeSingle();
 
 	if (!person?.id) {
@@ -1168,7 +1168,7 @@ const listEligibleAssigneesForGmail = async (workspaceId) => {
 		.from('members')
 		.select('user_id, role')
 		.eq('workspace_id', workspaceId)
-		.in('role', ['admin', 'member', 'owner']);
+		.in('role', ['admin', 'bedrock', 'member', 'owner']);
 	const ids = (data ?? []).map((row) => row.user_id).filter((id) => typeof id === 'string');
 	return new Set(ids);
 };
@@ -1178,7 +1178,7 @@ const listWorkspaceAssigneesForGmail = async (workspaceId) => {
 		.from('members')
 		.select('user_id, role')
 		.eq('workspace_id', workspaceId)
-		.in('role', ['admin', 'member', 'owner']);
+		.in('role', ['admin', 'bedrock', 'member', 'owner']);
 	const memberIds = (members ?? [])
 		.map((row) => row.user_id)
 		.filter((id) => typeof id === 'string');

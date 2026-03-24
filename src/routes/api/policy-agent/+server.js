@@ -188,7 +188,7 @@ export const POST = async ({ request, locals }) => {
 		.select('id')
 		.eq('workspace_id', resolvedWorkspaceId)
 		.eq('user_id', locals.user.id)
-		.in('role', ['admin', 'member', 'owner'])
+		.in('role', ['admin', 'bedrock', 'member', 'owner'])
 		.maybeSingle();
 
 	if (!membership?.id && !personRow?.id) {

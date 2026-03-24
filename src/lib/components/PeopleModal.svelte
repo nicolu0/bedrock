@@ -84,7 +84,15 @@
 					const res = await fetch('/api/people', {
 						method: 'PATCH',
 						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify({ id: personId, workspace: $page.params.workspace, name: trimmedName, email: trimmedEmail, role, trade: role === 'vendor' ? trimmedTrade : null, notes: trimmedNotes || null })
+						body: JSON.stringify({
+							id: personId,
+							workspace: $page.params.workspace,
+							name: trimmedName,
+							email: trimmedEmail,
+							role,
+							trade: role === 'vendor' ? trimmedTrade : null,
+							notes: trimmedNotes || null
+						})
 					});
 					const json = await res.json();
 					if (res.ok) {

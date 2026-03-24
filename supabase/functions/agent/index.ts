@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
@@ -505,14 +506,14 @@ const getWorkspaceIdForUser = async (userId: string) => {
 		.from('people')
 		.select('workspace_id')
 		.eq('user_id', userId)
-		.in('role', ['admin', 'member', 'owner'])
+		.in('role', ['admin', 'bedrock', 'member', 'owner'])
 		.maybeSingle();
 	if (data?.workspace_id) return data.workspace_id;
 	const { data: member } = await supabase
 		.from('members')
 		.select('workspace_id')
 		.eq('user_id', userId)
-		.in('role', ['admin', 'member', 'owner'])
+		.in('role', ['admin', 'bedrock', 'member', 'owner'])
 		.maybeSingle();
 	return member?.workspace_id ?? null;
 };
@@ -643,7 +644,7 @@ const listEligibleAssignees = async (workspaceId: string): Promise<Set<string>> 
 		.from('members')
 		.select('user_id, role')
 		.eq('workspace_id', workspaceId)
-		.in('role', ['admin', 'member', 'owner']);
+		.in('role', ['admin', 'bedrock', 'member', 'owner']);
 	const ids = (data ?? [])
 		.map((row) => row.user_id)
 		.filter((id): id is string => typeof id === 'string');
@@ -655,7 +656,7 @@ const listWorkspaceAssignees = async (workspaceId: string) => {
 		.from('members')
 		.select('user_id, role')
 		.eq('workspace_id', workspaceId)
-		.in('role', ['admin', 'member', 'owner']);
+		.in('role', ['admin', 'bedrock', 'member', 'owner']);
 	const memberIds = (members ?? [])
 		.map((row) => row.user_id)
 		.filter((id): id is string => typeof id === 'string');

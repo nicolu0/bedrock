@@ -4,7 +4,12 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
-	import { peopleCache, primePeopleCache, removePersonFromCache, addPersonToCache } from '$lib/stores/peopleCache.js';
+	import {
+		peopleCache,
+		primePeopleCache,
+		removePersonFromCache,
+		addPersonToCache
+	} from '$lib/stores/peopleCache.js';
 
 	export let data;
 
@@ -49,6 +54,8 @@
 
 	const roleBadgeClass = (role) => {
 		switch (role) {
+			case 'bedrock':
+				return 'bg-stone-700 text-stone-300';
 			case 'admin':
 				return 'bg-rose-50 text-rose-600';
 			case 'owner':

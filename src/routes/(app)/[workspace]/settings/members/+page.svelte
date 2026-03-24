@@ -9,6 +9,7 @@
 
 	const roleLabels = {
 		admin: 'Admin',
+		bedrock: 'Bedrock',
 		member: 'Member',
 		owner: 'Owner'
 	};
@@ -21,7 +22,7 @@
 	$: members =
 		$peopleMembersCache.workspace === workspaceSlug && $peopleMembersCache.data != null
 			? $peopleMembersCache.data.filter((member) =>
-					['admin', 'member', 'owner'].includes((member?.role ?? '').toLowerCase())
+					['admin', 'bedrock', 'member', 'owner'].includes((member?.role ?? '').toLowerCase())
 				)
 			: null;
 

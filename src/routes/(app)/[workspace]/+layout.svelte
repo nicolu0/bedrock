@@ -374,8 +374,9 @@
 	$: workspaceId = data?.workspace?.id;
 	$: userId = data?.userId;
 	$: userRole = data?.role;
-	$: canViewPeople = userRole === 'admin' || userRole === 'member';
-	$: canViewProperties = userRole === 'admin' || userRole === 'member' || userRole === 'owner';
+	$: canViewPeople = userRole === 'admin' || userRole === 'bedrock' || userRole === 'member';
+	$: canViewProperties =
+		userRole === 'admin' || userRole === 'bedrock' || userRole === 'member' || userRole === 'owner';
 
 	$: if (browser && workspaceSlug) {
 		ensureIssuesCache(workspaceSlug);
