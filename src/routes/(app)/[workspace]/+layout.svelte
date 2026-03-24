@@ -13,7 +13,9 @@
 	import { peopleMembersCache, ensurePeopleMembersCache } from '$lib/stores/peopleMembersCache';
 	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
 	import { pageReady } from '$lib/stores/pageReady';
+	import { agentToasts } from '$lib/stores/agentToasts';
 	import { supabase } from '$lib/supabaseClient.js';
+	import AgentToasts from '$lib/components/AgentToasts.svelte';
 	export let data;
 
 	let appMounted = false;
@@ -386,6 +388,16 @@
 	}
 
 	let _workspaceChannel = null;
+	let _issuesChannel = null;
+	let _agentEventsChannel = null;
+	let _sessionReady = false;
+	let _workspaceChannelWorkspaceId = null;
+	let _authSubscription = null;
+	const handleAgentEvent = (payload) => {
+		const record = payload?.new ?? null;
+		if (!record?.run_id) return;
+		agentToasts.upsert(record);
+	};
 
 	// RT → Svelte bridge: counters force a Svelte flush so invalidate() runs inside the update cycle
 	let _rtIssuesV = 0,
@@ -432,24 +444,42 @@
 		// the server always has a fresh token via hooks.server.js, so we pass it explicitly.
 		if (data.session) {
 			await supabase.auth.setSession(data.session);
+			if (data.session.access_token) {
+				supabase.realtime.setAuth(data.session.access_token);
+			}
 		}
+		_sessionReady = true;
 
-		const wid = workspaceId;
-		const uid = userId;
-		if (!wid) return;
+		const { data: authData } = supabase.auth.onAuthStateChange((_event, session) => {
+			if (session?.access_token) {
+				supabase.realtime.setAuth(session.access_token);
+				if (workspaceId && userId) {
+					setupWorkspaceChannel(workspaceId, userId);
+				}
+			}
+		});
+		_authSubscription = authData?.subscription ?? null;
+	});
+
+	const setupWorkspaceChannel = (wid, uid) => {
+		if (!wid || !uid) return;
+		if (_workspaceChannel && _workspaceChannelWorkspaceId === wid) return;
+		if (_workspaceChannel) {
+			supabase.removeChannel(_workspaceChannel);
+			_workspaceChannel = null;
+			_workspaceChannelWorkspaceId = null;
+		}
+		if (_issuesChannel) {
+			supabase.removeChannel(_issuesChannel);
+			_issuesChannel = null;
+		}
+		if (_agentEventsChannel) {
+			supabase.removeChannel(_agentEventsChannel);
+			_agentEventsChannel = null;
+		}
 
 		_workspaceChannel = supabase
 			.channel(`workspace-delta-${wid}`)
-
-			.on(
-				'postgres_changes',
-				{ event: '*', schema: 'public', table: 'issues', filter: `workspace_id=eq.${wid}` },
-				() => {
-					console.log('[RT] issues event');
-					_rtIssuesV++;
-				}
-			)
-
 			.on(
 				'postgres_changes',
 				{ event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` },
@@ -510,10 +540,49 @@
 					invalidate('app:policies');
 				}
 			});
-	});
+		_workspaceChannelWorkspaceId = wid;
+
+		_issuesChannel = supabase
+			.channel(`issues-${wid}`)
+			.on('postgres_changes', { event: '*', schema: 'public', table: 'issues' }, (payload) => {
+				const record = payload?.new ?? payload?.old ?? null;
+				if (record?.workspace_id && record.workspace_id !== wid) return;
+				console.log('[RT] issues event', payload?.eventType, record?.id);
+				_rtIssuesV++;
+			})
+			.subscribe((status) => {
+				console.log('[RT] issues channel status:', status);
+			});
+
+		_agentEventsChannel = supabase
+			.channel(`agent-events-${wid}`)
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'public',
+					table: 'agent_events',
+					filter: `workspace_id=eq.${wid}`
+				},
+				(payload) => {
+					console.log('[RT] agent event', payload?.new);
+					handleAgentEvent(payload);
+				}
+			)
+			.subscribe((status) => {
+				console.log('[RT] agent channel status:', status);
+			});
+	};
+
+	$: if (browser && _sessionReady && workspaceId && userId) {
+		setupWorkspaceChannel(workspaceId, userId);
+	}
 
 	onDestroy(() => {
 		if (_workspaceChannel) supabase.removeChannel(_workspaceChannel);
+		if (_issuesChannel) supabase.removeChannel(_issuesChannel);
+		if (_agentEventsChannel) supabase.removeChannel(_agentEventsChannel);
+		_authSubscription?.unsubscribe?.();
 		if (_origFetch) window.fetch = _origFetch;
 	});
 </script>
@@ -729,6 +798,7 @@
 					<slot />
 				</div>
 			</section>
+			<AgentToasts />
 			{#if showSearchModal}
 				<div
 					class="fixed inset-0 z-40 bg-neutral-900/30"

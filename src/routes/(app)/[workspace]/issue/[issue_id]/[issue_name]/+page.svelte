@@ -632,7 +632,12 @@
 	const handleUrgentChange = async (nextUrgent) => {
 		if (!canEditIssue) return;
 		if (!issueId) return;
+		if (issue?.parent_id) return;
 		const prevUrgent = issue?.urgent ?? false;
+		if (prevUrgent === nextUrgent) {
+			urgentOpen = false;
+			return;
+		}
 		issue = { ...issue, urgent: nextUrgent };
 		urgentOpen = false;
 		const { error } = await supabase
@@ -641,6 +646,10 @@
 			.eq('id', issueId);
 		if (error) {
 			issue = { ...issue, urgent: prevUrgent };
+			return;
+		}
+		if (!issue?.parent_id) {
+			openUrgencyPolicyPrompt(nextUrgent);
 		}
 	};
 
@@ -649,6 +658,12 @@
 	let propertyOpen = false;
 	let unitOpen = false;
 	let urgentOpen = false;
+	let showUrgencyPolicyPrompt = false;
+	let urgencyPolicyValue = 'not_urgent';
+	let urgencyPolicyIssue = '';
+	let urgencyPolicyMatchingId = null;
+	let urgencyPolicyLoading = false;
+	let urgencyPolicyError = '';
 
 	const handleAssigneeSelect = async (member) => {
 		if (!canEditIssue) return;
@@ -761,6 +776,9 @@
 
 	// ── Utility functions ────────────────────────────────────────────────────────
 
+	$: isSubissue = Boolean(issue?.parent_id);
+	$: displayUrgent = isSubissue ? (issue?.root_urgent ?? issue?.urgent) : issue?.urgent;
+
 	const normalizeAssignee = (member) => {
 		if (!member) return null;
 		const id = member.user_id ?? member?.users?.id ?? null;
@@ -827,6 +845,83 @@
 	};
 
 	const getActivityActor = (log) => getCommentAuthor(log);
+
+	const normalizePolicyLabel = (value) =>
+		(value ?? '')
+			.toString()
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9\s]/g, ' ')
+			.replace(/\s+/g, ' ');
+
+	const openUrgencyPolicyPrompt = async (nextUrgent) => {
+		if (!issue) return;
+		urgencyPolicyValue = nextUrgent ? 'urgent' : 'not_urgent';
+		urgencyPolicyIssue = issue?.name?.toString().trim() || 'Maintenance issue';
+		urgencyPolicyMatchingId = null;
+		urgencyPolicyError = '';
+		showUrgencyPolicyPrompt = true;
+		const workspaceId = issue?.workspace_id ?? issue?.workspaceId ?? null;
+		if (!workspaceId) return;
+		urgencyPolicyLoading = true;
+		try {
+			const { data } = await supabase
+				.from('workspace_policies')
+				.select('id, meta, description')
+				.eq('workspace_id', workspaceId)
+				.eq('type', 'urgency')
+				.order('updated_at', { ascending: false });
+			const target = normalizePolicyLabel(urgencyPolicyIssue);
+			const match = (data ?? []).find((row) => {
+				const candidate = row?.meta?.maintenance_issue ?? row?.description ?? '';
+				return normalizePolicyLabel(candidate) === target;
+			});
+			urgencyPolicyMatchingId = match?.id ?? null;
+		} catch {
+			urgencyPolicyError = 'Unable to load policies.';
+		} finally {
+			urgencyPolicyLoading = false;
+		}
+	};
+
+	const closeUrgencyPolicyPrompt = () => {
+		showUrgencyPolicyPrompt = false;
+		urgencyPolicyError = '';
+	};
+
+	const saveUrgencyPolicy = async () => {
+		if (!urgencyPolicyIssue.trim()) {
+			urgencyPolicyError = 'Maintenance issue is required.';
+			return;
+		}
+		urgencyPolicyLoading = true;
+		urgencyPolicyError = '';
+		try {
+			const response = await fetch('/api/policies', {
+				method: urgencyPolicyMatchingId ? 'PATCH' : 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					id: urgencyPolicyMatchingId,
+					workspace: $page.params.workspace,
+					type: 'urgency',
+					urgency: urgencyPolicyValue,
+					maintenance_issue: urgencyPolicyIssue.trim(),
+					email: null,
+					description: null
+				})
+			});
+			const result = await response.json();
+			if (!response.ok) {
+				urgencyPolicyError = result?.error ?? 'Unable to save policy.';
+				return;
+			}
+			closeUrgencyPolicyPrompt();
+		} catch {
+			urgencyPolicyError = 'Unable to save policy.';
+		} finally {
+			urgencyPolicyLoading = false;
+		}
+	};
 
 	const getAssigneeNameFromLog = (log) => {
 		const d = log?.data ?? {};
@@ -2021,16 +2116,16 @@
 							</div>
 						{/if}
 					</div>
-					<div class="relative">
+					<div class="group relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
-								canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+								canEditIssue && !isSubissue ? 'hover:bg-stone-100' : 'cursor-not-allowed opacity-60'
 							}`}
-							disabled={!canEditIssue}
-							aria-disabled={!canEditIssue}
+							disabled={!canEditIssue || isSubissue}
+							aria-disabled={!canEditIssue || isSubissue}
 							on:click|stopPropagation={() => {
-								if (!canEditIssue) return;
+								if (!canEditIssue || isSubissue) return;
 								urgentOpen = !urgentOpen;
 								statusOpen = false;
 								assigneeOpen = false;
@@ -2038,7 +2133,7 @@
 								unitOpen = false;
 							}}
 						>
-							{#if issue?.urgent}
+							{#if displayUrgent}
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
 									width="16"
@@ -2068,7 +2163,14 @@
 								<span>Not urgent</span>
 							{/if}
 						</button>
-						{#if urgentOpen && canEditIssue}
+						{#if isSubissue}
+							<div
+								class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] text-white opacity-0 transition group-hover:opacity-100"
+							>
+								Change urgency in the root issue
+							</div>
+						{/if}
+						{#if urgentOpen && canEditIssue && !isSubissue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
 								on:click|stopPropagation
@@ -2076,7 +2178,7 @@
 								<button
 									type="button"
 									class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-										issue?.urgent ? 'bg-neutral-50' : ''
+										displayUrgent ? 'bg-neutral-50' : ''
 									}`}
 									on:click={() => handleUrgentChange(true)}
 								>
@@ -2097,7 +2199,7 @@
 								<button
 									type="button"
 									class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-										!issue?.urgent ? 'bg-neutral-50' : ''
+										!displayUrgent ? 'bg-neutral-50' : ''
 									}`}
 									on:click={() => handleUrgentChange(false)}
 								>
@@ -2227,6 +2329,87 @@
 			</div>
 		</aside>
 	</div>
+	{#if showUrgencyPolicyPrompt}
+		<div class="fixed inset-0 z-40 bg-neutral-900/30" on:click={closeUrgencyPolicyPrompt}></div>
+		<div class="fixed inset-0 z-50 flex items-center justify-center px-4">
+			<div
+				class="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="urgency-policy-title"
+				on:click|stopPropagation
+			>
+				<div class="flex items-start justify-between gap-4">
+					<div>
+						<div id="urgency-policy-title" class="text-lg font-medium text-neutral-800">
+							Update urgency policy?
+						</div>
+						<p class="mt-1 text-xs text-neutral-500">
+							Apply this urgency setting to future issues like this.
+						</p>
+					</div>
+					<button
+						class="text-neutral-400 transition hover:text-neutral-600"
+						on:click={closeUrgencyPolicyPrompt}
+						aria-label="Close"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-5 w-5">
+							<path
+								fill="currentColor"
+								d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7A1 1 0 0 0 5.7 7.11L10.59 12l-4.9 4.89a1 1 0 1 0 1.41 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.41L13.41 12l4.9-4.89a1 1 0 0 0-.01-1.4z"
+							/>
+						</svg>
+					</button>
+				</div>
+				<div class="mt-4 space-y-3">
+					<div>
+						<label class="text-xs text-neutral-500">Maintenance issue</label>
+						<input
+							class="mt-1 w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							bind:value={urgencyPolicyIssue}
+							required
+							type="text"
+						/>
+					</div>
+					<div>
+						<label class="text-xs text-neutral-500">Urgency</label>
+						<select
+							class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							bind:value={urgencyPolicyValue}
+						>
+							<option value="urgent">Urgent</option>
+							<option value="not_urgent">Not urgent</option>
+						</select>
+					</div>
+					{#if urgencyPolicyError}
+						<p class="text-xs text-rose-600">{urgencyPolicyError}</p>
+					{/if}
+				</div>
+				<div class="mt-6 flex items-center justify-end gap-3">
+					<button
+						type="button"
+						class="rounded-full border border-neutral-200 px-4 py-2 text-sm text-neutral-600 transition hover:border-neutral-300"
+						on:click={closeUrgencyPolicyPrompt}
+						disabled={urgencyPolicyLoading}
+					>
+						No thanks
+					</button>
+					<button
+						type="button"
+						class="rounded-full bg-neutral-900 px-4 py-2 text-sm text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
+						on:click={saveUrgencyPolicy}
+						disabled={urgencyPolicyLoading}
+					>
+						{#if urgencyPolicyLoading}
+							Saving...
+						{:else}
+							{urgencyPolicyMatchingId ? 'Update policy' : 'Create policy'}
+						{/if}
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 {:else}
 	<div class="flex h-full flex-col">
 		<div class="border-b border-neutral-200 px-6 py-2">

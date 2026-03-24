@@ -248,7 +248,7 @@ export const loadPoliciesData = async (workspaceId) => {
 
 	const normalized = (policies ?? []).map((policy) => ({
 		id: policy.id,
-		type: policy.type ?? 'behavior',
+		type: policy.type ?? 'urgency',
 		email: policy.email ?? '',
 		description: policy.description ?? '',
 		meta: policy.meta ?? null,

@@ -213,6 +213,55 @@ const logAgentError = async ({
 	}
 };
 
+const emitAgentEvent = async ({
+	workspaceId,
+	userId,
+	runId,
+	step,
+	stage,
+	message,
+	meta,
+	issueId
+}: {
+	workspaceId: string;
+	userId: string | null;
+	runId: string;
+	step: number | null;
+	stage: string;
+	message: string;
+	meta?: Record<string, unknown>;
+	issueId?: string | null;
+}) => {
+	if (!workspaceId || !runId || !stage || !message) return;
+	const payload = {
+		workspace_id: workspaceId,
+		user_id: userId ?? null,
+		run_id: runId,
+		issue_id: issueId ?? null,
+		step: Number.isFinite(step) ? step : null,
+		stage,
+		message,
+		meta: meta ?? {},
+		updated_at: new Date().toISOString()
+	};
+	let error = null;
+	if (issueId) {
+		const upsertResult = await supabase
+			.from('agent_events')
+			.upsert(payload, { onConflict: 'workspace_id,issue_id' });
+		error = upsertResult.error;
+		if (!error) {
+			await supabase.from('agent_events').delete().eq('run_id', runId).is('issue_id', null);
+		}
+	} else {
+		const insertResult = await supabase.from('agent_events').insert(payload);
+		error = insertResult.error;
+	}
+	if (error) {
+		console.error('agent-events insert failed', error);
+	}
+};
+
 const createDraftNotification = async ({
 	workspaceId,
 	issueId,
@@ -402,6 +451,90 @@ const getPolicyMatch = async ({
 	return { allow: types.has('allow'), block: types.has('block') };
 };
 
+const buildUrgencyPolicyText = (rows: Array<any>) => {
+	const lines = (rows ?? [])
+		.map((row) => {
+			const meta = row?.meta ?? {};
+			const issue =
+				typeof meta?.maintenance_issue === 'string'
+					? meta.maintenance_issue.trim()
+					: typeof row?.description === 'string'
+						? row.description.trim()
+						: '';
+			if (!issue) return null;
+			const urgency = typeof meta?.urgency === 'string' ? meta.urgency.trim() : 'not_urgent';
+			if (urgency === 'urgent') {
+				return `- ${issue}: urgent (schedule vendor immediately; create triage + schedule subissues in the same run)`;
+			}
+			if (urgency === 'not_urgent') {
+				return `- ${issue}: not_urgent (default triage flow)`;
+			}
+			return `- ${issue}: ${urgency} (default triage flow)`;
+		})
+		.filter(Boolean);
+
+	if (!lines.length) return '';
+	return `Urgency policies:\n${lines.join('\n')}`;
+};
+
+const normalizePolicyLabel = (value: string) =>
+	(value ?? '')
+		.toString()
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9\s]/g, ' ')
+		.replace(/\s+/g, ' ');
+
+const findUrgencyPolicyMatch = (rows: Array<any>, haystack: string) => {
+	const normalizedHaystack = normalizePolicyLabel(haystack);
+	if (!normalizedHaystack) return null;
+	const haystackTokens = normalizedHaystack.split(' ').filter(Boolean);
+	for (const row of rows ?? []) {
+		const meta = row?.meta ?? {};
+		const issue =
+			typeof meta?.maintenance_issue === 'string'
+				? meta.maintenance_issue
+				: typeof row?.description === 'string'
+					? row.description
+					: '';
+		const normalizedIssue = normalizePolicyLabel(issue);
+		if (!normalizedIssue) continue;
+		const issueTokens = normalizedIssue.split(' ').filter(Boolean);
+		const tokenMatch = issueTokens.length
+			? issueTokens.every((token) =>
+					haystackTokens.some((hay) => hay.startsWith(token) || token.startsWith(hay))
+				)
+			: false;
+		if (normalizedHaystack.includes(normalizedIssue) || tokenMatch) {
+			const urgency = typeof meta?.urgency === 'string' ? meta.urgency.trim() : null;
+			return urgency === 'urgent' || urgency === 'not_urgent' ? urgency : null;
+		}
+	}
+	return null;
+};
+
+const shouldMarkUrgent = (subject: string, body: string, issueName: string | null) => {
+	const combined = `${subject ?? ''} ${body ?? ''} ${issueName ?? ''}`;
+	return /\b(pest|pests|roach|bed\s*bug|rat|rats|gas\s*leak|gas\s*smell|no\s*power|power\s*outage|no\s*water|flood|flooding|smoke|fire|carbon\s*monoxide|co\s*detector|safety\s*risk)\b/i.test(
+		combined
+	);
+};
+
+const getUrgencyDecision = (
+	rows: Array<any>,
+	subject: string,
+	body: string,
+	issueTitle: string | null
+) => {
+	const policyMatch = findUrgencyPolicyMatch(
+		rows,
+		`${subject ?? ''} ${body ?? ''} ${issueTitle ?? ''}`
+	);
+	if (policyMatch === 'urgent') return true;
+	if (policyMatch === 'not_urgent') return false;
+	return shouldMarkUrgent(subject, body, issueTitle) ? true : null;
+};
+
 const listEligibleAssignees = async (workspaceId: string): Promise<Set<string>> => {
 	const { data } = await supabase
 		.from('members')
@@ -485,13 +618,15 @@ const createIssue = async ({
 	unitId,
 	workspaceId,
 	assigneeId,
-	description
+	description,
+	urgent
 }: {
 	name: string;
 	unitId: string | null;
 	workspaceId: string;
 	assigneeId?: string | null;
 	description?: string | null;
+	urgent?: boolean | null;
 }) => {
 	const { data, error } = await supabase
 		.from('issues')
@@ -501,7 +636,8 @@ const createIssue = async ({
 			workspace_id: workspaceId,
 			status: 'todo',
 			assignee_id: assigneeId ?? null,
-			description: description ?? null
+			description: description ?? null,
+			urgent: typeof urgent === 'boolean' ? urgent : undefined
 		})
 		.select('id')
 		.single();
@@ -634,7 +770,8 @@ const createSubissue = async ({
 	status,
 	reasoning,
 	assigneeId,
-	description
+	description,
+	urgent
 }: {
 	parentIssueId: string;
 	name: string;
@@ -644,6 +781,7 @@ const createSubissue = async ({
 	reasoning: string | null;
 	assigneeId?: string | null;
 	description?: string | null;
+	urgent?: boolean | null;
 }) => {
 	const { data, error } = await supabase
 		.from('issues')
@@ -655,7 +793,8 @@ const createSubissue = async ({
 			status,
 			reasoning,
 			assignee_id: assigneeId ?? null,
-			description: description ?? null
+			description: description ?? null,
+			urgent: typeof urgent === 'boolean' ? urgent : undefined
 		})
 		.select('id')
 		.single();
@@ -783,82 +922,6 @@ const linkThreadToIssue = async ({ threadId, issueId }: { threadId: string; issu
 	return Boolean(data?.issue_id);
 };
 
-const generateIssueTitle = async ({
-	subject,
-	body,
-	senderEmail,
-	unitId,
-	workspaceId
-}: {
-	subject: string;
-	body: string;
-	senderEmail: string;
-	unitId: string | null;
-	workspaceId: string;
-}) => {
-	const system = `Generate a concise maintenance issue title.
-Rules:
-- 2-5 words
-- Title Case
-- No location names
-- Describe the maintenance problem
-`.trim();
-
-	const response = await fetch('https://api.openai.com/v1/responses', {
-		method: 'POST',
-		headers: {
-			Authorization: `Bearer ${openaiApiKey}`,
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify({
-			model: openaiModel,
-			input: [
-				{ role: 'system', content: system },
-				{
-					role: 'user',
-					content: JSON.stringify({
-						subject,
-						body,
-						sender_email: senderEmail,
-						unit_id: unitId,
-						workspace_id: workspaceId
-					})
-				}
-			],
-			text: {
-				format: {
-					type: 'json_schema',
-					name: 'issue_title',
-					schema: {
-						type: 'object',
-						additionalProperties: false,
-						properties: {
-							title: { type: 'string' }
-						},
-						required: ['title']
-					}
-				}
-			}
-		})
-	});
-
-	if (!response.ok) {
-		throw new Error(await response.text());
-	}
-
-	const data = await response.json();
-	const outputText = data.output_text ?? '';
-	try {
-		const parsed = outputText ? JSON.parse(outputText) : null;
-		if (parsed?.title && typeof parsed.title === 'string') {
-			return parsed.title.trim();
-		}
-	} catch {
-		// ignore
-	}
-	return '';
-};
-
 const runIssueAgent = async ({
 	subject,
 	body,
@@ -870,6 +933,7 @@ const runIssueAgent = async ({
 	threadId,
 	userId,
 	policyText,
+	urgencyDecision,
 	tenantName,
 	tenantEmail,
 	userName,
@@ -890,6 +954,7 @@ const runIssueAgent = async ({
 	threadId: string;
 	userId: string;
 	policyText: string;
+	urgencyDecision: boolean | null;
 	tenantName: string | null;
 	tenantEmail: string | null;
 	userName: string | null;
@@ -917,18 +982,22 @@ Your job is to link this email thread to the most specific issue (prefer a subis
 Process (required):
 1) Review the provided open_issues list.
 2) If root_issue_id is provided, do not create a new issue. Use it as the root issue id.
-3) If no existing_issue_id is provided and no clear match exists, call create_issue with a concise title.
+3) If no existing_issue_id is provided and no clear match exists, call create_issue with a concise title. This is required before creating subissues.
 4) If existing_issue_id is provided, prefer reusing the most recent triage subissue from open_issues that matches the issue. Only create a new triage subissue if no suitable triage subissue exists.
 5) If the tenant indicates troubleshooting failed or the issue cannot be resolved by the tenant, create a Schedule subissue for a vendor (even if you reused the triage subissue) and shift the workflow to scheduling. This is a stopping point: do not continue triage back-and-forth.
-6) If the email is from a tenant, follow staged triage:
+6) If the email is from a tenant, follow staged triage unless an urgency policy overrides it:
    - Stage 1: Identify if the tenant can resolve the issue themselves with basic steps.
    - Stage 2: Determine if a vendor is needed.
    - Stage 3: Determine if it is an emergency.
    Use the full conversation thread for context and ask clarifying questions to confirm urgency.
    Choose triage when the tenant might resolve it or more info is needed; choose schedule only for clear emergencies (e.g., pests, gas smell, no power, no water, flooding, safety risks) or when workspace_policy explicitly requires immediate scheduling.
    Example: a clogged toilet is typically triage (suggest using a plunger and ask if there is overflow/flooding). If there is flooding or safety risk, treat as emergency and schedule.
-7) If you created a triage subissue, create an email draft reply to the tenant using draft_reply (required).
-8) When you determine the tenant cannot resolve the issue and you create a Schedule subissue, you should create two drafts in the same run:
+7) If workspace_policy marks the issue as urgent, schedule immediately in the first pass: create the root issue (if needed), then create a triage subissue and a schedule subissue in the same run.
+   - The triage subissue reply must tell the tenant that a vendor is being scheduled.
+   - The schedule subissue must include a vendor request draft.
+   - Do not wait for triage results in this case.
+8) If you created a triage subissue, create an email draft reply to the tenant using draft_reply (required).
+9) When you determine the tenant cannot resolve the issue and you create a Schedule subissue, you should create two drafts in the same run:
    - Tenant reply: acknowledge, confirm availability/entry permission, and keep the tenant informed. Use latest_message_id for message_id.
     - Vendor request: pick a vendor from the vendors list (prefer trade match) and draft a vendor email. Omit message_id unless a vendor thread exists. If no suitable vendor or no vendor email exists, draft with recipient_email null and note that no matching vendor was found.
    This is a stopping point for triage: do not keep asking tenant troubleshooting questions in the same run.
@@ -944,6 +1013,12 @@ Rules:
 - Use tools only.
 - Issue title: 2-5 words, Title Case, no location or unit/building names.
 - Issue description: required when creating an issue. One line only, super concise, human readable summary of the current state. Include who reported it (name if known) and what the issue is. Avoid quoting the email body. Avoid list/CSV formatting; write a sentence.
+- Issue urgency: when creating the root issue, set the urgent field.
+  - Use workspace_policy urgency rules and emergency heuristics to decide.
+  - If the workspace_policy marks it urgent, set urgent=true.
+  - If the workspace_policy marks it not_urgent, set urgent=false.
+  - If no policy applies but emergency heuristics apply, set urgent=true.
+  - If unsure, omit urgent.
 - Status must be 'todo' when creating a new issue.
 - Subissue title format:
   - Triage {Issue Title} (${tenantName ?? 'Tenant'})
@@ -990,7 +1065,8 @@ When you believe you have completed the task, call done().
 				unit_id: { type: ['string', 'null'] },
 				workspace_id: { type: 'string' },
 				assignee_id: { type: 'string' },
-				description: { type: 'string' }
+				description: { type: 'string' },
+				urgent: { type: 'boolean' }
 			},
 			required: ['title', 'workspace_id', 'description']
 		}
@@ -1022,7 +1098,8 @@ When you believe you have completed the task, call done().
 				status: { type: 'string' },
 				reasoning: { type: 'string' },
 				assignee_id: { type: 'string' },
-				description: { type: 'string' }
+				description: { type: 'string' },
+				urgent: { type: 'boolean' }
 			},
 			required: ['parent_issue_id', 'title', 'status', 'reasoning', 'description']
 		}
@@ -1133,16 +1210,31 @@ When you believe you have completed the task, call done().
 	];
 
 	const runId = crypto.randomUUID();
+	let startedEventSent = false;
 	let linkedIssueId: string | null = null;
 	let createdIssueId: string | null = null;
 	let lastSubissueId: string | null = null;
 	let lastSubissueTitle: string | null = null;
+	let lastTriageSubissueId: string | null = null;
 	let draftedIssueId: string | null = null;
 	let threadLinked = false;
 	let resolvedUnitId: string | null = unitId;
 	const issueNameCache = new Map<string, string>();
+	const urgencyHint = urgencyDecision === true ? true : urgencyDecision === false ? false : null;
 
 	for (let i = 0; i < 6; i += 1) {
+		if (!startedEventSent) {
+			await emitAgentEvent({
+				workspaceId,
+				userId,
+				runId,
+				step: i,
+				stage: 'processing',
+				message: 'Processing email',
+				meta: { thread_id: threadId }
+			});
+			startedEventSent = true;
+		}
 		const response = await fetch('https://api.openai.com/v1/responses', {
 			method: 'POST',
 			headers: {
@@ -1189,6 +1281,39 @@ When you believe you have completed the task, call done().
 			const name = toolCall.name;
 			const args = toolCall.arguments ? JSON.parse(toolCall.arguments) : {};
 			let result: Record<string, unknown> = {};
+
+			const stageMessageByName: Record<string, string> = {
+				create_issue: 'Creating root issue',
+				create_subissue: 'Creating subissues',
+				draft_email: 'Drafting emails',
+				draft_reply: 'Drafting emails'
+			};
+			const stageMessage = stageMessageByName[name];
+			const issueIdForEvent =
+				rootIssueId ??
+				createdIssueId ??
+				(typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null);
+			if (stageMessage && (issueIdForEvent || name !== 'create_issue')) {
+				const meta: Record<string, unknown> = { thread_id: threadId };
+				if (name === 'create_subissue') {
+					meta.parent_issue_id =
+						typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
+				}
+				if (name === 'draft_email' || name === 'draft_reply') {
+					meta.issue_id = typeof args.issue_id === 'string' ? args.issue_id : null;
+					if (typeof args.message_id === 'string') meta.message_id = args.message_id;
+				}
+				await emitAgentEvent({
+					workspaceId,
+					userId,
+					runId,
+					step: i,
+					stage: name,
+					message: stageMessage,
+					meta,
+					issueId: issueIdForEvent ?? null
+				});
+			}
 			try {
 				if (name === 'create_issue') {
 					const title = typeof args.title === 'string' ? args.title.trim() : '';
@@ -1223,12 +1348,25 @@ When you believe you have completed the task, call done().
 					if (!title) {
 						throw new Error('create_issue missing title');
 					}
+					const urgentValue =
+						typeof args.urgent === 'boolean' ? args.urgent : (urgencyHint ?? undefined);
 					const issueId = await createIssue({
 						name: title,
 						unitId: unit,
 						workspaceId: workspace,
 						assigneeId: assignee,
-						description
+						description,
+						urgent: urgentValue
+					});
+					await emitAgentEvent({
+						workspaceId,
+						userId,
+						runId,
+						step: i,
+						stage: 'create_issue',
+						message: 'Creating root issue',
+						meta: { thread_id: threadId },
+						issueId
 					});
 					if (unit && typeof unit === 'string') {
 						resolvedUnitId = unit;
@@ -1264,6 +1402,7 @@ When you believe you have completed the task, call done().
 
 				if (name === 'create_subissue') {
 					const title = typeof args.title === 'string' ? args.title.trim() : '';
+					const isTriageSubissue = /^triage\s+/i.test(title);
 					const statusValue = typeof args.status === 'string' ? args.status : 'todo';
 					const status = ['todo', 'in_progress', 'done'].includes(statusValue)
 						? statusValue
@@ -1294,6 +1433,8 @@ When you believe you have completed the task, call done().
 					if (!title || !parentIssueId) {
 						throw new Error('create_subissue missing title or parent_issue_id');
 					}
+					const subissueUrgentValue =
+						typeof args.urgent === 'boolean' ? args.urgent : (urgencyHint ?? undefined);
 					const subissueId = await createSubissue({
 						parentIssueId,
 						name: title,
@@ -1302,16 +1443,23 @@ When you believe you have completed the task, call done().
 						status,
 						reasoning,
 						assigneeId: assignee,
-						description
+						description,
+						urgent: subissueUrgentValue
 					});
 					lastSubissueId = subissueId;
 					lastSubissueTitle = title;
+					if (isTriageSubissue) {
+						lastTriageSubissueId = subissueId;
+					}
 					issuedAction = true;
 					result = { subissue_id: subissueId };
 				}
 
 				if (name === 'draft_reply') {
-					const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
+					const issue =
+						typeof args.issue_id === 'string'
+							? args.issue_id
+							: (lastTriageSubissueId ?? lastSubissueId);
 					const messageId = typeof args.message_id === 'string' ? args.message_id.trim() : '';
 					const subject = typeof args.subject === 'string' ? args.subject : '';
 					const bodyText = typeof args.body === 'string' ? args.body : '';
@@ -1615,27 +1763,7 @@ When you believe you have completed the task, call done().
 			await linkThreadToIssue({ threadId, issueId: fallbackIssueId });
 			linkedIssueId = fallbackIssueId;
 		} else {
-			await logError(userId, 'LLM did not create/link issue; generating title directly.');
-			const llmTitle = await generateIssueTitle({
-				subject,
-				body,
-				senderEmail,
-				unitId,
-				workspaceId
-			});
-			const fallbackTitle = llmTitle || 'Maintenance Issue';
-			linkedIssueId = await createIssue({
-				name: fallbackTitle,
-				unitId,
-				workspaceId,
-				assigneeId: resolveAssigneeId({
-					requestedAssigneeId: null,
-					fallbackAssigneeId: workspaceAdminId,
-					eligibleAssignees
-				})
-			});
-			createdIssueId = linkedIssueId;
-			await linkThreadToIssue({ threadId, issueId: linkedIssueId });
+			await logError(userId, 'LLM did not create/link issue.');
 		}
 	}
 
@@ -1871,32 +1999,25 @@ const processMessage = async ({
 		return;
 	}
 
-	if (!threadRow.issue_id) {
-		const workspaceAdminId = await getWorkspaceAdminId(propertyRow.workspace_id);
-		const adminName = workspaceAdminId ? await getUserNameById(workspaceAdminId) : null;
-		const titleCandidate = normalizeSubjectTitle(messageSubject || '');
-		const issueTitle = titleCandidate || 'Maintenance Issue';
-		const description = normalizeOneLine(
-			ensureSentence(
-				buildRootIssueDescriptionFallback({
-					reporterName: tenant.name ?? null,
-					assigneeName: adminName,
-					subject: messageSubject,
-					body: cleanedBody,
-					issueTitle
-				})
-			)
-		);
-		const issueId = await createIssue({
-			name: issueTitle,
-			unitId: unitRow.id,
-			workspaceId: propertyRow.workspace_id,
-			assigneeId: workspaceAdminId ?? undefined,
-			description
-		});
-		await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
-		threadRow.issue_id = issueId;
+	let urgencyPolicies: Array<any> = [];
+	try {
+		const { data } = await supabase
+			.from('workspace_policies')
+			.select('meta, description')
+			.eq('workspace_id', propertyRow.workspace_id)
+			.eq('type', 'urgency')
+			.order('updated_at', { ascending: false });
+		urgencyPolicies = data ?? [];
+	} catch {
+		urgencyPolicies = [];
 	}
+
+	const urgencyDecision = getUrgencyDecision(
+		urgencyPolicies,
+		messageSubject ?? '',
+		cleanedBody ?? '',
+		normalizeSubjectTitle(messageSubject || '')
+	);
 
 	try {
 		const internalDate = Number(message.internalDate ?? 0);
@@ -1971,7 +2092,10 @@ const processMessage = async ({
 			.order('updated_at', { ascending: false })
 			.limit(1)
 			.maybeSingle();
-		const policyText = policyRow?.policy_text ?? '';
+		const urgencyPolicyText = buildUrgencyPolicyText(urgencyPolicies ?? []);
+		const policyText = [policyRow?.policy_text ?? '', urgencyPolicyText]
+			.filter(Boolean)
+			.join('\n\n');
 		const { data: userProfile } = await supabase
 			.from('users')
 			.select('name')
@@ -1990,6 +2114,7 @@ const processMessage = async ({
 			threadId: threadRow.id,
 			userId: connection.user_id,
 			policyText,
+			urgencyDecision,
 			tenantName: tenant.name ?? null,
 			tenantEmail: tenant.email ?? null,
 			userName,

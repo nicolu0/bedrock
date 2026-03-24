@@ -249,6 +249,46 @@ const logAgentError = async ({ workspaceId, issueId, userId, action, error, meta
 	}
 };
 
+const emitAgentEvent = async ({
+	workspaceId,
+	userId,
+	runId,
+	step,
+	stage,
+	message,
+	meta,
+	issueId
+}) => {
+	if (!workspaceId || !runId || !stage || !message) return;
+	const payload = {
+		workspace_id: workspaceId,
+		user_id: userId ?? null,
+		run_id: runId,
+		issue_id: issueId ?? null,
+		step: Number.isFinite(step) ? step : null,
+		stage,
+		message,
+		meta: meta ?? {},
+		updated_at: new Date().toISOString()
+	};
+	let error = null;
+	if (issueId) {
+		const upsertResult = await supabaseAdmin
+			.from('agent_events')
+			.upsert(payload, { onConflict: 'workspace_id,issue_id' });
+		error = upsertResult.error;
+		if (!error) {
+			await supabaseAdmin.from('agent_events').delete().eq('run_id', runId).is('issue_id', null);
+		}
+	} else {
+		const insertResult = await supabaseAdmin.from('agent_events').insert(payload);
+		error = insertResult.error;
+	}
+	if (error) {
+		console.error('agent-events insert failed', error);
+	}
+};
+
 const linkThreadToIssue = async ({ threadId, issueId }) => {
 	const { data, error } = await supabaseAdmin
 		.from('threads')
@@ -326,7 +366,9 @@ Guidance:
  - Be precise and minimal.
  - If drafting to multiple recipients, use recipient_emails with plain email addresses.
  - When done, call done().
- `.trim();
+	 `.trim();
+
+	const runId = crypto.randomUUID();
 
 	const createIssueTool = {
 		type: 'function',
@@ -540,6 +582,34 @@ Guidance:
 			const args = toolCall.arguments ? JSON.parse(toolCall.arguments) : {};
 			actions.push({ name, arguments: args });
 			let result = {};
+
+			const stageMessageByName = {
+				create_issue: 'Creating root issue',
+				create_subissue: 'Creating subissues',
+				draft_email: 'Drafting emails',
+				draft_reply: 'Drafting emails'
+			};
+			const stageMessage = stageMessageByName[name];
+			if (stageMessage) {
+				const meta = { issue_id: issue?.id ?? null };
+				if (name === 'create_subissue') {
+					meta.parent_issue_id =
+						typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
+				}
+				if (name === 'draft_email' || name === 'draft_reply') {
+					meta.issue_id = typeof args.issue_id === 'string' ? args.issue_id : (issue?.id ?? null);
+					if (typeof args.message_id === 'string') meta.message_id = args.message_id;
+				}
+				await emitAgentEvent({
+					workspaceId: issue.workspace_id,
+					userId,
+					runId,
+					step: i,
+					stage: name,
+					message: stageMessage,
+					meta
+				});
+			}
 
 			try {
 				if (name === 'create_issue') {
@@ -1746,6 +1816,34 @@ When you believe you have completed the task, call done().
 			const name = toolCall.name;
 			const args = toolCall.arguments ? JSON.parse(toolCall.arguments) : {};
 			let result = {};
+
+			const stageMessageByName = {
+				create_issue: 'Creating root issue',
+				create_subissue: 'Creating subissues',
+				draft_email: 'Drafting emails',
+				draft_reply: 'Drafting emails'
+			};
+			const stageMessage = stageMessageByName[name];
+			if (stageMessage) {
+				const meta = { thread_id: threadId ?? null };
+				if (name === 'create_subissue') {
+					meta.parent_issue_id =
+						typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
+				}
+				if (name === 'draft_email' || name === 'draft_reply') {
+					meta.issue_id = typeof args.issue_id === 'string' ? args.issue_id : null;
+					if (typeof args.message_id === 'string') meta.message_id = args.message_id;
+				}
+				await emitAgentEvent({
+					workspaceId,
+					userId,
+					runId,
+					step: i,
+					stage: name,
+					message: stageMessage,
+					meta
+				});
+			}
 			try {
 				if (name === 'create_issue') {
 					const title = typeof args.title === 'string' ? args.title.trim() : '';
