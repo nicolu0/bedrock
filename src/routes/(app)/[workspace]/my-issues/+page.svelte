@@ -242,7 +242,10 @@
 			const assigneeOptions = [...members]
 				.filter((member) => {
 					const role = (member?.role ?? '').toLowerCase();
-					return Boolean(member?.user_id) && (role === 'admin' || role === 'member');
+					return (
+						Boolean(member?.user_id) &&
+						(role === 'admin' || role === 'bedrock' || role === 'member')
+					);
 				})
 				.map((member) => ({
 					value: member.user_id,

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { fail, redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
@@ -52,7 +53,7 @@ export const load = async ({ locals }) => {
 		.from('people')
 		.select('workspace_id, workspaces(name)')
 		.eq('user_id', locals.user.id)
-		.in('role', ['admin', 'member', 'owner'])
+		.in('role', ['admin', 'bedrock', 'member', 'owner'])
 		.maybeSingle();
 	const workspaceName = memberRow?.workspaces?.name ?? null;
 

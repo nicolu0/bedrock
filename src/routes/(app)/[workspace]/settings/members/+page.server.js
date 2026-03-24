@@ -8,7 +8,7 @@ export const load = async ({ parent, locals }) => {
 			.from('people')
 			.select('user_id, role, users(name, id)')
 			.eq('workspace_id', workspace.id)
-			.in('role', ['admin', 'member', 'owner'])
+			.in('role', ['admin', 'bedrock', 'member', 'owner'])
 			.order('role', { ascending: true }); // 'admin' sorts before 'member' alphabetically
 		return data ?? [];
 	})();

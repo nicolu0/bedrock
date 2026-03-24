@@ -170,3 +170,16 @@ export const applyPolicyInsert = (policy) => {
 		};
 	});
 };
+
+export const applyPolicyUpdate = (policy) => {
+	if (!policy?.id) return;
+	policiesCache.update((state) => {
+		if (!state.data) return state;
+		const existing = state.data.policies ?? [];
+		const next = existing.map((item) => (item.id === policy.id ? { ...item, ...policy } : item));
+		return {
+			...state,
+			data: { ...state.data, policies: next }
+		};
+	});
+};

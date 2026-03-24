@@ -1,9 +1,10 @@
 <script>
 	// @ts-nocheck
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { supabase } from '$lib/supabaseClient.js';
 	import EmailMessageWithDraft from './EmailMessageWithDraft.svelte';
+	import AppfolioDraftMessage from './AppfolioDraftMessage.svelte';
 
 	export let issueId;
 	export let seedIssue = null;
@@ -25,8 +26,31 @@
 	let subIssues = [];
 	let subIssuesOpen = true;
 	let activityOpen = {};
+	let appfolioEnabled = false;
+	$: if (typeof window !== 'undefined') {
+		appfolioEnabled = window.localStorage.getItem(APPFOLIO_KEY) === 'true';
+	}
+
+	const APPFOLIO_KEY = 'appfolio_enabled';
+
+	const syncAppfolioSettings = () => {
+		if (typeof window === 'undefined') return;
+		const enabled = window.localStorage.getItem(APPFOLIO_KEY) === 'true';
+		appfolioEnabled = enabled;
+	};
 
 	$: if (issueId) loadIssue(issueId);
+
+	onMount(() => {
+		syncAppfolioSettings();
+		const handleStorage = (event) => {
+			if (event.key === APPFOLIO_KEY) {
+				syncAppfolioSettings();
+			}
+		};
+		window.addEventListener('storage', handleStorage);
+		return () => window.removeEventListener('storage', handleStorage);
+	});
 
 	async function loadIssue(id) {
 		console.log('[IssuePanel] loadIssue called', { id, seedIssue });
@@ -60,14 +84,100 @@
 
 	$: messagesByIssue = activityData?.messagesByIssue ?? {};
 	$: emailDraftsByMessageId = activityData?.emailDraftsByMessageId ?? {};
+	$: draftIssueIds = activityData?.draftIssueIds ?? [];
+	$: logsByIssue = activityLogsData?.logsByIssue ?? {};
+
+	const getAppfolioApprovedBy = (id) => {
+		const list = logsByIssue?.[id] ?? [];
+		const last = [...list].reverse().find((entry) => entry?.type === 'appfolio_approved');
+		return last?.data?.approved_by ?? null;
+	};
+
+	let suppressedDraftKeys = new Set();
+
+	const suppressDraftKey = (key) => {
+		if (!key) return;
+		suppressedDraftKeys = new Set([...suppressedDraftKeys, key]);
+	};
+
+	const unsuppressDraftKey = (key) => {
+		if (!key || !suppressedDraftKeys.has(key)) return;
+		const next = new Set(suppressedDraftKeys);
+		next.delete(key);
+		suppressedDraftKeys = next;
+	};
+
 	$: draftsByIssue = Object.values(emailDraftsByMessageId).reduce((acc, d) => {
 		if (!d?.issue_id) return acc;
+		const key = d.message_id ?? d.id;
+		if (key && suppressedDraftKeys.has(key)) return acc;
 		if (!acc[d.issue_id]) acc[d.issue_id] = [];
 		acc[d.issue_id].push(d);
 		return acc;
 	}, {});
-	$: draftIssueIds = activityData?.draftIssueIds ?? [];
-	$: logsByIssue = activityLogsData?.logsByIssue ?? {};
+
+	const applyMessageDelta = (msg) => {
+		if (!msg?.issue_id) return;
+		const list = messagesByIssue[msg.issue_id] ?? [];
+		const idx = list.findIndex((m) => m.id === msg.id);
+		const updated =
+			idx >= 0 ? [...list.slice(0, idx), msg, ...list.slice(idx + 1)] : [...list, msg];
+		messagesByIssue = { ...messagesByIssue, [msg.issue_id]: updated };
+	};
+
+	const removeMessageFromCache = (msg) => {
+		if (!msg?.id || !msg?.issue_id) return;
+		const list = messagesByIssue[msg.issue_id] ?? [];
+		messagesByIssue = { ...messagesByIssue, [msg.issue_id]: list.filter((m) => m.id !== msg.id) };
+	};
+
+	const applyDraftDelta = (draft) => {
+		if (!draft) return;
+		const key = draft.message_id ?? draft.id;
+		if (!key) return;
+		emailDraftsByMessageId = { ...emailDraftsByMessageId, [key]: draft };
+		if (draft.issue_id && !draftIssueIds.includes(draft.issue_id)) {
+			draftIssueIds = [...draftIssueIds, draft.issue_id];
+		}
+	};
+
+	const removeDraftFromCache = (draft) => {
+		if (!draft) return;
+		const key = draft.message_id ?? draft.id;
+		if (!key) return;
+		const { [key]: _, ...rest } = emailDraftsByMessageId;
+		emailDraftsByMessageId = rest;
+	};
+
+	const handleDraftSent = (detail) => {
+		if (!detail) return;
+		const { status, message, tempId, issueId, draft, draftKey } = detail;
+		const targetIssueId = issueId ?? message?.issue_id ?? draft?.issue_id ?? null;
+		if (status === 'optimistic') {
+			suppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (message) applyMessageDelta(message);
+			if (draft) removeDraftFromCache(draft);
+			return;
+		}
+		if (status === 'confirmed') {
+			unsuppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (tempId && targetIssueId) {
+				removeMessageFromCache({ id: tempId, issue_id: targetIssueId });
+			}
+			if (message) {
+				applyMessageDelta({ ...message, _ui: { expanded: true } });
+			}
+			if (draft) removeDraftFromCache(draft);
+			return;
+		}
+		if (status === 'error') {
+			unsuppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (tempId && targetIssueId) {
+				removeMessageFromCache({ id: tempId, issue_id: targetIssueId });
+			}
+			if (draft) applyDraftDelta(draft);
+		}
+	};
 
 	$: statusMeta = statusConfig[issue?.status ?? 'todo'] ?? statusConfig.todo;
 	$: parentIssue = (() => {
@@ -257,46 +367,76 @@
 									<div
 										class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
 									>
-										<svg
-											width="18"
-											height="18"
-											viewBox="0 0 32 32"
-											fill="none"
-											xmlns="http://www.w3.org/2000/svg"
-										>
-											<path
-												d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
-												fill="white"
-											/>
-											<path
-												d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
-												fill="#EA4335"
-											/>
-											<path
-												d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
-												fill="#FBBC05"
-											/>
-											<path
-												d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
-												fill="#34A853"
-											/>
-											<path
-												d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
-												fill="#C5221F"
-											/>
-											<path
-												d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
-												fill="#C5221F"
-											/>
-											<path
-												d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
-												fill="#C5221F"
-											/>
-											<path
-												d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
-												fill="#4285F4"
-											/>
-										</svg>
+										{#if appfolioEnabled}
+											<svg
+												width="18"
+												height="18"
+												viewBox="0 0 1024 1024"
+												fill="none"
+												xmlns="http://www.w3.org/2000/svg"
+											>
+												<circle cx="512" cy="512" r="512" fill="#007bc7" />
+												<path
+													d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zm192.2-4c0 141.38-117.61 256-262.69 256S249.31 653.38 249.31 512 366.92 256 512 256s262.69 114.62 262.69 256zm-120.57-31.23c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+													fill="white"
+												/>
+											</svg>
+										{:else if appfolioEnabled}
+											<svg
+												width="18"
+												height="18"
+												viewBox="0 0 1024 1024"
+												fill="none"
+												xmlns="http://www.w3.org/2000/svg"
+											>
+												<circle cx="512" cy="512" r="512" fill="#007bc7" />
+												<path
+													d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zm192.2-4c0 141.38-117.61 256-262.69 256S249.31 653.38 249.31 512 366.92 256 512 256s262.69 114.62 262.69 256zm-120.57-31.23c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+													fill="white"
+												/>
+											</svg>
+										{:else}
+											<svg
+												width="18"
+												height="18"
+												viewBox="0 0 32 32"
+												fill="none"
+												xmlns="http://www.w3.org/2000/svg"
+											>
+												<path
+													d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
+													fill="white"
+												/>
+												<path
+													d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+													fill="#EA4335"
+												/>
+												<path
+													d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+													fill="#FBBC05"
+												/>
+												<path
+													d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+													fill="#34A853"
+												/>
+												<path
+													d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+													fill="#C5221F"
+												/>
+												<path
+													d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+													fill="#C5221F"
+												/>
+												<path
+													d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+													fill="#C5221F"
+												/>
+												<path
+													d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+													fill="#4285F4"
+												/>
+											</svg>
+										{/if}
 									</div>
 									<h3 class="text-base font-semibold text-neutral-900">
 										{getThreadSubject(issueId)}
@@ -315,20 +455,44 @@
 									/>
 								{/each}
 								{#each draftsByIssue[issueId] ?? [] as draft (draft.id ?? draft.message_id)}
-									<EmailMessageWithDraft
-										message={{
-											id: draft.message_id,
-											subject: draft.subject,
-											message: '',
-											sender: 'outbound',
-											direction: 'outbound',
-											timestampLabel: formatTimestamp(draft.updated_at)
-										}}
-										{draft}
-										{vendors}
-										{people}
-										on:sent={() => dispatch('resolved')}
-									/>
+									{#if appfolioEnabled}
+										<AppfolioDraftMessage
+											message={{
+												id: draft.message_id,
+												subject: draft.subject,
+												message: '',
+												sender: 'outbound',
+												direction: 'outbound',
+												timestampLabel: formatTimestamp(draft.updated_at)
+											}}
+											{draft}
+											approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+											{vendors}
+											{people}
+											on:sent={(e) => {
+												handleDraftSent(e.detail);
+												if (e.detail?.status === 'confirmed') dispatch('resolved');
+											}}
+										/>
+									{:else}
+										<EmailMessageWithDraft
+											message={{
+												id: draft.message_id,
+												subject: draft.subject,
+												message: '',
+												sender: 'outbound',
+												direction: 'outbound',
+												timestampLabel: formatTimestamp(draft.updated_at)
+											}}
+											{draft}
+											{vendors}
+											{people}
+											on:sent={(e) => {
+												handleDraftSent(e.detail);
+												if (e.detail?.status === 'confirmed') dispatch('resolved');
+											}}
+										/>
+									{/if}
 								{/each}
 							</div>
 						</div>
@@ -342,6 +506,10 @@
 									Status changed · {formatTimestamp(log.created_at)}
 								{:else if log.type === 'assignee_change'}
 									Assignee changed · {formatTimestamp(log.created_at)}
+								{:else if log.type === 'appfolio_approved'}
+									Approved by {log?.data?.approved_by ?? 'Unknown'} · {formatTimestamp(
+										log.created_at
+									)}
 								{:else if log.type === 'comment'}
 									<p class="text-neutral-700">{log.body}</p>
 									<span>{formatTimestamp(log.created_at)}</span>
@@ -452,20 +620,44 @@
 													/>
 												{/each}
 												{#each draftsByIssue[subIssue.id] ?? [] as draft (draft.id ?? draft.message_id)}
-													<EmailMessageWithDraft
-														message={{
-															id: draft.message_id,
-															subject: draft.subject,
-															message: '',
-															sender: 'outbound',
-															direction: 'outbound',
-															timestampLabel: formatTimestamp(draft.updated_at)
-														}}
-														{draft}
-														{vendors}
-														{people}
-														on:sent={() => dispatch('resolved')}
-													/>
+													{#if appfolioEnabled}
+														<AppfolioDraftMessage
+															message={{
+																id: draft.message_id,
+																subject: draft.subject,
+																message: '',
+																sender: 'outbound',
+																direction: 'outbound',
+																timestampLabel: formatTimestamp(draft.updated_at)
+															}}
+															{draft}
+															approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+															{vendors}
+															{people}
+															on:sent={(e) => {
+																handleDraftSent(e.detail);
+																if (e.detail?.status === 'confirmed') dispatch('resolved');
+															}}
+														/>
+													{:else}
+														<EmailMessageWithDraft
+															message={{
+																id: draft.message_id,
+																subject: draft.subject,
+																message: '',
+																sender: 'outbound',
+																direction: 'outbound',
+																timestampLabel: formatTimestamp(draft.updated_at)
+															}}
+															{draft}
+															{vendors}
+															{people}
+															on:sent={(e) => {
+																handleDraftSent(e.detail);
+																if (e.detail?.status === 'confirmed') dispatch('resolved');
+															}}
+														/>
+													{/if}
 												{/each}
 											</div>
 
@@ -478,6 +670,10 @@
 															Status changed · {formatTimestamp(log.created_at)}
 														{:else if log.type === 'assignee_change'}
 															Assignee changed · {formatTimestamp(log.created_at)}
+														{:else if log.type === 'appfolio_approved'}
+															Approved by {log?.data?.approved_by ?? 'Unknown'} · {formatTimestamp(
+																log.created_at
+															)}
 														{:else if log.type === 'comment'}
 															<p class="text-neutral-700">{log.body}</p>
 															<span>{formatTimestamp(log.created_at)}</span>

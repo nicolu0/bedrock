@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
 	import {
 		gmailConnectionCache,
 		primeGmailConnectionCache
@@ -10,11 +11,35 @@
 
 	$: connection = $gmailConnectionCache;
 
+	const APPFOLIO_KEY = 'appfolio_enabled';
+	let appfolioEnabled = false;
+
+	const syncAppfolioEnabled = () => {
+		if (!browser) return;
+		appfolioEnabled = window.localStorage.getItem(APPFOLIO_KEY) === 'true';
+	};
+
+	const toggleAppfolio = () => {
+		appfolioEnabled = !appfolioEnabled;
+		window.localStorage.setItem(APPFOLIO_KEY, appfolioEnabled ? 'true' : 'false');
+	};
+
 	$: if (browser && data.gmailConnection) {
 		data.gmailConnection.then((c) => {
 			primeGmailConnectionCache(c);
 		});
 	}
+
+	onMount(() => {
+		syncAppfolioEnabled();
+		const handleStorage = (event) => {
+			if (event.key === APPFOLIO_KEY) {
+				syncAppfolioEnabled();
+			}
+		};
+		window.addEventListener('storage', handleStorage);
+		return () => window.removeEventListener('storage', handleStorage);
+	});
 
 	const formatDate = (value) => {
 		if (!value) return 'Unknown';
@@ -119,6 +144,31 @@
 							</button>
 						</form>
 					{/if}
+				</div>
+			</div>
+			<div class="mt-6 border-t border-neutral-100 pt-4">
+				<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<div>
+						<h3 class="text-sm font-semibold text-neutral-900">Appfolio</h3>
+						<p class="text-xs text-neutral-500">Use Appfolio approvals instead of Gmail send.</p>
+					</div>
+					<button
+						type="button"
+						class={`inline-flex h-7 w-12 items-center rounded-full border transition ${
+							appfolioEnabled
+								? 'border-emerald-500 bg-emerald-500'
+								: 'border-neutral-300 bg-neutral-200'
+						}`}
+						on:click={toggleAppfolio}
+						aria-pressed={appfolioEnabled}
+						aria-label="Toggle Appfolio drafts"
+					>
+						<span
+							class={`h-5 w-5 rounded-full bg-white shadow transition ${
+								appfolioEnabled ? 'translate-x-6' : 'translate-x-1'
+							}`}
+						></span>
+					</button>
 				</div>
 			</div>
 		{/if}

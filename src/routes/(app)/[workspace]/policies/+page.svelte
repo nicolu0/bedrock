@@ -3,7 +3,12 @@
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
-	import { applyPolicyInsert, policiesCache, primePoliciesCache } from '$lib/stores/policiesCache';
+	import {
+		applyPolicyInsert,
+		applyPolicyUpdate,
+		policiesCache,
+		primePoliciesCache
+	} from '$lib/stores/policiesCache';
 
 	export let data;
 
@@ -11,9 +16,10 @@
 	const sidebarControl = getContext('sidebarControl');
 	const openSidebar = () => sidebarControl?.open?.();
 	let showNewPolicyModal = false;
-	let newPolicyType = 'allow';
-	let newPolicyEmail = '';
-	let newPolicyDescription = '';
+	let newPolicyType = 'urgency';
+	let newPolicyUrgency = 'urgent';
+	let newPolicyMaintenanceIssue = '';
+	let editingPolicyId = null;
 	let createPolicyError = '';
 	let creatingPolicy = false;
 	let filterOpen = false;
@@ -47,21 +53,55 @@
 	}
 	$: policies = _resolvedPolicies ?? [];
 
-	const policyTypeOptions = [
-		{ value: 'allow', label: 'Allow' },
-		{ value: 'block', label: 'Block' },
-		{ value: 'behavior', label: 'Behavior' }
-	];
+	const policyTypeOptions = [{ value: 'urgency', label: 'Urgency' }];
 	const policyTypeLabels = {
-		allow: 'Allow',
-		block: 'Block',
-		behavior: 'Behavior'
+		urgency: 'Urgency'
 	};
 	const policyTypeStyles = {
-		allow: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-		block: 'border-rose-200 bg-rose-50 text-rose-700',
-		behavior: 'border-amber-200 bg-amber-50 text-amber-700'
+		urgency: 'border-rose-200 bg-rose-50 text-rose-700'
 	};
+	const maintenanceIssueOptions = [
+		'toilet clog',
+		'toilet leak',
+		'sink clog',
+		'sink leak',
+		'shower drain',
+		'tub drain',
+		'faucet leak',
+		'pipe leak',
+		'garbage disposal',
+		'water heater',
+		'AC unit',
+		'heater outage',
+		'thermostat issue',
+		'dishwasher drain',
+		'refrigerator cooling',
+		'oven heat',
+		'stove burner',
+		'microwave issue',
+		'washer leak',
+		'dryer heat',
+		'ceiling leak',
+		'wall damage',
+		'mold growth',
+		'smoke detector',
+		'CO detector',
+		'outlet failure',
+		'breaker trip',
+		'window lock',
+		'sliding door',
+		'door lock',
+		'cabinet hinge',
+		'closet track',
+		'exhaust fan',
+		'ceiling fan',
+		'blinds damage',
+		'intercom issue',
+		'garbage chute',
+		'ant infestation',
+		'roach infestation',
+		'balcony door'
+	];
 	const filterCategories = [{ value: 'type', label: 'Type' }];
 
 	let filterValueOptions = [];
@@ -81,6 +121,31 @@
 	}
 	$: selectedValue =
 		filterValueOptions.find((option) => option.value === filterValue) ?? filterValueOptions[0];
+
+	const formatMaintenanceIssue = (value) =>
+		typeof value === 'string' && value.trim() ? value.trim() : 'Maintenance issue';
+
+	const formatMaintenanceIssueTitle = (value) => {
+		const issue = formatMaintenanceIssue(value);
+		return issue ? issue.charAt(0).toUpperCase() + issue.slice(1) : issue;
+	};
+
+	const formatMaintenanceIssueDescription = (value) => formatMaintenanceIssue(value).toLowerCase();
+
+	const buildBehaviorDescription = (policy) => {
+		if (policy?.type !== 'urgency') return policy?.description || 'No description';
+		const issue = formatMaintenanceIssueDescription(
+			policy?.meta?.maintenance_issue ?? policy?.description
+		);
+		const urgency = policy?.meta?.urgency;
+		if (urgency === 'urgent') {
+			return `The agent will immediately schedule a vendor for ${issue}.`;
+		}
+		if (urgency === 'not_urgent') {
+			return `The agent won't immediately schedule a vendor for ${issue}.`;
+		}
+		return `Policy applies to ${issue}.`;
+	};
 
 	$: filteredPolicies = policies.filter((policy) => {
 		if (filterCategory === 'type') {
@@ -102,26 +167,40 @@
 		}).format(date);
 	};
 
-	const normalizeEmail = (value) => (typeof value === 'string' ? value.trim() : '');
-	const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-	$: emailRequired = newPolicyType === 'allow' || newPolicyType === 'block';
-	$: normalizedEmail = normalizeEmail(newPolicyEmail);
-	$: emailLooksValid = normalizedEmail ? isValidEmail(normalizedEmail) : false;
-	$: canSubmit = !emailRequired || emailLooksValid;
+	$: canSubmit = Boolean(newPolicyMaintenanceIssue.trim());
+	$: maintenanceIssueLabel = newPolicyMaintenanceIssue.trim();
+	$: behaviorDescription =
+		maintenanceIssueLabel && newPolicyType === 'urgency'
+			? newPolicyUrgency === 'urgent'
+				? `The agent will immediately schedule a vendor for ${maintenanceIssueLabel}.`
+				: `The agent won't immediately schedule a vendor for ${maintenanceIssueLabel}.`
+			: '';
 
 	const openNewPolicyModal = () => {
 		showNewPolicyModal = true;
+		editingPolicyId = null;
 		createPolicyError = '';
-		if (!newPolicyType) newPolicyType = 'allow';
+		if (!newPolicyType) newPolicyType = 'urgency';
 	};
 
 	const closeNewPolicyModal = () => {
 		showNewPolicyModal = false;
-		newPolicyType = 'allow';
-		newPolicyEmail = '';
-		newPolicyDescription = '';
+		newPolicyType = 'urgency';
+		newPolicyUrgency = 'urgent';
+		newPolicyMaintenanceIssue = '';
+		editingPolicyId = null;
 		createPolicyError = '';
 		document.activeElement?.blur();
+	};
+
+	const openEditPolicyModal = (policy) => {
+		if (!policy) return;
+		showNewPolicyModal = true;
+		editingPolicyId = policy.id ?? null;
+		newPolicyType = policy.type ?? 'urgency';
+		newPolicyUrgency = policy?.meta?.urgency ?? 'urgent';
+		newPolicyMaintenanceIssue = policy?.meta?.maintenance_issue ?? policy?.description ?? '';
+		createPolicyError = '';
 	};
 
 	const closeFilterMenus = () => {
@@ -151,13 +230,16 @@
 		creatingPolicy = true;
 		try {
 			const response = await fetch('/api/policies', {
-				method: 'POST',
+				method: editingPolicyId ? 'PATCH' : 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
+					id: editingPolicyId,
 					workspace: workspaceSlug,
 					type: newPolicyType,
-					email: normalizedEmail || null,
-					description: newPolicyDescription.trim()
+					urgency: newPolicyType === 'urgency' ? newPolicyUrgency : null,
+					maintenance_issue: newPolicyMaintenanceIssue.trim() || null,
+					email: null,
+					description: null
 				})
 			});
 			const result = await response.json();
@@ -165,7 +247,11 @@
 				createPolicyError = result?.error ?? 'Unable to create policy.';
 				return;
 			}
-			applyPolicyInsert(result);
+			if (editingPolicyId) {
+				applyPolicyUpdate(result);
+			} else {
+				applyPolicyInsert(result);
+			}
 			closeNewPolicyModal();
 		} catch {
 			createPolicyError = 'Unable to create policy.';
@@ -378,9 +464,12 @@
 			{hasActiveFilter ? 'No policies match the current filter.' : 'No policies yet.'}
 		</div>
 	{:else}
-		<div class="divide-y divide-neutral-100">
+		<div>
 			{#each filteredPolicies as policy}
-				<div class="flex items-center justify-between gap-4 px-6 py-2">
+				<div
+					class="flex cursor-pointer items-center justify-between gap-4 px-6 py-2 transition hover:bg-neutral-50"
+					on:click={() => openEditPolicyModal(policy)}
+				>
 					<div class="flex min-w-0 items-center gap-3">
 						<span
 							class={`inline-flex h-5 items-center rounded-full border px-2 text-[10px] font-semibold tracking-wide uppercase ${
@@ -392,10 +481,12 @@
 						</span>
 						<div class="min-w-0">
 							<div class="truncate text-sm text-neutral-800">
-								{policy.email || 'All senders'}
+								{formatMaintenanceIssueTitle(
+									policy?.meta?.maintenance_issue ?? policy?.description
+								)}
 							</div>
 							<div class="truncate text-xs text-neutral-400">
-								{policy.description || 'No description'}
+								{buildBehaviorDescription(policy)}
 							</div>
 						</div>
 					</div>
@@ -427,7 +518,9 @@
 		>
 			<form on:submit|preventDefault={handleCreatePolicy}>
 				<div class="flex items-center justify-between">
-					<div class="text-lg font-medium text-neutral-800">New policy</div>
+					<div class="text-lg font-medium text-neutral-800">
+						{editingPolicyId ? 'Edit policy' : 'New policy'}
+					</div>
 					<button
 						class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
 						on:click={closeNewPolicyModal}
@@ -454,6 +547,16 @@
 						</p>
 					{/if}
 					<div>
+						<label class="text-xs text-neutral-500">Maintenance issue</label>
+						<input
+							class="mt-1 w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							placeholder="Add maintenance issue"
+							bind:value={newPolicyMaintenanceIssue}
+							type="text"
+							required
+						/>
+					</div>
+					<div>
 						<label class="text-xs text-neutral-500">Type</label>
 						<select
 							class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
@@ -465,30 +568,26 @@
 							{/each}
 						</select>
 					</div>
-					<div>
-						<label class="text-xs text-neutral-500">Sender email</label>
-						<input
-							class={`mt-1 w-full rounded-xl border px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500 ${
-								emailRequired && normalizedEmail && !emailLooksValid
-									? 'border-red-300'
-									: 'border-stone-300'
-							}`}
-							placeholder={emailRequired ? 'name@company.com' : 'Optional'}
-							bind:value={newPolicyEmail}
-							type="email"
-						/>
-						{#if emailRequired}
-							<p class="mt-1 text-[11px] text-neutral-400">
-								Required for allow and block policies.
-							</p>
-						{/if}
-					</div>
-					<textarea
-						class="min-h-[96px] rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
-						placeholder="Description (optional)"
-						name="description"
-						bind:value={newPolicyDescription}
-					></textarea>
+					{#if newPolicyType === 'urgency'}
+						<div>
+							<label class="text-xs text-neutral-500">Urgency</label>
+							<select
+								class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+								bind:value={newPolicyUrgency}
+								required
+							>
+								<option value="urgent">Urgent</option>
+								<option value="not_urgent">Not urgent</option>
+							</select>
+						</div>
+					{/if}
+					{#if behaviorDescription}
+						<p
+							class="rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-xs text-neutral-600"
+						>
+							{behaviorDescription}
+						</p>
+					{/if}
 				</div>
 				<div class="mt-5 flex items-center justify-end gap-2">
 					<button
@@ -503,7 +602,13 @@
 						disabled={creatingPolicy || !canSubmit}
 						type="submit"
 					>
-						{creatingPolicy ? 'Creating...' : 'Create policy'}
+						{creatingPolicy
+							? editingPolicyId
+								? 'Saving...'
+								: 'Creating...'
+							: editingPolicyId
+								? 'Save policy'
+								: 'Create policy'}
 					</button>
 				</div>
 			</form>

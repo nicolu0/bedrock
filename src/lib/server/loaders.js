@@ -248,7 +248,7 @@ export const loadPoliciesData = async (workspaceId) => {
 
 	const normalized = (policies ?? []).map((policy) => ({
 		id: policy.id,
-		type: policy.type ?? 'behavior',
+		type: policy.type ?? 'urgency',
 		email: policy.email ?? '',
 		description: policy.description ?? '',
 		meta: policy.meta ?? null,
@@ -410,7 +410,7 @@ export const loadNotificationsData = async (workspaceId, userId) => {
 			.from('people')
 			.select('user_id, role, users(name, id)')
 			.eq('workspace_id', workspaceId)
-			.in('role', ['admin', 'member', 'owner', 'vendor'])
+			.in('role', ['admin', 'bedrock', 'member', 'owner', 'vendor'])
 	]);
 	return { notifications: notifications ?? [], members: members ?? [] };
 };
@@ -420,7 +420,7 @@ export const loadPeopleMembers = async (workspaceId) => {
 		.from('people')
 		.select('user_id, role, users(name, id)')
 		.eq('workspace_id', workspaceId)
-		.in('role', ['admin', 'member', 'owner', 'vendor']);
+		.in('role', ['admin', 'bedrock', 'member', 'owner', 'vendor']);
 	return members ?? [];
 };
 

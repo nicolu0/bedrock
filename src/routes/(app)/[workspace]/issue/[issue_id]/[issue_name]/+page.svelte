@@ -3,9 +3,10 @@
 	import { browser } from '$app/environment';
 	import { goto, preloadData } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
+	import AppfolioDraftMessage from '$lib/components/AppfolioDraftMessage.svelte';
 	import { pageReady } from '$lib/stores/pageReady';
 	import { supabase } from '$lib/supabaseClient.js';
 	import { getIssueDetailByReadableId, seedIssueDetail } from '$lib/stores/issueDetailCache.js';
@@ -13,11 +14,34 @@
 	export let data;
 
 	$: role = (data?.role ?? '').toString().toLowerCase();
-	$: canEditIssue = role === 'admin';
+	$: canEditIssue = role === 'admin' || role === 'bedrock';
+
+	const APPFOLIO_KEY = 'appfolio_enabled';
+	let appfolioEnabled = false;
+	$: if (browser) {
+		appfolioEnabled = window.localStorage.getItem(APPFOLIO_KEY) === 'true';
+	}
+
+	const syncAppfolioSettings = () => {
+		if (!browser) return;
+		const enabled = window.localStorage.getItem(APPFOLIO_KEY) === 'true';
+		appfolioEnabled = enabled;
+	};
 
 	if (!browser) {
 		pageReady.set(false);
 	}
+
+	onMount(() => {
+		syncAppfolioSettings();
+		const handleStorage = (event) => {
+			if (event.key === APPFOLIO_KEY) {
+				syncAppfolioSettings();
+			}
+		};
+		window.addEventListener('storage', handleStorage);
+		return () => window.removeEventListener('storage', handleStorage);
+	});
 
 	const statusConfig = {
 		in_progress: {
@@ -37,6 +61,7 @@
 	const roleLabels = {
 		owner: 'Owner',
 		admin: 'Admin',
+		bedrock: 'Bedrock',
 		member: 'Member',
 		vendor: 'Vendor'
 	};
@@ -321,8 +346,24 @@
 
 	// ── Activity derived ─────────────────────────────────────────────────────────
 
+	let suppressedDraftKeys = new Set();
+
+	const suppressDraftKey = (key) => {
+		if (!key) return;
+		suppressedDraftKeys = new Set([...suppressedDraftKeys, key]);
+	};
+
+	const unsuppressDraftKey = (key) => {
+		if (!key || !suppressedDraftKeys.has(key)) return;
+		const next = new Set(suppressedDraftKeys);
+		next.delete(key);
+		suppressedDraftKeys = next;
+	};
+
 	$: draftsByIssue = Object.values(emailDraftsByMessageId ?? {}).reduce((acc, draft) => {
 		if (!draft?.issue_id) return acc;
+		const key = draft.message_id ?? draft.id;
+		if (key && suppressedDraftKeys.has(key)) return acc;
 		if (!acc[draft.issue_id]) acc[draft.issue_id] = [];
 		acc[draft.issue_id].push(draft);
 		return acc;
@@ -412,6 +453,36 @@
 	const upsertDraft = applyDraftDelta;
 	const removeDraft = removeDraftFromCache;
 
+	const handleDraftSent = (detail) => {
+		if (!detail) return;
+		const { status, message, tempId, issueId, draft, draftKey } = detail;
+		const targetIssueId = issueId ?? message?.issue_id ?? draft?.issue_id ?? null;
+		if (status === 'optimistic') {
+			suppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (message) applyMessageDelta(message);
+			if (draft) removeDraftFromCache(draft);
+			return;
+		}
+		if (status === 'confirmed') {
+			unsuppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (tempId && targetIssueId) {
+				removeMessageFromCache({ id: tempId, issue_id: targetIssueId });
+			}
+			if (message) {
+				applyMessageDelta({ ...message, _ui: { expanded: true } });
+			}
+			if (draft) removeDraftFromCache(draft);
+			return;
+		}
+		if (status === 'error') {
+			unsuppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (tempId && targetIssueId) {
+				removeMessageFromCache({ id: tempId, issue_id: targetIssueId });
+			}
+			if (draft) applyDraftDelta(draft);
+		}
+	};
+
 	// ── Activity log helpers ─────────────────────────────────────────────────────
 
 	const getStatusRingClassFromLog = (log) => {
@@ -423,6 +494,12 @@
 	};
 
 	const ACTIVITY_LOG_WINDOW_MS = 60 * 60 * 1000;
+
+	const getAppfolioApprovedBy = (id) => {
+		const list = logsByIssue?.[id] ?? [];
+		const last = [...list].reverse().find((entry) => entry?.type === 'appfolio_approved');
+		return last?.data?.approved_by ?? null;
+	};
 
 	const getLatestLogForIssue = (id, options = {}) => {
 		const list = logsByIssue[id] ?? [];
@@ -632,7 +709,12 @@
 	const handleUrgentChange = async (nextUrgent) => {
 		if (!canEditIssue) return;
 		if (!issueId) return;
+		if (issue?.parent_id) return;
 		const prevUrgent = issue?.urgent ?? false;
+		if (prevUrgent === nextUrgent) {
+			urgentOpen = false;
+			return;
+		}
 		issue = { ...issue, urgent: nextUrgent };
 		urgentOpen = false;
 		const { error } = await supabase
@@ -641,6 +723,10 @@
 			.eq('id', issueId);
 		if (error) {
 			issue = { ...issue, urgent: prevUrgent };
+			return;
+		}
+		if (!issue?.parent_id) {
+			openUrgencyPolicyPrompt(nextUrgent);
 		}
 	};
 
@@ -649,6 +735,12 @@
 	let propertyOpen = false;
 	let unitOpen = false;
 	let urgentOpen = false;
+	let showUrgencyPolicyPrompt = false;
+	let urgencyPolicyValue = 'not_urgent';
+	let urgencyPolicyIssue = '';
+	let urgencyPolicyMatchingId = null;
+	let urgencyPolicyLoading = false;
+	let urgencyPolicyError = '';
 
 	const handleAssigneeSelect = async (member) => {
 		if (!canEditIssue) return;
@@ -761,6 +853,9 @@
 
 	// ── Utility functions ────────────────────────────────────────────────────────
 
+	$: isSubissue = Boolean(issue?.parent_id);
+	$: displayUrgent = isSubissue ? (issue?.root_urgent ?? issue?.urgent) : issue?.urgent;
+
 	const normalizeAssignee = (member) => {
 		if (!member) return null;
 		const id = member.user_id ?? member?.users?.id ?? null;
@@ -827,6 +922,83 @@
 	};
 
 	const getActivityActor = (log) => getCommentAuthor(log);
+
+	const normalizePolicyLabel = (value) =>
+		(value ?? '')
+			.toString()
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9\s]/g, ' ')
+			.replace(/\s+/g, ' ');
+
+	const openUrgencyPolicyPrompt = async (nextUrgent) => {
+		if (!issue) return;
+		urgencyPolicyValue = nextUrgent ? 'urgent' : 'not_urgent';
+		urgencyPolicyIssue = issue?.name?.toString().trim() || 'Maintenance issue';
+		urgencyPolicyMatchingId = null;
+		urgencyPolicyError = '';
+		showUrgencyPolicyPrompt = true;
+		const workspaceId = issue?.workspace_id ?? issue?.workspaceId ?? null;
+		if (!workspaceId) return;
+		urgencyPolicyLoading = true;
+		try {
+			const { data } = await supabase
+				.from('workspace_policies')
+				.select('id, meta, description')
+				.eq('workspace_id', workspaceId)
+				.eq('type', 'urgency')
+				.order('updated_at', { ascending: false });
+			const target = normalizePolicyLabel(urgencyPolicyIssue);
+			const match = (data ?? []).find((row) => {
+				const candidate = row?.meta?.maintenance_issue ?? row?.description ?? '';
+				return normalizePolicyLabel(candidate) === target;
+			});
+			urgencyPolicyMatchingId = match?.id ?? null;
+		} catch {
+			urgencyPolicyError = 'Unable to load policies.';
+		} finally {
+			urgencyPolicyLoading = false;
+		}
+	};
+
+	const closeUrgencyPolicyPrompt = () => {
+		showUrgencyPolicyPrompt = false;
+		urgencyPolicyError = '';
+	};
+
+	const saveUrgencyPolicy = async () => {
+		if (!urgencyPolicyIssue.trim()) {
+			urgencyPolicyError = 'Maintenance issue is required.';
+			return;
+		}
+		urgencyPolicyLoading = true;
+		urgencyPolicyError = '';
+		try {
+			const response = await fetch('/api/policies', {
+				method: urgencyPolicyMatchingId ? 'PATCH' : 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					id: urgencyPolicyMatchingId,
+					workspace: $page.params.workspace,
+					type: 'urgency',
+					urgency: urgencyPolicyValue,
+					maintenance_issue: urgencyPolicyIssue.trim(),
+					email: null,
+					description: null
+				})
+			});
+			const result = await response.json();
+			if (!response.ok) {
+				urgencyPolicyError = result?.error ?? 'Unable to save policy.';
+				return;
+			}
+			closeUrgencyPolicyPrompt();
+		} catch {
+			urgencyPolicyError = 'Unable to save policy.';
+		} finally {
+			urgencyPolicyLoading = false;
+		}
+	};
 
 	const getAssigneeNameFromLog = (log) => {
 		const d = log?.data ?? {};
@@ -1256,46 +1428,76 @@
 												<div
 													class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
 												>
-													<svg
-														width="18"
-														height="18"
-														viewBox="0 0 32 32"
-														fill="none"
-														xmlns="http://www.w3.org/2000/svg"
-													>
-														<path
-															d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
-															fill="white"
-														/>
-														<path
-															d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
-															fill="#EA4335"
-														/>
-														<path
-															d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
-															fill="#FBBC05"
-														/>
-														<path
-															d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
-															fill="#34A853"
-														/>
-														<path
-															d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
-															fill="#C5221F"
-														/>
-														<path
-															d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
-															fill="#C5221F"
-														/>
-														<path
-															d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
-															fill="#C5221F"
-														/>
-														<path
-															d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
-															fill="#4285F4"
-														/>
-													</svg>
+													{#if appfolioEnabled}
+														<svg
+															width="18"
+															height="18"
+															viewBox="0 0 1024 1024"
+															fill="none"
+															xmlns="http://www.w3.org/2000/svg"
+														>
+															<circle cx="512" cy="512" r="512" fill="#007bc7" />
+															<path
+																d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zm192.2-4c0 141.38-117.61 256-262.69 256S249.31 653.38 249.31 512 366.92 256 512 256s262.69 114.62 262.69 256zm-120.57-31.23c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																fill="white"
+															/>
+														</svg>
+													{:else if appfolioEnabled}
+														<svg
+															width="18"
+															height="18"
+															viewBox="0 0 1024 1024"
+															fill="none"
+															xmlns="http://www.w3.org/2000/svg"
+														>
+															<circle cx="512" cy="512" r="512" fill="#007bc7" />
+															<path
+																d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zm192.2-4c0 141.38-117.61 256-262.69 256S249.31 653.38 249.31 512 366.92 256 512 256s262.69 114.62 262.69 256zm-120.57-31.23c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																fill="white"
+															/>
+														</svg>
+													{:else}
+														<svg
+															width="18"
+															height="18"
+															viewBox="0 0 32 32"
+															fill="none"
+															xmlns="http://www.w3.org/2000/svg"
+														>
+															<path
+																d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
+																fill="white"
+															/>
+															<path
+																d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+																fill="#EA4335"
+															/>
+															<path
+																d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+																fill="#FBBC05"
+															/>
+															<path
+																d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+																fill="#34A853"
+															/>
+															<path
+																d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+																fill="#C5221F"
+															/>
+															<path
+																d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+																fill="#C5221F"
+															/>
+															<path
+																d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+																fill="#C5221F"
+															/>
+															<path
+																d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+																fill="#4285F4"
+															/>
+														</svg>
+													{/if}
 												</div>
 												<h3 class="text-base font-semibold text-neutral-900">
 													{getThreadSubject(issueId)}
@@ -1303,22 +1505,26 @@
 											</div>
 										{:else if (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
 											<div class="flex items-center gap-3 px-1">
-												<div
-													class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-												>
-													<svg
-														width="18"
-														height="18"
-														viewBox="0 0 16 16"
-														fill="currentColor"
-														class="text-neutral-500"
+												{#if !appfolioEnabled}
+													<div
+														class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
 													>
-														<path
-															d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
-														/>
-													</svg>
-												</div>
-												<h3 class="text-base font-semibold text-neutral-900">Draft reply</h3>
+														<svg
+															width="18"
+															height="18"
+															viewBox="0 0 16 16"
+															fill="currentColor"
+															class="text-neutral-500"
+														>
+															<path
+																d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
+															/>
+														</svg>
+													</div>
+													<h3 class="text-base font-semibold text-neutral-900">Draft reply</h3>
+												{:else}
+													<h3 class="text-base font-semibold text-neutral-900">Drafted reply</h3>
+												{/if}
 											</div>
 										{/if}
 										<div class="space-y-3 pl-11">
@@ -1332,21 +1538,36 @@
 												/>
 											{/each}
 											{#each replyDraftsByIssue[issueId] ?? [] as draft}
-												<EmailMessageWithDraft
-													message={{
-														id: draft.message_id,
-														subject: draft.subject,
-														message: '',
-														sender: 'outbound',
-														direction: 'outbound',
-														timestampLabel: formatTimestamp(draft.updated_at)
-													}}
-													{draft}
-													{vendors}
-													on:sent={(e) => {
-														if (e.detail.message) applyMessageDelta(e.detail.message);
-													}}
-												/>
+												{#if appfolioEnabled}
+													<AppfolioDraftMessage
+														message={{
+															id: draft.message_id,
+															subject: draft.subject,
+															message: '',
+															sender: 'outbound',
+															direction: 'outbound',
+															timestampLabel: formatTimestamp(draft.updated_at)
+														}}
+														{draft}
+														approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+														{vendors}
+														on:sent={(e) => handleDraftSent(e.detail)}
+													/>
+												{:else}
+													<EmailMessageWithDraft
+														message={{
+															id: draft.message_id,
+															subject: draft.subject,
+															message: '',
+															sender: 'outbound',
+															direction: 'outbound',
+															timestampLabel: formatTimestamp(draft.updated_at)
+														}}
+														{draft}
+														{vendors}
+														on:sent={(e) => handleDraftSent(e.detail)}
+													/>
+												{/if}
 											{/each}
 										</div>
 									</div>
@@ -1355,40 +1576,76 @@
 								{#if (newDraftsByIssue[issueId]?.length ?? 0) > 0}
 									<div class="space-y-3">
 										<div class="flex items-center gap-3 px-1">
-											<div
-												class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-											>
-												<svg
-													width="18"
-													height="18"
-													viewBox="0 0 16 16"
-													fill="currentColor"
-													class="text-neutral-500"
+											{#if !appfolioEnabled}
+												<div
+													class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
 												>
-													<path
-														d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v7A1.5 1.5 0 0 1 12.5 12h-9A1.5 1.5 0 0 1 2 10.5zM3.5 3a.5.5 0 0 0-.5.5v.379l5 3.125 5-3.125V3.5a.5.5 0 0 0-.5-.5z"
-													/>
-												</svg>
-											</div>
-											<h3 class="text-base font-semibold text-neutral-900">Email drafted</h3>
+													<svg
+														width="18"
+														height="18"
+														viewBox="0 0 16 16"
+														fill="currentColor"
+														class="text-neutral-500"
+													>
+														<path
+															d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v7A1.5 1.5 0 0 1 12.5 12h-9A1.5 1.5 0 0 1 2 10.5zM3.5 3a.5.5 0 0 0-.5.5v.379l5 3.125 5-3.125V3.5a.5.5 0 0 0-.5-.5z"
+														/>
+													</svg>
+												</div>
+												<h3 class="text-base font-semibold text-neutral-900">Email drafted</h3>
+											{:else}
+												<div
+													class="flex h-8 w-8 items-center justify-center rounded-full bg-[#007bc7]"
+												>
+													<svg
+														width="18"
+														height="18"
+														viewBox="0 0 1024 1024"
+														fill="none"
+														xmlns="http://www.w3.org/2000/svg"
+													>
+														<circle cx="512" cy="512" r="512" fill="#007bc7" />
+														<path
+															d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zm192.2-4c0 141.38-117.61 256-262.69 256S249.31 653.38 249.31 512 366.92 256 512 256s262.69 114.62 262.69 256zm-120.57-31.23c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+															fill="white"
+														/>
+													</svg>
+												</div>
+												<h3 class="text-base font-semibold text-neutral-900">Assign Vendor</h3>
+											{/if}
 										</div>
 										<div class="space-y-3 pl-11">
 											{#each newDraftsByIssue[issueId] ?? [] as draft}
-												<EmailMessageWithDraft
-													message={{
-														id: draft.message_id,
-														subject: draft.subject,
-														message: '',
-														sender: 'outbound',
-														direction: 'outbound',
-														timestampLabel: formatTimestamp(draft.updated_at)
-													}}
-													{draft}
-													{vendors}
-													on:sent={(e) => {
-														if (e.detail.message) applyMessageDelta(e.detail.message);
-													}}
-												/>
+												{#if appfolioEnabled}
+													<AppfolioDraftMessage
+														message={{
+															id: draft.message_id,
+															subject: draft.subject,
+															message: '',
+															sender: 'outbound',
+															direction: 'outbound',
+															timestampLabel: formatTimestamp(draft.updated_at)
+														}}
+														{draft}
+														approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+														{vendors}
+														on:sent={(e) => handleDraftSent(e.detail)}
+													/>
+												{:else}
+													<EmailMessageWithDraft
+														message={{
+															id: draft.message_id,
+															subject: draft.subject,
+															message: '',
+															sender: 'outbound',
+															direction: 'outbound',
+															timestampLabel: formatTimestamp(draft.updated_at)
+														}}
+														{draft}
+														{vendors}
+														on:sent={(e) => handleDraftSent(e.detail)}
+													/>
+												{/if}
 											{/each}
 										</div>
 									</div>
@@ -1473,6 +1730,8 @@
 															{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
 																log
 															)}
+														{:else if log.type === 'appfolio_approved'}
+															Approved by {log?.data?.approved_by ?? getActivityActor(log).name}
 														{/if}
 													</p>
 													<span class="shrink-0 text-xs text-neutral-400">
@@ -1531,46 +1790,62 @@
 																	<div
 																		class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
 																	>
-																		<svg
-																			width="18"
-																			height="18"
-																			viewBox="0 0 32 32"
-																			fill="none"
-																			xmlns="http://www.w3.org/2000/svg"
-																		>
-																			<path
-																				d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
-																				fill="white"
-																			/>
-																			<path
-																				d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
-																				fill="#EA4335"
-																			/>
-																			<path
-																				d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
-																				fill="#FBBC05"
-																			/>
-																			<path
-																				d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
-																				fill="#34A853"
-																			/>
-																			<path
-																				d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
-																				fill="#C5221F"
-																			/>
-																			<path
-																				d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
-																				fill="#C5221F"
-																			/>
-																			<path
-																				d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
-																				fill="#C5221F"
-																			/>
-																			<path
-																				d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
-																				fill="#4285F4"
-																			/>
-																		</svg>
+																		{#if appfolioEnabled}
+																			<svg
+																				width="18"
+																				height="18"
+																				viewBox="0 0 1024 1024"
+																				fill="none"
+																				xmlns="http://www.w3.org/2000/svg"
+																			>
+																				<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																				<path
+																					d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zm192.2-4c0 141.38-117.61 256-262.69 256S249.31 653.38 249.31 512 366.92 256 512 256s262.69 114.62 262.69 256zm-120.57-31.23c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																					fill="white"
+																				/>
+																			</svg>
+																		{:else}
+																			<svg
+																				width="18"
+																				height="18"
+																				viewBox="0 0 32 32"
+																				fill="none"
+																				xmlns="http://www.w3.org/2000/svg"
+																			>
+																				<path
+																					d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
+																					fill="white"
+																				/>
+																				<path
+																					d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+																					fill="#EA4335"
+																				/>
+																				<path
+																					d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+																					fill="#FBBC05"
+																				/>
+																				<path
+																					d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+																					fill="#34A853"
+																				/>
+																				<path
+																					d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+																					fill="#C5221F"
+																				/>
+																				<path
+																					d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+																					fill="#C5221F"
+																				/>
+																				<path
+																					d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+																					fill="#C5221F"
+																				/>
+																				<path
+																					d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+																					fill="#4285F4"
+																				/>
+																			</svg>
+																		{/if}
 																	</div>
 																	<h3 class="text-base font-semibold text-neutral-900">
 																		{getThreadSubject(subIssue.id)}
@@ -1578,24 +1853,30 @@
 																</div>
 															{:else if (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 																<div class="flex items-center gap-3 px-1">
-																	<div
-																		class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-																	>
-																		<svg
-																			width="18"
-																			height="18"
-																			viewBox="0 0 16 16"
-																			fill="currentColor"
-																			class="text-neutral-500"
+																	{#if !appfolioEnabled}
+																		<div
+																			class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
 																		>
-																			<path
-																				d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
-																			/>
-																		</svg>
-																	</div>
-																	<h3 class="text-base font-semibold text-neutral-900">
-																		Draft reply
-																	</h3>
+																			<svg
+																				width="18"
+																				height="18"
+																				viewBox="0 0 16 16"
+																				fill="currentColor"
+																				class="text-neutral-500"
+																			>
+																				<path
+																					d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
+																				/>
+																			</svg>
+																		</div>
+																		<h3 class="text-base font-semibold text-neutral-900">
+																			Draft reply
+																		</h3>
+																	{:else}
+																		<h3 class="text-base font-semibold text-neutral-900">
+																			Drafted reply
+																		</h3>
+																	{/if}
 																</div>
 															{/if}
 															<div class="space-y-3 pl-11">
@@ -1609,21 +1890,36 @@
 																	/>
 																{/each}
 																{#each replyDraftsByIssue[subIssue.id] ?? [] as draft}
-																	<EmailMessageWithDraft
-																		message={{
-																			id: draft.message_id,
-																			subject: draft.subject,
-																			message: '',
-																			sender: 'outbound',
-																			direction: 'outbound',
-																			timestampLabel: formatTimestamp(draft.updated_at)
-																		}}
-																		{draft}
-																		{vendors}
-																		on:sent={(e) => {
-																			if (e.detail.message) applyMessageDelta(e.detail.message);
-																		}}
-																	/>
+																	{#if appfolioEnabled}
+																		<AppfolioDraftMessage
+																			message={{
+																				id: draft.message_id,
+																				subject: draft.subject,
+																				message: '',
+																				sender: 'outbound',
+																				direction: 'outbound',
+																				timestampLabel: formatTimestamp(draft.updated_at)
+																			}}
+																			{draft}
+																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+																			{vendors}
+																			on:sent={(e) => handleDraftSent(e.detail)}
+																		/>
+																	{:else}
+																		<EmailMessageWithDraft
+																			message={{
+																				id: draft.message_id,
+																				subject: draft.subject,
+																				message: '',
+																				sender: 'outbound',
+																				direction: 'outbound',
+																				timestampLabel: formatTimestamp(draft.updated_at)
+																			}}
+																			{draft}
+																			{vendors}
+																			on:sent={(e) => handleDraftSent(e.detail)}
+																		/>
+																	{/if}
 																{/each}
 															</div>
 														</div>
@@ -1632,42 +1928,80 @@
 													{#if (newDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 														<div class="space-y-3">
 															<div class="flex items-center gap-3 px-1">
-																<div
-																	class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-																>
-																	<svg
-																		width="18"
-																		height="18"
-																		viewBox="0 0 16 16"
-																		fill="currentColor"
-																		class="text-neutral-500"
+																{#if !appfolioEnabled}
+																	<div
+																		class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
 																	>
-																		<path
-																			d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v7A1.5 1.5 0 0 1 12.5 12h-9A1.5 1.5 0 0 1 2 10.5zM3.5 3a.5.5 0 0 0-.5.5v.379l5 3.125 5-3.125V3.5a.5.5 0 0 0-.5-.5z"
-																		/>
-																	</svg>
-																</div>
-																<h3 class="text-base font-semibold text-neutral-900">
-																	Draft email
-																</h3>
+																		<svg
+																			width="18"
+																			height="18"
+																			viewBox="0 0 16 16"
+																			fill="currentColor"
+																			class="text-neutral-500"
+																		>
+																			<path
+																				d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v7A1.5 1.5 0 0 1 12.5 12h-9A1.5 1.5 0 0 1 2 10.5zM3.5 3a.5.5 0 0 0-.5.5v.379l5 3.125 5-3.125V3.5a.5.5 0 0 0-.5-.5z"
+																			/>
+																		</svg>
+																	</div>
+																	<h3 class="text-base font-semibold text-neutral-900">
+																		Draft email
+																	</h3>
+																{:else}
+																	<div
+																		class="flex h-8 w-8 items-center justify-center rounded-full bg-[#007bc7]"
+																	>
+																		<svg
+																			width="18"
+																			height="18"
+																			viewBox="0 0 1024 1024"
+																			fill="none"
+																			xmlns="http://www.w3.org/2000/svg"
+																		>
+																			<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																			<path
+																				d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zm192.2-4c0 141.38-117.61 256-262.69 256S249.31 653.38 249.31 512 366.92 256 512 256s262.69 114.62 262.69 256zm-120.57-31.23c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																				fill="white"
+																			/>
+																		</svg>
+																	</div>
+																	<h3 class="text-base font-semibold text-neutral-900">
+																		Assign Vendor
+																	</h3>
+																{/if}
 															</div>
 															<div class="space-y-3 pl-11">
 																{#each newDraftsByIssue[subIssue.id] ?? [] as draft}
-																	<EmailMessageWithDraft
-																		message={{
-																			id: draft.message_id,
-																			subject: draft.subject,
-																			message: '',
-																			sender: 'outbound',
-																			direction: 'outbound',
-																			timestampLabel: formatTimestamp(draft.updated_at)
-																		}}
-																		{draft}
-																		{vendors}
-																		on:sent={(e) => {
-																			if (e.detail.message) applyMessageDelta(e.detail.message);
-																		}}
-																	/>
+																	{#if appfolioEnabled}
+																		<AppfolioDraftMessage
+																			message={{
+																				id: draft.message_id,
+																				subject: draft.subject,
+																				message: '',
+																				sender: 'outbound',
+																				direction: 'outbound',
+																				timestampLabel: formatTimestamp(draft.updated_at)
+																			}}
+																			{draft}
+																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+																			{vendors}
+																			on:sent={(e) => handleDraftSent(e.detail)}
+																		/>
+																	{:else}
+																		<EmailMessageWithDraft
+																			message={{
+																				id: draft.message_id,
+																				subject: draft.subject,
+																				message: '',
+																				sender: 'outbound',
+																				direction: 'outbound',
+																				timestampLabel: formatTimestamp(draft.updated_at)
+																			}}
+																			{draft}
+																			{vendors}
+																			on:sent={(e) => handleDraftSent(e.detail)}
+																		/>
+																	{/if}
 																{/each}
 															</div>
 														</div>
@@ -1751,6 +2085,9 @@
 																					{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
 																						log
 																					)}
+																				{:else if log.type === 'appfolio_approved'}
+																					Approved by {log?.data?.approved_by ??
+																						getActivityActor(log).name}
 																				{/if}
 																			</p>
 																			<span class="shrink-0 text-xs text-neutral-400">
@@ -2021,16 +2358,16 @@
 							</div>
 						{/if}
 					</div>
-					<div class="relative">
+					<div class="group relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
-								canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+								canEditIssue && !isSubissue ? 'hover:bg-stone-100' : 'cursor-not-allowed opacity-60'
 							}`}
-							disabled={!canEditIssue}
-							aria-disabled={!canEditIssue}
+							disabled={!canEditIssue || isSubissue}
+							aria-disabled={!canEditIssue || isSubissue}
 							on:click|stopPropagation={() => {
-								if (!canEditIssue) return;
+								if (!canEditIssue || isSubissue) return;
 								urgentOpen = !urgentOpen;
 								statusOpen = false;
 								assigneeOpen = false;
@@ -2038,7 +2375,7 @@
 								unitOpen = false;
 							}}
 						>
-							{#if issue?.urgent}
+							{#if displayUrgent}
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
 									width="16"
@@ -2068,7 +2405,14 @@
 								<span>Not urgent</span>
 							{/if}
 						</button>
-						{#if urgentOpen && canEditIssue}
+						{#if isSubissue}
+							<div
+								class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] text-white opacity-0 transition group-hover:opacity-100"
+							>
+								Change urgency in the root issue
+							</div>
+						{/if}
+						{#if urgentOpen && canEditIssue && !isSubissue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
 								on:click|stopPropagation
@@ -2076,7 +2420,7 @@
 								<button
 									type="button"
 									class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-										issue?.urgent ? 'bg-neutral-50' : ''
+										displayUrgent ? 'bg-neutral-50' : ''
 									}`}
 									on:click={() => handleUrgentChange(true)}
 								>
@@ -2097,7 +2441,7 @@
 								<button
 									type="button"
 									class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-										!issue?.urgent ? 'bg-neutral-50' : ''
+										!displayUrgent ? 'bg-neutral-50' : ''
 									}`}
 									on:click={() => handleUrgentChange(false)}
 								>
@@ -2227,6 +2571,87 @@
 			</div>
 		</aside>
 	</div>
+	{#if showUrgencyPolicyPrompt}
+		<div class="fixed inset-0 z-40 bg-neutral-900/30" on:click={closeUrgencyPolicyPrompt}></div>
+		<div class="fixed inset-0 z-50 flex items-center justify-center px-4">
+			<div
+				class="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="urgency-policy-title"
+				on:click|stopPropagation
+			>
+				<div class="flex items-start justify-between gap-4">
+					<div>
+						<div id="urgency-policy-title" class="text-lg font-medium text-neutral-800">
+							Update urgency policy?
+						</div>
+						<p class="mt-1 text-xs text-neutral-500">
+							Apply this urgency setting to future issues like this.
+						</p>
+					</div>
+					<button
+						class="text-neutral-400 transition hover:text-neutral-600"
+						on:click={closeUrgencyPolicyPrompt}
+						aria-label="Close"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-5 w-5">
+							<path
+								fill="currentColor"
+								d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7A1 1 0 0 0 5.7 7.11L10.59 12l-4.9 4.89a1 1 0 1 0 1.41 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.41L13.41 12l4.9-4.89a1 1 0 0 0-.01-1.4z"
+							/>
+						</svg>
+					</button>
+				</div>
+				<div class="mt-4 space-y-3">
+					<div>
+						<label class="text-xs text-neutral-500">Maintenance issue</label>
+						<input
+							class="mt-1 w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							bind:value={urgencyPolicyIssue}
+							required
+							type="text"
+						/>
+					</div>
+					<div>
+						<label class="text-xs text-neutral-500">Urgency</label>
+						<select
+							class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							bind:value={urgencyPolicyValue}
+						>
+							<option value="urgent">Urgent</option>
+							<option value="not_urgent">Not urgent</option>
+						</select>
+					</div>
+					{#if urgencyPolicyError}
+						<p class="text-xs text-rose-600">{urgencyPolicyError}</p>
+					{/if}
+				</div>
+				<div class="mt-6 flex items-center justify-end gap-3">
+					<button
+						type="button"
+						class="rounded-full border border-neutral-200 px-4 py-2 text-sm text-neutral-600 transition hover:border-neutral-300"
+						on:click={closeUrgencyPolicyPrompt}
+						disabled={urgencyPolicyLoading}
+					>
+						No thanks
+					</button>
+					<button
+						type="button"
+						class="rounded-full bg-neutral-900 px-4 py-2 text-sm text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
+						on:click={saveUrgencyPolicy}
+						disabled={urgencyPolicyLoading}
+					>
+						{#if urgencyPolicyLoading}
+							Saving...
+						{:else}
+							{urgencyPolicyMatchingId ? 'Update policy' : 'Create policy'}
+						{/if}
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 {:else}
 	<div class="flex h-full flex-col">
 		<div class="border-b border-neutral-200 px-6 py-2">

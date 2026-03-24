@@ -26,6 +26,8 @@
 
 	const roleBadgeClass = (role) => {
 		switch (role) {
+			case 'bedrock':
+				return 'bg-stone-700 text-stone-300';
 			case 'admin':
 				return 'bg-rose-50 text-rose-600';
 			case 'owner':

@@ -18,7 +18,7 @@ const canAccessPeople = async (workspaceId, userId) => {
 		.eq('workspace_id', workspaceId)
 		.eq('user_id', userId)
 		.maybeSingle();
-	return member?.role === 'admin' || member?.role === 'member';
+	return member?.role === 'admin' || member?.role === 'bedrock' || member?.role === 'member';
 };
 
 export const GET = async ({ locals, url }) => {

@@ -160,14 +160,14 @@ const getWorkspaceIdForUser = async (userId) => {
 		.from('people')
 		.select('workspace_id')
 		.eq('user_id', userId)
-		.in('role', ['admin', 'member', 'owner'])
+		.in('role', ['admin', 'bedrock', 'member', 'owner'])
 		.maybeSingle();
 	if (data?.workspace_id) return data.workspace_id;
 	const { data: member } = await supabase
 		.from('members')
 		.select('workspace_id')
 		.eq('user_id', userId)
-		.in('role', ['admin', 'member', 'owner'])
+		.in('role', ['admin', 'bedrock', 'member', 'owner'])
 		.maybeSingle();
 	return member?.workspace_id ?? null;
 };
@@ -179,7 +179,7 @@ const getWorkspacePersonMatch = async ({ workspaceId, senderEmail }) => {
 		.select('id, role')
 		.eq('workspace_id', workspaceId)
 		.ilike('email', senderEmail)
-		.in('role', ['admin', 'member', 'vendor'])
+		.in('role', ['admin', 'bedrock', 'member', 'vendor'])
 		.maybeSingle();
 	return data ?? null;
 };

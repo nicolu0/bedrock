@@ -19,13 +19,25 @@ export const load = async ({ parent, params, depends }) => {
 	const issueRowPromise = supabaseAdmin
 		.from('issues')
 		.select(
-			'id, name, description, status, urgent, issue_number, readable_id, assignee_id, unit_id, property_id, properties(name), units(name, property_id, properties(name))'
+			'id, name, description, status, urgent, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, properties(name), units(name, property_id, properties(name))'
 		)
 		.eq('workspace_id', workspace.id)
 		.eq('readable_id', readableId)
 		.maybeSingle()
-		.then(({ data: issueRow, error: issueErr }) => {
+		.then(async ({ data: issueRow, error: issueErr }) => {
 			if (issueErr || !issueRow?.id) return null;
+			const parentId = issueRow.parent_id ?? null;
+			let rootUrgent = issueRow.urgent ?? false;
+			let rootIssueId = issueRow.id;
+			if (parentId) {
+				const { data: parentRow } = await supabaseAdmin
+					.from('issues')
+					.select('id, urgent')
+					.eq('id', parentId)
+					.maybeSingle();
+				rootUrgent = parentRow?.urgent ?? rootUrgent;
+				rootIssueId = parentRow?.id ?? parentId;
+			}
 			const propertyId = issueRow.property_id ?? issueRow.units?.property_id ?? null;
 			return {
 				id: issueRow.id,
@@ -33,6 +45,10 @@ export const load = async ({ parent, params, depends }) => {
 				description: issueRow.description ?? null,
 				status: issueRow.status,
 				urgent: issueRow.urgent ?? false,
+				parent_id: parentId,
+				parentId,
+				root_urgent: rootUrgent,
+				rootIssueId,
 				issueNumber: issueRow.issue_number ?? null,
 				readableId: issueRow.readable_id ?? null,
 				assignee_id: issueRow.assignee_id ?? null,

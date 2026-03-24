@@ -14,7 +14,7 @@
 
 	$: workspaceSlug = $page.params.workspace;
 	$: role = $page.data?.role;
-	$: canViewPeople = role === 'admin' || role === 'member';
+	$: canViewPeople = role === 'admin' || role === 'bedrock' || role === 'member';
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: currentPath = $page.url.pathname;
 	$: if (browser && workspaceSlug && role && !canViewPeople) goto(basePath);
