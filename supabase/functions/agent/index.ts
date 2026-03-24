@@ -246,12 +246,26 @@ const emitAgentEvent = async ({
 	};
 	let error = null;
 	if (issueId) {
-		const upsertResult = await supabase
+		const { data: updated, error: updateError } = await supabase
 			.from('agent_events')
-			.upsert(payload, { onConflict: 'workspace_id,issue_id' });
-		error = upsertResult.error;
-		if (!error) {
-			await supabase.from('agent_events').delete().eq('run_id', runId).is('issue_id', null);
+			.update({
+				issue_id: issueId,
+				step: payload.step,
+				stage: payload.stage,
+				message: payload.message,
+				meta: payload.meta,
+				updated_at: payload.updated_at
+			})
+			.eq('run_id', runId)
+			.is('issue_id', null)
+			.select('id');
+		if (updateError) {
+			error = updateError;
+		} else if (!updated?.length) {
+			const upsertResult = await supabase
+				.from('agent_events')
+				.upsert(payload, { onConflict: 'workspace_id,issue_id' });
+			error = upsertResult.error;
 		}
 	} else {
 		const insertResult = await supabase.from('agent_events').insert(payload);
