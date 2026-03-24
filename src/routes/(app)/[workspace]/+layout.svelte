@@ -593,6 +593,8 @@
          transition: width 180ms ease-out, opacity 150ms ease;"
 ></div>
 
+<AgentToasts />
+
 {#if isSettingsRoute}
 	<slot />
 {:else}
@@ -798,7 +800,6 @@
 					<slot />
 				</div>
 			</section>
-			<AgentToasts />
 			{#if showSearchModal}
 				<div
 					class="fixed inset-0 z-40 bg-neutral-900/30"

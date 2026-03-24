@@ -321,8 +321,24 @@
 
 	// ── Activity derived ─────────────────────────────────────────────────────────
 
+	let suppressedDraftKeys = new Set();
+
+	const suppressDraftKey = (key) => {
+		if (!key) return;
+		suppressedDraftKeys = new Set([...suppressedDraftKeys, key]);
+	};
+
+	const unsuppressDraftKey = (key) => {
+		if (!key || !suppressedDraftKeys.has(key)) return;
+		const next = new Set(suppressedDraftKeys);
+		next.delete(key);
+		suppressedDraftKeys = next;
+	};
+
 	$: draftsByIssue = Object.values(emailDraftsByMessageId ?? {}).reduce((acc, draft) => {
 		if (!draft?.issue_id) return acc;
+		const key = draft.message_id ?? draft.id;
+		if (key && suppressedDraftKeys.has(key)) return acc;
 		if (!acc[draft.issue_id]) acc[draft.issue_id] = [];
 		acc[draft.issue_id].push(draft);
 		return acc;
@@ -411,6 +427,36 @@
 	const removeMessage = removeMessageFromCache;
 	const upsertDraft = applyDraftDelta;
 	const removeDraft = removeDraftFromCache;
+
+	const handleDraftSent = (detail) => {
+		if (!detail) return;
+		const { status, message, tempId, issueId, draft, draftKey } = detail;
+		const targetIssueId = issueId ?? message?.issue_id ?? draft?.issue_id ?? null;
+		if (status === 'optimistic') {
+			suppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (message) applyMessageDelta(message);
+			if (draft) removeDraftFromCache(draft);
+			return;
+		}
+		if (status === 'confirmed') {
+			unsuppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (tempId && targetIssueId) {
+				removeMessageFromCache({ id: tempId, issue_id: targetIssueId });
+			}
+			if (message) {
+				applyMessageDelta({ ...message, _ui: { expanded: true } });
+			}
+			if (draft) removeDraftFromCache(draft);
+			return;
+		}
+		if (status === 'error') {
+			unsuppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (tempId && targetIssueId) {
+				removeMessageFromCache({ id: tempId, issue_id: targetIssueId });
+			}
+			if (draft) applyDraftDelta(draft);
+		}
+	};
 
 	// ── Activity log helpers ─────────────────────────────────────────────────────
 
@@ -1438,9 +1484,7 @@
 													}}
 													{draft}
 													{vendors}
-													on:sent={(e) => {
-														if (e.detail.message) applyMessageDelta(e.detail.message);
-													}}
+													on:sent={(e) => handleDraftSent(e.detail)}
 												/>
 											{/each}
 										</div>
@@ -1480,9 +1524,7 @@
 													}}
 													{draft}
 													{vendors}
-													on:sent={(e) => {
-														if (e.detail.message) applyMessageDelta(e.detail.message);
-													}}
+													on:sent={(e) => handleDraftSent(e.detail)}
 												/>
 											{/each}
 										</div>
@@ -1715,9 +1757,7 @@
 																		}}
 																		{draft}
 																		{vendors}
-																		on:sent={(e) => {
-																			if (e.detail.message) applyMessageDelta(e.detail.message);
-																		}}
+																		on:sent={(e) => handleDraftSent(e.detail)}
 																	/>
 																{/each}
 															</div>
@@ -1759,9 +1799,7 @@
 																		}}
 																		{draft}
 																		{vendors}
-																		on:sent={(e) => {
-																			if (e.detail.message) applyMessageDelta(e.detail.message);
-																		}}
+																		on:sent={(e) => handleDraftSent(e.detail)}
 																	/>
 																{/each}
 															</div>

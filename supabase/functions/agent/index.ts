@@ -15,6 +15,11 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 	auth: { persistSession: false, autoRefreshToken: false }
 });
 
+let currentWorkspaceId: string | null = null;
+let currentUserId: string | null = null;
+let currentRunId: string | null = null;
+let currentIssueId: string | null = null;
+
 const decodeBase64Url = (input: string) => {
 	const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
 	const pad = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
@@ -213,6 +218,25 @@ const logAgentError = async ({
 	}
 };
 
+const clearStaleProcessingEvents = async ({
+	workspaceId,
+	threadId,
+	runId
+}: {
+	workspaceId: string;
+	threadId: string;
+	runId: string;
+}) => {
+	await supabase
+		.from('agent_events')
+		.delete()
+		.eq('workspace_id', workspaceId)
+		.eq('stage', 'processing')
+		.is('issue_id', null)
+		.neq('run_id', runId)
+		.eq('meta->>thread_id', threadId);
+};
+
 const emitAgentEvent = async ({
 	workspaceId,
 	userId,
@@ -245,31 +269,96 @@ const emitAgentEvent = async ({
 		updated_at: new Date().toISOString()
 	};
 	let error = null;
+	if (stage === 'processing' && !issueId) {
+		const insertResult = await supabase.from('agent_events').insert(payload);
+		error = insertResult.error;
+		if (error) {
+			console.error('agent-events insert failed', error);
+		}
+		return;
+	}
+	const updateFields: Record<string, unknown> = {
+		step: payload.step,
+		stage: payload.stage,
+		message: payload.message,
+		meta: payload.meta,
+		updated_at: payload.updated_at
+	};
 	if (issueId) {
-		const { data: updated, error: updateError } = await supabase
+		const { data: updatedByIssue, error: updateIssueError } = await supabase
 			.from('agent_events')
-			.update({
+			.update(updateFields)
+			.eq('workspace_id', workspaceId)
+			.eq('issue_id', issueId)
+			.select('id');
+		if (updateIssueError) {
+			console.error('agent-events update failed', {
+				run_id: runId,
 				issue_id: issueId,
-				step: payload.step,
-				stage: payload.stage,
-				message: payload.message,
-				meta: payload.meta,
-				updated_at: payload.updated_at
-			})
+				stage,
+				message,
+				error: updateIssueError
+			});
+			error = updateIssueError;
+		} else if (updatedByIssue?.length) {
+			return;
+		}
+
+		updateFields.issue_id = issueId;
+		const { data: updatedByRun, error: updateRunError } = await supabase
+			.from('agent_events')
+			.update(updateFields)
 			.eq('run_id', runId)
 			.is('issue_id', null)
 			.select('id');
-		if (updateError) {
-			error = updateError;
-		} else if (!updated?.length) {
-			const upsertResult = await supabase
-				.from('agent_events')
-				.upsert(payload, { onConflict: 'workspace_id,issue_id' });
-			error = upsertResult.error;
+		if (updateRunError) {
+			console.error('agent-events update failed', {
+				run_id: runId,
+				issue_id: issueId,
+				stage,
+				message,
+				error: updateRunError
+			});
+			error = updateRunError;
+		} else if (updatedByRun?.length) {
+			return;
 		}
+
+		console.warn('agent-events update found no rows', {
+			run_id: runId,
+			issue_id: issueId,
+			stage,
+			message
+		});
+		const upsertResult = await supabase
+			.from('agent_events')
+			.upsert(payload, { onConflict: 'workspace_id,issue_id' });
+		error = upsertResult.error;
 	} else {
-		const insertResult = await supabase.from('agent_events').insert(payload);
-		error = insertResult.error;
+		const { data: updatedByRun, error: updateRunError } = await supabase
+			.from('agent_events')
+			.update(updateFields)
+			.eq('run_id', runId)
+			.select('id');
+		if (updateRunError) {
+			console.error('agent-events update failed', {
+				run_id: runId,
+				issue_id: null,
+				stage,
+				message,
+				error: updateRunError
+			});
+			error = updateRunError;
+		} else if (!updatedByRun?.length) {
+			console.warn('agent-events update found no rows', {
+				run_id: runId,
+				issue_id: null,
+				stage,
+				message
+			});
+			const insertResult = await supabase.from('agent_events').insert(payload);
+			error = insertResult.error;
+		}
 	}
 	if (error) {
 		console.error('agent-events insert failed', error);
@@ -1233,10 +1322,11 @@ When you believe you have completed the task, call done().
 	let draftedIssueId: string | null = null;
 	let threadLinked = false;
 	let resolvedUnitId: string | null = unitId;
+	let primaryIssueId: string | null = rootIssueId ?? threadIssueId ?? null;
 	const issueNameCache = new Map<string, string>();
 	const urgencyHint = urgencyDecision === true ? true : urgencyDecision === false ? false : null;
 
-	for (let i = 0; i < 6; i += 1) {
+	for (let i = 0; i < 10; i += 1) {
 		if (!startedEventSent) {
 			await emitAgentEvent({
 				workspaceId,
@@ -1304,9 +1394,14 @@ When you believe you have completed the task, call done().
 			};
 			const stageMessage = stageMessageByName[name];
 			const issueIdForEvent =
-				rootIssueId ??
+				primaryIssueId ??
 				createdIssueId ??
-				(typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null);
+				linkedIssueId ??
+				rootIssueId ??
+				threadIssueId ??
+				(typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null) ??
+				(typeof args.issue_id === 'string' ? args.issue_id : null) ??
+				lastSubissueId;
 			if (stageMessage && (issueIdForEvent || name !== 'create_issue')) {
 				const meta: Record<string, unknown> = { thread_id: threadId };
 				if (name === 'create_subissue') {
@@ -1387,6 +1482,7 @@ When you believe you have completed the task, call done().
 					}
 					linkedIssueId = issueId;
 					createdIssueId = issueId;
+					primaryIssueId = primaryIssueId ?? issueId;
 					issuedAction = true;
 					result = { issue_id: issueId };
 				}
@@ -1467,6 +1563,7 @@ When you believe you have completed the task, call done().
 					}
 					issuedAction = true;
 					result = { subissue_id: subissueId };
+					primaryIssueId = primaryIssueId ?? parentIssueId ?? rootIssueId ?? createdIssueId;
 				}
 
 				if (name === 'draft_reply') {
@@ -1716,6 +1813,25 @@ When you believe you have completed the task, call done().
 				}
 
 				if (name === 'done') {
+					const doneIssueId =
+						primaryIssueId ??
+						linkedIssueId ??
+						draftedIssueId ??
+						lastSubissueId ??
+						createdIssueId ??
+						rootIssueId ??
+						(typeof args.issue_id === 'string' ? args.issue_id : null);
+					await emitAgentEvent({
+						workspaceId,
+						userId,
+						runId,
+						step: i,
+						stage: 'done',
+						message: 'Done',
+						meta: { thread_id: threadId },
+						issueId: doneIssueId
+					});
+					await clearStaleProcessingEvents({ workspaceId, threadId, runId });
 					doneCalled = true;
 					issuedAction = true;
 					result = { ok: true };
@@ -1781,7 +1897,7 @@ When you believe you have completed the task, call done().
 		}
 	}
 
-	return { issueId: linkedIssueId };
+	return { issueId: linkedIssueId, runId };
 };
 
 const processMessage = async ({
@@ -1841,6 +1957,8 @@ const processMessage = async ({
 		await logError(connection.user_id, `Workspace lookup failed for user ${connection.user_id}`);
 		return;
 	}
+	currentWorkspaceId = workspaceIdForConnection;
+	currentUserId = connection.user_id;
 
 	const { allow: allowPolicy, block: blockPolicy } = await getPolicyMatch({
 		workspaceId: workspaceIdForConnection,
@@ -2140,6 +2258,8 @@ const processMessage = async ({
 			workspaceUnits
 		});
 		issueId = created?.issueId ?? issueId;
+		currentRunId = created?.runId ?? currentRunId;
+		currentIssueId = issueId ?? currentIssueId;
 
 		if (issueId) {
 			await supabase.from('threads').update({ issue_id: issueId }).eq('id', threadRow.id);
@@ -2494,6 +2614,16 @@ serve(async (req) => {
 			if (currentJobId) {
 				await markJobError(currentJobId, 1, err instanceof Error ? err.message : 'Internal error');
 			}
+			await emitAgentEvent({
+				workspaceId: currentWorkspaceId ?? null,
+				userId: currentUserId ?? null,
+				runId: currentRunId ?? crypto.randomUUID(),
+				step: null,
+				stage: 'error',
+				message: err instanceof Error ? err.message : 'Agent error',
+				meta: {},
+				issueId: currentIssueId ?? null
+			});
 		} catch {
 			// ignore
 		}

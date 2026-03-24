@@ -1,7 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { onDestroy, createEventDispatcher } from 'svelte';
-	import { fade } from 'svelte/transition';
+	import { agentToasts } from '$lib/stores/agentToasts';
 	const dispatch = createEventDispatcher();
 
 	export let message;
@@ -17,7 +17,6 @@
 	let isSent = false;
 	let sentMessage = null;
 	let toastMessage = '';
-	let toastTimeout;
 	let isExpanded = Boolean(draft);
 	let isQuotedExpanded = false;
 	let isSentQuotedExpanded = false;
@@ -141,18 +140,34 @@
 		isExpanded = true;
 	}
 
+	$: if (!draft && message?._ui?.expanded && !isExpanded) {
+		isExpanded = true;
+	}
+
 	$: if (!isExpanded) {
 		isQuotedExpanded = false;
 		isSentQuotedExpanded = false;
 	}
 
-	const showToast = (message) => {
-		toastMessage = message;
-		if (toastTimeout) clearTimeout(toastTimeout);
-		toastTimeout = setTimeout(() => {
-			toastMessage = '';
-		}, 3000);
+	const showToast = (message, id) => {
+		agentToasts.upsert({
+			id: id ?? `email-toast-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+			message,
+			stage: 'done'
+		});
 	};
+
+	const buildOptimisticMessage = ({ tempId, issueId, subject, body }) => ({
+		id: tempId,
+		issue_id: issueId ?? null,
+		message: body ?? '',
+		sender: 'unknown',
+		subject: subject ?? '',
+		timestamp: new Date().toISOString(),
+		direction: 'outbound',
+		channel: 'gmail',
+		_ui: { expanded: true }
+	});
 
 	const saveDraft = async () => {
 		if (!draft?.message_id && !draft?.issue_id) return;
@@ -184,6 +199,25 @@
 			return;
 		}
 		if (isSending || isSent) return;
+		const tempId = `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+		const optimisticMessage = buildOptimisticMessage({
+			tempId,
+			issueId: draft.issue_id ?? null,
+			subject: draft.subject,
+			body: draftBody
+		});
+		isExpanded = true;
+		isSent = true;
+		sentMessage = optimisticMessage;
+		dispatch('sent', {
+			status: 'optimistic',
+			message: optimisticMessage,
+			tempId,
+			issueId: draft.issue_id ?? null,
+			draftKey: draft.message_id ?? draft.id,
+			draft
+		});
+		showToast(`Email sent to ${effectiveRecipients.join(', ')}`);
 		try {
 			isSending = true;
 			const response = await fetch('/api/email-drafts/send', {
@@ -195,14 +229,33 @@
 						: { issue_id: draft.issue_id, recipient_emails: effectiveRecipients }
 				)
 			});
-			if (response.ok) {
-				const payload = await response.json().catch(() => null);
-				sentMessage = payload?.message ?? null;
-				isSent = true;
-				dispatch('sent', { issueId: draft.issue_id ?? null, message: sentMessage });
+			if (!response.ok) {
+				throw new Error('send failed');
 			}
+			const payload = await response.json().catch(() => null);
+			const confirmedMessage = payload?.message ?? null;
+			if (confirmedMessage) {
+				sentMessage = confirmedMessage;
+			}
+			dispatch('sent', {
+				status: 'confirmed',
+				message: confirmedMessage,
+				tempId,
+				issueId: draft.issue_id ?? null,
+				draftKey: draft.message_id ?? draft.id,
+				draft
+			});
 		} catch {
-			// ignore send failures
+			isSent = false;
+			sentMessage = null;
+			showToast('Email failed to send.');
+			dispatch('sent', {
+				status: 'error',
+				tempId,
+				issueId: draft.issue_id ?? null,
+				draftKey: draft.message_id ?? draft.id,
+				draft
+			});
 		} finally {
 			isSending = false;
 		}
@@ -266,15 +319,6 @@
 </script>
 
 <svelte:window on:click={handleWindowClick} />
-
-{#if toastMessage}
-	<div
-		transition:fade={{ duration: 100 }}
-		class="fixed right-4 bottom-4 z-50 rounded-md bg-neutral-900 px-3 py-2 text-xs text-white shadow-[0_2px_12px_rgba(0,0,0,0.18)]"
-	>
-		{toastMessage}
-	</div>
-{/if}
 
 <div class="overflow-hidden rounded-md border border-neutral-100 bg-white">
 	{#if !draft}

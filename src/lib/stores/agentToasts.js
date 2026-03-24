@@ -2,14 +2,14 @@
 import { writable } from 'svelte/store';
 
 const MAX_TOASTS = 4;
-const AUTO_DISMISS_MS = 8000;
+const DONE_DISMISS_MS = 2000;
 
 const timers = new Map();
 
 const createAgentToasts = () => {
 	const { subscribe, update } = writable([]);
 
-	const scheduleDismiss = (runId) => {
+	const scheduleDismiss = (runId, delayMs = DONE_DISMISS_MS) => {
 		if (!runId) return;
 		if (timers.has(runId)) {
 			clearTimeout(timers.get(runId));
@@ -17,18 +17,19 @@ const createAgentToasts = () => {
 		const timer = setTimeout(() => {
 			timers.delete(runId);
 			update((items) => items.filter((item) => item.runId !== runId));
-		}, AUTO_DISMISS_MS);
+		}, delayMs);
 		timers.set(runId, timer);
 	};
 
 	const upsert = (event) => {
-		if (!event?.run_id) return;
+		const key = event?.run_id ?? event?.id ?? null;
+		if (!key) return;
 		const title =
 			typeof event.message === 'string' && event.message.trim()
 				? event.message.trim()
 				: 'Agent update';
 		const payload = {
-			runId: event.run_id,
+			runId: key,
 			title,
 			stage: event.stage ?? null,
 			step: Number.isFinite(event.step) ? event.step : null,
@@ -43,7 +44,9 @@ const createAgentToasts = () => {
 			}
 			return [payload, ...items].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_TOASTS);
 		});
-		scheduleDismiss(payload.runId);
+		if (payload.stage === 'done' || payload.stage === 'error') {
+			scheduleDismiss(payload.runId);
+		}
 	};
 
 	const clear = () => {

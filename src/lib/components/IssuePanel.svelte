@@ -60,14 +60,94 @@
 
 	$: messagesByIssue = activityData?.messagesByIssue ?? {};
 	$: emailDraftsByMessageId = activityData?.emailDraftsByMessageId ?? {};
+	$: draftIssueIds = activityData?.draftIssueIds ?? [];
+	$: logsByIssue = activityLogsData?.logsByIssue ?? {};
+
+	let suppressedDraftKeys = new Set();
+
+	const suppressDraftKey = (key) => {
+		if (!key) return;
+		suppressedDraftKeys = new Set([...suppressedDraftKeys, key]);
+	};
+
+	const unsuppressDraftKey = (key) => {
+		if (!key || !suppressedDraftKeys.has(key)) return;
+		const next = new Set(suppressedDraftKeys);
+		next.delete(key);
+		suppressedDraftKeys = next;
+	};
+
 	$: draftsByIssue = Object.values(emailDraftsByMessageId).reduce((acc, d) => {
 		if (!d?.issue_id) return acc;
+		const key = d.message_id ?? d.id;
+		if (key && suppressedDraftKeys.has(key)) return acc;
 		if (!acc[d.issue_id]) acc[d.issue_id] = [];
 		acc[d.issue_id].push(d);
 		return acc;
 	}, {});
-	$: draftIssueIds = activityData?.draftIssueIds ?? [];
-	$: logsByIssue = activityLogsData?.logsByIssue ?? {};
+
+	const applyMessageDelta = (msg) => {
+		if (!msg?.issue_id) return;
+		const list = messagesByIssue[msg.issue_id] ?? [];
+		const idx = list.findIndex((m) => m.id === msg.id);
+		const updated =
+			idx >= 0 ? [...list.slice(0, idx), msg, ...list.slice(idx + 1)] : [...list, msg];
+		messagesByIssue = { ...messagesByIssue, [msg.issue_id]: updated };
+	};
+
+	const removeMessageFromCache = (msg) => {
+		if (!msg?.id || !msg?.issue_id) return;
+		const list = messagesByIssue[msg.issue_id] ?? [];
+		messagesByIssue = { ...messagesByIssue, [msg.issue_id]: list.filter((m) => m.id !== msg.id) };
+	};
+
+	const applyDraftDelta = (draft) => {
+		if (!draft) return;
+		const key = draft.message_id ?? draft.id;
+		if (!key) return;
+		emailDraftsByMessageId = { ...emailDraftsByMessageId, [key]: draft };
+		if (draft.issue_id && !draftIssueIds.includes(draft.issue_id)) {
+			draftIssueIds = [...draftIssueIds, draft.issue_id];
+		}
+	};
+
+	const removeDraftFromCache = (draft) => {
+		if (!draft) return;
+		const key = draft.message_id ?? draft.id;
+		if (!key) return;
+		const { [key]: _, ...rest } = emailDraftsByMessageId;
+		emailDraftsByMessageId = rest;
+	};
+
+	const handleDraftSent = (detail) => {
+		if (!detail) return;
+		const { status, message, tempId, issueId, draft, draftKey } = detail;
+		const targetIssueId = issueId ?? message?.issue_id ?? draft?.issue_id ?? null;
+		if (status === 'optimistic') {
+			suppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (message) applyMessageDelta(message);
+			if (draft) removeDraftFromCache(draft);
+			return;
+		}
+		if (status === 'confirmed') {
+			unsuppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (tempId && targetIssueId) {
+				removeMessageFromCache({ id: tempId, issue_id: targetIssueId });
+			}
+			if (message) {
+				applyMessageDelta({ ...message, _ui: { expanded: true } });
+			}
+			if (draft) removeDraftFromCache(draft);
+			return;
+		}
+		if (status === 'error') {
+			unsuppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
+			if (tempId && targetIssueId) {
+				removeMessageFromCache({ id: tempId, issue_id: targetIssueId });
+			}
+			if (draft) applyDraftDelta(draft);
+		}
+	};
 
 	$: statusMeta = statusConfig[issue?.status ?? 'todo'] ?? statusConfig.todo;
 	$: parentIssue = (() => {
@@ -327,7 +407,10 @@
 										{draft}
 										{vendors}
 										{people}
-										on:sent={() => dispatch('resolved')}
+										on:sent={(e) => {
+											handleDraftSent(e.detail);
+											if (e.detail?.status === 'confirmed') dispatch('resolved');
+										}}
 									/>
 								{/each}
 							</div>
@@ -464,7 +547,10 @@
 														{draft}
 														{vendors}
 														{people}
-														on:sent={() => dispatch('resolved')}
+														on:sent={(e) => {
+															handleDraftSent(e.detail);
+															if (e.detail?.status === 'confirmed') dispatch('resolved');
+														}}
 													/>
 												{/each}
 											</div>
