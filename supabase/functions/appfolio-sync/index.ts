@@ -4,6 +4,14 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+// Legacy JWT anon key — required by the gateway for project routing.
+// The gateway validates `apikey` as a JWT; sb_secret_* and sb_publishable_* formats
+// are NOT JWTs and will be rejected with 401 before the function runs.
+// ANON_JWT is the legacy eyJhbG... key from Supabase → Settings → API.
+const ANON_JWT = Deno.env.get('ANON_JWT')!;
+// Shared secret for internal edge-function-to-edge-function calls.
+// Validated inside the agent function; the gateway never inspects this header.
+const INTERNAL_AGENT_KEY = Deno.env.get('INTERNAL_AGENT_KEY')!;
 const APPFOLIO_CLIENT_ID = Deno.env.get('APPFOLIO_CLIENT_ID')!;
 const APPFOLIO_CLIENT_SECRET = Deno.env.get('APPFOLIO_CLIENT_SECRET')!;
 const APPFOLIO_VHOST = Deno.env.get('APPFOLIO_VHOST')!;
@@ -344,13 +352,12 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 		(unitRows ?? []).map((u) => [u.appfolio_unit_id, { id: u.id, property_id: u.property_id }])
 	);
 
-	// Batch-fetch all existing AppFolio issues (id + appfolio_id).
-	// Build a map so we can look up the UUID by appfolio_id without
-	// relying on the upsert RETURNING clause (which can return empty for
-	// unchanged rows in some Postgres/driver configurations).
+	// Batch-fetch all existing AppFolio issues — both for UUID lookup and change detection.
+	// We grab tracking columns here so we can diff each work order against the prior sync
+	// without an extra per-row query.
 	const { data: existingIssueRows } = await supabase
 		.from('issues')
-		.select('id, appfolio_id')
+		.select('id, appfolio_id, appfolio_raw_status, appfolio_vendor_id, appfolio_status_notes, vendor_assigned_at, vendor_followup_sent')
 		.eq('workspace_id', workspaceId)
 		.eq('source', 'appfolio')
 		.not('appfolio_id', 'is', null);
@@ -358,6 +365,12 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 		(existingIssueRows ?? []).map((r) => [String(r.appfolio_id), r.id])
 	);
 	const existingIssueIds = [...existingIssueMap.values()];
+	// Snapshot keyed by Bedrock issue UUID for O(1) change detection per row.
+	const snapshotById = new Map<string, any>(
+		(existingIssueRows ?? []).map((r) => [r.id, r])
+	);
+	// Accumulated change events; fired to the agent in one batch after the property loop.
+	const changeQueue: Array<{ issueId: string; workspaceId: string; change_type: string; row: any }> = [];
 
 	// Batch-fetch existing issue_created logs with their data so we can:
 	//   a) skip issues that already have a complete log (has 'from' field)
@@ -381,16 +394,21 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 
 	// work_order endpoint takes exactly ONE property filter at a time
 	for (const appfolioPropId of appfolioPropertyIds) {
+		// Only pull work orders created on or after March 10, 2026 (pilot start date)
+		const PILOT_START_DATE = '2026-03-10';
+
 		let rows: unknown[];
 		try {
 			rows = await appfolioFetch('work_order', {
 				property_visibility: 'active',
 				property: { property_id: String(appfolioPropId) },
 				work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
+				status_date: '0',               // filter by Created On
+				status_date_range_from: PILOT_START_DATE,
 				columns: [
 					'work_order_id', 'service_request_number', 'property_id', 'unit_id',
 					'status', 'priority', 'job_description', 'service_request_description',
-					'vendor_id', 'created_at', 'work_order_type',
+					'vendor_id', 'vendor', 'status_notes', 'created_at', 'work_order_type',
 					'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
 				]
 			});
@@ -445,6 +463,40 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 			const issueId = existingIssueMap.get(String(woId)) ?? upserted?.[0]?.id ?? null;
 			if (issueId) existingIssueMap.set(String(woId), issueId); // cache for future iterations
 
+			// Change detection — compare current AppFolio data against our last snapshot.
+			// New issues (not in snapshot) always trigger 'new'; existing issues are diffed
+			// field-by-field so we only fire agent events for actual changes.
+			if (issueId) {
+				const prev = snapshotById.get(issueId);
+				const isNew = !prev;
+				const statusChanged = !!prev && (prev.appfolio_raw_status ?? '') !== String(row.status ?? '');
+				const vendorAssigned = !!prev && !prev.appfolio_vendor_id && row.vendor_id != null;
+				const newNotes = (row.status_notes as string) || null;
+				const notesChanged = !!prev && !!newNotes && newNotes !== (prev.appfolio_status_notes ?? '');
+
+				// Persist tracking columns so future syncs can detect further changes.
+				const updateData: Record<string, any> = {
+					appfolio_raw_status: String(row.status ?? ''),
+					appfolio_status_notes: newNotes,
+					appfolio_vendor_id: row.vendor_id != null ? String(row.vendor_id) : null
+				};
+				if (vendorAssigned) {
+					updateData.vendor_assigned_at = new Date().toISOString();
+				}
+				const { error: trackingError } = await supabase
+					.from('issues')
+					.update(updateData)
+					.eq('id', issueId);
+				if (trackingError) {
+					console.error(`syncWorkOrders tracking update error for work_order_id=${woId}:`, trackingError.message);
+				}
+
+				if (isNew)          changeQueue.push({ issueId, workspaceId, change_type: 'new', row });
+				if (statusChanged)  changeQueue.push({ issueId, workspaceId, change_type: 'status_changed', row });
+				if (vendorAssigned) changeQueue.push({ issueId, workspaceId, change_type: 'vendor_assigned', row });
+				if (notesChanged)   changeQueue.push({ issueId, workspaceId, change_type: 'notes_changed', row });
+			}
+
 			// Build tenant data from work order fields
 			const tenantName = (row.primary_tenant as string) || null;
 			const tenantEmail = (row.primary_tenant_email as string) || null;
@@ -485,6 +537,41 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 				}
 			}
 		}
+	}
+
+	// After all properties: check for overdue vendor follow-ups (>2h since assigned, no ack sent)
+	const followupCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+	if (existingIssueIds.length > 0) {
+		const { data: followupDue } = await supabase
+			.from('issues')
+			.select('id')
+			.eq('workspace_id', workspaceId)
+			.eq('source', 'appfolio')
+			.eq('vendor_followup_sent', false)
+			.not('vendor_assigned_at', 'is', null)
+			.lt('vendor_assigned_at', followupCutoff);
+		for (const issue of followupDue ?? []) {
+			changeQueue.push({ issueId: issue.id, workspaceId, change_type: 'vendor_followup', row: null });
+		}
+	}
+
+	// Fire-and-forget agent events for all detected changes.
+	// Non-blocking — a failed agent call should never abort the sync.
+	// The gateway requires `apikey` to be a valid JWT for project routing.
+	// ANON_JWT is the legacy eyJhbG... anon key (not sb_secret_* or sb_publishable_* which are not JWTs).
+	// verify_jwt:false in agent/config.json means the gateway won't reject the anon role.
+	// x-internal-agent-key is validated inside the agent function to ensure only trusted callers proceed.
+	for (const event of changeQueue) {
+		fetch(`${SUPABASE_URL}/functions/v1/agent`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				apikey: ANON_JWT,
+				Authorization: `Bearer ${ANON_JWT}`,
+				'x-internal-agent-key': INTERNAL_AGENT_KEY
+			},
+			body: JSON.stringify({ source: 'appfolio', ...event })
+		}).catch((err: Error) => console.error('appfolio-sync agent call failed:', err));
 	}
 }
 
