@@ -261,6 +261,8 @@
 
 	$: if (issue) pageReady.set(true);
 
+	$: isAppfolioIssue = issue?.source === 'appfolio';
+
 	// ── Member resolution ────────────────────────────────────────────────────────
 
 	$: assignmentPool = members
@@ -621,6 +623,14 @@
 			return;
 		}
 
+		if (isAppfolioIssue) {
+			fetch('/api/appfolio-actions/log', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ issueId, action: 'status_change', meta: { status: newStatus } })
+			}).catch(() => {});
+		}
+
 		upsertIssueActivityLog({
 			id: issueId,
 			type: 'status_change',
@@ -676,6 +686,18 @@
 			assignee = prevAssignee;
 			issueAssigneeId = prevAssigneeId;
 			return;
+		}
+
+		if (isAppfolioIssue) {
+			fetch('/api/appfolio-actions/log', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					issueId,
+					action: 'vendor_assign',
+					meta: { vendorName: nextAssignee?.name ?? null }
+				})
+			}).catch(() => {});
 		}
 
 		upsertIssueActivityLog({
