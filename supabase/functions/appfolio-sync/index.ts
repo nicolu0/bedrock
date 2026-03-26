@@ -64,6 +64,23 @@ function sleep(ms: number) {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
+// ── Address Abbreviation ──────────────────────────────────────────────────────
+
+function abbreviateStreet(street: string): string {
+	if (!street) return street;
+	return street
+		.replace(/\bStreet\b/gi, 'St')
+		.replace(/\bAvenue\b/gi, 'Ave')
+		.replace(/\bBoulevard\b/gi, 'Blvd')
+		.replace(/\bPlace\b/gi, 'Pl')
+		.replace(/\bDrive\b/gi, 'Dr')
+		.replace(/\bCourt\b/gi, 'Ct')
+		.replace(/\bLane\b/gi, 'Ln')
+		.replace(/\bRoad\b/gi, 'Rd')
+		.replace(/\bTerrace\b/gi, 'Ter')
+		.replace(/\bCircle\b/gi, 'Cir');
+}
+
 // ── Work Order Status Mapping ─────────────────────────────────────────────────
 
 // AppFolio returns status as a string label, not a numeric code.
@@ -83,18 +100,34 @@ function mapWorkOrderStatus(status: string): string {
 // ── Sync Functions ────────────────────────────────────────────────────────────
 
 // Returns array of AppFolio property_id numbers synced for this workspace.
-// If allowedIds is provided, only those properties are fetched and upserted.
+// If allowedIds is provided, only those properties are fetched and synced.
+// Matches existing Bedrock properties by abbreviated street name (case-insensitive)
+// rather than blindly upserting by appfolio_property_id.
 async function syncProperties(workspaceId: string, allowedIds: number[] | null = null): Promise<number[]> {
 	const body: Record<string, unknown> = {
 		property_visibility: 'active',
 		columns: ['property_id', 'property_name', 'property_address', 'property_street',
 			'property_city', 'property_state', 'property_zip']
 	};
-	// Filter to assigned properties only if specified
 	if (allowedIds?.length) {
 		body.properties = { properties_ids: allowedIds.map(String) };
 	}
 	const rows = await appfolioFetch('property_directory', body);
+
+	// Batch-fetch all existing Bedrock properties for this workspace upfront
+	const { data: existingProps } = await supabase
+		.from('properties')
+		.select('id, name, address, appfolio_property_id')
+		.eq('workspace_id', workspaceId);
+
+	// Build lookup maps: normalized abbreviated name → property, normalized address → property
+	const byName = new Map<string, any>();
+	const byAddress = new Map<string, any>();
+	for (const p of existingProps ?? []) {
+		if (p.name) byName.set(abbreviateStreet(p.name).toLowerCase().trim(), p);
+		// address stores the raw street only — index it abbreviated for matching
+		if (p.address) byAddress.set(abbreviateStreet(p.address).toLowerCase().trim(), p);
+	}
 
 	const appfolioIds: number[] = [];
 
@@ -103,24 +136,42 @@ async function syncProperties(workspaceId: string, allowedIds: number[] | null =
 		if (propId == null) continue;
 		appfolioIds.push(Number(propId));
 
-		const address = [
-			row.property_street,
-			row.property_city,
-			row.property_state,
-			row.property_zip
-		].filter(Boolean).join(', ') || row.property_address || null;
+		const abbrevName = abbreviateStreet(row.property_street ?? '');
+		// address = raw street only (no city/state/zip); city/state/postal_code go in their own columns
+		const streetAddress = row.property_street || row.property_address || null;
 
-		const { error } = await supabase.from('properties').upsert(
-			{
+		// Try to find an existing Bedrock property by abbreviated street name, then by raw street
+		const nameKey = abbrevName.toLowerCase().trim();
+		const addrKey = streetAddress?.toLowerCase().trim();
+		const existing = (nameKey ? byName.get(nameKey) : null)
+			?? (addrKey ? byAddress.get(addrKey) : null)
+			?? null;
+
+		const propertyFields = {
+			name: abbrevName || existing?.name || (row.property_name ?? String(propId)),
+			address: streetAddress ?? null,
+			city: row.property_city ?? null,
+			state: row.property_state ?? null,
+			postal_code: row.property_zip ?? null,
+			appfolio_property_id: String(propId)
+		};
+
+		if (existing) {
+			const { error } = await supabase
+				.from('properties')
+				.update(propertyFields)
+				.eq('id', existing.id);
+			if (error) {
+				console.error(`syncProperties update error for property_id=${propId}:`, error.message);
+			}
+		} else {
+			const { error } = await supabase.from('properties').insert({
 				workspace_id: workspaceId,
-				name: row.property_name ?? String(propId),
-				address: address ?? null,
-				appfolio_property_id: String(propId)
-			},
-			{ onConflict: 'workspace_id,appfolio_property_id', ignoreDuplicates: false }
-		);
-		if (error) {
-			console.error(`syncProperties upsert error for property_id=${propId}:`, error.message);
+				...propertyFields
+			});
+			if (error) {
+				console.error(`syncProperties insert error for property_id=${propId}:`, error.message);
+			}
 		}
 	}
 
@@ -139,34 +190,108 @@ async function syncUnits(workspaceId: string, appfolioPropertyIds: number[]): Pr
 			'sqft', 'bedrooms', 'bathrooms']
 	});
 
+	// Batch-fetch Bedrock property UUIDs by appfolio_property_id
+	const { data: propRows } = await supabase
+		.from('properties')
+		.select('id, appfolio_property_id')
+		.eq('workspace_id', workspaceId)
+		.in('appfolio_property_id', appfolioPropertyIds.map(String));
+
+	const propMap = new Map<string, string>(
+		(propRows ?? []).map((p) => [p.appfolio_property_id, p.id])
+	);
+
+	// Batch-fetch all existing Bedrock units for these properties
+	const bedrockPropertyIds = [...propMap.values()];
+	const { data: unitRows } = bedrockPropertyIds.length
+		? await supabase
+			.from('units')
+			.select('id, property_id, name, appfolio_unit_id')
+			.in('property_id', bedrockPropertyIds)
+		: { data: [] as any[] };
+
+	// Build lookup: "${bedrockPropertyId}:${unitNameLower}" → unit
+	const unitByNameAndProp = new Map<string, any>();
+	for (const u of unitRows ?? []) {
+		const key = `${u.property_id}:${(u.name ?? '').toLowerCase().trim()}`;
+		unitByNameAndProp.set(key, u);
+	}
+
 	for (const row of rows as any[]) {
 		const unitId = row.unit_id;
 		const propId = row.property_id;
 		if (unitId == null || propId == null) continue;
 
-		// Look up the Bedrock property UUID by appfolio_property_id
-		const { data: prop } = await supabase
-			.from('properties')
-			.select('id')
-			.eq('workspace_id', workspaceId)
-			.eq('appfolio_property_id', String(propId))
-			.maybeSingle();
-
-		if (!prop?.id) {
+		const bedrockPropertyId = propMap.get(String(propId));
+		if (!bedrockPropertyId) {
 			console.warn(`syncUnits: no Bedrock property for appfolio_property_id=${propId}`);
 			continue;
 		}
 
-		const { error } = await supabase.from('units').upsert(
-			{
-				property_id: prop.id,
-				name: row.unit_name ?? String(unitId),
-				appfolio_unit_id: String(unitId)
-			},
-			{ onConflict: 'appfolio_unit_id', ignoreDuplicates: false }
-		);
+		const unitName = row.unit_name ?? String(unitId);
+		const lookupKey = `${bedrockPropertyId}:${unitName.toLowerCase().trim()}`;
+		const existing = unitByNameAndProp.get(lookupKey);
+
+		if (existing) {
+			// Update existing unit's appfolio_unit_id if not already set
+			if (existing.appfolio_unit_id !== String(unitId)) {
+				const { error } = await supabase
+					.from('units')
+					.update({ appfolio_unit_id: String(unitId) })
+					.eq('id', existing.id);
+				if (error) {
+					console.error(`syncUnits update error for unit_id=${unitId}:`, error.message);
+				}
+			}
+		} else {
+			// No name match — insert new unit
+			const { error } = await supabase.from('units').upsert(
+				{
+					property_id: bedrockPropertyId,
+					name: unitName,
+					appfolio_unit_id: String(unitId)
+				},
+				{ onConflict: 'appfolio_unit_id', ignoreDuplicates: false }
+			);
+			if (error) {
+				console.error(`syncUnits insert error for unit_id=${unitId}:`, error.message);
+			}
+		}
+	}
+}
+
+async function syncTenants(workspaceId: string, appfolioPropertyIds: number[]): Promise<void> {
+	await sleep(500);
+
+	// Fetch financially-responsible (primary) tenants for current/notice leases.
+	// Each row has unit_id which links back to appfolio_unit_id on the units table.
+	const rows = await appfolioFetch('tenant_directory', {
+		tenant_visibility: 'active',
+		tenant_statuses: ['0', '4'], // Current and Notice
+		tenant_types: ['0'],          // Financially Responsible (primary leaseholder)
+		property_visibility: 'active',
+		properties: { properties_ids: appfolioPropertyIds.map(String) },
+		columns: ['unit_id', 'tenant', 'first_name', 'last_name', 'emails', 'phone_numbers']
+	});
+
+	for (const row of rows as any[]) {
+		if (!row.unit_id) continue;
+
+		// Prefer the pre-joined full name; fall back to first+last
+		const name = row.tenant || [row.first_name, row.last_name].filter(Boolean).join(' ') || null;
+		// emails/phone_numbers may be comma-separated; take the first value
+		const email = row.emails ? String(row.emails).split(',')[0].trim() || null : null;
+		const phone = row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : null;
+
+		if (!name && !email && !phone) continue;
+
+		const { error } = await supabase
+			.from('units')
+			.update({ tenant_name: name, tenant_email: email, tenant_phone: phone })
+			.eq('appfolio_unit_id', String(row.unit_id));
+
 		if (error) {
-			console.error(`syncUnits upsert error for unit_id=${unitId}:`, error.message);
+			console.error(`syncTenants update error for unit_id=${row.unit_id}:`, error.message);
 		}
 	}
 }
@@ -201,6 +326,59 @@ async function syncVendors(workspaceId: string): Promise<void> {
 async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]): Promise<void> {
 	await sleep(500);
 
+	// Batch-fetch all Bedrock property + unit mappings upfront
+	const { data: propRows } = await supabase
+		.from('properties')
+		.select('id, appfolio_property_id')
+		.eq('workspace_id', workspaceId)
+		.in('appfolio_property_id', appfolioPropertyIds.map(String));
+	const propMap = new Map<string, string>(
+		(propRows ?? []).map((p) => [p.appfolio_property_id, p.id])
+	);
+
+	const { data: unitRows } = await supabase
+		.from('units')
+		.select('id, property_id, appfolio_unit_id')
+		.not('appfolio_unit_id', 'is', null);
+	const unitMap = new Map<string, { id: string; property_id: string }>(
+		(unitRows ?? []).map((u) => [u.appfolio_unit_id, { id: u.id, property_id: u.property_id }])
+	);
+
+	// Batch-fetch all existing AppFolio issues (id + appfolio_id).
+	// Build a map so we can look up the UUID by appfolio_id without
+	// relying on the upsert RETURNING clause (which can return empty for
+	// unchanged rows in some Postgres/driver configurations).
+	const { data: existingIssueRows } = await supabase
+		.from('issues')
+		.select('id, appfolio_id')
+		.eq('workspace_id', workspaceId)
+		.eq('source', 'appfolio')
+		.not('appfolio_id', 'is', null);
+	const existingIssueMap = new Map<string, string>(
+		(existingIssueRows ?? []).map((r) => [String(r.appfolio_id), r.id])
+	);
+	const existingIssueIds = [...existingIssueMap.values()];
+
+	// Batch-fetch existing issue_created logs with their data so we can:
+	//   a) skip issues that already have a complete log (has 'from' field)
+	//   b) backfill logs that exist but were created before we stored tenant info
+	const issueIdsWithLog = new Set<string>();         // has any log → don't insert again
+	const issueIdsNeedingFromUpdate = new Map<string, string>(); // issue_id → log.id for backfill
+	if (existingIssueIds.length > 0) {
+		const { data: logRows } = await supabase
+			.from('activity_logs')
+			.select('id, issue_id, data')
+			.eq('type', 'issue_created')
+			.in('issue_id', existingIssueIds);
+		for (const logRow of logRows ?? []) {
+			const iid = String(logRow.issue_id);
+			issueIdsWithLog.add(iid);
+			if (!logRow.data?.from) {
+				issueIdsNeedingFromUpdate.set(iid, logRow.id);
+			}
+		}
+	}
+
 	// work_order endpoint takes exactly ONE property filter at a time
 	for (const appfolioPropId of appfolioPropertyIds) {
 		let rows: unknown[];
@@ -208,12 +386,12 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 			rows = await appfolioFetch('work_order', {
 				property_visibility: 'active',
 				property: { property_id: String(appfolioPropId) },
-				// Default statuses cover all active work orders; include completed for updates
 				work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
 				columns: [
 					'work_order_id', 'service_request_number', 'property_id', 'unit_id',
 					'status', 'priority', 'job_description', 'service_request_description',
-					'vendor_id', 'created_at', 'work_order_type'
+					'vendor_id', 'created_at', 'work_order_type',
+					'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
 				]
 			});
 		} catch (err) {
@@ -221,27 +399,16 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 			continue;
 		}
 
-		// Look up the Bedrock property UUID once per property
-		const { data: prop } = await supabase
-			.from('properties')
-			.select('id')
-			.eq('workspace_id', workspaceId)
-			.eq('appfolio_property_id', String(appfolioPropId))
-			.maybeSingle();
+		const bedrockPropertyId = propMap.get(String(appfolioPropId)) ?? null;
 
 		for (const row of rows as any[]) {
 			const woId = row.work_order_id;
 			if (woId == null) continue;
 
-			// Look up unit by appfolio_unit_id if present
 			let unitId: string | null = null;
-			let propertyId: string | null = prop?.id ?? null;
+			let propertyId: string | null = bedrockPropertyId;
 			if (row.unit_id != null) {
-				const { data: unit } = await supabase
-					.from('units')
-					.select('id, property_id')
-					.eq('appfolio_unit_id', String(row.unit_id))
-					.maybeSingle();
+				const unit = unitMap.get(String(row.unit_id));
 				if (unit) {
 					unitId = unit.id;
 					propertyId = unit.property_id ?? propertyId;
@@ -253,7 +420,7 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 				? description.slice(0, 120)
 				: `Work Order ${row.service_request_number ?? woId}`;
 
-			const { error } = await supabase.from('issues').upsert(
+			const { data: upserted, error } = await supabase.from('issues').upsert(
 				{
 					workspace_id: workspaceId,
 					source: 'appfolio',
@@ -266,9 +433,56 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 					property_id: propertyId
 				},
 				{ onConflict: 'workspace_id,appfolio_id', ignoreDuplicates: false }
-			);
+			).select('id');
 			if (error) {
 				console.error(`syncWorkOrders upsert error for work_order_id=${woId}:`, error.message);
+				continue;
+			}
+
+			// Look up the issue UUID — prefer the pre-fetched map (works for existing
+			// rows even if upsert RETURNING returns empty), fall back to upsert result
+			// for genuinely new rows not in the map yet.
+			const issueId = existingIssueMap.get(String(woId)) ?? upserted?.[0]?.id ?? null;
+			if (issueId) existingIssueMap.set(String(woId), issueId); // cache for future iterations
+
+			// Build tenant data from work order fields
+			const tenantName = (row.primary_tenant as string) || null;
+			const tenantEmail = (row.primary_tenant_email as string) || null;
+			const tenantPhone = (row.primary_tenant_phone_number as string) || null;
+			const logData = {
+				source: 'appfolio',
+				appfolio_id: String(woId),
+				from: tenantName,
+				from_email: tenantEmail,
+				from_phone: tenantPhone
+			};
+
+			if (issueId && !issueIdsWithLog.has(issueId)) {
+				// No log yet — insert
+				issueIdsWithLog.add(issueId);
+				const rawCreatedAt = row.created_at;
+				const createdAt = rawCreatedAt ? new Date(rawCreatedAt).toISOString() : new Date().toISOString();
+				const { error: logError } = await supabase.from('activity_logs').insert({
+					workspace_id: workspaceId,
+					issue_id: issueId,
+					type: 'issue_created',
+					created_at: createdAt,
+					data: logData
+				});
+				if (logError) {
+					console.error(`syncWorkOrders activity_log insert error for work_order_id=${woId}:`, logError.message);
+				}
+			} else if (issueId && issueIdsNeedingFromUpdate.has(issueId) && tenantName) {
+				// Log exists but missing 'from' — backfill tenant info
+				const logId = issueIdsNeedingFromUpdate.get(issueId)!;
+				issueIdsNeedingFromUpdate.delete(issueId); // don't update again in same run
+				const { error: updateError } = await supabase
+					.from('activity_logs')
+					.update({ data: logData })
+					.eq('id', logId);
+				if (updateError) {
+					console.error(`syncWorkOrders activity_log backfill error for work_order_id=${woId}:`, updateError.message);
+				}
 			}
 		}
 	}
@@ -295,6 +509,66 @@ serve(async (req) => {
 				ok: res.ok,
 				status: res.status,
 				count: Array.isArray(json) ? json.length : (json?.results?.length ?? 0)
+			});
+		} catch (err) {
+			return Response.json({ ok: false, error: String(err) }, { status: 500 });
+		}
+	}
+
+	// ?debug=1 — fetch raw work order fields from AppFolio to inspect date formats (no DB writes)
+	if (url.searchParams.get('debug') === '1') {
+		try {
+			const propRows = await appfolioFetch('property_directory', {
+				property_visibility: 'active',
+				columns: ['property_id', 'property_name']
+			});
+			const firstProp = (propRows as any[])[0];
+			if (!firstProp?.property_id) {
+				return Response.json({ ok: false, error: 'No properties found' });
+			}
+			const woRows = await appfolioFetch('work_order', {
+				property_visibility: 'active',
+				property: { property_id: String(firstProp.property_id) },
+				work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
+				columns: [
+					'work_order_id', 'service_request_number', 'created_at',
+					'estimate_req_on', 'scheduled_start', 'completed_on',
+					'status', 'priority', 'job_description'
+				]
+			});
+			return Response.json({
+				ok: true,
+				property: { id: firstProp.property_id, name: firstProp.property_name },
+				work_order_count: woRows.length,
+				// Return first 5 raw rows so we can inspect date field formats
+				sample: (woRows as any[]).slice(0, 5).map((r) => ({
+					work_order_id: r.work_order_id,
+					service_request_number: r.service_request_number,
+					created_at: r.created_at,
+					estimate_req_on: r.estimate_req_on,
+					scheduled_start: r.scheduled_start,
+					completed_on: r.completed_on,
+					status: r.status,
+					priority: r.priority,
+					job_description: (r.job_description ?? '').slice(0, 60)
+				}))
+			});
+		} catch (err) {
+			return Response.json({ ok: false, error: String(err) }, { status: 500 });
+		}
+	}
+
+	// ?discover=1 — return all AppFolio property IDs and names (no DB writes)
+	if (url.searchParams.get('discover') === '1') {
+		try {
+			const rows = await appfolioFetch('property_directory', {
+				property_visibility: 'active',
+				columns: ['property_id', 'property_name']
+			});
+			return Response.json({
+				ok: true,
+				count: rows.length,
+				properties: (rows as any[]).map((r) => ({ id: r.property_id, name: r.property_name }))
 			});
 		} catch (err) {
 			return Response.json({ ok: false, error: String(err) }, { status: 500 });
@@ -328,7 +602,8 @@ serve(async (req) => {
 			const appfolioPropertyIds = await syncProperties(ws.id, allowedIds);
 			if (appfolioPropertyIds.length > 0) {
 				await syncUnits(ws.id, appfolioPropertyIds);
-				await syncVendors(ws.id);
+				await syncTenants(ws.id, appfolioPropertyIds);
+				// syncVendors skipped — vendors table not yet created
 				await syncWorkOrders(ws.id, appfolioPropertyIds);
 			}
 			results[ws.id] = { ok: true, properties: appfolioPropertyIds.length };

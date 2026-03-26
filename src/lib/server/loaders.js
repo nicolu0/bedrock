@@ -381,7 +381,7 @@ export const loadActivityLogsData = async (workspaceId, issueIds = null) => {
 			'id, issue_id, workspace_id, type, from_email, to_emails, subject, body, data, created_by, created_at'
 		)
 		.eq('workspace_id', workspaceId)
-		.gte('created_at', cutoff)
+		.or(`created_at.gte.${cutoff},type.eq.issue_created`)
 		.order('created_at', { ascending: true });
 	if (Array.isArray(issueIds)) {
 		logsQuery = logsQuery.in('issue_id', issueIds);
