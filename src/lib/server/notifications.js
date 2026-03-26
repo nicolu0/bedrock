@@ -12,7 +12,7 @@ export async function notifyWorkspace(workspaceId, issueId, title, body) {
 		.from('people')
 		.select('user_id')
 		.eq('workspace_id', workspaceId)
-		.in('role', ['admin', 'member', 'owner'])
+		.in('role', ['admin', 'bedrock', 'member', 'owner'])
 		.not('user_id', 'is', null);
 
 	if (!members?.length) return;

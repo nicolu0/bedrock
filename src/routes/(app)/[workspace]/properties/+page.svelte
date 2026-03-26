@@ -11,7 +11,7 @@
 
 	$: workspaceSlug = $page.params.workspace;
 	$: role = $page.data?.role;
-	$: canViewPeople = role === 'admin' || role === 'member';
+	$: canViewPeople = role === 'admin' || role === 'bedrock' || role === 'member';
 	$: userName = $page.data?.userName;
 	$: ownerPersonId = $page.data?.ownerPersonId;
 	$: isOwnerRole = role === 'owner';

@@ -5,7 +5,7 @@ export const load = async ({ parent, depends }) => {
 	depends('app:people');
 
 	const { workspace, role, userId } = await parent();
-	const canViewPeople = role === 'admin' || role === 'member';
+	const canViewPeople = role === 'admin' || role === 'bedrock' || role === 'member';
 
 	if (!canViewPeople) {
 		return { people: [], currentUserId: userId };

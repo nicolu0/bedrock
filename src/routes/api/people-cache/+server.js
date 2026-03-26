@@ -17,7 +17,7 @@ const canAccessPeople = async (workspaceId, userId) => {
 		.eq('workspace_id', workspaceId)
 		.eq('user_id', userId)
 		.maybeSingle();
-	return member?.role === 'admin' || member?.role === 'member';
+	return member?.role === 'admin' || member?.role === 'bedrock' || member?.role === 'member';
 };
 
 export const GET = async ({ locals, url }) => {
@@ -39,7 +39,7 @@ export const GET = async ({ locals, url }) => {
 		.from('people')
 		.select('user_id, name, role, users(name, id)')
 		.eq('workspace_id', workspace.id)
-		.in('role', ['admin', 'member', 'owner', 'vendor'])
+		.in('role', ['admin', 'bedrock', 'member', 'owner', 'vendor'])
 		.order('role', { ascending: true });
 
 	return json(members ?? []);
