@@ -286,6 +286,8 @@
 
 	$: if (issue) pageReady.set(true);
 
+	$: isAppfolioIssue = issue?.source === 'appfolio';
+
 	// ── Member resolution ────────────────────────────────────────────────────────
 
 	$: assignmentPool = members
@@ -698,6 +700,14 @@
 			return;
 		}
 
+		if (isAppfolioIssue) {
+			fetch('/api/appfolio-actions/log', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ issueId, action: 'status_change', meta: { status: newStatus } })
+			}).catch(() => {});
+		}
+
 		upsertIssueActivityLog({
 			id: issueId,
 			type: 'status_change',
@@ -768,6 +778,18 @@
 			assignee = prevAssignee;
 			issueAssigneeId = prevAssigneeId;
 			return;
+		}
+
+		if (isAppfolioIssue) {
+			fetch('/api/appfolio-actions/log', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					issueId,
+					action: 'vendor_assign',
+					meta: { vendorName: nextAssignee?.name ?? null }
+				})
+			}).catch(() => {});
 		}
 
 		upsertIssueActivityLog({
@@ -1022,6 +1044,16 @@
 			const timeB = b?.timestamp ? new Date(b.timestamp).getTime() : 0;
 			return timeA - timeB;
 		});
+	};
+
+	// Convert "Lastname, Firstname M." → "Firstname M. Lastname"
+	const formatTenantName = (name) => {
+		if (!name) return name;
+		const comma = name.indexOf(',');
+		if (comma === -1) return name;
+		const last = name.slice(0, comma).trim();
+		const first = name.slice(comma + 1).trim();
+		return first ? `${first} ${last}` : last;
 	};
 
 	const formatTimestamp = (value) => {
@@ -1722,7 +1754,13 @@
 											<div class="rounded-md border-0 bg-white p-0 shadow-none">
 												<div class="flex min-w-0 items-start justify-between gap-4">
 													<p class="flex-1 text-sm text-neutral-700">
-														{#if log.type === 'status_change'}
+														{#if log.type === 'issue_created'}
+															{#if log.data?.from || log.data?.from_email}
+																{formatTenantName(log.data.from) ?? log.data.from_email} created the issue
+															{:else}
+																Issue created
+															{/if}
+														{:else if log.type === 'status_change'}
 															{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
 																log
 															)}
@@ -1735,7 +1773,11 @@
 														{/if}
 													</p>
 													<span class="shrink-0 text-xs text-neutral-400">
-														{formatTimestamp(log.created_at)}
+														{#if log.type === 'issue_created'}
+															{new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}
+														{:else}
+															{formatTimestamp(log.created_at)}
+														{/if}
 													</span>
 												</div>
 											</div>
@@ -2077,7 +2119,13 @@
 																	<div class="rounded-md border-0 bg-white p-0 shadow-none">
 																		<div class="flex min-w-0 items-start justify-between gap-4">
 																			<p class="flex-1 text-sm text-neutral-700">
-																				{#if log.type === 'status_change'}
+																				{#if log.type === 'issue_created'}
+																					{#if log.data?.from || log.data?.from_email}
+																						{formatTenantName(log.data.from) ?? log.data.from_email} created the issue
+																					{:else}
+																						Issue created
+																					{/if}
+																				{:else if log.type === 'status_change'}
 																					{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
 																						log
 																					)}
@@ -2091,7 +2139,11 @@
 																				{/if}
 																			</p>
 																			<span class="shrink-0 text-xs text-neutral-400">
-																				{formatTimestamp(log.created_at)}
+																				{#if log.type === 'issue_created'}
+																					{new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}
+																				{:else}
+																					{formatTimestamp(log.created_at)}
+																				{/if}
 																			</span>
 																		</div>
 																	</div>

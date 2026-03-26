@@ -2,6 +2,7 @@
 import { json } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 import { env } from '$env/dynamic/private';
+import { notifyFoundersOfAppfolioAction } from '$lib/server/notifications';
 
 const encodeBase64Url = (value) =>
 	Buffer.from(value).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -112,7 +113,7 @@ export const POST = async ({ locals, request }) => {
 
 	const { data: issue } = await supabaseAdmin
 		.from('issues')
-		.select('workspace_id')
+		.select('id, workspace_id, source, appfolio_id, name, readable_id')
 		.eq('id', draft.issue_id)
 		.maybeSingle();
 
@@ -380,6 +381,20 @@ export const POST = async ({ locals, request }) => {
 	}
 
 	await supabaseAdmin.from('email_drafts').delete().eq('id', draft.id);
+
+	if (issue?.source === 'appfolio') {
+		notifyFoundersOfAppfolioAction({
+			issue,
+			action: 'email_send',
+			title: `AppFolio action needed: email sent on ${issue.readable_id ?? issue.name}`,
+			body: `A message was sent via Bedrock for work order ${issue.appfolio_id ?? issue.readable_id}. Please send the same message in AppFolio.`,
+			meta: {
+				to: effectiveRecipients.join(', '),
+				subject: draft.subject ?? null,
+				body_excerpt: (draft.body ?? '').slice(0, 300)
+			}
+		}).catch(console.error);
+	}
 
 	if (draft?.issue_id && locals.user?.id) {
 		await supabaseAdmin

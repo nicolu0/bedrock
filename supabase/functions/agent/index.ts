@@ -1046,7 +1046,8 @@ const runIssueAgent = async ({
 	rootIssueId,
 	threadIssueId,
 	relatedIssues,
-	workspaceUnits
+	workspaceUnits,
+	source
 }: {
 	subject: string;
 	body: string;
@@ -1055,7 +1056,7 @@ const runIssueAgent = async ({
 	unitName: string | null;
 	workspaceId: string;
 	propertyName: string | null;
-	threadId: string;
+	threadId: string | null;
 	userId: string;
 	policyText: string;
 	urgencyDecision: boolean | null;
@@ -1079,6 +1080,7 @@ const runIssueAgent = async ({
 		property_name: string | null;
 		property_address: string | null;
 	}>;
+	source?: string | null;
 }) => {
 	const system = `You are Bedrock, an assistant for property management.
 Your job is to link this email thread to the most specific issue (prefer a subissue when appropriate). If no match exists, create a new issue and then create one subissue for the next step.
@@ -1156,7 +1158,29 @@ Issue context:
 - thread_issue_id is the issue currently linked to the email thread (often triage).
 - related_issues are the root issue and its subissues; use them to reason about structure.
 When you believe you have completed the task, call done().
-`.trim();
+${source === 'appfolio' && rootIssueId ? `
+AppFolio source rules (apply FIRST, before anything else):
+- The root issue was synced from AppFolio and its title/description are raw work order text.
+- Your FIRST action must be to call update_issue with:
+  - title: 2-5 words, Title Case (e.g., "Leaky Kitchen Faucet", "Broken AC Unit", "Clogged Bathroom Drain"). No location, no unit names.
+  - description: one concise sentence summarising who reported it and what the problem is.
+  Do NOT copy the work order body verbatim. Derive a clean human-readable title and description.
+- After update_issue, proceed with normal subissue creation and email drafts.
+`.trim() : ''}`.trim();
+	const updateIssueTool = {
+		type: 'function',
+		name: 'update_issue',
+		description: 'Update the title and description of the root AppFolio issue',
+		parameters: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				title: { type: 'string' },
+				description: { type: 'string' }
+			},
+			required: ['title', 'description']
+		}
+	};
 	const createIssueTool = {
 		type: 'function',
 		name: 'create_issue',
@@ -1258,6 +1282,7 @@ When you believe you have completed the task, call done().
 
 	const tools = [
 		...(rootIssueId ? [] : [createIssueTool]),
+		...(rootIssueId && source === 'appfolio' ? [updateIssueTool] : []),
 		linkThreadTool,
 		createSubissueTool,
 		draftEmailTool,
@@ -1425,6 +1450,19 @@ When you believe you have completed the task, call done().
 				});
 			}
 			try {
+				if (name === 'update_issue') {
+					const title = typeof args.title === 'string' ? args.title.trim() : '';
+					const desc = typeof args.description === 'string' ? args.description.trim() : '';
+					if (rootIssueId && (title || desc)) {
+						const updates: Record<string, string> = {};
+						if (title) updates.name = title;
+						if (desc) updates.description = desc;
+						await supabase.from('issues').update(updates).eq('id', rootIssueId);
+					}
+					issuedAction = true;
+					result = { ok: true };
+				}
+
 				if (name === 'create_issue') {
 					const title = typeof args.title === 'string' ? args.title.trim() : '';
 					const unit = typeof args.unit_id === 'string' ? args.unit_id : unitId;
@@ -1492,23 +1530,31 @@ When you believe you have completed the task, call done().
 					const thread = typeof args.thread_id === 'string' ? args.thread_id : threadId;
 					const issue =
 						typeof args.issue_id === 'string' ? args.issue_id : (lastSubissueId ?? linkedIssueId);
-					if (!thread || !issue) {
-						throw new Error('link_thread_to_issue missing thread_id or issue_id');
-					}
-					const linked = await linkThreadToIssue({ threadId: thread, issueId: issue });
-					if (!linked) {
-						const { data: existingThread } = await supabase
-							.from('threads')
-							.select('issue_id')
-							.eq('id', thread)
-							.maybeSingle();
-						linkedIssueId = existingThread?.issue_id ?? issue;
+					// AppFolio source: no email thread to link — treat as no-op so the agent
+					// can call link_thread_to_issue as usual without crashing.
+					if (!thread) {
+						threadLinked = true;
+						issuedAction = true;
+						linkedIssueId = issue ?? linkedIssueId;
+						result = { ok: true };
+					} else if (!issue) {
+						throw new Error('link_thread_to_issue missing issue_id');
 					} else {
-						linkedIssueId = issue;
+						const linked = await linkThreadToIssue({ threadId: thread, issueId: issue });
+						if (!linked) {
+							const { data: existingThread } = await supabase
+								.from('threads')
+								.select('issue_id')
+								.eq('id', thread)
+								.maybeSingle();
+							linkedIssueId = existingThread?.issue_id ?? issue;
+						} else {
+							linkedIssueId = issue;
+						}
+						threadLinked = true;
+						issuedAction = true;
+						result = { ok: true };
 					}
-					threadLinked = true;
-					issuedAction = true;
-					result = { ok: true };
 				}
 
 				if (name === 'create_subissue') {
@@ -1832,7 +1878,7 @@ When you believe you have completed the task, call done().
 						meta: { thread_id: threadId },
 						issueId: doneIssueId
 					});
-					await clearStaleProcessingEvents({ workspaceId, threadId, runId });
+					if (threadId) await clearStaleProcessingEvents({ workspaceId, threadId, runId });
 					doneCalled = true;
 					issuedAction = true;
 					result = { ok: true };
@@ -1884,14 +1930,17 @@ When you believe you have completed the task, call done().
 
 	// All LLM outputs logged per step above.
 
-	if (!threadLinked) {
+	if (threadId && !threadLinked) {
 		await logError(userId, 'LLM did not link thread to issue.');
 	}
 
 	if (!linkedIssueId) {
 		const fallbackIssueId = lastSubissueId ?? createdIssueId;
-		if (fallbackIssueId) {
+		if (threadId && fallbackIssueId) {
 			await linkThreadToIssue({ threadId, issueId: fallbackIssueId });
+			linkedIssueId = fallbackIssueId;
+		} else if (fallbackIssueId) {
+			// AppFolio source: no thread to link but we have an issue ID — that's fine.
 			linkedIssueId = fallbackIssueId;
 		} else {
 			await logError(userId, 'LLM did not create/link issue.');
@@ -2372,6 +2421,243 @@ const resetStaleJobs = async () => {
 	}
 };
 
+// ── AppFolio Agent Handler ────────────────────────────────────────────────────
+
+/**
+ * Handle an AppFolio-sourced change event from the appfolio-sync edge function.
+ * Routes to runIssueAgent (same function as Gmail) for 'new' work orders so there
+ * is exactly one agent prompt to maintain across both sources.
+ */
+const handleAppfolioWorkOrder = async ({
+	issueId,
+	workspaceId,
+	change_type,
+	row
+}: {
+	issueId: string;
+	workspaceId: string;
+	change_type: string;
+	row: any;
+}): Promise<void> => {
+	// Load workspace admin (used as userId for agent runs that have no human initiator)
+	const userId = await getWorkspaceAdminId(workspaceId);
+	if (!userId) {
+		console.error(`handleAppfolioWorkOrder: no admin for workspace ${workspaceId}`);
+		return;
+	}
+
+	// ── status_changed: log the transition ───────────────────────────────────
+	if (change_type === 'status_changed') {
+		const { data: issueRow } = await supabase
+			.from('issues')
+			.select('appfolio_raw_status')
+			.eq('id', issueId)
+			.maybeSingle();
+		await supabase.from('activity_logs').insert({
+			workspace_id: workspaceId,
+			issue_id: issueId,
+			type: 'status_change',
+			data: {
+				appfolio_id: row?.work_order_id ? String(row.work_order_id) : null,
+				new_status: row?.status ? String(row.status) : null,
+				prev_status: issueRow?.appfolio_raw_status ?? null
+			}
+		});
+		return;
+	}
+
+	// ── vendor_assigned: log the assignment + notify founders ─────────────────
+	if (change_type === 'vendor_assigned') {
+		const vendorName = (row?.vendor as string) || null;
+		await supabase.from('activity_logs').insert({
+			workspace_id: workspaceId,
+			issue_id: issueId,
+			type: 'assignee_change',
+			data: {
+				appfolio_vendor_id: row?.vendor_id ? String(row.vendor_id) : null,
+				vendor_name: vendorName
+			}
+		});
+		// Notify bedrock-role members in the LAPM workspace to mirror the assignment in AppFolio.
+		try {
+			const { data: issueRow } = await supabase
+				.from('issues')
+				.select('name, appfolio_id, readable_id')
+				.eq('id', issueId)
+				.maybeSingle();
+			if (issueRow) {
+				const { data: lapm } = await supabase
+					.from('workspaces').select('id').eq('slug', 'lapm').maybeSingle();
+				if (lapm?.id) {
+					const { data: founders } = await supabase
+						.from('people').select('user_id')
+						.eq('workspace_id', lapm.id).eq('role', 'bedrock');
+					if (founders?.length) {
+						await supabase.from('notifications').insert(
+							founders.map((f: any) => ({
+								workspace_id: lapm.id,
+								user_id: f.user_id,
+								issue_id: issueId,
+								title: `AppFolio action needed: vendor assigned on ${issueRow.readable_id ?? issueRow.name}`,
+								body: `Vendor "${vendorName ?? 'unknown'}" was assigned in Bedrock for work order ${issueRow.appfolio_id ?? issueRow.readable_id}. Please update vendor assignment in AppFolio.`,
+								type: 'appfolio_action_required',
+								requires_action: true,
+								is_resolved: false,
+								meta: { action: 'vendor_assign', vendorName, appfolio_id: issueRow.appfolio_id }
+							}))
+						);
+					}
+				}
+			}
+		} catch (_) { /* notification failure should not block sync */ }
+		return;
+	}
+
+	// ── notes_changed: log the note + AI check if response needed ─────────────
+	if (change_type === 'notes_changed') {
+		const newNotes = (row?.status_notes as string) || '(no content)';
+		await supabase.from('activity_logs').insert({
+			workspace_id: workspaceId,
+			issue_id: issueId,
+			type: 'appfolio_note',
+			data: { body: newNotes, appfolio_id: row?.work_order_id ? String(row.work_order_id) : null }
+		});
+		// Quick AI check: does this note require a PM response?
+		try {
+			const openaiKey = Deno.env.get('OPENAI_API_KEY')!;
+			const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+				body: JSON.stringify({
+					model: 'gpt-4o-mini',
+					max_tokens: 60,
+					messages: [{
+						role: 'user',
+						content: `Does this work order note require a property manager response? Answer YES or NO then one sentence reason.\n\nNote: ${newNotes}`
+					}]
+				})
+			});
+			const aiJson = await resp.json().catch(() => null);
+			const aiText: string = aiJson?.choices?.[0]?.message?.content ?? '';
+			if (aiText.toUpperCase().startsWith('YES')) {
+				const { data: issueRow } = await supabase
+					.from('issues')
+					.select('name, readable_id')
+					.eq('id', issueId)
+					.maybeSingle();
+				await supabase.from('notifications').insert({
+					workspace_id: workspaceId,
+					issue_id: issueId,
+					title: `New AppFolio note may need a response — ${issueRow?.readable_id ?? issueRow?.name ?? 'work order'}`,
+					body: newNotes.slice(0, 300),
+					type: 'appfolio_note',
+					requires_action: false
+				});
+			}
+		} catch (_) { /* AI check is best-effort */ }
+		return;
+	}
+
+	// ── vendor_followup: draft a follow-up and mark as sent ───────────────────
+	if (change_type === 'vendor_followup') {
+		const { data: issueRow } = await supabase
+			.from('issues')
+			.select('name, appfolio_id, readable_id, unit_id')
+			.eq('id', issueId)
+			.maybeSingle();
+		if (!issueRow) return;
+
+		// Look up vendor email from people table (matched by appfolio_vendor_id on the issue)
+		const { data: issueTracking } = await supabase
+			.from('issues')
+			.select('appfolio_vendor_id')
+			.eq('id', issueId)
+			.maybeSingle();
+		const vendorEmail: string | null = null; // vendor email lookup deferred — no vendor table yet
+
+		await supabase.from('email_drafts').insert({
+			workspace_id: workspaceId,
+			issue_id: issueId,
+			to: vendorEmail,
+			subject: `Follow-up: Work Order #${issueRow.appfolio_id ?? issueRow.readable_id ?? issueId}`,
+			body: `Hi, this is a follow-up to confirm you received work order #${issueRow.appfolio_id ?? issueId} at ${issueRow.name}. Please reply with your estimated arrival time. Thank you.`,
+			status: 'draft'
+		});
+		await supabase.from('issues').update({ vendor_followup_sent: true }).eq('id', issueId);
+		return;
+	}
+
+	// ── new: run full agent triage (same prompt as Gmail) ─────────────────────
+	if (change_type === 'new') {
+		const { data: issueRow } = await supabase
+			.from('issues')
+			.select('id, name, description, unit_id, property_id')
+			.eq('id', issueId)
+			.maybeSingle();
+		if (!issueRow) return;
+
+		const { data: unitRow } = issueRow.unit_id
+			? await supabase.from('units').select('name').eq('id', issueRow.unit_id).maybeSingle()
+			: { data: null };
+		const { data: propRow } = issueRow.property_id
+			? await supabase.from('properties').select('name').eq('id', issueRow.property_id).maybeSingle()
+			: { data: null };
+
+		const { data: policyRow } = await supabase
+			.from('workspace_policies')
+			.select('policy_text')
+			.eq('workspace_id', workspaceId)
+			.in('type', ['behavior', 'allow'])
+			.order('updated_at', { ascending: false })
+			.limit(1)
+			.maybeSingle();
+		let urgencyPolicies: Array<any> = [];
+		try {
+			const { data: upRows } = await supabase
+				.from('workspace_policies')
+				.select('meta, description')
+				.eq('workspace_id', workspaceId)
+				.eq('type', 'urgency')
+				.order('updated_at', { ascending: false });
+			urgencyPolicies = upRows ?? [];
+		} catch { urgencyPolicies = []; }
+		const urgencyPolicyText = buildUrgencyPolicyText(urgencyPolicies);
+		const policyText = [policyRow?.policy_text ?? '', urgencyPolicyText].filter(Boolean).join('\n\n');
+
+		const { data: userProfile } = await supabase
+			.from('users').select('name').eq('id', userId).maybeSingle();
+
+		const workspaceUnits = await listWorkspaceUnitsForAgent(workspaceId);
+
+		const tenantName = row?.primary_tenant ? String(row.primary_tenant) : null;
+		const tenantEmail = row?.primary_tenant_email ? String(row.primary_tenant_email) : null;
+		const description = issueRow.description ?? issueRow.name ?? '';
+
+		await runIssueAgent({
+			subject: issueRow.name,
+			body: description,
+			senderEmail: tenantEmail ?? '',
+			unitId: issueRow.unit_id ?? null,
+			unitName: unitRow?.name ?? null,
+			workspaceId,
+			propertyName: propRow?.name ?? null,
+			threadId: null,   // AppFolio source — no email thread
+			userId,
+			policyText,
+			urgencyDecision: null,
+			tenantName,
+			tenantEmail,
+			userName: userProfile?.name ?? 'Bedrock',
+			defaultSenderEmail: null,
+			replyMessageId: null,
+			rootIssueId: issueId,   // issue already exists — skip create_issue
+			workspaceUnits,
+			source: 'appfolio'
+		});
+	}
+};
+
+
 serve(async (req) => {
 	let currentJobId: string | null = null;
 	try {
@@ -2379,10 +2665,38 @@ serve(async (req) => {
 			return new Response('Method not allowed', { status: 405 });
 		}
 
+		// Internal shared-secret auth for edge-function-to-edge-function calls (e.g. appfolio-sync).
+		// If the header is present it MUST match — rejects invalid keys before any processing.
+		// Absence is allowed so that existing JWT-authenticated callers (SvelteKit server) still work.
+		const internalKey = req.headers.get('x-internal-agent-key');
+		if (internalKey !== null) {
+			const INTERNAL_AGENT_KEY = Deno.env.get('INTERNAL_AGENT_KEY');
+			if (!INTERNAL_AGENT_KEY || internalKey !== INTERNAL_AGENT_KEY) {
+				console.error('agent: invalid x-internal-agent-key');
+				return new Response('Unauthorized', { status: 401 });
+			}
+		}
+
 		await resetStaleJobs();
 		const body = await req.json().catch(() => null);
 		const jobId = typeof body?.job_id === 'string' ? body.job_id : null;
 		const directSource = typeof body?.source === 'string' ? body.source : null;
+
+		// AppFolio change events arrive directly (no job queue) from appfolio-sync.
+		if (!jobId && directSource === 'appfolio') {
+			const { issueId, workspaceId: wsId, change_type, row } = body ?? {};
+			if (!issueId || !wsId || !change_type) {
+				return new Response('Missing issueId, workspaceId, or change_type', { status: 400 });
+			}
+			try {
+				await handleAppfolioWorkOrder({ issueId, workspaceId: wsId, change_type, row: row ?? null });
+				return Response.json({ ok: true });
+			} catch (err) {
+				console.error('handleAppfolioWorkOrder error:', err);
+				return Response.json({ ok: false, error: String(err) }, { status: 500 });
+			}
+		}
+
 		if (!jobId && directSource && directSource !== 'gmail') {
 			return new Response('Direct comment processing not implemented', { status: 501 });
 		}
