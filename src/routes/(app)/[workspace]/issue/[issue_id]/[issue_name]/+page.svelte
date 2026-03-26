@@ -668,14 +668,6 @@
 
 		removeActivityLogFromCache(optimisticLog);
 		applyActivityLogDelta(created);
-
-		if (/@bedrock/i.test(trimmed)) {
-			fetch('/api/agent', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ issue_id: issueId ?? issueKey, comment: trimmed })
-			}).catch(() => null);
-		}
 	};
 
 	const resizeCommentTextarea = () => {
@@ -2229,7 +2221,7 @@
 					</button>
 				</div>
 				<div class="space-y-2 py-4 text-sm text-neutral-600">
-					<div class="relative">
+					<div class="tooltip-target relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
@@ -2260,6 +2252,11 @@
 							</svg>
 							<span class="truncate text-neutral-700">{propertyName}</span>
 						</button>
+						<div
+							class="delayed-tooltip absolute top-full left-1/2 z-20 mt-2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+						>
+							Change property
+						</div>
 						{#if propertyOpen && canEditIssue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
@@ -2295,7 +2292,7 @@
 							</div>
 						{/if}
 					</div>
-					<div class="relative">
+					<div class="tooltip-target relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
@@ -2326,6 +2323,11 @@
 							</svg>
 							<span class="truncate text-neutral-700">{unitName}</span>
 						</button>
+						<div
+							class="delayed-tooltip absolute top-full left-1/2 z-20 mt-2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+						>
+							Change unit
+						</div>
 						{#if unitOpen && canEditIssue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
@@ -2365,7 +2367,7 @@
 							</div>
 						{/if}
 					</div>
-					<div class="relative">
+					<div class="tooltip-target relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
@@ -2383,6 +2385,11 @@
 							></span>
 							<span>{statusMeta.label}</span>
 						</button>
+						<div
+							class="delayed-tooltip absolute top-full left-1/2 z-20 mt-2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+						>
+							Change status
+						</div>
 						{#if statusOpen && canEditIssue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
@@ -2410,7 +2417,7 @@
 							</div>
 						{/if}
 					</div>
-					<div class="group relative">
+					<div class="tooltip-target group relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
@@ -2457,6 +2464,11 @@
 								<span>Not urgent</span>
 							{/if}
 						</button>
+						<div
+							class="delayed-tooltip absolute top-full left-1/2 z-20 mt-2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+						>
+							Change urgency
+						</div>
 						{#if isSubissue}
 							<div
 								class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] text-white opacity-0 transition group-hover:opacity-100"
@@ -2514,7 +2526,7 @@
 							</div>
 						{/if}
 					</div>
-					<div class="relative">
+					<div class="tooltip-target relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
@@ -2553,6 +2565,11 @@
 							{/if}
 							<span class="truncate">{assigneeName}</span>
 						</button>
+						<div
+							class="delayed-tooltip absolute top-full left-1/2 z-20 mt-2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+						>
+							Change assignee
+						</div>
 						{#if assigneeOpen && canEditIssue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
@@ -2720,3 +2737,33 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.tooltip-target .delayed-tooltip {
+		opacity: 0;
+		transform: translateY(-4px);
+		transition:
+			opacity 150ms ease,
+			transform 150ms ease;
+		transition-delay: 0s;
+		pointer-events: none;
+	}
+
+	.tooltip-target:hover .delayed-tooltip {
+		opacity: 1;
+		transform: translateY(0);
+		transition-delay: 1s;
+	}
+
+	.tooltip-target:focus-within .delayed-tooltip {
+		opacity: 0;
+		transform: translateY(-4px);
+		transition-delay: 0s;
+	}
+
+	@media (hover: none) {
+		.tooltip-target .delayed-tooltip {
+			display: none;
+		}
+	}
+</style>

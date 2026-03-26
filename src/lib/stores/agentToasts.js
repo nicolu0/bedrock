@@ -9,6 +9,15 @@ const timers = new Map();
 const createAgentToasts = () => {
 	const { subscribe, update } = writable([]);
 
+	const dismiss = (runId) => {
+		if (!runId) return;
+		if (timers.has(runId)) {
+			clearTimeout(timers.get(runId));
+			timers.delete(runId);
+		}
+		update((items) => items.filter((item) => item.runId !== runId));
+	};
+
 	const scheduleDismiss = (runId, delayMs = DONE_DISMISS_MS) => {
 		if (!runId) return;
 		if (timers.has(runId)) {
@@ -16,7 +25,7 @@ const createAgentToasts = () => {
 		}
 		const timer = setTimeout(() => {
 			timers.delete(runId);
-			update((items) => items.filter((item) => item.runId !== runId));
+			dismiss(runId);
 		}, delayMs);
 		timers.set(runId, timer);
 	};
@@ -57,7 +66,7 @@ const createAgentToasts = () => {
 		update(() => []);
 	};
 
-	return { subscribe, upsert, clear };
+	return { subscribe, upsert, dismiss, clear };
 };
 
 export const agentToasts = createAgentToasts();
