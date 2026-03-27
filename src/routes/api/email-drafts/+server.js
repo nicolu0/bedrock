@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { json } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
+import { diffWords } from '$lib/utils/textDiff';
 
 const normalizeRecipientList = (value) => {
 	if (!value) return [];
@@ -37,7 +38,7 @@ export const PATCH = async ({ locals, request }) => {
 		return json({ error: 'Invalid payload' }, { status: 400 });
 	}
 
-	const draftQuery = supabaseAdmin.from('drafts').select('id, issue_id');
+	const draftQuery = supabaseAdmin.from('drafts').select('id, issue_id, body, original_body');
 	const { data: draft } = messageId
 		? await draftQuery.eq('message_id', messageId).eq('channel', 'email').maybeSingle()
 		: await draftQuery
@@ -83,20 +84,29 @@ export const PATCH = async ({ locals, request }) => {
 	}
 
 	const updatePayload = { updated_at: new Date().toISOString() };
-	if (hasBody) updatePayload.body = draftBody;
+	if (hasBody) {
+		const previousBody = typeof draft?.body === 'string' ? draft.body : '';
+		const storedOriginal =
+			typeof draft?.original_body === 'string' ? draft.original_body : previousBody;
+		updatePayload.body = draftBody;
+		updatePayload.original_body = storedOriginal;
+		updatePayload.draft_diff = diffWords(storedOriginal, draftBody ?? '');
+	}
 	if (hasRecipientEmails) {
 		updatePayload.recipient_emails = normalizedRecipients?.length ? normalizedRecipients : null;
 		updatePayload.recipient_email = normalizedRecipients?.[0] ?? null;
 	}
 
-	const { error } = await supabaseAdmin
+	const { data: updatedDraft, error } = await supabaseAdmin
 		.from('drafts')
 		.update(updatePayload)
-		.eq('id', draft.id);
+		.eq('id', draft.id)
+		.select('id, body, original_body, draft_diff, recipient_email, recipient_emails')
+		.maybeSingle();
 
 	if (error) {
 		return json({ error: error.message }, { status: 400 });
 	}
 
-	return json({ ok: true });
+	return json({ ok: true, draft: updatedDraft ?? null });
 };

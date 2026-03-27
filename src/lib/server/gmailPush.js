@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } from '$env/static/private';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
+import { buildTonePolicyText } from '$lib/server/tonePolicies';
 
 const supabase = supabaseAdmin;
 
@@ -495,12 +496,14 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 			let issueId = refreshedThread?.issue_id ?? threadRow.issue_id ?? null;
 			let rootIssueIdForAgent = issueId;
 			let relatedIssues = [];
+			let issueName = null;
 			if (issueId) {
 				const { data: issueRow } = await supabase
 					.from('issues')
 					.select('id, name, status, parent_id')
 					.eq('id', issueId)
 					.maybeSingle();
+				issueName = issueRow?.name ?? null;
 				rootIssueIdForAgent = issueRow?.parent_id ?? issueRow?.id ?? issueId;
 				if (rootIssueIdForAgent) {
 					const { data: related } = await supabase
@@ -519,7 +522,21 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 				.order('updated_at', { ascending: false })
 				.limit(1)
 				.maybeSingle();
-			const policyText = policyRow?.policy_text ?? '';
+			const { data: tonePolicies } = await supabase
+				.from('workspace_policies')
+				.select('id, type, description, meta')
+				.eq('workspace_id', workspaceIdForConnection)
+				.eq('type', 'tone')
+				.order('updated_at', { ascending: false });
+			const tonePolicyText = buildTonePolicyText({
+				policies: tonePolicies ?? [],
+				issueLabel: issueName ?? '',
+				subject: messageSubject,
+				body: cleanedBody
+			});
+			const policyText = [policyRow?.policy_text ?? '', tonePolicyText]
+				.filter(Boolean)
+				.join('\n\n');
 			const { data: userProfile } = await supabase
 				.from('users')
 				.select('name')
@@ -777,12 +794,14 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 		let issueId = refreshedThread?.issue_id ?? threadRow.issue_id ?? null;
 		let rootIssueIdForAgent = issueId;
 		let relatedIssues = [];
+		let issueName = null;
 		if (issueId) {
 			const { data: issueRow } = await supabase
 				.from('issues')
 				.select('id, name, status, parent_id')
 				.eq('id', issueId)
 				.maybeSingle();
+			issueName = issueRow?.name ?? null;
 			rootIssueIdForAgent = issueRow?.parent_id ?? issueRow?.id ?? issueId;
 			if (rootIssueIdForAgent) {
 				const { data: related } = await supabase
@@ -801,7 +820,19 @@ const processMessage = async ({ connection, accessToken, message, runAgent }) =>
 			.order('updated_at', { ascending: false })
 			.limit(1)
 			.maybeSingle();
-		const policyText = policyRow?.policy_text ?? '';
+		const { data: tonePolicies } = await supabase
+			.from('workspace_policies')
+			.select('id, type, description, meta')
+			.eq('workspace_id', propertyRow.workspace_id)
+			.eq('type', 'tone')
+			.order('updated_at', { ascending: false });
+		const tonePolicyText = buildTonePolicyText({
+			policies: tonePolicies ?? [],
+			issueLabel: issueName ?? '',
+			subject: messageSubject,
+			body: cleanedBody
+		});
+		const policyText = [policyRow?.policy_text ?? '', tonePolicyText].filter(Boolean).join('\n\n');
 		const { data: userProfile } = await supabase
 			.from('users')
 			.select('name')
