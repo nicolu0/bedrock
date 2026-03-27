@@ -716,7 +716,7 @@
 									{#if item.id === 'inbox' && inboxCount > 0}
 										<span class="ml-auto inline-flex min-w-[18px] items-center justify-center">
 											<span
-												class="inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-neutral-200 px-1.5 text-[11px] leading-none font-medium text-neutral-800"
+												class="inline-flex h-5 min-w-5 items-center justify-center rounded bg-neutral-200/70 px-1.5 text-[11px] leading-none font-medium text-neutral-800"
 											>
 												<span class="relative h-3.5 min-w-[1ch] overflow-hidden">
 													{#key inboxCount}
