@@ -105,6 +105,21 @@ function mapWorkOrderStatus(status: string): string {
 	return 'todo';
 }
 
+// ── Tenant Name Normalization ─────────────────────────────────────────────────
+
+// AppFolio returns tenant names as "Last, First" (or "Last, First Middle").
+// Normalize to "First Last" so names display naturally in the UI.
+function normalizeTenantName(name: string | null | undefined): string | null {
+	if (!name) return null;
+	const trimmed = name.trim();
+	if (trimmed.includes(',')) {
+		const [last, ...rest] = trimmed.split(',');
+		const first = rest.join(',').trim();
+		return first ? `${first} ${last.trim()}` : last.trim();
+	}
+	return trimmed;
+}
+
 // ── Sync Functions ────────────────────────────────────────────────────────────
 
 // Returns array of AppFolio property_id numbers synced for this workspace.
@@ -285,8 +300,8 @@ async function syncTenants(workspaceId: string, appfolioPropertyIds: number[]): 
 	for (const row of rows as any[]) {
 		if (!row.unit_id) continue;
 
-		// Prefer the pre-joined full name; fall back to first+last
-		const name = row.tenant || [row.first_name, row.last_name].filter(Boolean).join(' ') || null;
+		// Prefer the pre-joined full name; fall back to first+last. Normalize "Last, First" → "First Last".
+		const name = normalizeTenantName(row.tenant || [row.first_name, row.last_name].filter(Boolean).join(' ') || null);
 		// emails/phone_numbers may be comma-separated; take the first value
 		const email = row.emails ? String(row.emails).split(',')[0].trim() || null : null;
 		const phone = row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : null;
@@ -498,7 +513,7 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 			}
 
 			// Build tenant data from work order fields
-			const tenantName = (row.primary_tenant as string) || null;
+			const tenantName = normalizeTenantName((row.primary_tenant as string) || null);
 			const tenantEmail = (row.primary_tenant_email as string) || null;
 			const tenantPhone = (row.primary_tenant_phone_number as string) || null;
 			const logData = {
