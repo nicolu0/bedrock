@@ -309,6 +309,7 @@ export const loadActivityData = async (workspaceId, issueIds = null) => {
 			'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at, channel'
 		)
 		.eq('workspace_id', workspaceId)
+		.eq('channel', 'email')
 		.gte('updated_at', cutoff)
 		.order('updated_at', { ascending: false });
 

@@ -39,8 +39,12 @@ export const PATCH = async ({ locals, request }) => {
 
 	const draftQuery = supabaseAdmin.from('drafts').select('id, issue_id');
 	const { data: draft } = messageId
-		? await draftQuery.eq('message_id', messageId).maybeSingle()
-		: await draftQuery.eq('issue_id', issueId).is('message_id', null).maybeSingle();
+		? await draftQuery.eq('message_id', messageId).eq('channel', 'email').maybeSingle()
+		: await draftQuery
+				.eq('issue_id', issueId)
+				.is('message_id', null)
+				.eq('channel', 'email')
+				.maybeSingle();
 
 	if (!draft?.id || !draft.issue_id) {
 		return json({ error: 'Not found' }, { status: 404 });

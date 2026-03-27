@@ -181,6 +181,7 @@ const upsertEmailDraft = async ({
 		recipient_emails: normalizedRecipients.length ? normalizedRecipients : null,
 		subject,
 		body,
+		channel: 'email',
 		updated_at: new Date().toISOString()
 	};
 
@@ -191,12 +192,10 @@ const upsertEmailDraft = async ({
 			.from('drafts')
 			.select('id')
 			.eq('message_id', normalizedMessageId)
+			.eq('channel', 'email')
 			.maybeSingle();
 		if (existingDraft?.id) {
-			const result = await supabaseAdmin
-				.from('drafts')
-				.update(payload)
-				.eq('id', existingDraft.id);
+			const result = await supabaseAdmin.from('drafts').update(payload).eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
@@ -210,12 +209,10 @@ const upsertEmailDraft = async ({
 			.select('id')
 			.eq('issue_id', issueId)
 			.is('message_id', null)
+			.eq('channel', 'email')
 			.maybeSingle();
 		if (existingDraft?.id) {
-			const result = await supabaseAdmin
-				.from('drafts')
-				.update(payload)
-				.eq('id', existingDraft.id);
+			const result = await supabaseAdmin.from('drafts').update(payload).eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
@@ -318,6 +315,37 @@ const updateIssue = async ({ issueId, patch }) => {
 	}
 };
 
+const unitLabelCache = new Map();
+const resolveUnitLabel = async ({ workspaceId, unitId, propertyId }) => {
+	if (!workspaceId) return { propertyName: null, unitName: null };
+	const cacheKey = `${workspaceId}:${unitId ?? 'none'}:${propertyId ?? 'none'}`;
+	if (unitLabelCache.has(cacheKey)) return unitLabelCache.get(cacheKey);
+
+	let propertyName = null;
+	let unitName = null;
+	if (unitId) {
+		const { data: unitRow } = await supabaseAdmin
+			.from('units')
+			.select('name, properties!inner(id, name, workspace_id)')
+			.eq('id', unitId)
+			.eq('properties.workspace_id', workspaceId)
+			.maybeSingle();
+		unitName = unitRow?.name ?? null;
+		propertyName = unitRow?.properties?.name ?? null;
+	} else if (propertyId) {
+		const { data: propertyRow } = await supabaseAdmin
+			.from('properties')
+			.select('name')
+			.eq('id', propertyId)
+			.eq('workspace_id', workspaceId)
+			.maybeSingle();
+		propertyName = propertyRow?.name ?? null;
+	}
+	const resolved = { propertyName, unitName };
+	unitLabelCache.set(cacheKey, resolved);
+	return resolved;
+};
+
 const deleteIssue = async ({ issueId }) => {
 	const { data: issueRow } = await supabaseAdmin
 		.from('issues')
@@ -369,6 +397,8 @@ Guidance:
 	 `.trim();
 
 	const runId = crypto.randomUUID();
+	const issuePropertyName = issue?.property_name ?? issue?.propertyName ?? issue?.property ?? null;
+	const issueUnitName = issue?.unit_name ?? issue?.unitName ?? issue?.unit ?? null;
 
 	const createIssueTool = {
 		type: 'function',
@@ -591,7 +621,22 @@ Guidance:
 			};
 			const stageMessage = stageMessageByName[name];
 			if (stageMessage) {
-				const meta = { issue_id: issue?.id ?? null };
+				const currentUnitId =
+					name === 'create_issue'
+						? typeof args.unit_id === 'string'
+							? args.unit_id
+							: issue.unit_id
+						: issue.unit_id;
+				const labelMeta = await resolveUnitLabel({
+					workspaceId: issue.workspace_id,
+					unitId: currentUnitId,
+					propertyId: issue.property_id ?? null
+				});
+				const meta = {
+					issue_id: issue?.id ?? null,
+					property_name: labelMeta.propertyName ?? issuePropertyName ?? null,
+					unit_name: labelMeta.unitName ?? issueUnitName ?? null
+				};
 				if (name === 'create_subissue') {
 					meta.parent_issue_id =
 						typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
@@ -636,6 +681,26 @@ Guidance:
 						assigneeId: assignee,
 						description
 					});
+					if (stageMessage) {
+						const labelMeta = await resolveUnitLabel({
+							workspaceId: issue.workspace_id,
+							unitId: unit ?? null,
+							propertyId: issue.property_id ?? null
+						});
+						await emitAgentEvent({
+							workspaceId: issue.workspace_id,
+							userId,
+							runId,
+							step: i,
+							stage: name,
+							message: stageMessage,
+							meta: {
+								issue_id: issue?.id ?? null,
+								property_name: labelMeta.propertyName ?? issuePropertyName ?? null,
+								unit_name: labelMeta.unitName ?? issueUnitName ?? null
+							}
+						});
+					}
 					result = { issue_id: issueId };
 				}
 
@@ -1379,6 +1444,7 @@ const upsertEmailDraftForGmail = async ({
 		subject,
 		body,
 		workspace_id: workspaceId,
+		channel: 'email',
 		updated_at: new Date().toISOString()
 	};
 
@@ -1390,12 +1456,10 @@ const upsertEmailDraftForGmail = async ({
 			.from('drafts')
 			.select('id')
 			.eq('message_id', messageId)
+			.eq('channel', 'email')
 			.maybeSingle();
 		if (existingDraft?.id) {
-			const result = await supabaseAdmin
-				.from('drafts')
-				.update(payload)
-				.eq('id', existingDraft.id);
+			const result = await supabaseAdmin.from('drafts').update(payload).eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
@@ -1410,12 +1474,10 @@ const upsertEmailDraftForGmail = async ({
 			.select('id')
 			.eq('issue_id', issueId)
 			.is('message_id', null)
+			.eq('channel', 'email')
 			.maybeSingle();
 		if (existingDraft?.id) {
-			const result = await supabaseAdmin
-				.from('drafts')
-				.update(payload)
-				.eq('id', existingDraft.id);
+			const result = await supabaseAdmin.from('drafts').update(payload).eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
@@ -1769,6 +1831,25 @@ When you believe you have completed the task, call done().
 	let resolvedUnitId = unitId;
 	const issueNameCache = new Map();
 
+	const initialLabelMeta = await resolveUnitLabel({
+		workspaceId,
+		unitId: unitId ?? null,
+		propertyId: null
+	});
+	await emitAgentEvent({
+		workspaceId,
+		userId,
+		runId,
+		step: 0,
+		stage: 'processing',
+		message: 'Processing email',
+		meta: {
+			thread_id: threadId ?? null,
+			property_name: initialLabelMeta.propertyName ?? propertyName ?? null,
+			unit_name: initialLabelMeta.unitName ?? unitName ?? null
+		}
+	});
+
 	for (let i = 0; i < 6; i += 1) {
 		const response = await fetch('https://api.openai.com/v1/responses', {
 			method: 'POST',
@@ -1825,7 +1906,16 @@ When you believe you have completed the task, call done().
 			};
 			const stageMessage = stageMessageByName[name];
 			if (stageMessage) {
-				const meta = { thread_id: threadId ?? null };
+				const labelMeta = await resolveUnitLabel({
+					workspaceId,
+					unitId: resolvedUnitId ?? unitId ?? null,
+					propertyId: null
+				});
+				const meta = {
+					thread_id: threadId ?? null,
+					property_name: propertyName ?? labelMeta.propertyName ?? null,
+					unit_name: unitName ?? labelMeta.unitName ?? null
+				};
 				if (name === 'create_subissue') {
 					meta.parent_issue_id =
 						typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
@@ -1885,6 +1975,26 @@ When you believe you have completed the task, call done().
 						assigneeId: assignee,
 						description
 					});
+					if (stageMessage) {
+						const labelMeta = await resolveUnitLabel({
+							workspaceId,
+							unitId: unit ?? null,
+							propertyId: null
+						});
+						await emitAgentEvent({
+							workspaceId,
+							userId,
+							runId,
+							step: i,
+							stage: name,
+							message: stageMessage,
+							meta: {
+								thread_id: threadId ?? null,
+								property_name: labelMeta.propertyName ?? propertyName ?? null,
+								unit_name: labelMeta.unitName ?? unitName ?? null
+							}
+						});
+					}
 					if (unit && typeof unit === 'string') {
 						resolvedUnitId = unit;
 					}

@@ -92,6 +92,10 @@
 	let _subscribedIssuePromise = null;
 	let commentBody = '';
 	let commentTextarea;
+	let subIssueHoverId = null;
+	let subIssueTooltipX = 0;
+	let subIssueTooltipY = 0;
+	let subIssueTooltipVisible = false;
 
 	// ── Streaming resolution for secondary data ───────────────────────────────
 
@@ -668,14 +672,6 @@
 
 		removeActivityLogFromCache(optimisticLog);
 		applyActivityLogDelta(created);
-
-		if (/@bedrock/i.test(trimmed)) {
-			fetch('/api/agent', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ issue_id: issueId ?? issueKey, comment: trimmed })
-			}).catch(() => null);
-		}
 	};
 
 	const resizeCommentTextarea = () => {
@@ -745,6 +741,7 @@
 	let propertyOpen = false;
 	let unitOpen = false;
 	let urgentOpen = false;
+	let urgentHelpOpen = false;
 	let showUrgencyPolicyPrompt = false;
 	let urgencyPolicyValue = 'not_urgent';
 	let urgencyPolicyIssue = '';
@@ -1166,6 +1163,7 @@
 									'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at, channel'
 								)
 								.eq('issue_id', newSub.id)
+								.eq('channel', 'email')
 						]);
 						for (const msg of msgs ?? []) applyMessageDelta(msg);
 						for (const draft of drafts ?? []) applyDraftDelta(draft);
@@ -1375,26 +1373,33 @@
 				{#if !_subIssuesLoading && subIssues.length}
 					<div class="mt-8">
 						<div class="flex items-center gap-2 text-sm text-neutral-600">
-							<button
-								type="button"
-								class="flex items-center gap-2 rounded-md px-1.5 py-1 transition hover:bg-neutral-100"
-								on:click={() => (subIssuesOpen = !subIssuesOpen)}
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="14"
-									height="14"
-									fill="currentColor"
-									class="text-neutral-400 transition-transform duration-200"
-									class:rotate-[-90deg]={!subIssuesOpen}
-									viewBox="0 0 16 16"
+							<div class="tooltip-target relative">
+								<button
+									type="button"
+									class="flex items-center gap-2 rounded-md px-1.5 py-1 transition hover:bg-neutral-100"
+									on:click={() => (subIssuesOpen = !subIssuesOpen)}
 								>
-									<path
-										d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-									/>
-								</svg>
-								<span class="text-neutral-700">Sub-issues</span>
-							</button>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="14"
+										height="14"
+										fill="currentColor"
+										class="text-neutral-400 transition-transform duration-200"
+										class:rotate-[-90deg]={!subIssuesOpen}
+										viewBox="0 0 16 16"
+									>
+										<path
+											d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+										/>
+									</svg>
+									<span class="text-neutral-700">Sub-issues</span>
+								</button>
+								<div
+									class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+								>
+									{subIssuesOpen ? 'Collapse' : 'Expand'}
+								</div>
+							</div>
 							<span class="text-neutral-400">{subIssueProgress}</span>
 						</div>
 						<div
@@ -1406,7 +1411,21 @@
 									{#each subIssuesWithAssignees as subIssue}
 										<a
 											href={getSubIssueHref(subIssue)}
-											class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
+											class="relative flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
+											on:mouseenter={(event) => {
+												subIssueHoverId = subIssue.id;
+												subIssueTooltipVisible = true;
+												const rect = event.currentTarget.getBoundingClientRect();
+												subIssueTooltipX = event.clientX + 12;
+												subIssueTooltipY = rect.bottom + 8;
+											}}
+											on:mousemove={(event) => {
+												subIssueTooltipX = event.clientX + 12;
+											}}
+											on:mouseleave={() => {
+												subIssueTooltipVisible = false;
+												subIssueHoverId = null;
+											}}
 										>
 											<div class="flex items-center gap-3">
 												<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
@@ -1434,6 +1453,14 @@
 														d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
 													/>
 												</svg>
+											{/if}
+											{#if subIssueTooltipVisible && subIssueHoverId === subIssue.id}
+												<div
+													class="subissue-hover-tooltip fixed z-50 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													style={`left: ${subIssueTooltipX}px; top: ${subIssueTooltipY}px;`}
+												>
+													Open issue
+												</div>
 											{/if}
 										</a>
 									{/each}
@@ -1774,7 +1801,12 @@
 													</p>
 													<span class="shrink-0 text-xs text-neutral-400">
 														{#if log.type === 'issue_created'}
-															{new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}
+															{new Date(log.created_at).toLocaleDateString('en-US', {
+																month: 'short',
+																day: 'numeric',
+																year: 'numeric',
+																timeZone: 'UTC'
+															})}
 														{:else}
 															{formatTimestamp(log.created_at)}
 														{/if}
@@ -1791,7 +1823,7 @@
 									<div>
 										<button
 											type="button"
-											class="flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
+											class="tooltip-target relative flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
 											on:click={() => toggleActivity(subIssue.id)}
 										>
 											<div
@@ -1811,6 +1843,11 @@
 													/>
 												</svg>
 												<span>{subIssue.name}</span>
+											</div>
+											<div
+												class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+											>
+												{(activityOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
 											</div>
 											<span class="text-neutral-300">
 												{messagesByIssue[subIssue.id]?.length ?? 0}
@@ -2121,7 +2158,8 @@
 																			<p class="flex-1 text-sm text-neutral-700">
 																				{#if log.type === 'issue_created'}
 																					{#if log.data?.from || log.data?.from_email}
-																						{formatTenantName(log.data.from) ?? log.data.from_email} created the issue
+																						{formatTenantName(log.data.from) ?? log.data.from_email} created
+																						the issue
 																					{:else}
 																						Issue created
 																					{/if}
@@ -2140,7 +2178,12 @@
 																			</p>
 																			<span class="shrink-0 text-xs text-neutral-400">
 																				{#if log.type === 'issue_created'}
-																					{new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}
+																					{new Date(log.created_at).toLocaleDateString('en-US', {
+																						month: 'short',
+																						day: 'numeric',
+																						year: 'numeric',
+																						timeZone: 'UTC'
+																					})}
 																				{:else}
 																					{formatTimestamp(log.created_at)}
 																				{/if}
@@ -2229,7 +2272,7 @@
 					</button>
 				</div>
 				<div class="space-y-2 py-4 text-sm text-neutral-600">
-					<div class="relative">
+					<div class="tooltip-target relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
@@ -2260,6 +2303,11 @@
 							</svg>
 							<span class="truncate text-neutral-700">{propertyName}</span>
 						</button>
+						<div
+							class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+						>
+							Change property
+						</div>
 						{#if propertyOpen && canEditIssue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
@@ -2295,7 +2343,7 @@
 							</div>
 						{/if}
 					</div>
-					<div class="relative">
+					<div class="tooltip-target relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
@@ -2326,6 +2374,11 @@
 							</svg>
 							<span class="truncate text-neutral-700">{unitName}</span>
 						</button>
+						<div
+							class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+						>
+							Change unit
+						</div>
 						{#if unitOpen && canEditIssue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
@@ -2365,7 +2418,7 @@
 							</div>
 						{/if}
 					</div>
-					<div class="relative">
+					<div class="tooltip-target relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
@@ -2383,6 +2436,11 @@
 							></span>
 							<span>{statusMeta.label}</span>
 						</button>
+						<div
+							class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+						>
+							Change status
+						</div>
 						{#if statusOpen && canEditIssue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
@@ -2410,72 +2468,28 @@
 							</div>
 						{/if}
 					</div>
-					<div class="group relative">
-						<button
-							type="button"
-							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
-								canEditIssue && !isSubissue ? 'hover:bg-stone-100' : 'cursor-not-allowed opacity-60'
-							}`}
-							disabled={!canEditIssue || isSubissue}
-							aria-disabled={!canEditIssue || isSubissue}
-							on:click|stopPropagation={() => {
-								if (!canEditIssue || isSubissue) return;
-								urgentOpen = !urgentOpen;
-								statusOpen = false;
-								assigneeOpen = false;
-								propertyOpen = false;
-								unitOpen = false;
-							}}
-						>
-							{#if displayUrgent}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="16"
-									height="16"
-									fill="currentColor"
-									class="text-rose-600"
-									viewBox="0 0 16 16"
-								>
-									<path
-										d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
-									/>
-								</svg>
-								<span>Urgent</span>
-							{:else}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="16"
-									height="16"
-									fill="currentColor"
-									class="text-neutral-400"
-									viewBox="0 0 16 16"
-								>
-									<path
-										d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
-									/>
-								</svg>
-								<span>Not urgent</span>
-							{/if}
-						</button>
-						{#if isSubissue}
-							<div
-								class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] text-white opacity-0 transition group-hover:opacity-100"
+					<div class="flex w-full items-center gap-2">
+						<div class="tooltip-target group relative">
+							<button
+								type="button"
+								class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
+									canEditIssue && !isSubissue
+										? 'hover:bg-stone-100'
+										: 'cursor-not-allowed opacity-60'
+								}`}
+								disabled={!canEditIssue || isSubissue}
+								aria-disabled={!canEditIssue || isSubissue}
+								on:click|stopPropagation={() => {
+									if (!canEditIssue || isSubissue) return;
+									urgentOpen = !urgentOpen;
+									urgentHelpOpen = false;
+									statusOpen = false;
+									assigneeOpen = false;
+									propertyOpen = false;
+									unitOpen = false;
+								}}
 							>
-								Change urgency in the root issue
-							</div>
-						{/if}
-						{#if urgentOpen && canEditIssue && !isSubissue}
-							<div
-								class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-								on:click|stopPropagation
-							>
-								<button
-									type="button"
-									class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-										displayUrgent ? 'bg-neutral-50' : ''
-									}`}
-									on:click={() => handleUrgentChange(true)}
-								>
+								{#if displayUrgent}
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
 										width="16"
@@ -2489,14 +2503,7 @@
 										/>
 									</svg>
 									<span>Urgent</span>
-								</button>
-								<button
-									type="button"
-									class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-										!displayUrgent ? 'bg-neutral-50' : ''
-									}`}
-									on:click={() => handleUrgentChange(false)}
-								>
+								{:else}
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
 										width="16"
@@ -2510,11 +2517,106 @@
 										/>
 									</svg>
 									<span>Not urgent</span>
-								</button>
+								{/if}
+							</button>
+							<div
+								class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+							>
+								Change urgency
 							</div>
-						{/if}
+							{#if isSubissue}
+								<div
+									class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] text-white opacity-0 transition group-hover:opacity-100"
+								>
+									Change urgency in the root issue
+								</div>
+							{/if}
+							{#if urgentOpen && canEditIssue && !isSubissue}
+								<div
+									class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+									on:click|stopPropagation
+								>
+									<button
+										type="button"
+										class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+											displayUrgent ? 'bg-neutral-50' : ''
+										}`}
+										on:click={() => handleUrgentChange(true)}
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											fill="currentColor"
+											class="text-rose-600"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+											/>
+										</svg>
+										<span>Urgent</span>
+									</button>
+									<button
+										type="button"
+										class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+											!displayUrgent ? 'bg-neutral-50' : ''
+										}`}
+										on:click={() => handleUrgentChange(false)}
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											fill="currentColor"
+											class="text-neutral-400"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+											/>
+										</svg>
+										<span>Not urgent</span>
+									</button>
+								</div>
+							{/if}
+						</div>
+						<div class="relative ml-auto">
+							<button
+								type="button"
+								class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700"
+								aria-label="Urgent issue help"
+								aria-expanded={urgentHelpOpen}
+								on:click|stopPropagation={() => {
+									urgentOpen = false;
+									urgentHelpOpen = !urgentHelpOpen;
+								}}
+								on:blur={() => (urgentHelpOpen = false)}
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									fill="currentColor"
+									class="bi bi-question-circle"
+									viewBox="0 0 16 16"
+								>
+									<path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16" />
+									<path
+										d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286m1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94"
+									/>
+								</svg>
+							</button>
+							{#if urgentHelpOpen}
+								<div
+									class="absolute top-full right-0 z-30 mt-2 min-w-[260px] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs leading-snug text-neutral-700 shadow-sm"
+								>
+									Bedrock immediately assigns a vendor for urgent issues.
+								</div>
+							{/if}
+						</div>
 					</div>
-					<div class="relative">
+					<div class="tooltip-target relative">
 						<button
 							type="button"
 							class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
@@ -2553,6 +2655,11 @@
 							{/if}
 							<span class="truncate">{assigneeName}</span>
 						</button>
+						<div
+							class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+						>
+							Change assignee
+						</div>
 						{#if assigneeOpen && canEditIssue}
 							<div
 								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
@@ -2720,3 +2827,48 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.tooltip-target .delayed-tooltip {
+		opacity: 0;
+		transform: translateY(-4px);
+		transition:
+			opacity 150ms ease,
+			transform 150ms ease;
+		transition-delay: 0s;
+		pointer-events: none;
+	}
+
+	.tooltip-target:hover .delayed-tooltip {
+		opacity: 1;
+		transform: translateY(0);
+		transition-delay: 0s;
+	}
+
+	.tooltip-target:focus-within .delayed-tooltip {
+		opacity: 0;
+		transform: translateY(-4px);
+		transition-delay: 0s;
+	}
+
+	.tooltip-target:focus-within:hover .delayed-tooltip {
+		opacity: 1;
+		transform: translateY(0);
+		transition-delay: 0s;
+	}
+
+	@media (hover: none) {
+		.tooltip-target .delayed-tooltip {
+			display: none;
+		}
+	}
+
+	.subissue-hover-tooltip {
+		opacity: 1;
+		transform: translateY(0);
+		transition:
+			opacity 120ms ease,
+			transform 120ms ease;
+		pointer-events: none;
+	}
+</style>

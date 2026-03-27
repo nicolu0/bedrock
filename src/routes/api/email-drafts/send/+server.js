@@ -93,8 +93,12 @@ export const POST = async ({ locals, request }) => {
 			'id, issue_id, recipient_email, recipient_emails, subject, body, message_id, sender_email'
 		);
 	const { data: draft } = messageId
-		? await draftQuery.eq('message_id', messageId).maybeSingle()
-		: await draftQuery.eq('issue_id', issueId).is('message_id', null).maybeSingle();
+		? await draftQuery.eq('message_id', messageId).eq('channel', 'email').maybeSingle()
+		: await draftQuery
+				.eq('issue_id', issueId)
+				.is('message_id', null)
+				.eq('channel', 'email')
+				.maybeSingle();
 
 	if (!draft?.id || !draft.issue_id) {
 		return json({ error: 'Not found' }, { status: 404 });
