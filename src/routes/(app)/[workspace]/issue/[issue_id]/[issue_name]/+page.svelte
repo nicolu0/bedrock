@@ -742,6 +742,8 @@
 	let unitOpen = false;
 	let urgentOpen = false;
 	let urgentHelpOpen = false;
+	$: rightSidebarMenuOpen =
+		statusOpen || assigneeOpen || propertyOpen || unitOpen || urgentOpen || urgentHelpOpen;
 	let showUrgencyPolicyPrompt = false;
 	let urgencyPolicyValue = 'not_urgent';
 	let urgencyPolicyIssue = '';
@@ -2287,6 +2289,7 @@
 								statusOpen = false;
 								assigneeOpen = false;
 								urgentOpen = false;
+								urgentHelpOpen = false;
 							}}
 						>
 							<svg
@@ -2303,14 +2306,16 @@
 							</svg>
 							<span class="truncate text-neutral-700">{propertyName}</span>
 						</button>
-						<div
-							class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-						>
-							Change property
-						</div>
+						{#if !rightSidebarMenuOpen}
+							<div
+								class="delayed-tooltip absolute top-full left-[-0.5rem] z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+							>
+								Change property
+							</div>
+						{/if}
 						{#if propertyOpen && canEditIssue}
 							<div
-								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+								class="absolute right-auto left-[-0.5rem] z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
 								on:click|stopPropagation
 							>
 								<button
@@ -2358,6 +2363,7 @@
 								statusOpen = false;
 								assigneeOpen = false;
 								urgentOpen = false;
+								urgentHelpOpen = false;
 							}}
 						>
 							<svg
@@ -2374,14 +2380,16 @@
 							</svg>
 							<span class="truncate text-neutral-700">{unitName}</span>
 						</button>
-						<div
-							class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-						>
-							Change unit
-						</div>
+						{#if !rightSidebarMenuOpen}
+							<div
+								class="delayed-tooltip absolute top-full left-[-0.5rem] z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+							>
+								Change unit
+							</div>
+						{/if}
 						{#if unitOpen && canEditIssue}
 							<div
-								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+								class="absolute right-auto left-[-0.5rem] z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
 								on:click|stopPropagation
 							>
 								<button
@@ -2429,21 +2437,27 @@
 							on:click|stopPropagation={() => {
 								if (!canEditIssue) return;
 								statusOpen = !statusOpen;
+								propertyOpen = false;
+								unitOpen = false;
+								assigneeOpen = false;
 								urgentOpen = false;
+								urgentHelpOpen = false;
 							}}
 						>
 							<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
 							></span>
 							<span>{statusMeta.label}</span>
 						</button>
-						<div
-							class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-						>
-							Change status
-						</div>
+						{#if !rightSidebarMenuOpen}
+							<div
+								class="delayed-tooltip absolute top-full left-[-0.5rem] z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+							>
+								Change status
+							</div>
+						{/if}
 						{#if statusOpen && canEditIssue}
 							<div
-								class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+								class="absolute right-auto left-[-0.5rem] z-10 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
 								on:click|stopPropagation
 							>
 								{#each statusCycle as status}
@@ -2519,14 +2533,16 @@
 									<span>Not urgent</span>
 								{/if}
 							</button>
-							<div
-								class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-							>
-								{isSubissue ? 'Change urgency in the root issue' : 'Change urgency'}
-							</div>
+							{#if !rightSidebarMenuOpen}
+								<div
+									class="delayed-tooltip absolute top-full left-[-0.5rem] z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+								>
+									{isSubissue ? 'Change urgency in the root issue' : 'Change urgency'}
+								</div>
+							{/if}
 							{#if urgentOpen && canEditIssue && !isSubissue}
 								<div
-									class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+									class="absolute right-auto left-[-0.5rem] z-10 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
 									on:click|stopPropagation
 								>
 									<button
@@ -2583,6 +2599,10 @@
 								on:click|stopPropagation={() => {
 									urgentOpen = false;
 									urgentHelpOpen = !urgentHelpOpen;
+									propertyOpen = false;
+									unitOpen = false;
+									statusOpen = false;
+									assigneeOpen = false;
 								}}
 								on:blur={() => (urgentHelpOpen = false)}
 							>
@@ -2620,7 +2640,11 @@
 							on:click|stopPropagation={() => {
 								if (!canEditIssue) return;
 								assigneeOpen = !assigneeOpen;
+								propertyOpen = false;
+								unitOpen = false;
+								statusOpen = false;
 								urgentOpen = false;
+								urgentHelpOpen = false;
 							}}
 						>
 							{#if assignee}
@@ -2648,14 +2672,16 @@
 							{/if}
 							<span class="truncate">{assigneeName}</span>
 						</button>
-						<div
-							class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-						>
-							Change assignee
-						</div>
+						{#if !rightSidebarMenuOpen}
+							<div
+								class="delayed-tooltip absolute top-full left-[-0.5rem] z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+							>
+								Change assignee
+							</div>
+						{/if}
 						{#if assigneeOpen && canEditIssue}
 							<div
-								class="absolute right-0 left-auto z-10 mt-2 w-56 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+								class="absolute right-auto left-[-0.5rem] z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
 								on:click|stopPropagation
 							>
 								<button
