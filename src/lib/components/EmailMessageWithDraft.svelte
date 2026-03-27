@@ -2,6 +2,8 @@
 	// @ts-nocheck
 	import { onDestroy, createEventDispatcher } from 'svelte';
 	import { agentToasts } from '$lib/stores/agentToasts';
+	import { applyPolicyInsert } from '$lib/stores/policiesCache';
+	import { diffWords } from '$lib/utils/textDiff';
 	const dispatch = createEventDispatcher();
 
 	export let message;
@@ -21,6 +23,12 @@
 	let isQuotedExpanded = false;
 	let isSentQuotedExpanded = false;
 	let isTranslating = false;
+	let showOriginal = false;
+	let showTonePrompt = false;
+	let tonePromptLoading = false;
+	let tonePromptError = '';
+	let draftOriginal = draft?.original_body ?? null;
+	let draftDiff = draft?.draft_diff ?? null;
 	let messageParts = { main: '', quoted: '' };
 	let sentParts = { main: '', quoted: '' };
 	let showVendorDropdown = false;
@@ -122,6 +130,8 @@
 	$: if (draft && (draft.message_id ?? draft.id) !== lastMessageKey) {
 		lastMessageKey = draft.message_id ?? draft.id;
 		draftBody = draft.body ?? '';
+		draftOriginal = draft?.original_body ?? null;
+		draftDiff = draft?.draft_diff ?? null;
 		localRecipientEmails = normalizeRecipientList(
 			draft?.recipient_emails ?? draft?.recipient_email
 		);
@@ -129,6 +139,15 @@
 		if (textareaEl) {
 			textareaEl.style.height = 'auto';
 			textareaEl.style.height = `${textareaEl.scrollHeight}px`;
+		}
+	}
+
+	$: if (draft) {
+		if (draft?.original_body && draftOriginal !== draft.original_body) {
+			draftOriginal = draft.original_body;
+		}
+		if (draft?.draft_diff && draftDiff !== draft.draft_diff) {
+			draftDiff = draft.draft_diff;
 		}
 	}
 
@@ -184,8 +203,14 @@
 						: { issue_id: draft.issue_id, body: draftBody }
 				)
 			});
+			const payload = await response.json().catch(() => null);
 			if (response.ok) {
 				draft.body = draftBody;
+				if (payload?.draft) {
+					draft = { ...draft, ...payload.draft };
+					draftOriginal = draft?.original_body ?? draftOriginal;
+					draftDiff = draft?.draft_diff ?? draftDiff;
+				}
 			}
 		} catch {
 			// ignore save failures
@@ -216,6 +241,61 @@
 			showToast('Translation failed.');
 		} finally {
 			isTranslating = false;
+		}
+	};
+
+	const closeTonePrompt = () => {
+		if (tonePromptLoading) return;
+		showTonePrompt = false;
+		tonePromptError = '';
+	};
+
+	const openTonePrompt = () => {
+		tonePromptError = '';
+		showTonePrompt = true;
+	};
+
+	const handleSendClick = () => {
+		if (!draft?.message_id && !draft?.issue_id) return;
+		if (isSending || isSent) return;
+		openTonePrompt();
+	};
+
+	const saveTonePolicy = async () => {
+		if (!draft?.issue_id) {
+			tonePromptError = 'Draft is missing an issue.';
+			return null;
+		}
+		if (!hasToneDiff) {
+			tonePromptError = 'No changes to learn from.';
+			return null;
+		}
+		tonePromptLoading = true;
+		tonePromptError = '';
+		try {
+			const response = await fetch('/api/policies/tone', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					issue_id: draft.issue_id,
+					original_body: originalBodyForDiff,
+					updated_body: draftBody,
+					diff: diffSegments
+				})
+			});
+			const result = await response.json().catch(() => null);
+			if (!response.ok) {
+				throw new Error(result?.error ?? 'Unable to save tone policy.');
+			}
+			if (result?.policy) {
+				applyPolicyInsert(result.policy);
+			}
+			return result?.policy ?? null;
+		} catch (err) {
+			tonePromptError = err?.message ?? 'Unable to save tone policy.';
+			return null;
+		} finally {
+			tonePromptLoading = false;
 		}
 	};
 
@@ -289,6 +369,19 @@
 		}
 	};
 
+	const sendOnce = async () => {
+		closeTonePrompt();
+		await sendDraft();
+	};
+
+	const approveAndSend = async () => {
+		if (tonePromptLoading) return;
+		const policy = await saveTonePolicy();
+		if (!policy) return;
+		closeTonePrompt();
+		await sendDraft();
+	};
+
 	const queueSave = () => {
 		if (saveTimeout) clearTimeout(saveTimeout);
 		saveTimeout = setTimeout(() => {
@@ -329,6 +422,20 @@
 		return String(body).replace(/\s+/g, ' ').trim();
 	};
 
+	const splitDiffColumns = (segments) => {
+		const original = [];
+		const updated = [];
+		(segments ?? []).forEach((segment) => {
+			if (!segment?.text) return;
+			if (segment.type !== 'insert') original.push(segment);
+			if (segment.type !== 'delete') updated.push(segment);
+		});
+		return { original, updated };
+	};
+
+	const hasMeaningfulDiff = (segments) =>
+		(segments ?? []).some((segment) => segment?.type && segment.type !== 'equal');
+
 	const formatSenderLabel = (message) => {
 		if (message?.direction === 'outbound') return 'You';
 		const sender = message?.sender;
@@ -341,6 +448,21 @@
 		if (sender === 'agent') return 'Bedrock Ops';
 		return sender;
 	};
+
+	$: originalBodyForDiff =
+		typeof draftOriginal === 'string'
+			? draftOriginal
+			: typeof draft?.body === 'string'
+				? draft.body
+				: '';
+	$: diffSegments = (() => {
+		if (Array.isArray(draftDiff) && draftBody === (draft?.body ?? '') && draftDiff.length) {
+			return draftDiff;
+		}
+		return diffWords(originalBodyForDiff, draftBody ?? '');
+	})();
+	$: diffColumns = splitDiffColumns(diffSegments);
+	$: hasToneDiff = hasMeaningfulDiff(diffSegments);
 
 	$: messageParts = splitEmailBody(message?.message ?? '');
 	$: sentParts = splitEmailBody(sentMessage?.message ?? '');
@@ -510,35 +632,79 @@
 					bind:this={textareaEl}
 					on:input={queueSave}
 				/>
+				{#if showOriginal}
+					<div class="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+						<div class="grid gap-4 md:grid-cols-2">
+							<div>
+								<div class="text-xs font-semibold text-neutral-600">Original</div>
+								<div class="mt-2 text-sm whitespace-pre-wrap text-neutral-700">
+									{#each diffColumns.original as segment}
+										<span
+											class={segment.type === 'delete'
+												? 'rounded-sm bg-rose-100 text-rose-800'
+												: ''}
+										>
+											{segment.text}
+										</span>
+									{/each}
+								</div>
+							</div>
+							<div>
+								<div class="text-xs font-semibold text-neutral-600">Current</div>
+								<div class="mt-2 text-sm whitespace-pre-wrap text-neutral-700">
+									{#each diffColumns.updated as segment}
+										<span
+											class={segment.type === 'insert'
+												? 'rounded-sm bg-emerald-100 text-emerald-800'
+												: ''}
+										>
+											{segment.text}
+										</span>
+									{/each}
+								</div>
+							</div>
+						</div>
+					</div>
+				{/if}
 				<div class="mt-3 flex items-center justify-between">
-					<button
-						type="button"
-						class="inline-flex items-center gap-2 text-xs text-neutral-500 transition hover:text-neutral-900 disabled:opacity-50"
-						on:click={translateDraft}
-						disabled={isTranslating}
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							width="16"
-							height="16"
-							fill="currentColor"
-							class="bi bi-globe"
-							viewBox="0 0 16 16"
+					<div class="flex items-center gap-3">
+						<button
+							type="button"
+							class="inline-flex items-center gap-2 text-xs text-neutral-500 transition hover:text-neutral-900 disabled:opacity-50"
+							on:click={() => (showOriginal = !showOriginal)}
+							disabled={!originalBodyForDiff && !draftBody}
 						>
-							<path
-								d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m7.5-6.923c-.67.204-1.335.82-1.887 1.855A8 8 0 0 0 5.145 4H7.5zM4.09 4a9.3 9.3 0 0 1 .64-1.539 7 7 0 0 1 .597-.933A7.03 7.03 0 0 0 2.255 4zm-.582 3.5c.03-.877.138-1.718.312-2.5H1.674a7 7 0 0 0-.656 2.5zM4.847 5a12.5 12.5 0 0 0-.338 2.5H7.5V5zM8.5 5v2.5h2.99a12.5 12.5 0 0 0-.337-2.5zM4.51 8.5a12.5 12.5 0 0 0 .337 2.5H7.5V8.5zm3.99 0V11h2.653c.187-.765.306-1.608.338-2.5zM5.145 12q.208.58.468 1.068c.552 1.035 1.218 1.65 1.887 1.855V12zm.182 2.472a7 7 0 0 1-.597-.933A9.3 9.3 0 0 1 4.09 12H2.255a7 7 0 0 0 3.072 2.472M3.82 11a13.7 13.7 0 0 1-.312-2.5h-2.49c.062.89.291 1.733.656 2.5zm6.853 3.472A7 7 0 0 0 13.745 12H11.91a9.3 9.3 0 0 1-.64 1.539 7 7 0 0 1-.597.933M8.5 12v2.923c.67-.204 1.335-.82 1.887-1.855q.26-.487.468-1.068zm3.68-1h2.146c.365-.767.594-1.61.656-2.5h-2.49a13.7 13.7 0 0 1-.312 2.5m2.802-3.5a7 7 0 0 0-.656-2.5H12.18c.174.782.282 1.623.312 2.5zM11.27 2.461c.247.464.462.98.64 1.539h1.835a7 7 0 0 0-3.072-2.472c.218.284.418.598.597.933M10.855 4a8 8 0 0 0-.468-1.068C9.835 1.897 9.17 1.282 8.5 1.077V4z"
-							/>
-						</svg>
-						{#if isTranslating}
-							Translating...
-						{:else}
-							Translate to Spanish
-						{/if}
-					</button>
+							{showOriginal ? 'Hide original' : 'View original'}
+						</button>
+						<button
+							type="button"
+							class="inline-flex items-center gap-2 text-xs text-neutral-500 transition hover:text-neutral-900 disabled:opacity-50"
+							on:click={translateDraft}
+							disabled={isTranslating}
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								fill="currentColor"
+								class="bi bi-globe"
+								viewBox="0 0 16 16"
+							>
+								<path
+									d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m7.5-6.923c-.67.204-1.335.82-1.887 1.855A8 8 0 0 0 5.145 4H7.5zM4.09 4a9.3 9.3 0 0 1 .64-1.539 7 7 0 0 1 .597-.933A7.03 7.03 0 0 0 2.255 4zm-.582 3.5c.03-.877.138-1.718.312-2.5H1.674a7 7 0 0 0-.656 2.5zM4.847 5a12.5 12.5 0 0 0-.338 2.5H7.5V5zM8.5 5v2.5h2.99a12.5 12.5 0 0 0-.337-2.5zM4.51 8.5a12.5 12.5 0 0 0 .337 2.5H7.5V8.5zm3.99 0V11h2.653c.187-.765.306-1.608.338-2.5zM5.145 12q.208.58.468 1.068c.552 1.035 1.218 1.65 1.887 1.855V12zm.182 2.472a7 7 0 0 1-.597-.933A9.3 9.3 0 0 1 4.09 12H2.255a7 7 0 0 0 3.072 2.472M3.82 11a13.7 13.7 0 0 1-.312-2.5h-2.49c.062.89.291 1.733.656 2.5zm6.853 3.472A7 7 0 0 0 13.745 12H11.91a9.3 9.3 0 0 1-.64 1.539 7 7 0 0 1-.597.933M8.5 12v2.923c.67-.204 1.335-.82 1.887-1.855q.26-.487.468-1.068zm3.68-1h2.146c.365-.767.594-1.61.656-2.5h-2.49a13.7 13.7 0 0 1-.312 2.5m2.802-3.5a7 7 0 0 0-.656-2.5H12.18c.174.782.282 1.623.312 2.5zM11.27 2.461c.247.464.462.98.64 1.539h1.835a7 7 0 0 0-3.072-2.472c.218.284.418.598.597.933M10.855 4a8 8 0 0 0-.468-1.068C9.835 1.897 9.17 1.282 8.5 1.077V4z"
+								/>
+							</svg>
+							{#if isTranslating}
+								Translating...
+							{:else}
+								Translate to Spanish
+							{/if}
+						</button>
+					</div>
 					<button
 						class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-800 disabled:opacity-50"
 						type="button"
-						on:click={sendDraft}
+						on:click={handleSendClick}
 						disabled={isSending}
 					>
 						{#if isSending}
@@ -615,3 +781,92 @@
 		</div>
 	{/if}
 </div>
+
+{#if showTonePrompt}
+	<div class="fixed inset-0 z-40 bg-neutral-900/30" on:click={closeTonePrompt}></div>
+	<div class="fixed inset-0 z-50 flex items-center justify-center px-4">
+		<div
+			class="w-full max-w-4xl rounded-lg border border-neutral-200 bg-white shadow-xl"
+			role="dialog"
+			aria-modal="true"
+			on:click|stopPropagation
+		>
+			<div class="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
+				<div>
+					<div class="text-base font-semibold text-neutral-900">Draft Tone</div>
+					<div class="text-xs text-neutral-500">Review how the message changed before sending.</div>
+				</div>
+				<button
+					type="button"
+					class="text-sm text-neutral-400 hover:text-neutral-700"
+					on:click={closeTonePrompt}
+					disabled={tonePromptLoading}
+				>
+					Close
+				</button>
+			</div>
+			<div class="px-5 py-4">
+				<div class="grid gap-4 md:grid-cols-2">
+					<div>
+						<div class="text-xs font-semibold text-neutral-600">Original</div>
+						<div
+							class="mt-2 max-h-80 overflow-auto rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm whitespace-pre-wrap text-neutral-700"
+						>
+							{#each diffColumns.original as segment}
+								<span
+									class={segment.type === 'delete' ? 'rounded-sm bg-rose-100 text-rose-800' : ''}
+								>
+									{segment.text}
+								</span>
+							{/each}
+						</div>
+					</div>
+					<div>
+						<div class="text-xs font-semibold text-neutral-600">Current</div>
+						<div
+							class="mt-2 max-h-80 overflow-auto rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm whitespace-pre-wrap text-neutral-700"
+						>
+							{#each diffColumns.updated as segment}
+								<span
+									class={segment.type === 'insert'
+										? 'rounded-sm bg-emerald-100 text-emerald-800'
+										: ''}
+								>
+									{segment.text}
+								</span>
+							{/each}
+						</div>
+					</div>
+				</div>
+				<div class="mt-4 text-sm text-neutral-700">
+					Send messages like this moving forward for similar issues?
+				</div>
+				{#if tonePromptError}
+					<div class="mt-2 text-xs text-rose-600">{tonePromptError}</div>
+				{/if}
+			</div>
+			<div class="flex items-center justify-end gap-2 border-t border-neutral-100 px-5 py-4">
+				<button
+					type="button"
+					class="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 transition hover:border-neutral-300"
+					on:click={sendOnce}
+					disabled={tonePromptLoading || isSending}
+				>
+					Just once
+				</button>
+				<button
+					type="button"
+					class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white transition hover:bg-neutral-800 disabled:opacity-60"
+					on:click={approveAndSend}
+					disabled={!hasToneDiff || tonePromptLoading || isSending}
+				>
+					{#if tonePromptLoading}
+						Saving...
+					{:else}
+						Approve and send
+					{/if}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}

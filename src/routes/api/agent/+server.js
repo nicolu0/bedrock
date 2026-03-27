@@ -3,6 +3,7 @@ import { json } from '@sveltejs/kit';
 import { AGENT_WEBHOOK_SECRET, SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
+import { buildTonePolicyText } from '$lib/server/tonePolicies';
 
 const openaiModel = 'gpt-5-mini-2025-08-07';
 const agentSecretHeader = 'x-agent-secret';
@@ -1014,6 +1015,17 @@ const handleIssueAgent = async ({ payload, locals }) => {
 		.limit(1)
 		.maybeSingle();
 	const policyText = policyRow?.policy_text ?? '';
+	const { data: tonePolicies } = await supabaseAdmin
+		.from('workspace_policies')
+		.select('id, type, description, meta')
+		.eq('workspace_id', issue.workspace_id)
+		.eq('type', 'tone')
+		.order('updated_at', { ascending: false });
+	const tonePolicyText = buildTonePolicyText({
+		policies: tonePolicies ?? [],
+		issueLabel: issue?.name ?? ''
+	});
+	const compositePolicyText = [policyText, tonePolicyText].filter(Boolean).join('\n\n');
 
 	const vendors = await listVendors(issue.workspace_id);
 	const assignees = await listWorkspaceAssignees(issue.workspace_id);
@@ -1030,7 +1042,7 @@ const handleIssueAgent = async ({ payload, locals }) => {
 			comment,
 			relatedIssues: relatedIssues ?? [],
 			messages: messages ?? [],
-			policyText,
+			policyText: compositePolicyText,
 			workspaceUnits,
 			vendors,
 			assignees,
