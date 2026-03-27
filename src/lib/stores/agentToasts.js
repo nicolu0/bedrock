@@ -56,6 +56,7 @@ const createAgentToasts = () => {
 			return;
 		}
 		if (dismissedRunIds.has(key)) return;
+		const meta = event?.meta ?? {};
 		const title =
 			typeof event.message === 'string' && event.message.trim()
 				? event.message.trim()
@@ -64,6 +65,8 @@ const createAgentToasts = () => {
 			runId: key,
 			title,
 			issueId: event.issue_id ?? null,
+			propertyName: meta.property_name ?? meta.propertyName ?? null,
+			unitName: meta.unit_name ?? meta.unitName ?? null,
 			stage: event.stage ?? null,
 			step: Number.isFinite(event.step) ? event.step : null,
 			updatedAt: Date.now()

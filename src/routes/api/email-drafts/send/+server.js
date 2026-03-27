@@ -88,13 +88,17 @@ export const POST = async ({ locals, request }) => {
 	if (!messageId && !issueId) return json({ error: 'Invalid payload' }, { status: 400 });
 
 	const draftQuery = supabaseAdmin
-		.from('email_drafts')
+		.from('drafts')
 		.select(
 			'id, issue_id, recipient_email, recipient_emails, subject, body, message_id, sender_email'
 		);
 	const { data: draft } = messageId
-		? await draftQuery.eq('message_id', messageId).maybeSingle()
-		: await draftQuery.eq('issue_id', issueId).is('message_id', null).maybeSingle();
+		? await draftQuery.eq('message_id', messageId).eq('channel', 'email').maybeSingle()
+		: await draftQuery
+				.eq('issue_id', issueId)
+				.is('message_id', null)
+				.eq('channel', 'email')
+				.maybeSingle();
 
 	if (!draft?.id || !draft.issue_id) {
 		return json({ error: 'Not found' }, { status: 404 });
@@ -218,7 +222,7 @@ export const POST = async ({ locals, request }) => {
 	if (recipientOverrides.length) {
 		const nextRecipientEmail = recipientOverrides[0] ?? null;
 		await supabaseAdmin
-			.from('email_drafts')
+			.from('drafts')
 			.update({
 				recipient_email: nextRecipientEmail,
 				recipient_emails: recipientOverrides
@@ -226,7 +230,7 @@ export const POST = async ({ locals, request }) => {
 			.eq('id', draft.id);
 	} else if (recipientOverride && recipientOverride !== draft.recipient_email) {
 		await supabaseAdmin
-			.from('email_drafts')
+			.from('drafts')
 			.update({ recipient_email: recipientOverride, recipient_emails: [recipientOverride] })
 			.eq('id', draft.id);
 	}
@@ -380,7 +384,7 @@ export const POST = async ({ locals, request }) => {
 		});
 	}
 
-	await supabaseAdmin.from('email_drafts').delete().eq('id', draft.id);
+	await supabaseAdmin.from('drafts').delete().eq('id', draft.id);
 
 	if (issue?.source === 'appfolio') {
 		notifyFoundersOfAppfolioAction({

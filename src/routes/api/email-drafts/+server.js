@@ -37,10 +37,14 @@ export const PATCH = async ({ locals, request }) => {
 		return json({ error: 'Invalid payload' }, { status: 400 });
 	}
 
-	const draftQuery = supabaseAdmin.from('email_drafts').select('id, issue_id');
+	const draftQuery = supabaseAdmin.from('drafts').select('id, issue_id');
 	const { data: draft } = messageId
-		? await draftQuery.eq('message_id', messageId).maybeSingle()
-		: await draftQuery.eq('issue_id', issueId).is('message_id', null).maybeSingle();
+		? await draftQuery.eq('message_id', messageId).eq('channel', 'email').maybeSingle()
+		: await draftQuery
+				.eq('issue_id', issueId)
+				.is('message_id', null)
+				.eq('channel', 'email')
+				.maybeSingle();
 
 	if (!draft?.id || !draft.issue_id) {
 		return json({ error: 'Not found' }, { status: 404 });
@@ -85,10 +89,7 @@ export const PATCH = async ({ locals, request }) => {
 		updatePayload.recipient_email = normalizedRecipients?.[0] ?? null;
 	}
 
-	const { error } = await supabaseAdmin
-		.from('email_drafts')
-		.update(updatePayload)
-		.eq('id', draft.id);
+	const { error } = await supabaseAdmin.from('drafts').update(updatePayload).eq('id', draft.id);
 
 	if (error) {
 		return json({ error: error.message }, { status: 400 });

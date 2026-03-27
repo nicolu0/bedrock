@@ -1158,11 +1158,12 @@
 								.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
 								.eq('issue_id', newSub.id),
 							supabase
-								.from('email_drafts')
+								.from('drafts')
 								.select(
-									'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at'
+									'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at, channel'
 								)
 								.eq('issue_id', newSub.id)
+								.eq('channel', 'email')
 						]);
 						for (const msg of msgs ?? []) applyMessageDelta(msg);
 						for (const draft of drafts ?? []) applyDraftDelta(draft);
@@ -1208,7 +1209,12 @@
 				)
 				.on(
 					'postgres_changes',
-					{ event: '*', schema: 'public', table: 'email_drafts', filter: `issue_id=eq.${id}` },
+					{
+						event: '*',
+						schema: 'public',
+						table: 'drafts',
+						filter: `issue_id=eq.${id}&channel=eq.email`
+					},
 					(payload) => {
 						if (payload.eventType === 'DELETE') {
 							removeDraft(payload.old);
@@ -1372,26 +1378,33 @@
 				{#if !_subIssuesLoading && subIssues.length}
 					<div class="mt-8">
 						<div class="flex items-center gap-2 text-sm text-neutral-600">
-							<button
-								type="button"
-								class="flex items-center gap-2 rounded-md px-1.5 py-1 transition hover:bg-neutral-100"
-								on:click={() => (subIssuesOpen = !subIssuesOpen)}
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="14"
-									height="14"
-									fill="currentColor"
-									class="text-neutral-400 transition-transform duration-200"
-									class:rotate-[-90deg]={!subIssuesOpen}
-									viewBox="0 0 16 16"
+							<div class="tooltip-target relative">
+								<button
+									type="button"
+									class="flex items-center gap-2 rounded-md px-1.5 py-1 transition hover:bg-neutral-100"
+									on:click={() => (subIssuesOpen = !subIssuesOpen)}
 								>
-									<path
-										d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-									/>
-								</svg>
-								<span class="text-neutral-700">Sub-issues</span>
-							</button>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="14"
+										height="14"
+										fill="currentColor"
+										class="text-neutral-400 transition-transform duration-200"
+										class:rotate-[-90deg]={!subIssuesOpen}
+										viewBox="0 0 16 16"
+									>
+										<path
+											d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+										/>
+									</svg>
+									<span class="text-neutral-700">Sub-issues</span>
+								</button>
+								<div
+									class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+								>
+									{subIssuesOpen ? 'Collapse' : 'Expand'}
+								</div>
+							</div>
 							<span class="text-neutral-400">{subIssueProgress}</span>
 						</div>
 						<div
@@ -1815,7 +1828,7 @@
 									<div>
 										<button
 											type="button"
-											class="flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
+											class="tooltip-target relative flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
 											on:click={() => toggleActivity(subIssue.id)}
 										>
 											<div
@@ -1835,6 +1848,11 @@
 													/>
 												</svg>
 												<span>{subIssue.name}</span>
+											</div>
+											<div
+												class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+											>
+												{(activityOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
 											</div>
 											<span class="text-neutral-300">
 												{messagesByIssue[subIssue.id]?.length ?? 0}
@@ -2835,6 +2853,12 @@
 	.tooltip-target:focus-within .delayed-tooltip {
 		opacity: 0;
 		transform: translateY(-4px);
+		transition-delay: 0s;
+	}
+
+	.tooltip-target:focus-within:hover .delayed-tooltip {
+		opacity: 1;
+		transform: translateY(0);
 		transition-delay: 0s;
 	}
 

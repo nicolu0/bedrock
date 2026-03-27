@@ -1,23 +1,43 @@
 <script>
 	// @ts-nocheck
-	import { fly } from 'svelte/transition';
+	import { fade, fly } from 'svelte/transition';
 	import { agentToasts } from '$lib/stores/agentToasts';
 	import { issuesCache } from '$lib/stores/issuesCache';
 	import { page } from '$app/stores';
+	import { cubicOut } from 'svelte/easing';
 
 	$: issuesById = new Map(
 		($issuesCache.data?.issues ?? []).map((issue) => [issue.id ?? issue.issueId, issue])
 	);
 	const getIssueLabel = (toast) => {
-		if (!toast?.issueId) return null;
+		const propertyFromToast = toast?.propertyName?.trim?.() ?? toast?.propertyName ?? '';
+		const unitFromToast = toast?.unitName?.trim?.() ?? toast?.unitName ?? '';
+		if (propertyFromToast || unitFromToast) {
+			if (propertyFromToast && unitFromToast) return `${propertyFromToast} - ${unitFromToast}`;
+			return propertyFromToast || unitFromToast;
+		}
+		if (!toast?.issueId) return 'New maintenance request';
 		const issue = issuesById.get(toast.issueId);
-		if (!issue) return null;
+		if (!issue) return 'New maintenance request';
 		const property = issue.property?.trim?.() ?? issue.property ?? '';
 		const unit = issue.unit?.trim?.() ?? issue.unit ?? '';
-		if (!property && !unit) return null;
-		if (property && unit) return `${property} · ${unit}`;
+		if (!property && !unit) return 'New maintenance request';
+		if (property && unit) return `${property} - ${unit}`;
 		return property || unit;
 	};
+
+	const flipText = (node, { duration = 160, delay = 0 } = {}) => ({
+		duration,
+		delay,
+		easing: cubicOut,
+		css: (t) => {
+			const rotate = (1 - t) * 50;
+			const translate = (1 - t) * 6;
+			return `transform: translateY(${translate}px) rotateX(${rotate}deg); opacity: ${t};`;
+		}
+	});
+
+	const flipIn = (node) => flipText(node, { duration: 160, delay: 420 });
 </script>
 
 <div
@@ -30,12 +50,12 @@
 			transition:fly={{ y: 12, duration: 160 }}
 			class="pointer-events-auto flex items-center gap-3 rounded-lg border border-neutral-200 bg-white px-3 py-2 shadow-lg"
 		>
-			<div class="flex min-w-0 flex-1 flex-col gap-1">
+			<div class="flex min-w-0 flex-1 flex-col gap-3">
 				<div class="flex items-center justify-between text-[11px] text-neutral-500">
 					<span class="min-w-0 truncate">{getIssueLabel(toast) ?? ''}</span>
 					<button
 						type="button"
-						class="pointer-events-auto inline-flex h-4 w-4 items-center justify-center text-neutral-400 transition hover:text-neutral-600"
+						class="pointer-events-auto -mr-1 inline-flex h-4 w-4 items-center justify-center text-neutral-400 transition hover:text-neutral-600"
 						aria-label="Dismiss toast"
 						on:click={() => agentToasts.dismissForever(toast.runId, $page.params.workspace)}
 					>
@@ -74,7 +94,16 @@
 						{/if}
 					</div>
 					<div class="min-w-0 flex-1">
-						<div class="truncate text-xs font-medium text-neutral-800">{toast.title}</div>
+						{#key toast.title}
+							<div
+								in:flipIn
+								out:fade={{ duration: 80 }}
+								class="truncate text-xs font-medium text-neutral-800"
+								style="transform-origin: 50% 50%;"
+							>
+								{toast.title}
+							</div>
+						{/key}
 					</div>
 				</div>
 			</div>

@@ -271,6 +271,24 @@ const emitAgentEvent = async ({
 	};
 	let error = null;
 	if (stage === 'processing' && !issueId) {
+		const { data: updatedProcessing, error: updateProcessingError } = await supabase
+			.from('agent_events')
+			.update({
+				step: payload.step,
+				stage: payload.stage,
+				message: payload.message,
+				meta: payload.meta,
+				updated_at: payload.updated_at
+			})
+			.eq('workspace_id', workspaceId)
+			.eq('run_id', runId)
+			.is('issue_id', null)
+			.select('id');
+		if (updateProcessingError) {
+			console.error('agent-events update failed', updateProcessingError);
+		} else if (updatedProcessing?.length) {
+			return;
+		}
 		const insertResult = await supabase.from('agent_events').insert(payload);
 		error = insertResult.error;
 		if (error) {
@@ -950,6 +968,7 @@ const upsertEmailDraft = async ({
 		subject,
 		body,
 		workspace_id: workspaceId,
+		channel: 'email',
 		updated_at: new Date().toISOString()
 	};
 
@@ -958,33 +977,35 @@ const upsertEmailDraft = async ({
 	let created = false;
 	if (messageId) {
 		const { data: existingDraft } = await supabase
-			.from('email_drafts')
+			.from('drafts')
 			.select('id')
 			.eq('message_id', messageId)
+			.eq('channel', 'email')
 			.maybeSingle();
 		if (existingDraft?.id) {
-			const result = await supabase.from('email_drafts').update(payload).eq('id', existingDraft.id);
+			const result = await supabase.from('drafts').update(payload).eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
-			const result = await supabase.from('email_drafts').insert(payload).select('id').single();
+			const result = await supabase.from('drafts').insert(payload).select('id').single();
 			draftId = result.data?.id ?? null;
 			error = result.error;
 			created = true;
 		}
 	} else {
 		const { data: existingDraft } = await supabase
-			.from('email_drafts')
+			.from('drafts')
 			.select('id')
 			.eq('issue_id', issueId)
 			.is('message_id', null)
+			.eq('channel', 'email')
 			.maybeSingle();
 		if (existingDraft?.id) {
-			const result = await supabase.from('email_drafts').update(payload).eq('id', existingDraft.id);
+			const result = await supabase.from('drafts').update(payload).eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
-			const result = await supabase.from('email_drafts').insert(payload).select('id').single();
+			const result = await supabase.from('drafts').insert(payload).select('id').single();
 			draftId = result.data?.id ?? null;
 			error = result.error;
 			created = true;
@@ -1047,7 +1068,9 @@ const runIssueAgent = async ({
 	threadIssueId,
 	relatedIssues,
 	workspaceUnits,
-	source
+	source,
+	runId: providedRunId,
+	skipInitialEvent
 }: {
 	subject: string;
 	body: string;
@@ -1081,6 +1104,8 @@ const runIssueAgent = async ({
 		property_address: string | null;
 	}>;
 	source?: string | null;
+	runId?: string | null;
+	skipInitialEvent?: boolean;
 }) => {
 	const system = `You are Bedrock, an assistant for property management.
 Your job is to link this email thread to the most specific issue (prefer a subissue when appropriate). If no match exists, create a new issue and then create one subissue for the next step.
@@ -1158,7 +1183,9 @@ Issue context:
 - thread_issue_id is the issue currently linked to the email thread (often triage).
 - related_issues are the root issue and its subissues; use them to reason about structure.
 When you believe you have completed the task, call done().
-${source === 'appfolio' && rootIssueId ? `
+${
+	source === 'appfolio' && rootIssueId
+		? `
 AppFolio source rules (apply FIRST, before anything else):
 - The root issue was synced from AppFolio and its title/description are raw work order text.
 - Your FIRST action must be to call update_issue with:
@@ -1166,7 +1193,9 @@ AppFolio source rules (apply FIRST, before anything else):
   - description: one concise sentence summarising who reported it and what the problem is.
   Do NOT copy the work order body verbatim. Derive a clean human-readable title and description.
 - After update_issue, proceed with normal subissue creation and email drafts.
-`.trim() : ''}`.trim();
+`.trim()
+		: ''
+}`.trim();
 	const updateIssueTool = {
 		type: 'function',
 		name: 'update_issue',
@@ -1338,8 +1367,8 @@ AppFolio source rules (apply FIRST, before anything else):
 		}
 	];
 
-	const runId = crypto.randomUUID();
-	let startedEventSent = false;
+	const runId = providedRunId ?? crypto.randomUUID();
+	let startedEventSent = Boolean(skipInitialEvent);
 	let linkedIssueId: string | null = null;
 	let createdIssueId: string | null = null;
 	let lastSubissueId: string | null = null;
@@ -1361,7 +1390,11 @@ AppFolio source rules (apply FIRST, before anything else):
 				step: i,
 				stage: 'processing',
 				message: 'Processing email',
-				meta: { thread_id: threadId }
+				meta: {
+					thread_id: threadId,
+					property_name: propertyName ?? null,
+					unit_name: unitName ?? null
+				}
 			});
 			startedEventSent = true;
 		}
@@ -1429,7 +1462,11 @@ AppFolio source rules (apply FIRST, before anything else):
 				(typeof args.issue_id === 'string' ? args.issue_id : null) ??
 				lastSubissueId;
 			if (stageMessage && (issueIdForEvent || name !== 'create_issue')) {
-				const meta: Record<string, unknown> = { thread_id: threadId };
+				const meta: Record<string, unknown> = {
+					thread_id: threadId,
+					property_name: propertyName ?? null,
+					unit_name: unitName ?? null
+				};
 				if (name === 'create_subissue') {
 					meta.parent_issue_id =
 						typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
@@ -2052,6 +2089,18 @@ const processMessage = async ({
 		return;
 	}
 
+	const runId = crypto.randomUUID();
+	currentRunId = runId;
+	await emitAgentEvent({
+		workspaceId: workspaceIdForConnection,
+		userId: connection.user_id,
+		runId,
+		step: 0,
+		stage: 'processing',
+		message: 'Processing email',
+		meta: { thread_id: message.threadId ?? null }
+	});
+
 	const { data: tenant } = await supabase
 		.from('tenants')
 		.select('id, unit_id, email, name')
@@ -2090,6 +2139,20 @@ const processMessage = async ({
 		await logError(connection.user_id, `Workspace lookup failed for unit ${unitRow.id}`);
 		return;
 	}
+
+	await emitAgentEvent({
+		workspaceId: propertyRow.workspace_id,
+		userId: connection.user_id,
+		runId,
+		step: 0,
+		stage: 'processing',
+		message: 'Processing email',
+		meta: {
+			thread_id: message.threadId ?? null,
+			property_name: propertyRow.name ?? null,
+			unit_name: unitRow.name ?? null
+		}
+	});
 
 	const threadExternalId = message.threadId ?? null;
 	let threadRow = null;
@@ -2305,7 +2368,9 @@ const processMessage = async ({
 			rootIssueId: rootIssueIdForAgent,
 			threadIssueId: issueId,
 			relatedIssues,
-			workspaceUnits
+			workspaceUnits,
+			runId,
+			skipInitialEvent: true
 		});
 		issueId = created?.issueId ?? issueId;
 		currentRunId = created?.runId ?? currentRunId;
@@ -2487,11 +2552,16 @@ const handleAppfolioWorkOrder = async ({
 				.maybeSingle();
 			if (issueRow) {
 				const { data: lapm } = await supabase
-					.from('workspaces').select('id').eq('slug', 'lapm').maybeSingle();
+					.from('workspaces')
+					.select('id')
+					.eq('slug', 'lapm')
+					.maybeSingle();
 				if (lapm?.id) {
 					const { data: founders } = await supabase
-						.from('people').select('user_id')
-						.eq('workspace_id', lapm.id).eq('role', 'bedrock');
+						.from('people')
+						.select('user_id')
+						.eq('workspace_id', lapm.id)
+						.eq('role', 'bedrock');
 					if (founders?.length) {
 						await supabase.from('notifications').insert(
 							founders.map((f: any) => ({
@@ -2509,7 +2579,9 @@ const handleAppfolioWorkOrder = async ({
 					}
 				}
 			}
-		} catch (_) { /* notification failure should not block sync */ }
+		} catch (_) {
+			/* notification failure should not block sync */
+		}
 		return;
 	}
 
@@ -2531,10 +2603,12 @@ const handleAppfolioWorkOrder = async ({
 				body: JSON.stringify({
 					model: 'gpt-4o-mini',
 					max_tokens: 60,
-					messages: [{
-						role: 'user',
-						content: `Does this work order note require a property manager response? Answer YES or NO then one sentence reason.\n\nNote: ${newNotes}`
-					}]
+					messages: [
+						{
+							role: 'user',
+							content: `Does this work order note require a property manager response? Answer YES or NO then one sentence reason.\n\nNote: ${newNotes}`
+						}
+					]
 				})
 			});
 			const aiJson = await resp.json().catch(() => null);
@@ -2554,7 +2628,9 @@ const handleAppfolioWorkOrder = async ({
 					requires_action: false
 				});
 			}
-		} catch (_) { /* AI check is best-effort */ }
+		} catch (_) {
+			/* AI check is best-effort */
+		}
 		return;
 	}
 
@@ -2575,13 +2651,14 @@ const handleAppfolioWorkOrder = async ({
 			.maybeSingle();
 		const vendorEmail: string | null = null; // vendor email lookup deferred — no vendor table yet
 
-		await supabase.from('email_drafts').insert({
+		await supabase.from('drafts').insert({
 			workspace_id: workspaceId,
 			issue_id: issueId,
 			to: vendorEmail,
 			subject: `Follow-up: Work Order #${issueRow.appfolio_id ?? issueRow.readable_id ?? issueId}`,
 			body: `Hi, this is a follow-up to confirm you received work order #${issueRow.appfolio_id ?? issueId} at ${issueRow.name}. Please reply with your estimated arrival time. Thank you.`,
-			status: 'draft'
+			status: 'draft',
+			channel: 'email'
 		});
 		await supabase.from('issues').update({ vendor_followup_sent: true }).eq('id', issueId);
 		return;
@@ -2600,7 +2677,11 @@ const handleAppfolioWorkOrder = async ({
 			? await supabase.from('units').select('name').eq('id', issueRow.unit_id).maybeSingle()
 			: { data: null };
 		const { data: propRow } = issueRow.property_id
-			? await supabase.from('properties').select('name').eq('id', issueRow.property_id).maybeSingle()
+			? await supabase
+					.from('properties')
+					.select('name')
+					.eq('id', issueRow.property_id)
+					.maybeSingle()
 			: { data: null };
 
 		const { data: policyRow } = await supabase
@@ -2620,12 +2701,19 @@ const handleAppfolioWorkOrder = async ({
 				.eq('type', 'urgency')
 				.order('updated_at', { ascending: false });
 			urgencyPolicies = upRows ?? [];
-		} catch { urgencyPolicies = []; }
+		} catch {
+			urgencyPolicies = [];
+		}
 		const urgencyPolicyText = buildUrgencyPolicyText(urgencyPolicies);
-		const policyText = [policyRow?.policy_text ?? '', urgencyPolicyText].filter(Boolean).join('\n\n');
+		const policyText = [policyRow?.policy_text ?? '', urgencyPolicyText]
+			.filter(Boolean)
+			.join('\n\n');
 
 		const { data: userProfile } = await supabase
-			.from('users').select('name').eq('id', userId).maybeSingle();
+			.from('users')
+			.select('name')
+			.eq('id', userId)
+			.maybeSingle();
 
 		const workspaceUnits = await listWorkspaceUnitsForAgent(workspaceId);
 
@@ -2641,7 +2729,7 @@ const handleAppfolioWorkOrder = async ({
 			unitName: unitRow?.name ?? null,
 			workspaceId,
 			propertyName: propRow?.name ?? null,
-			threadId: null,   // AppFolio source — no email thread
+			threadId: null, // AppFolio source — no email thread
 			userId,
 			policyText,
 			urgencyDecision: null,
@@ -2650,13 +2738,13 @@ const handleAppfolioWorkOrder = async ({
 			userName: userProfile?.name ?? 'Bedrock',
 			defaultSenderEmail: null,
 			replyMessageId: null,
-			rootIssueId: issueId,   // issue already exists — skip create_issue
+			rootIssueId: issueId, // issue already exists — skip create_issue
 			workspaceUnits,
-			source: 'appfolio'
+			source: 'appfolio',
+			runId: null
 		});
 	}
 };
-
 
 serve(async (req) => {
 	let currentJobId: string | null = null;
@@ -2689,7 +2777,12 @@ serve(async (req) => {
 				return new Response('Missing issueId, workspaceId, or change_type', { status: 400 });
 			}
 			try {
-				await handleAppfolioWorkOrder({ issueId, workspaceId: wsId, change_type, row: row ?? null });
+				await handleAppfolioWorkOrder({
+					issueId,
+					workspaceId: wsId,
+					change_type,
+					row: row ?? null
+				});
 				return Response.json({ ok: true });
 			} catch (err) {
 				console.error('handleAppfolioWorkOrder error:', err);
