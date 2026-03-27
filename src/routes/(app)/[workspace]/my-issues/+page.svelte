@@ -804,7 +804,7 @@
 															{/if}
 															{#if item.isSubIssue ? (item.root_urgent ?? item.urgent) : item.urgent}
 																<span
-																	class="flex items-center justify-center text-rose-500"
+																	class={`flex items-center justify-center text-rose-500 ${item.isSubIssue ? 'opacity-50' : ''}`}
 																	style="width: 14px; height: 14px;"
 																>
 																	<svg
@@ -821,7 +821,7 @@
 																</span>
 															{:else}
 																<span
-																	class="flex items-center justify-center text-neutral-300"
+																	class={`flex items-center justify-center text-neutral-300 ${item.isSubIssue ? 'opacity-50' : ''}`}
 																	style="width: 14px; height: 14px;"
 																>
 																	<svg
