@@ -1161,9 +1161,9 @@
 								.select('id, issue_id, message, sender, subject, timestamp, direction, channel')
 								.eq('issue_id', newSub.id),
 							supabase
-								.from('email_drafts')
+								.from('drafts')
 								.select(
-									'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at'
+									'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at, channel'
 								)
 								.eq('issue_id', newSub.id)
 						]);
@@ -1211,7 +1211,7 @@
 				)
 				.on(
 					'postgres_changes',
-					{ event: '*', schema: 'public', table: 'email_drafts', filter: `issue_id=eq.${id}` },
+					{ event: '*', schema: 'public', table: 'drafts', filter: `issue_id=eq.${id}` },
 					(payload) => {
 						if (payload.eventType === 'DELETE') {
 							removeDraft(payload.old);
@@ -1570,7 +1570,7 @@
 												/>
 											{/each}
 											{#each replyDraftsByIssue[issueId] ?? [] as draft}
-												{#if appfolioEnabled}
+												{#if draft.channel === 'appfolio'}
 													<AppfolioDraftMessage
 														message={{
 															id: draft.message_id,
@@ -1648,7 +1648,7 @@
 										</div>
 										<div class="space-y-3 pl-11">
 											{#each newDraftsByIssue[issueId] ?? [] as draft}
-												{#if appfolioEnabled}
+												{#if draft.channel === 'appfolio'}
 													<AppfolioDraftMessage
 														message={{
 															id: draft.message_id,

@@ -188,38 +188,38 @@ const upsertEmailDraft = async ({
 	let error = null;
 	if (normalizedMessageId) {
 		const { data: existingDraft } = await supabaseAdmin
-			.from('email_drafts')
+			.from('drafts')
 			.select('id')
 			.eq('message_id', normalizedMessageId)
 			.maybeSingle();
 		if (existingDraft?.id) {
 			const result = await supabaseAdmin
-				.from('email_drafts')
+				.from('drafts')
 				.update(payload)
 				.eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
-			const result = await supabaseAdmin.from('email_drafts').insert(payload).select('id').single();
+			const result = await supabaseAdmin.from('drafts').insert(payload).select('id').single();
 			draftId = result.data?.id ?? null;
 			error = result.error;
 		}
 	} else {
 		const { data: existingDraft } = await supabaseAdmin
-			.from('email_drafts')
+			.from('drafts')
 			.select('id')
 			.eq('issue_id', issueId)
 			.is('message_id', null)
 			.maybeSingle();
 		if (existingDraft?.id) {
 			const result = await supabaseAdmin
-				.from('email_drafts')
+				.from('drafts')
 				.update(payload)
 				.eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
-			const result = await supabaseAdmin.from('email_drafts').insert(payload).select('id').single();
+			const result = await supabaseAdmin.from('drafts').insert(payload).select('id').single();
 			draftId = result.data?.id ?? null;
 			error = result.error;
 		}
@@ -1387,39 +1387,39 @@ const upsertEmailDraftForGmail = async ({
 	let created = false;
 	if (messageId) {
 		const { data: existingDraft } = await supabaseAdmin
-			.from('email_drafts')
+			.from('drafts')
 			.select('id')
 			.eq('message_id', messageId)
 			.maybeSingle();
 		if (existingDraft?.id) {
 			const result = await supabaseAdmin
-				.from('email_drafts')
+				.from('drafts')
 				.update(payload)
 				.eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
-			const result = await supabaseAdmin.from('email_drafts').insert(payload).select('id').single();
+			const result = await supabaseAdmin.from('drafts').insert(payload).select('id').single();
 			draftId = result.data?.id ?? null;
 			error = result.error;
 			created = true;
 		}
 	} else {
 		const { data: existingDraft } = await supabaseAdmin
-			.from('email_drafts')
+			.from('drafts')
 			.select('id')
 			.eq('issue_id', issueId)
 			.is('message_id', null)
 			.maybeSingle();
 		if (existingDraft?.id) {
 			const result = await supabaseAdmin
-				.from('email_drafts')
+				.from('drafts')
 				.update(payload)
 				.eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
-			const result = await supabaseAdmin.from('email_drafts').insert(payload).select('id').single();
+			const result = await supabaseAdmin.from('drafts').insert(payload).select('id').single();
 			draftId = result.data?.id ?? null;
 			error = result.error;
 			created = true;

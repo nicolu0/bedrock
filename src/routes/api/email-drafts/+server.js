@@ -37,7 +37,7 @@ export const PATCH = async ({ locals, request }) => {
 		return json({ error: 'Invalid payload' }, { status: 400 });
 	}
 
-	const draftQuery = supabaseAdmin.from('email_drafts').select('id, issue_id');
+	const draftQuery = supabaseAdmin.from('drafts').select('id, issue_id');
 	const { data: draft } = messageId
 		? await draftQuery.eq('message_id', messageId).maybeSingle()
 		: await draftQuery.eq('issue_id', issueId).is('message_id', null).maybeSingle();
@@ -86,7 +86,7 @@ export const PATCH = async ({ locals, request }) => {
 	}
 
 	const { error } = await supabaseAdmin
-		.from('email_drafts')
+		.from('drafts')
 		.update(updatePayload)
 		.eq('id', draft.id);
 

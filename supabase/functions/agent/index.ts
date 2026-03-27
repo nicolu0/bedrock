@@ -922,7 +922,8 @@ const upsertEmailDraft = async ({
 	subject,
 	body,
 	userId,
-	workspaceId
+	workspaceId,
+	channel = 'email'
 }: {
 	issueId: string;
 	messageId: string | null;
@@ -933,6 +934,7 @@ const upsertEmailDraft = async ({
 	body: string;
 	userId: string;
 	workspaceId: string;
+	channel?: string;
 }) => {
 	const normalizedRecipients = Array.isArray(recipientEmails)
 		? recipientEmails.map((email) => String(email ?? '').trim()).filter(Boolean)
@@ -950,7 +952,8 @@ const upsertEmailDraft = async ({
 		subject,
 		body,
 		workspace_id: workspaceId,
-		updated_at: new Date().toISOString()
+		updated_at: new Date().toISOString(),
+		channel
 	};
 
 	let error = null;
@@ -958,33 +961,33 @@ const upsertEmailDraft = async ({
 	let created = false;
 	if (messageId) {
 		const { data: existingDraft } = await supabase
-			.from('email_drafts')
+			.from('drafts')
 			.select('id')
 			.eq('message_id', messageId)
 			.maybeSingle();
 		if (existingDraft?.id) {
-			const result = await supabase.from('email_drafts').update(payload).eq('id', existingDraft.id);
+			const result = await supabase.from('drafts').update(payload).eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
-			const result = await supabase.from('email_drafts').insert(payload).select('id').single();
+			const result = await supabase.from('drafts').insert(payload).select('id').single();
 			draftId = result.data?.id ?? null;
 			error = result.error;
 			created = true;
 		}
 	} else {
 		const { data: existingDraft } = await supabase
-			.from('email_drafts')
+			.from('drafts')
 			.select('id')
 			.eq('issue_id', issueId)
 			.is('message_id', null)
 			.maybeSingle();
 		if (existingDraft?.id) {
-			const result = await supabase.from('email_drafts').update(payload).eq('id', existingDraft.id);
+			const result = await supabase.from('drafts').update(payload).eq('id', existingDraft.id);
 			draftId = existingDraft.id;
 			error = result.error;
 		} else {
-			const result = await supabase.from('email_drafts').insert(payload).select('id').single();
+			const result = await supabase.from('drafts').insert(payload).select('id').single();
 			draftId = result.data?.id ?? null;
 			error = result.error;
 			created = true;
@@ -1202,13 +1205,13 @@ AppFolio source rules (apply FIRST, before anything else):
 	const linkThreadTool = {
 		type: 'function',
 		name: 'link_thread_to_issue',
-		description: 'Attach a thread to an issue',
+		description: 'Attach a thread to an issue. issue_id must be a UUID returned by create_issue or create_subissue — never an email address.',
 		parameters: {
 			type: 'object',
 			additionalProperties: false,
 			properties: {
 				thread_id: { type: 'string' },
-				issue_id: { type: 'string' }
+				issue_id: { type: 'string', description: 'UUID of the issue or subissue (from create_issue/create_subissue result), not an email address' }
 			},
 			required: ['thread_id', 'issue_id']
 		}
@@ -1266,6 +1269,22 @@ AppFolio source rules (apply FIRST, before anything else):
 			required: ['issue_id', 'message_id', 'subject', 'body']
 		}
 	};
+	const draftAppfolioTool = {
+		type: 'function',
+		name: 'draft_appfolio',
+		description: 'Create or update a draft AppFolio message for the tenant (use for AppFolio work orders instead of draft_email or draft_reply)',
+		parameters: {
+			type: 'object',
+			additionalProperties: false,
+			properties: {
+				issue_id: { type: 'string' },
+				subject: { type: 'string' },
+				body: { type: 'string' },
+				recipient_email: { type: 'string', description: 'Tenant email address (optional)' }
+			},
+			required: ['issue_id', 'subject', 'body']
+		}
+	};
 	const doneTool = {
 		type: 'function',
 		name: 'done',
@@ -1285,8 +1304,7 @@ AppFolio source rules (apply FIRST, before anything else):
 		...(rootIssueId && source === 'appfolio' ? [updateIssueTool] : []),
 		linkThreadTool,
 		createSubissueTool,
-		draftEmailTool,
-		draftReplyTool,
+		...(source === 'appfolio' ? [draftAppfolioTool] : [draftEmailTool, draftReplyTool]),
 		doneTool
 	];
 
@@ -1530,6 +1548,7 @@ AppFolio source rules (apply FIRST, before anything else):
 					const thread = typeof args.thread_id === 'string' ? args.thread_id : threadId;
 					const issue =
 						typeof args.issue_id === 'string' ? args.issue_id : (lastSubissueId ?? linkedIssueId);
+					const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 					// AppFolio source: no email thread to link — treat as no-op so the agent
 					// can call link_thread_to_issue as usual without crashing.
 					if (!thread) {
@@ -1539,6 +1558,8 @@ AppFolio source rules (apply FIRST, before anything else):
 						result = { ok: true };
 					} else if (!issue) {
 						throw new Error('link_thread_to_issue missing issue_id');
+					} else if (!UUID_RE.test(issue)) {
+						result = { error: `issue_id must be a UUID (e.g. from create_issue or create_subissue), got "${issue}". Do not pass email addresses as issue_id.` };
 					} else {
 						const linked = await linkThreadToIssue({ threadId: thread, issueId: issue });
 						if (!linked) {
@@ -1706,7 +1727,8 @@ AppFolio source rules (apply FIRST, before anything else):
 							subject,
 							body: bodyText,
 							userId,
-							workspaceId
+							workspaceId,
+							channel: source === 'appfolio' ? 'appfolio' : 'email',
 						});
 						if (result.created) {
 							await createDraftNotification({
@@ -1821,7 +1843,8 @@ AppFolio source rules (apply FIRST, before anything else):
 							subject,
 							body: bodyText,
 							userId,
-							workspaceId
+							workspaceId,
+							channel: source === 'appfolio' ? 'appfolio' : 'email'
 						});
 						if (result.created) {
 							await createDraftNotification({
@@ -1854,6 +1877,31 @@ AppFolio source rules (apply FIRST, before anything else):
 							step: i
 						});
 					}
+					draftedIssueId = issue;
+					issuedAction = true;
+					result = { ok: true };
+				}
+
+				if (name === 'draft_appfolio') {
+					const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
+					const subject = typeof args.subject === 'string' ? args.subject : '';
+					const bodyText = typeof args.body === 'string' ? args.body : '';
+					const recipientEmail = typeof args.recipient_email === 'string' ? args.recipient_email : null;
+					if (!issue || !subject || !bodyText) {
+						throw new Error('draft_appfolio missing required fields');
+					}
+					await upsertEmailDraft({
+						issueId: issue,
+						messageId: null,
+						senderEmail: '',
+						recipientEmail,
+						recipientEmails: null,
+						subject,
+						body: bodyText,
+						userId,
+						workspaceId,
+						channel: 'appfolio'
+					});
 					draftedIssueId = issue;
 					issuedAction = true;
 					result = { ok: true };
@@ -2575,10 +2623,11 @@ const handleAppfolioWorkOrder = async ({
 			.maybeSingle();
 		const vendorEmail: string | null = null; // vendor email lookup deferred — no vendor table yet
 
-		await supabase.from('email_drafts').insert({
+		await supabase.from('drafts').insert({
 			workspace_id: workspaceId,
 			issue_id: issueId,
 			to: vendorEmail,
+			channel: 'appfolio',
 			subject: `Follow-up: Work Order #${issueRow.appfolio_id ?? issueRow.readable_id ?? issueId}`,
 			body: `Hi, this is a follow-up to confirm you received work order #${issueRow.appfolio_id ?? issueId} at ${issueRow.name}. Please reply with your estimated arrival time. Thank you.`,
 			status: 'draft'

@@ -96,13 +96,13 @@ function abbreviateStreet(street: string): string {
 function mapWorkOrderStatus(status: string): string {
 	const s = (status ?? '').toLowerCase().trim();
 	if (s === 'completed' || s === 'canceled' || s === 'completed no need to bill') {
-		return 'closed';
+		return 'done';
 	}
 	if (s === 'assigned' || s === 'scheduled' || s === 'waiting' || s === 'work done' || s === 'ready to bill') {
 		return 'in_progress';
 	}
-	// New, Estimate Requested, Estimated, and anything unknown → open
-	return 'open';
+	// New, Estimate Requested, Estimated, and anything unknown → todo
+	return 'todo';
 }
 
 // ── Sync Functions ────────────────────────────────────────────────────────────
