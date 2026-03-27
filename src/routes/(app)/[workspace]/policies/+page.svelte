@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { page } from '$app/stores';
+	import { supabase } from '$lib/supabaseClient';
 	import { getContext } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import {
@@ -20,8 +21,10 @@
 	let newPolicyUrgency = 'urgent';
 	let newPolicyMaintenanceIssue = '';
 	let editingPolicyId = null;
+	let selectedPolicy = null;
 	let createPolicyError = '';
 	let creatingPolicy = false;
+	let toneRefreshTimer = null;
 	let filterOpen = false;
 	let filterCategoryOpen = false;
 	let filterValueOpen = false;
@@ -54,11 +57,17 @@
 	$: policies = _resolvedPolicies ?? [];
 
 	const policyTypeOptions = [{ value: 'urgency', label: 'Urgency' }];
+	const policyTypeFilterOptions = [
+		{ value: 'urgency', label: 'Urgency' },
+		{ value: 'tone', label: 'Tone' }
+	];
 	const policyTypeLabels = {
-		urgency: 'Urgency'
+		urgency: 'Urgency',
+		tone: 'Tone'
 	};
 	const policyTypeStyles = {
-		urgency: 'border-rose-200 bg-rose-50 text-rose-700'
+		urgency: 'border-rose-200 bg-rose-50 text-rose-700',
+		tone: 'border-emerald-200 bg-emerald-50 text-emerald-700'
 	};
 	const maintenanceIssueOptions = [
 		'toilet clog',
@@ -107,7 +116,7 @@
 	let filterValueOptions = [];
 	$: {
 		if (filterCategory === 'type') {
-			filterValueOptions = [{ value: 'any', label: 'Any type' }, ...policyTypeOptions];
+			filterValueOptions = [{ value: 'any', label: 'Any type' }, ...policyTypeFilterOptions];
 		} else {
 			filterValueOptions = [{ value: 'any', label: 'Any' }];
 		}
@@ -133,6 +142,12 @@
 	const formatMaintenanceIssueDescription = (value) => formatMaintenanceIssue(value).toLowerCase();
 
 	const buildBehaviorDescription = (policy) => {
+		if (policy?.type === 'tone') {
+			const status = policy?.meta?.ai_prompt_status ?? 'pending';
+			if (policy?.meta?.ai_prompt) return policy.meta.ai_prompt;
+			if (status === 'error') return 'Tone description failed to generate.';
+			return 'Generating tone description...';
+		}
 		if (policy?.type !== 'urgency') return policy?.description || 'No description';
 		const issue = formatMaintenanceIssueDescription(
 			policy?.meta?.maintenance_issue ?? policy?.description
@@ -179,6 +194,7 @@
 	const openNewPolicyModal = () => {
 		showNewPolicyModal = true;
 		editingPolicyId = null;
+		selectedPolicy = null;
 		createPolicyError = '';
 		if (!newPolicyType) newPolicyType = 'urgency';
 	};
@@ -189,7 +205,12 @@
 		newPolicyUrgency = 'urgent';
 		newPolicyMaintenanceIssue = '';
 		editingPolicyId = null;
+		selectedPolicy = null;
 		createPolicyError = '';
+		if (toneRefreshTimer) {
+			clearTimeout(toneRefreshTimer);
+			toneRefreshTimer = null;
+		}
 		document.activeElement?.blur();
 	};
 
@@ -197,11 +218,67 @@
 		if (!policy) return;
 		showNewPolicyModal = true;
 		editingPolicyId = policy.id ?? null;
+		selectedPolicy = policy;
 		newPolicyType = policy.type ?? 'urgency';
 		newPolicyUrgency = policy?.meta?.urgency ?? 'urgent';
 		newPolicyMaintenanceIssue = policy?.meta?.maintenance_issue ?? policy?.description ?? '';
 		createPolicyError = '';
+		if (policy.type === 'tone') {
+			refreshTonePolicy(policy.id);
+		}
 	};
+
+	const refreshTonePolicy = async (policyId) => {
+		if (!policyId) return;
+		try {
+			const { data, error } = await supabase
+				.from('workspace_policies')
+				.select(
+					'id, type, email, description, meta, created_at, created_by, users:created_by(name)'
+				)
+				.eq('id', policyId)
+				.maybeSingle();
+			if (error || !data?.id) return;
+			selectedPolicy = {
+				id: data.id,
+				type: data.type ?? 'tone',
+				email: data.email ?? '',
+				description: data.description ?? '',
+				meta: data.meta ?? null,
+				createdAt: data.created_at ?? null,
+				createdById: data.created_by ?? null,
+				createdByName: data.users?.name ?? 'Unknown'
+			};
+		} catch {
+			// ignore refresh failures
+		}
+	};
+
+	$: if (selectedPolicy?.type === 'tone' && tonePromptStatus === 'pending') {
+		if (!toneRefreshTimer) {
+			toneRefreshTimer = setTimeout(() => {
+				toneRefreshTimer = null;
+				refreshTonePolicy(selectedPolicy?.id);
+			}, 2500);
+		}
+	}
+
+	const splitDiffColumns = (segments) => {
+		const original = [];
+		const updated = [];
+		(segments ?? []).forEach((segment) => {
+			if (!segment?.text) return;
+			if (segment.type !== 'insert') original.push(segment);
+			if (segment.type !== 'delete') updated.push(segment);
+		});
+		return { original, updated };
+	};
+
+	$: toneDiffSegments = Array.isArray(selectedPolicy?.meta?.diff) ? selectedPolicy.meta.diff : [];
+	$: toneDiffColumns = splitDiffColumns(toneDiffSegments);
+	$: tonePromptStatus = selectedPolicy?.meta?.ai_prompt_status ?? 'pending';
+	$: tonePromptError = selectedPolicy?.meta?.ai_prompt_error ?? '';
+	$: tonePrompt = selectedPolicy?.meta?.ai_prompt ?? '';
 
 	const closeFilterMenus = () => {
 		filterOpen = false;
@@ -510,16 +587,23 @@
 	></div>
 	<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-4">
 		<div
-			class="pointer-events-auto w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl"
+			class={`pointer-events-auto w-full rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl ${
+				selectedPolicy?.type === 'tone' ? 'max-w-4xl' : 'max-w-sm'
+			}`}
 			transition:scale={{ duration: 140, start: 0.9 }}
 			on:click|stopPropagation
 			role="dialog"
 			aria-modal="true"
 		>
-			<form on:submit|preventDefault={handleCreatePolicy}>
+			{#if selectedPolicy?.type === 'tone'}
 				<div class="flex items-center justify-between">
-					<div class="text-lg font-medium text-neutral-800">
-						{editingPolicyId ? 'Edit policy' : 'New policy'}
+					<div>
+						<div class="text-lg font-medium text-neutral-800">Tone policy</div>
+						<div class="text-xs text-neutral-500">
+							{formatMaintenanceIssueTitle(
+								selectedPolicy?.meta?.maintenance_issue ?? selectedPolicy?.description
+							)}
+						</div>
 					</div>
 					<button
 						class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
@@ -540,78 +624,174 @@
 						</svg>
 					</button>
 				</div>
-				<div class="mt-5 flex flex-col gap-3">
-					{#if createPolicyError}
-						<p class="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-600">
-							{createPolicyError}
-						</p>
-					{/if}
-					<div>
-						<label class="text-xs text-neutral-500">Maintenance issue</label>
-						<input
-							class="mt-1 w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
-							placeholder="Add maintenance issue"
-							bind:value={newPolicyMaintenanceIssue}
-							type="text"
-							required
-						/>
+				<div class="mt-5">
+					<div class="mb-2 text-xs text-neutral-500">
+						Tone policies are created from email drafts and are read-only here.
 					</div>
-					<div>
-						<label class="text-xs text-neutral-500">Type</label>
-						<select
-							class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
-							bind:value={newPolicyType}
-							required
-						>
-							{#each policyTypeOptions as option}
-								<option value={option.value}>{option.label}</option>
-							{/each}
-						</select>
-					</div>
-					{#if newPolicyType === 'urgency'}
+					<div class="grid gap-4 md:grid-cols-2">
 						<div>
-							<label class="text-xs text-neutral-500">Urgency</label>
+							<div class="text-xs font-semibold text-neutral-600">Original</div>
+							<div
+								class="mt-2 max-h-80 overflow-auto rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm whitespace-pre-wrap text-neutral-700"
+							>
+								{#if toneDiffColumns.original.length}
+									{#each toneDiffColumns.original as segment}
+										<span
+											class={segment.type === 'delete'
+												? 'rounded-sm bg-rose-100 text-rose-800'
+												: ''}
+										>
+											{segment.text}
+										</span>
+									{/each}
+								{:else}
+									<span class="text-neutral-400">No diff data available.</span>
+								{/if}
+							</div>
+						</div>
+						<div>
+							<div class="text-xs font-semibold text-neutral-600">Current</div>
+							<div
+								class="mt-2 max-h-80 overflow-auto rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm whitespace-pre-wrap text-neutral-700"
+							>
+								{#if toneDiffColumns.updated.length}
+									{#each toneDiffColumns.updated as segment}
+										<span
+											class={segment.type === 'insert'
+												? 'rounded-sm bg-emerald-100 text-emerald-800'
+												: ''}
+										>
+											{segment.text}
+										</span>
+									{/each}
+								{:else}
+									<span class="text-neutral-400">No diff data available.</span>
+								{/if}
+							</div>
+						</div>
+					</div>
+					<div class="mt-4">
+						<div class="text-xs font-semibold text-neutral-600">Tone description</div>
+						<p
+							class="mt-2 rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-sm text-neutral-700"
+						>
+							{#if tonePrompt}
+								{tonePrompt}
+							{:else if tonePromptStatus === 'error'}
+								{tonePromptError || 'Tone description failed to generate.'}
+							{:else}
+								Generating tone description...
+							{/if}
+						</p>
+					</div>
+					<div class="mt-5 flex items-center justify-end">
+						<button
+							class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
+							on:click={closeNewPolicyModal}
+							type="button"
+						>
+							Close
+						</button>
+					</div>
+				</div>
+			{:else}
+				<form on:submit|preventDefault={handleCreatePolicy}>
+					<div class="flex items-center justify-between">
+						<div class="text-lg font-medium text-neutral-800">
+							{editingPolicyId ? 'Edit policy' : 'New policy'}
+						</div>
+						<button
+							class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
+							on:click={closeNewPolicyModal}
+							type="button"
+							aria-label="Close"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="24"
+								height="24"
+								fill="currentColor"
+								viewBox="0 0 16 16"
+							>
+								<path
+									d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"
+								/>
+							</svg>
+						</button>
+					</div>
+					<div class="mt-5 flex flex-col gap-3">
+						{#if createPolicyError}
+							<p class="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-600">
+								{createPolicyError}
+							</p>
+						{/if}
+						<div>
+							<label class="text-xs text-neutral-500">Maintenance issue</label>
+							<input
+								class="mt-1 w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+								placeholder="Add maintenance issue"
+								bind:value={newPolicyMaintenanceIssue}
+								type="text"
+								required
+							/>
+						</div>
+						<div>
+							<label class="text-xs text-neutral-500">Type</label>
 							<select
 								class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
-								bind:value={newPolicyUrgency}
+								bind:value={newPolicyType}
 								required
 							>
-								<option value="urgent">Urgent</option>
-								<option value="not_urgent">Not urgent</option>
+								{#each policyTypeOptions as option}
+									<option value={option.value}>{option.label}</option>
+								{/each}
 							</select>
 						</div>
-					{/if}
-					{#if behaviorDescription}
-						<p
-							class="rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-xs text-neutral-600"
+						{#if newPolicyType === 'urgency'}
+							<div>
+								<label class="text-xs text-neutral-500">Urgency</label>
+								<select
+									class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+									bind:value={newPolicyUrgency}
+									required
+								>
+									<option value="urgent">Urgent</option>
+									<option value="not_urgent">Not urgent</option>
+								</select>
+							</div>
+						{/if}
+						{#if behaviorDescription}
+							<p
+								class="rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-xs text-neutral-600"
+							>
+								{behaviorDescription}
+							</p>
+						{/if}
+					</div>
+					<div class="mt-5 flex items-center justify-end gap-2">
+						<button
+							class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
+							on:click={closeNewPolicyModal}
+							type="button"
 						>
-							{behaviorDescription}
-						</p>
-					{/if}
-				</div>
-				<div class="mt-5 flex items-center justify-end gap-2">
-					<button
-						class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
-						on:click={closeNewPolicyModal}
-						type="button"
-					>
-						Cancel
-					</button>
-					<button
-						class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-						disabled={creatingPolicy || !canSubmit}
-						type="submit"
-					>
-						{creatingPolicy
-							? editingPolicyId
-								? 'Saving...'
-								: 'Creating...'
-							: editingPolicyId
-								? 'Save policy'
-								: 'Create policy'}
-					</button>
-				</div>
-			</form>
+							Cancel
+						</button>
+						<button
+							class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+							disabled={creatingPolicy || !canSubmit}
+							type="submit"
+						>
+							{creatingPolicy
+								? editingPolicyId
+									? 'Saving...'
+									: 'Creating...'
+								: editingPolicyId
+									? 'Save policy'
+									: 'Create policy'}
+						</button>
+					</div>
+				</form>
+			{/if}
 		</div>
 	</div>
 {/if}
