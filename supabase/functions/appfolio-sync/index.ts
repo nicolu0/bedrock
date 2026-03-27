@@ -410,25 +410,39 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 	// work_order endpoint takes exactly ONE property filter at a time
 	for (const appfolioPropId of appfolioPropertyIds) {
 		// Only pull work orders created on or after March 10, 2026 (pilot start date)
-		const PILOT_START_DATE = '2026-03-10';
+		const PILOT_START_DATE = '2026-03-20';
 
 		let rows: unknown[];
-		try {
-			rows = await appfolioFetch('work_order', {
-				property_visibility: 'active',
-				property: { property_id: String(appfolioPropId) },
-				work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
-				status_date: '0',               // filter by Created On
-				status_date_range_from: PILOT_START_DATE,
-				columns: [
-					'work_order_id', 'service_request_number', 'property_id', 'unit_id',
-					'status', 'priority', 'job_description', 'service_request_description',
-					'vendor_id', 'vendor', 'status_notes', 'created_at', 'work_order_type',
-					'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
-				]
-			});
-		} catch (err) {
-			console.error(`syncWorkOrders fetch error for property_id=${appfolioPropId}:`, err);
+		const fetchBody = {
+			property_visibility: 'active',
+			property: { property_id: String(appfolioPropId) },
+			work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
+			status_date: '0',               // filter by Created On
+			status_date_range_from: PILOT_START_DATE,
+			columns: [
+				'work_order_id', 'service_request_number', 'property_id', 'unit_id',
+				'status', 'priority', 'job_description', 'service_request_description',
+				'vendor_id', 'vendor', 'status_notes', 'created_at', 'work_order_type',
+				'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
+			]
+		};
+		let fetchError: unknown = null;
+		rows = [];
+		for (let attempt = 1; attempt <= 3; attempt++) {
+			try {
+				rows = await appfolioFetch('work_order', fetchBody);
+				fetchError = null;
+				break;
+			} catch (err) {
+				fetchError = err;
+				if (attempt < 3) {
+					console.warn(`syncWorkOrders fetch attempt ${attempt}/3 failed for property_id=${appfolioPropId}, retrying in ${attempt * 2}s:`, err);
+					await sleep(attempt * 2000);
+				}
+			}
+		}
+		if (fetchError) {
+			console.error(`syncWorkOrders fetch failed after 3 attempts for property_id=${appfolioPropId}:`, fetchError);
 			continue;
 		}
 
@@ -453,6 +467,8 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 				? description.slice(0, 120)
 				: `Work Order ${row.service_request_number ?? woId}`;
 
+			// ignoreDuplicates: true — existing issues keep their agent-cleaned title/description.
+			// Tracking columns (status, vendor, notes, urgent) are updated separately below.
 			const { data: upserted, error } = await supabase.from('issues').upsert(
 				{
 					workspace_id: workspaceId,
@@ -465,7 +481,7 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 					unit_id: unitId,
 					property_id: propertyId
 				},
-				{ onConflict: 'workspace_id,appfolio_id', ignoreDuplicates: false }
+				{ onConflict: 'workspace_id,appfolio_id', ignoreDuplicates: true }
 			).select('id');
 			if (error) {
 				console.error(`syncWorkOrders upsert error for work_order_id=${woId}:`, error.message);
@@ -493,7 +509,8 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 				const updateData: Record<string, any> = {
 					appfolio_raw_status: String(row.status ?? ''),
 					appfolio_status_notes: newNotes,
-					appfolio_vendor_id: row.vendor_id != null ? String(row.vendor_id) : null
+					appfolio_vendor_id: row.vendor_id != null ? String(row.vendor_id) : null,
+					urgent: (row.priority ?? '').toLowerCase() === 'urgent'
 				};
 				if (vendorAssigned) {
 					updateData.vendor_assigned_at = new Date().toISOString();
@@ -506,7 +523,7 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 					console.error(`syncWorkOrders tracking update error for work_order_id=${woId}:`, trackingError.message);
 				}
 
-				if (isNew)          changeQueue.push({ issueId, workspaceId, change_type: 'new', row });
+					if (isNew) changeQueue.push({ issueId, workspaceId, change_type: 'new', row });
 				if (statusChanged)  changeQueue.push({ issueId, workspaceId, change_type: 'status_changed', row });
 				if (vendorAssigned) changeQueue.push({ issueId, workspaceId, change_type: 'vendor_assigned', row });
 				if (notesChanged)   changeQueue.push({ issueId, workspaceId, change_type: 'notes_changed', row });

@@ -693,6 +693,18 @@ const getUserNameById = async (userId: string | null) => {
 	return data?.name ?? null;
 };
 
+/** Convert AppFolio "Lastname, Firstname" → "Firstname Lastname". Pass-through if no comma. */
+const normalizeTenantName = (name: string | null | undefined): string | null => {
+	if (!name) return null;
+	const trimmed = name.trim();
+	if (trimmed.includes(',')) {
+		const [last, ...rest] = trimmed.split(',');
+		const first = rest.join(',').trim();
+		return first ? `${first} ${last.trim()}` : last.trim();
+	}
+	return trimmed;
+};
+
 const resolveAssigneeId = ({
 	requestedAssigneeId,
 	fallbackAssigneeId,
@@ -982,7 +994,7 @@ const upsertEmailDraft = async ({
 			.from('drafts')
 			.select('id')
 			.eq('message_id', messageId)
-			.eq('channel', 'email')
+			.eq('channel', channel)
 			.maybeSingle();
 		if (existingDraft?.id) {
 			const result = await supabase.from('drafts').update(payload).eq('id', existingDraft.id);
@@ -1000,7 +1012,7 @@ const upsertEmailDraft = async ({
 			.select('id')
 			.eq('issue_id', issueId)
 			.is('message_id', null)
-			.eq('channel', 'email')
+			.eq('channel', channel)
 			.maybeSingle();
 		if (existingDraft?.id) {
 			const result = await supabase.from('drafts').update(payload).eq('id', existingDraft.id);
@@ -1036,7 +1048,13 @@ const upsertEmailDraft = async ({
 	return { draftId, created };
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const linkThreadToIssue = async ({ threadId, issueId }: { threadId: string; issueId: string }) => {
+	if (!UUID_RE.test(threadId)) {
+		// threadId is not a valid UUID (e.g. the model passed "appfolio") — skip silently
+		return false;
+	}
 	const { data, error } = await supabase
 		.from('threads')
 		.update({ issue_id: issueId, updated_at: new Date().toISOString() })
@@ -1154,14 +1172,14 @@ Rules:
   - If unsure, omit urgent.
 - Status must be 'todo' when creating a new issue.
 - Subissue title format:
-  - Triage {Issue Title} (${tenantName ?? 'Tenant'})
+  - Triage {Issue Title} (${tenantName ? tenantName.split(' ')[0] : 'Tenant'})
   - Schedule {Vendor Type} for {Issue Title}
 - Subissue parent rules: Triage and Schedule subissues must use root_issue_id as parent. Never use thread_issue_id as the parent for Schedule.
 - Subissue description: required. One line only, super concise, human readable summary of why this subissue exists (use the reasoning as a base). Make it specific to the subissue stage (triage vs schedule) and the reason for that stage (tenant-fixable, policy requirement, etc.). Avoid quoting the email body. Avoid list/CSV formatting; write a sentence.
 - Reasoning: keep as a short, human-readable sentence that can be reused for the subissue description.
 - Use the workspace_policy to decide triage vs schedule vendor. If the policy instructs drafting emails to cleaners or vendors, do that and skip draft_reply unless the policy explicitly says to reply.
 - Drafts: Always write from the property manager POV (the user). Never write from the tenant POV.
-- Drafts: For tenant replies, address the tenant by tenant_name only. Never infer a name from the email address.
+- Drafts: For tenant replies, address the tenant by first name only (e.g., "Hi John," not "Hi John Smith,"). Extract the first name from tenant_name. Never infer a name from the email address.
 - Drafts: End with the user_name as the signature. Never use an email address as the signature.
 - Drafts: Never use default_sender_email in the email body.
 - Drafts: When referencing location, use property_name and unit_name (e.g., "at {property_name}, unit {unit_name}"). Never include a raw UUID in the email body.
@@ -1188,13 +1206,14 @@ When you believe you have completed the task, call done().
 ${
 	source === 'appfolio' && rootIssueId
 		? `
-AppFolio source rules (apply FIRST, before anything else):
-- The root issue was synced from AppFolio and its title/description are raw work order text.
-- Your FIRST action must be to call update_issue with:
-  - title: 2-5 words, Title Case (e.g., "Leaky Kitchen Faucet", "Broken AC Unit", "Clogged Bathroom Drain"). No location, no unit names.
-  - description: one concise sentence summarising who reported it and what the problem is.
-  Do NOT copy the work order body verbatim. Derive a clean human-readable title and description.
-- After update_issue, proceed with normal subissue creation and email drafts.
+AppFolio source rules (override ALL general draft rules below):
+IMPORTANT: The current issue title and description are the VERBATIM raw work order text copied directly from AppFolio. They must ALWAYS be cleaned up regardless of how short or readable they appear.
+- Step 1 — MANDATORY FIRST ACTION: Call update_issue before any other tool call. No exceptions.
+  - title: 2-5 words, Title Case (e.g., "Leaky Kitchen Faucet", "Broken AC Unit", "Clogged Bathroom Drain", "Ant Infestation", "Broken Washer"). No location, no unit names. Never copy the work order text.
+  - description: one concise sentence summarising who reported it and what the problem is. Never copy the work order text verbatim.
+- Step 2: Create a triage subissue (and a schedule subissue if a vendor is clearly needed).
+- Step 3: Call draft_appfolio (NOT draft_reply or draft_email — those do not exist for AppFolio source). Use the triage subissue id as issue_id. Draft a short message to the tenant acknowledging the work order and any next steps.
+- Step 4: Call done().
 `.trim()
 		: ''
 }`.trim();
@@ -1415,22 +1434,33 @@ AppFolio source rules (apply FIRST, before anything else):
 			});
 			startedEventSent = true;
 		}
-		const response = await fetch('https://api.openai.com/v1/responses', {
-			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${openaiApiKey}`,
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-				model: openaiModel,
-				input: messages,
-				tools,
-				tool_choice: 'required'
-			})
-		});
-
-		if (!response.ok) {
-			throw new Error(await response.text());
+		let response: Response | null = null;
+		for (let attempt = 1; attempt <= 3; attempt++) {
+			response = await fetch('https://api.openai.com/v1/responses', {
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${openaiApiKey}`,
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					model: openaiModel,
+					input: messages,
+					tools,
+					tool_choice: 'required'
+				})
+			});
+			if (response.ok) break;
+			const errText = await response.text();
+			if (response.status === 429 && attempt < 3) {
+				const retryAfter = Number(response.headers.get('retry-after') ?? (attempt * 10));
+				console.warn(`OpenAI rate limit on attempt ${attempt}/3, retrying in ${retryAfter}s`);
+				await new Promise(r => setTimeout(r, retryAfter * 1000));
+			} else {
+				throw new Error(errText);
+			}
+		}
+		if (!response || !response.ok) {
+			throw new Error('OpenAI request failed after retries');
 		}
 
 		const data = await response.json();
@@ -2407,7 +2437,7 @@ const processMessage = async ({
 			userId: connection.user_id,
 			policyText,
 			urgencyDecision,
-			tenantName: tenant.name ?? null,
+			tenantName: normalizeTenantName(tenant.name ?? null),
 			tenantEmail: tenant.email ?? null,
 			userName,
 			defaultSenderEmail: connection.email ?? null,
@@ -2702,7 +2732,6 @@ const handleAppfolioWorkOrder = async ({
 			workspace_id: workspaceId,
 			issue_id: issueId,
 			to: vendorEmail,
-			channel: 'appfolio',
 			subject: `Follow-up: Work Order #${issueRow.appfolio_id ?? issueRow.readable_id ?? issueId}`,
 			body: `Hi, this is a follow-up to confirm you received work order #${issueRow.appfolio_id ?? issueId} at ${issueRow.name}. Please reply with your estimated arrival time. Thank you.`,
 			status: 'draft',
@@ -2765,7 +2794,7 @@ const handleAppfolioWorkOrder = async ({
 
 		const workspaceUnits = await listWorkspaceUnitsForAgent(workspaceId);
 
-		const tenantName = row?.primary_tenant ? String(row.primary_tenant) : null;
+		const tenantName = normalizeTenantName(row?.primary_tenant ? String(row.primary_tenant) : null);
 		const tenantEmail = row?.primary_tenant_email ? String(row.primary_tenant_email) : null;
 		const description = issueRow.description ?? issueRow.name ?? '';
 
