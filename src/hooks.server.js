@@ -13,8 +13,8 @@ export const handle = async ({ event, resolve }) => {
 
 	event.locals.supabase = supabase;
 
-	const { data } = await supabase.auth.getSession();
-	event.locals.user = data?.session?.user ?? null;
+	const { data: { user } } = await supabase.auth.getUser();
+	event.locals.user = user ?? null;
 
 	return resolve(event, {
 		filterSerializedResponseHeaders: (name) =>

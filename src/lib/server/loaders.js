@@ -304,9 +304,9 @@ export const loadActivityData = async (workspaceId, issueIds = null) => {
 			.order('timestamp', { ascending: true });
 
 	let draftsQuery = supabaseAdmin
-		.from('email_drafts')
+		.from('drafts')
 		.select(
-			'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at'
+			'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at, channel'
 		)
 		.eq('workspace_id', workspaceId)
 		.gte('updated_at', cutoff)
