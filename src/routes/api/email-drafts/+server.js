@@ -89,7 +89,10 @@ export const PATCH = async ({ locals, request }) => {
 		updatePayload.recipient_email = normalizedRecipients?.[0] ?? null;
 	}
 
-	const { error } = await supabaseAdmin.from('drafts').update(updatePayload).eq('id', draft.id);
+	const { error } = await supabaseAdmin
+		.from('drafts')
+		.update(updatePayload)
+		.eq('id', draft.id);
 
 	if (error) {
 		return json({ error: error.message }, { status: 400 });

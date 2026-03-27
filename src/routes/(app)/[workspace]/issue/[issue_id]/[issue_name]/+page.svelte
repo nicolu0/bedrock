@@ -1209,12 +1209,7 @@
 				)
 				.on(
 					'postgres_changes',
-					{
-						event: '*',
-						schema: 'public',
-						table: 'drafts',
-						filter: `issue_id=eq.${id}&channel=eq.email`
-					},
+					{ event: '*', schema: 'public', table: 'drafts', filter: `issue_id=eq.${id}` },
 					(payload) => {
 						if (payload.eventType === 'DELETE') {
 							removeDraft(payload.old);
@@ -1602,7 +1597,7 @@
 												/>
 											{/each}
 											{#each replyDraftsByIssue[issueId] ?? [] as draft}
-												{#if appfolioEnabled}
+												{#if draft.channel === 'appfolio'}
 													<AppfolioDraftMessage
 														message={{
 															id: draft.message_id,
@@ -1680,7 +1675,7 @@
 										</div>
 										<div class="space-y-3 pl-11">
 											{#each newDraftsByIssue[issueId] ?? [] as draft}
-												{#if appfolioEnabled}
+												{#if draft.channel === 'appfolio'}
 													<AppfolioDraftMessage
 														message={{
 															id: draft.message_id,

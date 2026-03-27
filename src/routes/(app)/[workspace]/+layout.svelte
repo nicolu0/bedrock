@@ -514,12 +514,7 @@
 
 			.on(
 				'postgres_changes',
-				{
-					event: '*',
-					schema: 'public',
-					table: 'drafts',
-					filter: `workspace_id=eq.${wid}&channel=eq.email`
-				},
+				{ event: '*', schema: 'public', table: 'drafts', filter: `workspace_id=eq.${wid}` },
 				() => {
 					_rtActivityV++;
 				}
