@@ -41,15 +41,22 @@ async function appfolioFetch(
 	let isFirst = true;
 
 	while (url) {
-		const res = await fetch(url, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: isFirst ? JSON.stringify(body) : JSON.stringify({})
-		});
+		let res: Response | null = null;
+		for (let attempt = 1; attempt <= 4; attempt++) {
+			res = await fetch(url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: isFirst ? JSON.stringify(body) : JSON.stringify({})
+			});
+			if (res.status !== 429) break;
+			const retryAfter = Number(res.headers.get('retry-after') ?? (attempt * 5));
+			console.warn(`AppFolio ${urlOrReport} rate limited, retrying in ${retryAfter}s (attempt ${attempt}/4)`);
+			await new Promise(r => setTimeout(r, retryAfter * 1000));
+		}
 
-		if (!res.ok) {
-			const text = await res.text();
-			throw new Error(`AppFolio ${urlOrReport} ${res.status}: ${text}`);
+		if (!res || !res.ok) {
+			const text = await res?.text() ?? '';
+			throw new Error(`AppFolio ${urlOrReport} ${res?.status}: ${text}`);
 		}
 
 		const json = await res.json();
@@ -319,24 +326,62 @@ async function syncTenants(workspaceId: string, appfolioPropertyIds: number[]): 
 	}
 }
 
-async function syncVendors(workspaceId: string): Promise<void> {
+async function syncVendors(workspaceId: string, appfolioPropertyIds: number[]): Promise<void> {
 	await sleep(500);
 
+	// Collect vendor IDs from work orders in the last 2 years across all tracked properties.
+	// Only vendors who have actually performed work at these properties get synced.
+	const activeVendorIds = new Set<string>();
+	const twoYearsAgo = new Date();
+	twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+	const VENDOR_LOOKBACK_DATE = twoYearsAgo.toISOString().slice(0, 10); // 'YYYY-MM-DD'
+
+	for (const appfolioPropId of appfolioPropertyIds) {
+		try {
+			const woRows = await appfolioFetch('work_order', {
+				property_visibility: 'active',
+				property: { property_id: String(appfolioPropId) },
+				work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
+				status_date: '0',
+				status_date_range_from: VENDOR_LOOKBACK_DATE,
+				columns: ['vendor_id']
+			});
+			for (const row of woRows as any[]) {
+				if (row.vendor_id != null) activeVendorIds.add(String(row.vendor_id));
+			}
+		} catch (err) {
+			console.warn(`syncVendors: work_order fetch failed for property ${appfolioPropId}:`, err);
+		}
+	}
+
+	if (activeVendorIds.size === 0) {
+		console.log('syncVendors: no vendors found on recent work orders — skipping');
+		return;
+	}
+
+	// Brief pause before vendor_directory call to avoid back-to-back rate limiting
+	await sleep(2000);
+
+	// Fetch all active vendors from AppFolio and filter to those in our work order set
 	const rows = await appfolioFetch('vendor_directory', {
 		vendor_visibility: 'active',
 		columns: ['vendor_id', 'company_name', 'name', 'vendor_trades', 'email', 'phone_numbers']
 	});
 
-	for (const row of rows as any[]) {
-		const vendorId = row.vendor_id;
-		if (vendorId == null) continue;
+	const filtered = (rows as any[]).filter(
+		(r) => r.vendor_id != null && activeVendorIds.has(String(r.vendor_id))
+	);
 
-		const { error } = await supabase.from('vendors').upsert(
+	for (const row of filtered) {
+		const vendorId = row.vendor_id;
+		const { error } = await supabase.from('people').upsert(
 			{
 				workspace_id: workspaceId,
+				role: 'vendor',
+				appfolio_vendor_id: String(vendorId),
 				name: row.company_name || row.name || String(vendorId),
 				trade: row.vendor_trades ?? null,
-				appfolio_vendor_id: String(vendorId)
+				email: row.email ? String(row.email).split(',')[0].trim() || null : null
 			},
 			{ onConflict: 'workspace_id,appfolio_vendor_id', ignoreDuplicates: false }
 		);
@@ -344,6 +389,8 @@ async function syncVendors(workspaceId: string): Promise<void> {
 			console.error(`syncVendors upsert error for vendor_id=${vendorId}:`, error.message);
 		}
 	}
+
+	console.log(`syncVendors: synced ${filtered.length} vendors (${activeVendorIds.size} found on work orders)`);
 }
 
 async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]): Promise<void> {
@@ -722,8 +769,8 @@ serve(async (req) => {
 			if (appfolioPropertyIds.length > 0) {
 				await syncUnits(ws.id, appfolioPropertyIds);
 				await syncTenants(ws.id, appfolioPropertyIds);
-				// syncVendors skipped — vendors table not yet created
-				await syncWorkOrders(ws.id, appfolioPropertyIds);
+				await syncVendors(ws.id, appfolioPropertyIds);
+			await syncWorkOrders(ws.id, appfolioPropertyIds);
 			}
 			results[ws.id] = { ok: true, properties: appfolioPropertyIds.length };
 		} catch (err) {
