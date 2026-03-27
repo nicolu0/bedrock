@@ -92,6 +92,10 @@
 	let _subscribedIssuePromise = null;
 	let commentBody = '';
 	let commentTextarea;
+	let subIssueHoverId = null;
+	let subIssueTooltipX = 0;
+	let subIssueTooltipY = 0;
+	let subIssueTooltipVisible = false;
 
 	// ── Streaming resolution for secondary data ───────────────────────────────
 
@@ -1399,7 +1403,21 @@
 									{#each subIssuesWithAssignees as subIssue}
 										<a
 											href={getSubIssueHref(subIssue)}
-											class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
+											class="relative flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
+											on:mouseenter={(event) => {
+												subIssueHoverId = subIssue.id;
+												subIssueTooltipVisible = true;
+												const rect = event.currentTarget.getBoundingClientRect();
+												subIssueTooltipX = event.clientX + 12;
+												subIssueTooltipY = rect.bottom + 8;
+											}}
+											on:mousemove={(event) => {
+												subIssueTooltipX = event.clientX + 12;
+											}}
+											on:mouseleave={() => {
+												subIssueTooltipVisible = false;
+												subIssueHoverId = null;
+											}}
 										>
 											<div class="flex items-center gap-3">
 												<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
@@ -1427,6 +1445,14 @@
 														d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
 													/>
 												</svg>
+											{/if}
+											{#if subIssueTooltipVisible && subIssueHoverId === subIssue.id}
+												<div
+													class="subissue-hover-tooltip fixed z-50 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													style={`left: ${subIssueTooltipX}px; top: ${subIssueTooltipY}px;`}
+												>
+													Open issue
+												</div>
 											{/if}
 										</a>
 									{/each}
@@ -2570,7 +2596,7 @@
 							</button>
 							{#if urgentHelpOpen}
 								<div
-									class="absolute top-full right-0 z-30 mt-2 max-w-[220px] rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] leading-snug text-white shadow-sm"
+									class="absolute top-full right-0 z-30 mt-2 min-w-[260px] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs leading-snug text-neutral-700 shadow-sm"
 								>
 									Bedrock immediately assigns a vendor for urgent issues.
 								</div>
@@ -2816,5 +2842,14 @@
 		.tooltip-target .delayed-tooltip {
 			display: none;
 		}
+	}
+
+	.subissue-hover-tooltip {
+		opacity: 1;
+		transform: translateY(0);
+		transition:
+			opacity 120ms ease,
+			transform 120ms ease;
+		pointer-events: none;
 	}
 </style>
