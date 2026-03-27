@@ -1,7 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { onMount, onDestroy, setContext, tick } from 'svelte';
-	import { fade, scale } from 'svelte/transition';
+	import { fade, scale, fly } from 'svelte/transition';
 	import { get } from 'svelte/store';
 	import { page, navigating } from '$app/stores';
 	import { browser } from '$app/environment';
@@ -303,6 +303,11 @@
 	})();
 	$: pageVisible = appMounted && $pageReady;
 	$: workspaceSlug = $page.params.workspace;
+	$: _inboxNotifications =
+		$notificationsCache?.workspace === workspaceSlug && $notificationsCache?.data?.notifications
+			? $notificationsCache.data.notifications
+			: [];
+	$: inboxCount = _inboxNotifications.filter((n) => !n.is_read && !n.is_resolved).length;
 	$: isIssueRoute = $page.url.pathname.includes('/issue/');
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: isSettingsRoute = $page.url.pathname.startsWith(`${basePath}/settings`);
@@ -398,6 +403,7 @@
 		const record = payload?.new ?? null;
 		if (!record?.run_id) return;
 		agentToasts.upsert(record);
+		_rtNotifsV++;
 	};
 
 	// RT → Svelte bridge: counters force a Svelte flush so invalidate() runs inside the update cycle
@@ -517,6 +523,7 @@
 				{ event: '*', schema: 'public', table: 'drafts', filter: `workspace_id=eq.${wid}` },
 				() => {
 					_rtActivityV++;
+					_rtNotifsV++;
 				}
 			)
 
@@ -650,60 +657,81 @@
 									href={`${basePath}/${item.href}`}
 									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition ${currentPath === `${basePath}/${item.href}` || currentPath.startsWith(`${basePath}/${item.href}/`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
 								>
-									{#if item.id === 'people'}
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="12"
-											height="12"
-											fill="currentColor"
-											class="shrink-0 text-neutral-600"
-											viewBox="0 0 16 16"
-										>
-											<path
-												d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5"
-											/>
-										</svg>
-									{:else if item.id === 'my-issues'}
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="12"
-											height="12"
-											fill="currentColor"
-											class="shrink-0 text-neutral-600"
-											viewBox="0 0 16 16"
-										>
-											<path
-												d="M2 2v13.5a.5.5 0 0 0 .74.439L8 13.069l5.26 2.87A.5.5 0 0 0 14 15.5V2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2"
-											/>
-										</svg>
-									{:else if item.id === 'policies'}
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="12"
-											height="12"
-											fill="currentColor"
-											class="shrink-0 text-neutral-600"
-											viewBox="0 0 16 16"
-										>
-											<path
-												d="M12.643 15C13.979 15 15 13.845 15 12.5V5H1v7.5C1 13.845 2.021 15 3.357 15zM5.5 7h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1M.8 1a.8.8 0 0 0-.8.8V3a.8.8 0 0 0 .8.8h14.4A.8.8 0 0 0 16 3V1.8a.8.8 0 0 0-.8-.8z"
-											/>
-										</svg>
-									{:else if item.id === 'inbox'}
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="16"
-											height="16"
-											fill="currentColor"
-											class="shrink-0 text-neutral-600"
-											viewBox="0 0 16 16"
-										>
-											<path
-												d="M4.98 4a.5.5 0 0 0-.39.188L1.54 8H6a.5.5 0 0 1 .5.5 1.5 1.5 0 1 0 3 0A.5.5 0 0 1 10 8h4.46l-3.05-3.812A.5.5 0 0 0 11.02 4zm-1.17-.437A1.5 1.5 0 0 1 4.98 3h6.04a1.5 1.5 0 0 1 1.17.563l3.7 4.625a.5.5 0 0 1 .106.374l-.39 3.124A1.5 1.5 0 0 1 14.117 13H1.883a1.5 1.5 0 0 1-1.489-1.314l-.39-3.124a.5.5 0 0 1 .106-.374z"
-											/>
-										</svg>
+									<div class="flex min-w-0 flex-1 items-center gap-2">
+										{#if item.id === 'people'}
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="12"
+												height="12"
+												fill="currentColor"
+												class="shrink-0 text-neutral-600"
+												viewBox="0 0 16 16"
+											>
+												<path
+													d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5"
+												/>
+											</svg>
+										{:else if item.id === 'my-issues'}
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="12"
+												height="12"
+												fill="currentColor"
+												class="shrink-0 text-neutral-600"
+												viewBox="0 0 16 16"
+											>
+												<path
+													d="M2 2v13.5a.5.5 0 0 0 .74.439L8 13.069l5.26 2.87A.5.5 0 0 0 14 15.5V2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2"
+												/>
+											</svg>
+										{:else if item.id === 'policies'}
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="12"
+												height="12"
+												fill="currentColor"
+												class="shrink-0 text-neutral-600"
+												viewBox="0 0 16 16"
+											>
+												<path
+													d="M12.643 15C13.979 15 15 13.845 15 12.5V5H1v7.5C1 13.845 2.021 15 3.357 15zM5.5 7h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1M.8 1a.8.8 0 0 0-.8.8V3a.8.8 0 0 0 .8.8h14.4A.8.8 0 0 0 16 3V1.8a.8.8 0 0 0-.8-.8z"
+												/>
+											</svg>
+										{:else if item.id === 'inbox'}
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												fill="currentColor"
+												class="shrink-0 text-neutral-600"
+												viewBox="0 0 16 16"
+											>
+												<path
+													d="M4.98 4a.5.5 0 0 0-.39.188L1.54 8H6a.5.5 0 0 1 .5.5 1.5 1.5 0 1 0 3 0A.5.5 0 0 1 10 8h4.46l-3.05-3.812A.5.5 0 0 0 11.02 4zm-1.17-.437A1.5 1.5 0 0 1 4.98 3h6.04a1.5 1.5 0 0 1 1.17.563l3.7 4.625a.5.5 0 0 1 .106.374l-.39 3.124A1.5 1.5 0 0 1 14.117 13H1.883a1.5 1.5 0 0 1-1.489-1.314l-.39-3.124a.5.5 0 0 1 .106-.374z"
+												/>
+											</svg>
+										{/if}
+										<span class="truncate">{item.label}</span>
+									</div>
+									{#if item.id === 'inbox' && inboxCount > 0}
+										<span class="ml-auto inline-flex min-w-[18px] items-center justify-center">
+											<span
+												class="inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-neutral-200 px-1.5 text-[11px] leading-none font-medium text-neutral-800"
+											>
+												<span class="relative h-3.5 min-w-[1ch] overflow-hidden">
+													{#key inboxCount}
+														<span
+															in:fly={{ y: 6, duration: 160, delay: 260 }}
+															out:fly={{ y: -6, duration: 160, opacity: 0 }}
+															class="absolute inset-0 inline-flex items-center justify-center"
+														>
+															{inboxCount}
+														</span>
+													{/key}
+												</span>
+											</span>
+										</span>
 									{/if}
-									<span class="truncate">{item.label}</span>
 								</a>
 							{/each}
 							{#if canViewProperties}
