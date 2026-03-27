@@ -1971,7 +1971,7 @@
 																	/>
 																{/each}
 																{#each replyDraftsByIssue[subIssue.id] ?? [] as draft}
-																	{#if appfolioEnabled}
+																	{#if draft.channel === 'appfolio'}
 																		<AppfolioDraftMessage
 																			message={{
 																				id: draft.message_id,
@@ -2053,7 +2053,7 @@
 															</div>
 															<div class="space-y-3 pl-11">
 																{#each newDraftsByIssue[subIssue.id] ?? [] as draft}
-																	{#if appfolioEnabled}
+																	{#if draft.channel === 'appfolio'}
 																		<AppfolioDraftMessage
 																			message={{
 																				id: draft.message_id,
