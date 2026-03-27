@@ -2522,15 +2522,8 @@
 							<div
 								class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
 							>
-								Change urgency
+								{isSubissue ? 'Change urgency in the root issue' : 'Change urgency'}
 							</div>
-							{#if isSubissue}
-								<div
-									class="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] text-white opacity-0 transition group-hover:opacity-100"
-								>
-									Change urgency in the root issue
-								</div>
-							{/if}
 							{#if urgentOpen && canEditIssue && !isSubissue}
 								<div
 									class="absolute right-0 left-auto z-10 mt-2 w-48 origin-top-right rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
@@ -2584,7 +2577,7 @@
 						<div class="relative ml-auto">
 							<button
 								type="button"
-								class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-700"
+								class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-400 transition hover:bg-neutral-50 hover:text-neutral-500"
 								aria-label="Urgent issue help"
 								aria-expanded={urgentHelpOpen}
 								on:click|stopPropagation={() => {

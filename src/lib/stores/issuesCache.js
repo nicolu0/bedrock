@@ -73,6 +73,10 @@ export const buildSectionsFromIssues = (issues = []) => {
 				issueId: subIssue.issueId ?? subIssue.id,
 				title: subIssue.title ?? subIssue.name,
 				parentTitle: issue.title ?? issue.name,
+				parentId: issue.id ?? issue.issueId,
+				parent_id: issue.id ?? issue.issueId,
+				urgent: subIssue.urgent ?? false,
+				root_urgent: issue.urgent ?? false,
 				property: subIssue.property,
 				unit: subIssue.unit,
 				issueNumber: subIssue.issueNumber ?? subIssue.issue_number ?? null,
@@ -88,6 +92,7 @@ export const buildSectionsFromIssues = (issues = []) => {
 			assignees: issue.assignees ?? 0,
 			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
+			urgent: issue.urgent ?? false,
 			property: issue.property,
 			unit: issue.unit,
 			issueNumber: issue.issueNumber ?? issue.issue_number ?? null,
@@ -111,6 +116,10 @@ export const buildSectionsFromIssues = (issues = []) => {
 			assignees: issue.assignees ?? 0,
 			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
+			urgent: issue.urgent ?? false,
+			parentId: parent.id ?? parent.issueId,
+			parent_id: parent.id ?? parent.issueId,
+			root_urgent: parent.urgent ?? false,
 			property: issue.property,
 			unit: issue.unit,
 			issueNumber: issue.issueNumber ?? issue.issue_number ?? null,
@@ -274,7 +283,12 @@ export const ensureIssuesCache = async (workspaceSlug, options = {}) => {
 			if (!shouldOverwrite) {
 			}
 			if (shouldOverwrite) {
-				console.log('[RT] issuesCache: fetch complete, sections:', nextSections, 'issues:', nextIssues);
+				console.log(
+					'[RT] issuesCache: fetch complete, sections:',
+					nextSections,
+					'issues:',
+					nextIssues
+				);
 				primeIssuesCache(workspaceSlug, data, payload.fetchedAt);
 				return data;
 			}

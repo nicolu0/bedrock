@@ -4,11 +4,12 @@
 	import { agentToasts } from '$lib/stores/agentToasts';
 	import { issuesCache } from '$lib/stores/issuesCache';
 	import { page } from '$app/stores';
-	import { cubicOut } from 'svelte/easing';
 
 	$: issuesById = new Map(
 		($issuesCache.data?.issues ?? []).map((issue) => [issue.id ?? issue.issueId, issue])
 	);
+	const FALLBACK_LABEL = 'New maintenance request';
+	const lastLabels = new Map();
 	const getIssueLabel = (toast) => {
 		const propertyFromToast = toast?.propertyName?.trim?.() ?? toast?.propertyName ?? '';
 		const unitFromToast = toast?.unitName?.trim?.() ?? toast?.unitName ?? '';
@@ -26,18 +27,23 @@
 		return property || unit;
 	};
 
-	const flipText = (node, { duration = 160, delay = 0 } = {}) => ({
-		duration,
-		delay,
-		easing: cubicOut,
-		css: (t) => {
-			const rotate = (1 - t) * 50;
-			const translate = (1 - t) * 6;
-			return `transform: translateY(${translate}px) rotateX(${rotate}deg); opacity: ${t};`;
+	const getStableIssueLabel = (toast) => {
+		const next = getIssueLabel(toast);
+		const key = toast?.runId ?? toast?.run_id ?? null;
+		if (!key) return next;
+		if (next && next !== FALLBACK_LABEL) {
+			lastLabels.set(key, next);
+			return next;
 		}
-	});
+		return lastLabels.get(key) ?? next;
+	};
 
-	const flipIn = (node) => flipText(node, { duration: 160, delay: 420 });
+	$: {
+		const activeIds = new Set(($agentToasts ?? []).map((toast) => toast?.runId ?? toast?.run_id));
+		for (const key of lastLabels.keys()) {
+			if (!activeIds.has(key)) lastLabels.delete(key);
+		}
+	}
 </script>
 
 <div
@@ -52,7 +58,7 @@
 		>
 			<div class="flex min-w-0 flex-1 flex-col gap-3">
 				<div class="flex items-center justify-between text-[11px] text-neutral-500">
-					<span class="min-w-0 truncate">{getIssueLabel(toast) ?? ''}</span>
+					<span class="min-w-0 truncate">{getStableIssueLabel(toast) ?? ''}</span>
 					<button
 						type="button"
 						class="pointer-events-auto -mr-1 inline-flex h-4 w-4 items-center justify-center text-neutral-400 transition hover:text-neutral-600"
@@ -93,13 +99,12 @@
 							></span>
 						{/if}
 					</div>
-					<div class="min-w-0 flex-1">
+					<div class="relative h-5 min-w-0 flex-1 overflow-hidden">
 						{#key toast.title}
 							<div
-								in:flipIn
+								in:fly={{ y: 6, duration: 160, delay: 260 }}
 								out:fade={{ duration: 80 }}
-								class="truncate text-xs font-medium text-neutral-800"
-								style="transform-origin: 50% 50%;"
+								class="absolute inset-0 truncate text-xs font-medium text-neutral-800"
 							>
 								{toast.title}
 							</div>
