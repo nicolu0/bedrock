@@ -1130,9 +1130,43 @@
 
 	// ── Realtime channels ────────────────────────────────────────────────────────
 
+	let _issueChannel = null;
 	let _subIssueChannel = null;
 
+	const applyIssueDelta = (next) => {
+		if (!next?.id) return;
+		const nextAssigneeId = next.assignee_id ?? null;
+		issue = {
+			...issue,
+			id: next.id ?? issue?.id,
+			name: next.name ?? issue?.name,
+			description: next.description ?? issue?.description ?? null,
+			status: next.status ?? issue?.status,
+			urgent: typeof next.urgent === 'boolean' ? next.urgent : (issue?.urgent ?? false),
+			assignee_id: nextAssigneeId,
+			assigneeId: nextAssigneeId,
+			property_id: next.property_id ?? issue?.property_id ?? issue?.propertyId ?? null,
+			propertyId: next.property_id ?? issue?.property_id ?? issue?.propertyId ?? null,
+			unit_id: next.unit_id ?? issue?.unit_id ?? issue?.unitId ?? null,
+			unitId: next.unit_id ?? issue?.unit_id ?? issue?.unitId ?? null
+		};
+		issueAssigneeId = nextAssigneeId;
+		if ((assignee?.id ?? null) !== nextAssigneeId) assignee = null;
+	};
+
 	$: if (browser && issueId) {
+		if (_issueChannel) supabase.removeChannel(_issueChannel);
+		_issueChannel = supabase
+			.channel(`issue-${issueId}`)
+			.on(
+				'postgres_changes',
+				{ event: 'UPDATE', schema: 'public', table: 'issues', filter: `id=eq.${issueId}` },
+				(payload) => {
+					if (payload?.new) applyIssueDelta(payload.new);
+				}
+			)
+			.subscribe();
+
 		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
 		_subIssueChannel = supabase
 			.channel(`subissues-${issueId}`)
@@ -1220,6 +1254,17 @@
 						}
 					}
 				)
+				.on(
+					'postgres_changes',
+					{ event: '*', schema: 'public', table: 'activity_logs', filter: `issue_id=eq.${id}` },
+					(payload) => {
+						if (payload.eventType === 'DELETE') {
+							removeActivityLogFromCache(payload.old);
+						} else {
+							applyActivityLogDelta(payload.new);
+						}
+					}
+				)
 				.subscribe();
 
 			channelMap.set(id, channel);
@@ -1234,6 +1279,7 @@
 	onDestroy(() => {
 		for (const channel of channelMap.values()) supabase.removeChannel(channel);
 		channelMap.clear();
+		if (_issueChannel) supabase.removeChannel(_issueChannel);
 		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
 		pageReady.set(true);
 	});
