@@ -521,7 +521,8 @@
 			.on(
 				'postgres_changes',
 				{ event: '*', schema: 'public', table: 'drafts', filter: `workspace_id=eq.${wid}` },
-				() => {
+				(payload) => {
+					if (payload?.eventType === 'UPDATE') return;
 					_rtActivityV++;
 					_rtNotifsV++;
 				}
