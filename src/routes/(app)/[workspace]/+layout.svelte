@@ -421,7 +421,7 @@
 	$: if (_rtIssuesV > _doneIssuesV) {
 		console.log('[RT] invalidating issues, v:', _rtIssuesV);
 		_doneIssuesV = _rtIssuesV;
-		invalidate('app:issues');
+		if (!isIssueRoute) invalidate('app:issues');
 		if (browser) ensureIssuesCache(workspaceSlug, { force: true });
 	}
 	$: if (_rtNotifsV > _doneNotifsV) {
@@ -438,11 +438,11 @@
 	}
 	$: if (_rtActivityV > _doneActivityV) {
 		_doneActivityV = _rtActivityV;
-		invalidate('app:activity');
+		if (!isIssueRoute) invalidate('app:activity');
 	}
 	$: if (_rtLogsV > _doneLogsV) {
 		_doneLogsV = _rtLogsV;
-		invalidate('app:activityLogs');
+		if (!isIssueRoute) invalidate('app:activityLogs');
 	}
 
 	onMount(async () => {
