@@ -513,10 +513,19 @@ const listWorkspaceUnitsForAgent = async (workspaceId: string) => {
 const getWorkspaceAdminId = async (workspaceId: string) => {
 	const { data } = await supabase
 		.from('workspaces')
-		.select('admin_user_id')
+		.select('admin_user_id, default_assignee_id')
 		.eq('id', workspaceId)
 		.maybeSingle();
 	return data?.admin_user_id ?? null;
+};
+
+const getWorkspaceDefaultAssigneeId = async (workspaceId: string) => {
+	const { data } = await supabase
+		.from('workspaces')
+		.select('default_assignee_id, admin_user_id')
+		.eq('id', workspaceId)
+		.maybeSingle();
+	return data?.default_assignee_id ?? data?.admin_user_id ?? null;
 };
 
 const getWorkspaceIdForUser = async (userId: string) => {
@@ -1195,7 +1204,7 @@ Rules:
 - root_issue_id: When present, you must not call create_issue. Reuse existing subissues when possible.
 - Drafts: Use the subissue id for issue_id. For replies, use latest_message_id for message_id. For vendor scheduling drafts, use draft_email for new outreach and draft_reply for replies; include message_id only when replying in an existing vendor thread, otherwise omit it entirely (do not send empty string).
 - Linking: Call link_thread_to_issue exactly once and only after issue/subissue creation. This is required.
-- Assignees: When creating issues/subissues, set assignee_id to a user id from eligible_assignees. If unsure, omit it and default to admin_user_id.
+- Assignees: When creating issues/subissues, set assignee_id to a user id from eligible_assignees. If unsure, omit it and default to default_assignee_id.
 Tenant identity:
 - tenant_name and tenant_email come from the tenants table lookup by sender email. These are authoritative.
 User identity:
@@ -1360,6 +1369,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 	const openIssues = await listOpenIssues(unitId);
 	const vendors = await listVendors(workspaceId);
 	const workspaceAdminId = await getWorkspaceAdminId(workspaceId);
+	const defaultAssigneeId = await getWorkspaceDefaultAssigneeId(workspaceId);
 	const eligibleAssignees = await listEligibleAssignees(workspaceId);
 	const assignees = await listWorkspaceAssignees(workspaceId);
 	const assigneeNameById = new Map(
@@ -1370,8 +1380,16 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 		assigneeNameById.set(workspaceAdminId, adminName);
 		assignees.push({ id: workspaceAdminId, name: adminName });
 	}
+	if (defaultAssigneeId && !assigneeNameById.has(defaultAssigneeId)) {
+		const defaultName = await getUserNameById(defaultAssigneeId);
+		assigneeNameById.set(defaultAssigneeId, defaultName);
+		assignees.push({ id: defaultAssigneeId, name: defaultName });
+	}
 	if (workspaceAdminId) {
 		eligibleAssignees.add(workspaceAdminId);
+	}
+	if (defaultAssigneeId) {
+		eligibleAssignees.add(defaultAssigneeId);
 	}
 	const messages: Array<any> = [
 		{ role: 'system', content: system },
@@ -1400,6 +1418,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 				eligible_assignees: Array.from(eligibleAssignees),
 				assignees,
 				admin_user_id: workspaceAdminId,
+				default_assignee_id: defaultAssigneeId,
 				workspace_units: workspaceUnits ?? []
 			})
 		}
@@ -1557,11 +1576,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 					const title = typeof args.title === 'string' ? args.title.trim() : '';
 					const unit = typeof args.unit_id === 'string' ? args.unit_id : unitId;
 					const workspace = typeof args.workspace_id === 'string' ? args.workspace_id : workspaceId;
-					const assignee = resolveAssigneeId({
-						requestedAssigneeId: typeof args.assignee_id === 'string' ? args.assignee_id : null,
-						fallbackAssigneeId: workspaceAdminId,
-						eligibleAssignees
-					});
+					const assignee = defaultAssigneeId;
 					const rawDescriptionCandidate =
 						typeof args.description === 'string'
 							? normalizeOneLine(ensureSentence(args.description.replace(/"/g, '')))
@@ -1662,11 +1677,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 					const reasoning = typeof args.reasoning === 'string' ? args.reasoning : '';
 					const requestedParent =
 						typeof args.parent_issue_id === 'string' ? args.parent_issue_id : null;
-					const assignee = resolveAssigneeId({
-						requestedAssigneeId: typeof args.assignee_id === 'string' ? args.assignee_id : null,
-						fallbackAssigneeId: workspaceAdminId,
-						eligibleAssignees
-					});
+					const assignee = defaultAssigneeId;
 					const rawDescriptionCandidate =
 						typeof args.description === 'string'
 							? normalizeOneLine(ensureSentence(args.description.replace(/"/g, '')))
@@ -2065,7 +2076,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 		// Notify bedrock users now that the issue is fully processed (cleaned title + description).
 		const { data: processedIssue } = await supabase
 			.from('issues')
-			.select('name, description')
+			.select('name, description, assignee_id')
 			.eq('id', rootIssueId)
 			.maybeSingle();
 		const processedTitle = processedIssue?.name?.trim() ?? '';
@@ -2091,6 +2102,25 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 					requires_action: true
 				}))
 			);
+		}
+
+		// Notify the assigned PM that the triage draft is ready for their review.
+		// This is separate from the bedrock notification — it targets whoever owns the issue.
+		const assigneeId = processedIssue?.assignee_id ?? null;
+		const bedrockUserIds = new Set((bedrockPeople ?? []).map((p: any) => p.user_id));
+		if (assigneeId && !bedrockUserIds.has(assigneeId)) {
+			const pmTitle = processedTitle
+				? `Draft Ready for Approval — ${processedTitle}`
+				: 'Draft Ready for Approval';
+			await supabase.from('notifications').insert({
+				workspace_id: workspaceId,
+				issue_id: rootIssueId,
+				user_id: assigneeId,
+				title: pmTitle,
+				body: processedDesc,
+				type: 'triage_approval',
+				requires_action: true
+			});
 		}
 	}
 
