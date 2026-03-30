@@ -32,8 +32,13 @@
 		pageReady.set(false);
 	}
 
+	let isMobileViewport = false;
+
 	onMount(() => {
 		syncAppfolioSettings();
+		const mobileQuery = window.matchMedia('(max-width: 639px)');
+		isMobileViewport = mobileQuery.matches;
+		subIssuesOpen = !isMobileViewport;
 		const handleStorage = (event) => {
 			if (event.key === APPFOLIO_KEY) {
 				syncAppfolioSettings();
@@ -1416,8 +1421,448 @@
 					</div>
 					<div></div>
 				</div>
-				<div class="mt-6"></div>
-
+				<div class="mt-6 sm:hidden">
+					<div class="rounded-2xl bg-neutral-50 p-4">
+						<div class="space-y-3 text-sm text-neutral-600">
+							<div class="grid grid-cols-2 gap-2">
+								<div class="tooltip-target relative">
+									<button
+										type="button"
+										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition ${
+											canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+										}`}
+										disabled={!canEditIssue}
+										aria-disabled={!canEditIssue}
+										on:click|stopPropagation={() => {
+											if (!canEditIssue) return;
+											propertyOpen = !propertyOpen;
+											unitOpen = false;
+											statusOpen = false;
+											assigneeOpen = false;
+											urgentOpen = false;
+											urgentHelpOpen = false;
+										}}
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="14"
+											height="14"
+											fill="currentColor"
+											class="text-neutral-400"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
+											/>
+										</svg>
+										<span class="truncate text-neutral-700">{propertyName}</span>
+									</button>
+									{#if !rightSidebarMenuOpen}
+										<div
+											class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+										>
+											Change property
+										</div>
+									{/if}
+									{#if propertyOpen && canEditIssue}
+										<div
+											class="absolute right-auto left-0 z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+											on:click|stopPropagation
+										>
+											<button
+												type="button"
+												class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+													!issuePropertyId ? 'bg-neutral-50' : ''
+												}`}
+												on:click={() => handlePropertySelect(null)}
+											>
+												<span>No property</span>
+												{#if !issuePropertyId}
+													<span class="text-xs text-neutral-400">Selected</span>
+												{/if}
+											</button>
+											<div class="my-1 h-px bg-neutral-100"></div>
+											{#each properties as property}
+												<button
+													type="button"
+													class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+														issuePropertyId === property.id ? 'bg-neutral-50' : ''
+													}`}
+													on:click={() => handlePropertySelect(property.id)}
+												>
+													<span class="truncate">{property.name}</span>
+													{#if issuePropertyId === property.id}
+														<span class="text-xs text-neutral-400">Selected</span>
+													{/if}
+												</button>
+											{/each}
+										</div>
+									{/if}
+								</div>
+								<div class="tooltip-target relative">
+									<button
+										type="button"
+										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition ${
+											canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+										}`}
+										disabled={!canEditIssue}
+										aria-disabled={!canEditIssue}
+										on:click|stopPropagation={() => {
+											if (!canEditIssue) return;
+											unitOpen = !unitOpen;
+											propertyOpen = false;
+											statusOpen = false;
+											assigneeOpen = false;
+											urgentOpen = false;
+											urgentHelpOpen = false;
+										}}
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="14"
+											height="14"
+											fill="currentColor"
+											class="text-neutral-400"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5"
+											/>
+										</svg>
+										<span class="truncate text-neutral-700">{unitName}</span>
+									</button>
+									{#if !rightSidebarMenuOpen}
+										<div
+											class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+										>
+											Change unit
+										</div>
+									{/if}
+									{#if unitOpen && canEditIssue}
+										<div
+											class="absolute right-auto left-0 z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+											on:click|stopPropagation
+										>
+											<button
+												type="button"
+												class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+													!issueUnitId ? 'bg-neutral-50' : ''
+												}`}
+												on:click={() => handleUnitSelect(null)}
+											>
+												<span>No unit</span>
+												{#if !issueUnitId}
+													<span class="text-xs text-neutral-400">Selected</span>
+												{/if}
+											</button>
+											<div class="my-1 h-px bg-neutral-100"></div>
+											{#if availableUnits.length}
+												{#each availableUnits as unit}
+													<button
+														type="button"
+														class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+															issueUnitId === unit.id ? 'bg-neutral-50' : ''
+														}`}
+														on:click={() => handleUnitSelect(unit.id)}
+													>
+														<span class="truncate">{unit.name}</span>
+														{#if issueUnitId === unit.id}
+															<span class="text-xs text-neutral-400">Selected</span>
+														{/if}
+													</button>
+												{/each}
+											{:else}
+												<div class="px-3 py-2 text-neutral-400">No units available.</div>
+											{/if}
+										</div>
+									{/if}
+								</div>
+							</div>
+							<div class="grid grid-cols-2 gap-2">
+								<div class="tooltip-target relative">
+									<button
+										type="button"
+										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition ${
+											canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+										}`}
+										disabled={!canEditIssue}
+										aria-disabled={!canEditIssue}
+										on:click|stopPropagation={() => {
+											if (!canEditIssue) return;
+											statusOpen = !statusOpen;
+											propertyOpen = false;
+											unitOpen = false;
+											assigneeOpen = false;
+											urgentOpen = false;
+											urgentHelpOpen = false;
+										}}
+									>
+										<span
+											class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
+										></span>
+										<span>{statusMeta.label}</span>
+									</button>
+									{#if !rightSidebarMenuOpen}
+										<div
+											class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+										>
+											Change status
+										</div>
+									{/if}
+									{#if statusOpen && canEditIssue}
+										<div
+											class="absolute right-auto left-0 z-10 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+											on:click|stopPropagation
+										>
+											{#each statusCycle as status}
+												<button
+													type="button"
+													class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+														statusKey === status ? 'bg-neutral-50' : ''
+													}`}
+													on:click={() => {
+														statusOpen = false;
+														handleStatusChange(status);
+													}}
+												>
+													<span
+														class={`h-4 w-4 rounded-full border-[1.5px] ${
+															(statusConfig[status] ?? statusConfig.todo).statusClass
+														}`}
+													></span>
+													<span>{(statusConfig[status] ?? statusConfig.todo).label}</span>
+												</button>
+											{/each}
+										</div>
+									{/if}
+								</div>
+								<div class="tooltip-target relative">
+									<button
+										type="button"
+										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition ${
+											canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+										}`}
+										disabled={!canEditIssue}
+										aria-disabled={!canEditIssue}
+										on:click|stopPropagation={() => {
+											if (!canEditIssue) return;
+											assigneeOpen = !assigneeOpen;
+											propertyOpen = false;
+											unitOpen = false;
+											statusOpen = false;
+											urgentOpen = false;
+											urgentHelpOpen = false;
+										}}
+									>
+										{#if assignee}
+											<div
+												class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(assignee).color}`}
+												aria-label={getAssigneeAvatar(assignee).name}
+											>
+												{getAssigneeAvatar(assignee).initial}
+											</div>
+										{:else}
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												fill="currentColor"
+												class="text-neutral-400"
+												viewBox="0 0 16 16"
+											>
+												<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+												<path
+													fill-rule="evenodd"
+													d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+												/>
+											</svg>
+										{/if}
+										<span class="truncate">{assigneeName}</span>
+									</button>
+									{#if !rightSidebarMenuOpen}
+										<div
+											class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+										>
+											Change assignee
+										</div>
+									{/if}
+									{#if assigneeOpen && canEditIssue}
+										<div
+											class="absolute right-auto left-0 z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+											on:click|stopPropagation
+										>
+											<button
+												type="button"
+												class="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50"
+												on:click={() => handleAssigneeSelect(null)}
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="16"
+													height="16"
+													fill="currentColor"
+													class="text-neutral-400"
+													viewBox="0 0 16 16"
+												>
+													<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+													<path
+														fill-rule="evenodd"
+														d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+													/>
+												</svg>
+												<span class="font-medium text-neutral-500"> Unassigned </span>
+											</button>
+											<div class="my-1 h-px bg-neutral-100"></div>
+											{#if membersLoading}
+												<div class="px-3 py-2 text-neutral-400">Loading members...</div>
+											{:else if assignableMembers.length}
+												{#each assignableMembers as member}
+													<button
+														type="button"
+														class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+															assignee?.id === member.user_id ? 'bg-neutral-50' : ''
+														}`}
+														on:click={() => handleAssigneeSelect(member)}
+													>
+														<div
+															class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getMemberAvatar(member).color}`}
+															aria-label={getMemberAvatar(member).name}
+														>
+															{getMemberAvatar(member).initial}
+														</div>
+														<span class="truncate">
+															{member.users?.name ??
+																member.name ??
+																member.users?.id ??
+																member.user_id ??
+																'Unknown member'}
+														</span>
+														<span
+															class="ml-auto rounded-full bg-stone-100 px-2 py-0.5 font-medium text-neutral-600"
+														>
+															{roleLabels[member.role] ?? member.role}
+														</span>
+													</button>
+												{/each}
+											{:else if membersReady}
+												<div class="px-3 py-2 text-neutral-400">No members found.</div>
+											{:else}
+												<div class="px-3 py-2 text-neutral-400">Unable to load members.</div>
+											{/if}
+										</div>
+									{/if}
+								</div>
+							</div>
+							<div class="tooltip-target group relative">
+								<button
+									type="button"
+									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition ${
+										canEditIssue && !isSubissue
+											? 'hover:bg-stone-100'
+											: 'cursor-not-allowed opacity-60'
+									}`}
+									disabled={!canEditIssue || isSubissue}
+									aria-disabled={!canEditIssue || isSubissue}
+									on:click|stopPropagation={() => {
+										if (!canEditIssue || isSubissue) return;
+										urgentOpen = !urgentOpen;
+										urgentHelpOpen = false;
+										statusOpen = false;
+										assigneeOpen = false;
+										propertyOpen = false;
+										unitOpen = false;
+									}}
+								>
+									{#if displayUrgent}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											fill="currentColor"
+											class="text-rose-600"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+											/>
+										</svg>
+										<span>Urgent</span>
+									{:else}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											fill="currentColor"
+											class="text-neutral-400"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+											/>
+										</svg>
+										<span>Not urgent</span>
+									{/if}
+								</button>
+								{#if !rightSidebarMenuOpen}
+									<div
+										class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+									>
+										{isSubissue ? 'Change urgency in the root issue' : 'Change urgency'}
+									</div>
+								{/if}
+								{#if urgentOpen && canEditIssue && !isSubissue}
+									<div
+										class="absolute right-auto left-0 z-10 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+										on:click|stopPropagation
+									>
+										<button
+											type="button"
+											class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+												displayUrgent ? 'bg-neutral-50' : ''
+											}`}
+											on:click={() => handleUrgentChange(true)}
+										>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												fill="currentColor"
+												class="text-rose-600"
+												viewBox="0 0 16 16"
+											>
+												<path
+													d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+												/>
+											</svg>
+											<span>Urgent</span>
+										</button>
+										<button
+											type="button"
+											class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+												!displayUrgent ? 'bg-neutral-50' : ''
+											}`}
+											on:click={() => handleUrgentChange(false)}
+										>
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												width="16"
+												height="16"
+												fill="currentColor"
+												class="text-neutral-400"
+												viewBox="0 0 16 16"
+											>
+												<path
+													d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+												/>
+											</svg>
+											<span>Not urgent</span>
+										</button>
+									</div>
+								{/if}
+							</div>
+						</div>
+					</div>
+				</div>
 				{#if !_subIssuesLoading && subIssues.length}
 					<div class="mt-8">
 						<div class="flex items-center gap-2 text-sm text-neutral-600">
@@ -2289,7 +2734,7 @@
 			</div>
 		</div>
 
-		<aside class="flex w-1/5 border-l border-neutral-200">
+		<aside class="hidden w-1/5 border-l border-neutral-200 sm:flex">
 			<div
 				class="flex w-full flex-col px-4 transition-opacity duration-150"
 				class:opacity-0={!$pageReady}
