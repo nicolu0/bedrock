@@ -1418,7 +1418,7 @@
 					</div>
 					<div></div>
 				</div>
-				<div class="mt-2 sm:hidden">
+				<div class="mt-1 sm:hidden">
 					<div class="rounded-2xl">
 						<div class="space-y-3 text-sm text-neutral-600">
 							<div class="grid grid-cols-2 gap-2">
