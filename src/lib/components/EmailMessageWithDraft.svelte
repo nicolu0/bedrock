@@ -702,7 +702,7 @@
 						</button>
 					</div>
 					<button
-						class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-800 disabled:opacity-50"
+						class="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1.5 text-white transition hover:bg-neutral-800 disabled:opacity-50"
 						type="button"
 						on:click={handleSendClick}
 						disabled={isSending}
@@ -710,6 +710,7 @@
 						{#if isSending}
 							<span class="text-[10px] font-semibold">...</span>
 						{:else}
+							<span class="text-xs font-semibold">Send</span>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								width="18"

@@ -190,7 +190,7 @@
 						</span>
 					{:else}
 						<button
-							class="inline-flex items-center justify-center rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
+							class="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
 							type="button"
 							on:click={approveDraft}
 							disabled={isApproving}
@@ -199,6 +199,18 @@
 								<span class="text-[10px] font-semibold">...</span>
 							{:else}
 								Approve
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="16"
+									height="16"
+									fill="currentColor"
+									class="bi bi-check2"
+									viewBox="0 0 16 16"
+								>
+									<path
+										d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0"
+									/>
+								</svg>
 							{/if}
 						</button>
 					{/if}
