@@ -865,7 +865,7 @@
 											data-sveltekit-preload-data="hover"
 										>
 											<div class="flex items-center justify-between gap-4">
-												<div class="flex items-center gap-2.5">
+												<div class="flex min-w-0 flex-1 items-center gap-2.5">
 													<div class="relative">
 														<button
 															type="button"
@@ -1032,15 +1032,23 @@
 														{/if}
 													</div>
 													{#if item.isSubIssue}
-														<div class="flex items-center gap-2 text-sm">
-															<span class="text-neutral-600">{item.title}</span>
+														<div class="flex min-w-0 items-center gap-2 text-sm">
+															<span
+																class="truncate text-neutral-600 sm:overflow-visible sm:whitespace-normal"
+															>
+																{item.title}
+															</span>
 															<span class="hidden text-neutral-300 sm:inline">›</span>
 															<span class="hidden text-neutral-400 sm:inline"
 																>{item.parentTitle}</span
 															>
 														</div>
 													{:else}
-														<span class="text-sm text-neutral-800">{item.title}</span>
+														<span
+															class="truncate text-sm text-neutral-800 sm:overflow-visible sm:whitespace-normal"
+														>
+															{item.title}
+														</span>
 													{/if}
 												</div>
 												<div class="flex items-center gap-2">
