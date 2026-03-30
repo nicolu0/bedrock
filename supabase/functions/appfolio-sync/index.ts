@@ -494,6 +494,10 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 		}
 
 		const bedrockPropertyId = propMap.get(String(appfolioPropId)) ?? null;
+		if (!bedrockPropertyId) {
+			console.warn(`syncWorkOrders: no Bedrock property for appfolio_property_id=${appfolioPropId} — skipping ${(rows as any[]).length} work orders`);
+			continue;
+		}
 
 		for (const row of rows as any[]) {
 			const woId = row.work_order_id;
@@ -570,7 +574,30 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 					console.error(`syncWorkOrders tracking update error for work_order_id=${woId}:`, trackingError.message);
 				}
 
-					if (isNew) changeQueue.push({ issueId, workspaceId, change_type: 'new', row });
+					if (isNew) {
+						changeQueue.push({ issueId, workspaceId, change_type: 'new', row });
+
+						// Notify all bedrock users that a new work order needs attention
+						const { data: bedrockPeople } = await supabase
+							.from('people')
+							.select('user_id')
+							.eq('workspace_id', workspaceId)
+							.eq('role', 'bedrock')
+							.not('user_id', 'is', null);
+						if (bedrockPeople?.length) {
+							await supabase.from('notifications').insert(
+								bedrockPeople.map((p: any) => ({
+									workspace_id: workspaceId,
+									issue_id: issueId,
+									user_id: p.user_id,
+									title: 'New Work Order',
+									body: name,
+									type: 'new_work_order',
+									requires_action: true
+								}))
+							);
+						}
+					}
 				if (statusChanged)  changeQueue.push({ issueId, workspaceId, change_type: 'status_changed', row });
 				if (vendorAssigned) changeQueue.push({ issueId, workspaceId, change_type: 'vendor_assigned', row });
 				if (notesChanged)   changeQueue.push({ issueId, workspaceId, change_type: 'notes_changed', row });
@@ -634,23 +661,68 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 		}
 	}
 
-	// Fire-and-forget agent events for all detected changes.
-	// Non-blocking — a failed agent call should never abort the sync.
-	// The gateway requires `apikey` to be a valid JWT for project routing.
-	// ANON_JWT is the legacy eyJhbG... anon key (not sb_secret_* or sb_publishable_* which are not JWTs).
-	// verify_jwt:false in agent/config.json means the gateway won't reject the anon role.
-	// x-internal-agent-key is validated inside the agent function to ensure only trusted callers proceed.
+	// Re-queue issues where the agent never ran (fire-and-forget failure on a prior sync).
+	// Only re-queue issues older than 2 minutes so we don't double-fire in-flight agent calls.
+	// Edge function hard timeout is 60s (free) / 150s (pro), so 2min gives ample safety buffer.
+	const staleThreshold = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+	if (existingIssueIds.length > 0) {
+		const { data: staleIssues } = await supabase
+			.from('issues')
+			.select('id')
+			.eq('workspace_id', workspaceId)
+			.eq('source', 'appfolio')
+			.is('agent_processed_at', null)
+			.lt('created_at', staleThreshold)
+			.in('id', existingIssueIds);
+		for (const issue of staleIssues ?? []) {
+			if (!changeQueue.some(e => e.issueId === issue.id && e.change_type === 'new')) {
+				changeQueue.push({ issueId: issue.id, workspaceId, change_type: 'new', row: null });
+			}
+		}
+		if (staleIssues?.length) {
+			console.log(`syncWorkOrders: re-queuing ${staleIssues.length} stale unprocessed issues`);
+		}
+	}
+
+	// Dispatch agent events for all detected changes.
+	// Non-blocking — sync returns immediately; each dispatch awaits its own response internally.
+	// On failure (network error OR non-2xx HTTP): retries once immediately before giving up.
+	// The stale re-queue (2 min) acts as the final safety net for persistent failures.
+	type ChangeEvent = (typeof changeQueue)[number];
+	const dispatchAgentWithRetry = (event: ChangeEvent) => {
+		const body = JSON.stringify({ source: 'appfolio', ...event });
+		const doFetch = async (attempt: number): Promise<void> => {
+			try {
+				const res = await fetch(`${SUPABASE_URL}/functions/v1/agent`, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						apikey: ANON_JWT,
+						Authorization: `Bearer ${ANON_JWT}`,
+						'x-internal-agent-key': INTERNAL_AGENT_KEY
+					},
+					body
+				});
+				if (!res.ok) {
+					const text = await res.text().catch(() => '');
+					console.error(
+						`appfolio-sync: agent HTTP ${res.status} for issue ${event.issueId} (attempt ${attempt})`,
+						text.slice(0, 200)
+					);
+					if (attempt < 2) return doFetch(attempt + 1);
+				}
+			} catch (err) {
+				console.error(
+					`appfolio-sync: agent fetch failed for issue ${event.issueId} (attempt ${attempt}):`,
+					err
+				);
+				if (attempt < 2) return doFetch(attempt + 1);
+			}
+		};
+		doFetch(1).catch((err) => console.error('dispatchAgentWithRetry unhandled:', err));
+	};
 	for (const event of changeQueue) {
-		fetch(`${SUPABASE_URL}/functions/v1/agent`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				apikey: ANON_JWT,
-				Authorization: `Bearer ${ANON_JWT}`,
-				'x-internal-agent-key': INTERNAL_AGENT_KEY
-			},
-			body: JSON.stringify({ source: 'appfolio', ...event })
-		}).catch((err: Error) => console.error('appfolio-sync agent call failed:', err));
+		dispatchAgentWithRetry(event);
 	}
 }
 
