@@ -107,13 +107,7 @@ export const POST = async ({ locals, request }) => {
 	});
 
 	// Notify all bedrock users that a draft was approved and needs action
-	const { data: bedrockPeople } = await supabaseAdmin
-		.from('people')
-		.select('user_id')
-		.eq('workspace_id', issue.workspace_id)
-		.eq('role', 'bedrock')
-		.not('user_id', 'is', null);
-
+	// (reuses bedrockPeople already fetched above)
 	if (bedrockPeople?.length) {
 		await supabaseAdmin.from('notifications').insert(
 			bedrockPeople.map((p) => ({
