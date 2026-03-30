@@ -1072,6 +1072,7 @@ const runIssueAgent = async ({
 	body,
 	senderEmail,
 	unitId,
+	propertyId,
 	unitName,
 	workspaceId,
 	propertyName,
@@ -1096,6 +1097,7 @@ const runIssueAgent = async ({
 	body: string;
 	senderEmail: string;
 	unitId: string | null;
+	propertyId?: string | null;
 	unitName: string | null;
 	workspaceId: string;
 	propertyName: string | null;
@@ -1413,6 +1415,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 	let draftedIssueId: string | null = null;
 	let threadLinked = false;
 	let resolvedUnitId: string | null = unitId;
+	let resolvedPropertyId: string | null = propertyId ?? null;
 	let primaryIssueId: string | null = rootIssueId ?? threadIssueId ?? null;
 	const issueNameCache = new Map<string, string>();
 	const urgencyHint = urgencyDecision === true ? true : urgencyDecision === false ? false : null;
@@ -1496,7 +1499,8 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 				create_issue: 'Creating root issue',
 				create_subissue: 'Creating subissues',
 				draft_email: 'Drafting emails',
-				draft_reply: 'Drafting emails'
+				draft_reply: 'Drafting emails',
+				draft_appfolio: 'Drafting message'
 			};
 			const stageMessage = stageMessageByName[name];
 			const issueIdForEvent =
@@ -1537,11 +1541,13 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 				if (name === 'update_issue') {
 					const title = typeof args.title === 'string' ? args.title.trim() : '';
 					const desc = typeof args.description === 'string' ? args.description.trim() : '';
-					if (rootIssueId && (title || desc)) {
-						const updates: Record<string, string> = {};
+					if (rootIssueId) {
+						const updates: Record<string, string | null> = {};
 						if (title) updates.name = title;
 						if (desc) updates.description = desc;
-						await supabase.from('issues').update(updates).eq('id', rootIssueId);
+						if (Object.keys(updates).length) {
+							await supabase.from('issues').update(updates).eq('id', rootIssueId);
+						}
 					}
 					issuedAction = true;
 					result = { ok: true };
@@ -1602,6 +1608,8 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 					});
 					if (unit && typeof unit === 'string') {
 						resolvedUnitId = unit;
+						const unitEntry = workspaceUnits?.find((u) => u.id === unit);
+						if (unitEntry?.property_id) resolvedPropertyId = unitEntry.property_id;
 					}
 					linkedIssueId = issueId;
 					createdIssueId = issueId;
@@ -1683,6 +1691,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 						parentIssueId,
 						name: title,
 						unitId: resolvedUnitId,
+						propertyId: resolvedPropertyId,
 						workspaceId,
 						status,
 						reasoning,
@@ -2043,6 +2052,47 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 	}
 
 	// All LLM outputs logged per step above.
+
+	// For AppFolio issues: mark as fully processed now that all steps are complete.
+	// This makes the issue visible client-side. Set here (not in update_issue) so the
+	// issue only appears after title, subissues, and drafts are all done.
+	if (source === 'appfolio' && rootIssueId) {
+		await supabase
+			.from('issues')
+			.update({ agent_processed_at: new Date().toISOString() })
+			.eq('id', rootIssueId);
+
+		// Notify bedrock users now that the issue is fully processed (cleaned title + description).
+		const { data: processedIssue } = await supabase
+			.from('issues')
+			.select('name, description')
+			.eq('id', rootIssueId)
+			.maybeSingle();
+		const processedTitle = processedIssue?.name?.trim() ?? '';
+		const processedDesc = processedIssue?.description?.trim() ?? '';
+		const notifTitle = processedTitle
+			? `New Work Order — ${processedTitle}`
+			: 'New Work Order';
+		const { data: bedrockPeople } = await supabase
+			.from('people')
+			.select('user_id')
+			.eq('workspace_id', workspaceId)
+			.eq('role', 'bedrock')
+			.not('user_id', 'is', null);
+		if (bedrockPeople?.length) {
+			await supabase.from('notifications').insert(
+				bedrockPeople.map((p: any) => ({
+					workspace_id: workspaceId,
+					issue_id: rootIssueId,
+					user_id: p.user_id,
+					title: notifTitle,
+					body: processedDesc,
+					type: 'new_work_order',
+					requires_action: true
+				}))
+			);
+		}
+	}
 
 	if (threadId && !threadLinked) {
 		await logError(userId, 'LLM did not link thread to issue.');
@@ -2731,10 +2781,9 @@ const handleAppfolioWorkOrder = async ({
 		await supabase.from('drafts').insert({
 			workspace_id: workspaceId,
 			issue_id: issueId,
-			to: vendorEmail,
+			recipient_email: vendorEmail,
 			subject: `Follow-up: Work Order #${issueRow.appfolio_id ?? issueRow.readable_id ?? issueId}`,
 			body: `Hi, this is a follow-up to confirm you received work order #${issueRow.appfolio_id ?? issueId} at ${issueRow.name}. Please reply with your estimated arrival time. Thank you.`,
-			status: 'draft',
 			channel: 'email'
 		});
 		await supabase.from('issues').update({ vendor_followup_sent: true }).eq('id', issueId);
@@ -2803,6 +2852,7 @@ const handleAppfolioWorkOrder = async ({
 			body: description,
 			senderEmail: tenantEmail ?? '',
 			unitId: issueRow.unit_id ?? null,
+			propertyId: issueRow.property_id ?? null,
 			unitName: unitRow?.name ?? null,
 			workspaceId,
 			propertyName: propRow?.name ?? null,

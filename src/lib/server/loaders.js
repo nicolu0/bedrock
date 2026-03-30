@@ -41,7 +41,7 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 		let query = supabaseAdmin
 			.from('issues')
 			.select(
-				'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id'
+				'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, source, agent_processed_at'
 			)
 			.eq('workspace_id', workspaceId)
 			.order('updated_at', { ascending: false });
@@ -54,7 +54,12 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 		return query;
 	};
 
-	let { data: issues } = await buildIssuesQuery();
+	let { data: rawIssues } = await buildIssuesQuery();
+	// Hide AppFolio issues that haven't been fully processed by the agent yet.
+	// agent_processed_at is set after done() completes, so NULL means mid-flight or failed.
+	let issues = (rawIssues ?? []).filter(
+		(issue) => issue.source !== 'appfolio' || issue.agent_processed_at != null
+	);
 
 	if (!issues?.length) {
 		const { data: fallbackUnits } = await supabaseAdmin
@@ -68,7 +73,7 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 			let fallbackQuery = supabaseAdmin
 				.from('issues')
 				.select(
-					'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id'
+					'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, source, agent_processed_at'
 				)
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
@@ -81,7 +86,9 @@ export const loadIssuesData = async (workspaceId, userId, userRole, ownerPersonI
 					: fallbackQuery.eq('id', '__none__');
 			}
 			const { data: fallbackIssues } = await fallbackQuery;
-			issues = fallbackIssues ?? [];
+			issues = (fallbackIssues ?? []).filter(
+				(issue) => issue.source !== 'appfolio' || issue.agent_processed_at != null
+			);
 		}
 	}
 

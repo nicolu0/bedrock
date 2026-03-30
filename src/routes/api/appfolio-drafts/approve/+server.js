@@ -28,7 +28,7 @@ export const POST = async ({ locals, request }) => {
 
 	const { data: issue } = await supabaseAdmin
 		.from('issues')
-		.select('id, workspace_id')
+		.select('id, workspace_id, name')
 		.eq('id', issueId)
 		.maybeSingle();
 	if (!issue?.id || !issue.workspace_id) {
@@ -105,6 +105,22 @@ export const POST = async ({ locals, request }) => {
 		},
 		created_by: locals.user.id
 	});
+
+	// Notify all bedrock users that a draft was approved and needs action
+	// (reuses bedrockPeople already fetched above)
+	if (bedrockPeople?.length) {
+		await supabaseAdmin.from('notifications').insert(
+			bedrockPeople.map((p) => ({
+				workspace_id: issue.workspace_id,
+				issue_id: issue.id,
+				user_id: p.user_id,
+				title: 'Draft Approved',
+				body: `${approvedBy} approved a draft — ${issue.name}`,
+				type: 'draft_approved',
+				requires_action: true
+			}))
+		);
+	}
 
 	return json({
 		ok: true,
