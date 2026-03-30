@@ -1861,7 +1861,7 @@
 					</div>
 				</div>
 				{#if !_subIssuesLoading && subIssues.length}
-					<div class="mt-3 sm:mt-6">
+					<div class="mt-1 sm:mt-6">
 						<div class="flex items-center gap-2 text-sm text-neutral-600">
 							<div class="tooltip-target relative">
 								<button
