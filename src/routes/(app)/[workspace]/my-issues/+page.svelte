@@ -1051,7 +1051,7 @@
 														<span class="hidden border-l border-neutral-200 px-2 py-0.5 sm:inline">
 															{item.unit}
 														</span>
-														<span class="px-2 py-0.5 sm:hidden">Unit {item.unit}</span>
+														<span class="px-2 py-0.5 sm:hidden">{item.unit}</span>
 													</div>
 													{#if item.assigneeBadge}
 														<div
