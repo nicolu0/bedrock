@@ -1078,7 +1078,11 @@
 	};
 
 	let subIssuesOpen = true;
+	let tasksOpen = {};
 	let activityOpen = {};
+	const toggleTasks = (id) => {
+		tasksOpen = { ...tasksOpen, [id]: !(tasksOpen[id] ?? true) };
+	};
 	const toggleActivity = (id) => {
 		activityOpen = { ...activityOpen, [id]: !(activityOpen[id] ?? true) };
 	};
@@ -1404,7 +1408,7 @@
 				class="flex-1 overflow-y-auto px-4 pt-4 pb-20 transition-opacity duration-200 sm:px-10 sm:pt-8"
 				class:opacity-0={!$pageReady}
 			>
-				<div class="flex flex-wrap items-start justify-between gap-6">
+				<div class="flex flex-wrap items-start justify-between">
 					<div class="min-w-0">
 						{#if !_issueLoading && issue}
 							<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
@@ -1418,9 +1422,9 @@
 					</div>
 					<div></div>
 				</div>
-				<div class="mt-1 sm:hidden">
+				<div class="my-4 sm:hidden">
 					<div class="rounded-2xl">
-						<div class="space-y-3 text-sm text-neutral-600">
+						<div class="space-y-2 text-sm text-neutral-600">
 							<div class="grid grid-cols-2 gap-2">
 								<div class="tooltip-target relative">
 									<button
@@ -1960,7 +1964,7 @@
 					</div>
 				{/if}
 
-				<div class="mt-2 border-t border-neutral-200 pt-4 sm:mt-8 sm:pt-6">
+				<div class="mt-4 border-t border-neutral-200 pt-4 sm:mt-8 sm:pt-6">
 					<div class="flex items-center justify-between">
 						<h2 class="text-base font-semibold text-neutral-800">Tasks</h2>
 						<div class="text-sm text-neutral-400">Unsubscribe</div>
@@ -2132,12 +2136,41 @@
 													<svg
 														width="18"
 														height="18"
-														viewBox="0 0 16 16"
-														fill="currentColor"
-														class="text-neutral-500"
+														viewBox="0 0 32 32"
+														fill="none"
+														xmlns="http://www.w3.org/2000/svg"
 													>
 														<path
-															d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v7A1.5 1.5 0 0 1 12.5 12h-9A1.5 1.5 0 0 1 2 10.5zM3.5 3a.5.5 0 0 0-.5.5v.379l5 3.125 5-3.125V3.5a.5.5 0 0 0-.5-.5z"
+															d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
+															fill="white"
+														/>
+														<path
+															d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+															fill="#EA4335"
+														/>
+														<path
+															d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+															fill="#FBBC05"
+														/>
+														<path
+															d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+															fill="#34A853"
+														/>
+														<path
+															d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+															fill="#C5221F"
+														/>
+														<path
+															d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+															fill="#C5221F"
+														/>
+														<path
+															d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+															fill="#C5221F"
+														/>
+														<path
+															d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+															fill="#4285F4"
 														/>
 													</svg>
 												</div>
@@ -2207,7 +2240,7 @@
 										<button
 											type="button"
 											class="tooltip-target relative flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
-											on:click={() => toggleActivity(subIssue.id)}
+											on:click={() => toggleTasks(subIssue.id)}
 										>
 											<div
 												class="flex items-center gap-2 rounded-md px-3 py-1.5 transition select-none hover:bg-neutral-100"
@@ -2218,7 +2251,7 @@
 													height="12"
 													fill="currentColor"
 													class="transition-transform duration-150 ease-in-out"
-													class:rotate-[-90deg]={!(activityOpen[subIssue.id] ?? true)}
+													class:rotate-[-90deg]={!(tasksOpen[subIssue.id] ?? true)}
 													viewBox="0 0 16 16"
 												>
 													<path
@@ -2230,7 +2263,7 @@
 											<div
 												class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
 											>
-												{(activityOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
+												{(tasksOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
 											</div>
 											<span class="text-neutral-300">
 												{draftsByIssue[subIssue.id]?.length ?? 0}
@@ -2238,12 +2271,12 @@
 										</button>
 										<div
 											class="grid transition-[grid-template-rows] duration-200 ease-in-out"
-											style:grid-template-rows={(activityOpen[subIssue.id] ?? true) ? '1fr' : '0fr'}
+											style:grid-template-rows={(tasksOpen[subIssue.id] ?? true) ? '1fr' : '0fr'}
 										>
 											<div class="overflow-hidden">
 												<div
 													class="space-y-3 py-2 transition-opacity duration-200"
-													class:opacity-0={!(activityOpen[subIssue.id] ?? true)}
+													class:opacity-0={!(tasksOpen[subIssue.id] ?? true)}
 												>
 													{#if (messagesByIssue[subIssue.id]?.length ?? 0) > 0 || (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 														<div class="space-y-3">
@@ -2397,12 +2430,41 @@
 																		<svg
 																			width="18"
 																			height="18"
-																			viewBox="0 0 16 16"
-																			fill="currentColor"
-																			class="text-neutral-500"
+																			viewBox="0 0 32 32"
+																			fill="none"
+																			xmlns="http://www.w3.org/2000/svg"
 																		>
 																			<path
-																				d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v7A1.5 1.5 0 0 1 12.5 12h-9A1.5 1.5 0 0 1 2 10.5zM3.5 3a.5.5 0 0 0-.5.5v.379l5 3.125 5-3.125V3.5a.5.5 0 0 0-.5-.5z"
+																				d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
+																				fill="white"
+																			/>
+																			<path
+																				d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+																				fill="#EA4335"
+																			/>
+																			<path
+																				d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+																				fill="#FBBC05"
+																			/>
+																			<path
+																				d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+																				fill="#34A853"
+																			/>
+																			<path
+																				d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+																				fill="#C5221F"
+																			/>
+																			<path
+																				d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+																				fill="#C5221F"
+																			/>
+																			<path
+																				d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+																				fill="#C5221F"
+																			/>
+																			<path
+																				d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+																				fill="#4285F4"
 																			/>
 																		</svg>
 																	</div>
