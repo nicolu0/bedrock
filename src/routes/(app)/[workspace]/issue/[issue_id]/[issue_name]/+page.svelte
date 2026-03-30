@@ -1404,7 +1404,7 @@
 			</div>
 
 			<div
-				class="flex-1 overflow-y-auto px-10 pt-8 pb-20 transition-opacity duration-200"
+				class="flex-1 overflow-y-auto px-4 pt-8 pb-20 transition-opacity duration-200 sm:px-10"
 				class:opacity-0={!$pageReady}
 			>
 				<div class="flex flex-wrap items-start justify-between gap-6">
