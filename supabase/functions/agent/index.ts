@@ -2061,6 +2061,37 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 			.from('issues')
 			.update({ agent_processed_at: new Date().toISOString() })
 			.eq('id', rootIssueId);
+
+		// Notify bedrock users now that the issue is fully processed (cleaned title + description).
+		const { data: processedIssue } = await supabase
+			.from('issues')
+			.select('name, description')
+			.eq('id', rootIssueId)
+			.maybeSingle();
+		const processedTitle = processedIssue?.name?.trim() ?? '';
+		const processedDesc = processedIssue?.description?.trim() ?? '';
+		const notifTitle = processedTitle
+			? `New Work Order — ${processedTitle}`
+			: 'New Work Order';
+		const { data: bedrockPeople } = await supabase
+			.from('people')
+			.select('user_id')
+			.eq('workspace_id', workspaceId)
+			.eq('role', 'bedrock')
+			.not('user_id', 'is', null);
+		if (bedrockPeople?.length) {
+			await supabase.from('notifications').insert(
+				bedrockPeople.map((p: any) => ({
+					workspace_id: workspaceId,
+					issue_id: rootIssueId,
+					user_id: p.user_id,
+					title: notifTitle,
+					body: processedDesc,
+					type: 'new_work_order',
+					requires_action: true
+				}))
+			);
+		}
 	}
 
 	if (threadId && !threadLinked) {

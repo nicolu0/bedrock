@@ -576,27 +576,7 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 
 					if (isNew) {
 						changeQueue.push({ issueId, workspaceId, change_type: 'new', row });
-
-						// Notify all bedrock users that a new work order needs attention
-						const { data: bedrockPeople } = await supabase
-							.from('people')
-							.select('user_id')
-							.eq('workspace_id', workspaceId)
-							.eq('role', 'bedrock')
-							.not('user_id', 'is', null);
-						if (bedrockPeople?.length) {
-							await supabase.from('notifications').insert(
-								bedrockPeople.map((p: any) => ({
-									workspace_id: workspaceId,
-									issue_id: issueId,
-									user_id: p.user_id,
-									title: 'New Work Order',
-									body: name,
-									type: 'new_work_order',
-									requires_action: true
-								}))
-							);
-						}
+						// Notification is created by the agent after processing, using the cleaned title/description.
 					}
 				if (statusChanged)  changeQueue.push({ issueId, workspaceId, change_type: 'status_changed', row });
 				if (vendorAssigned) changeQueue.push({ issueId, workspaceId, change_type: 'vendor_assigned', row });
