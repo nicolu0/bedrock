@@ -57,6 +57,33 @@ const trimQuotedReply = (input: string) => {
 	return markerMatch[0].trim();
 };
 
+// Clamp a title to MAX_TITLE_CHARS by trimming at the last word boundary.
+// Prevents mid-word truncation while enforcing the character limit.
+const MAX_TITLE_CHARS = 30;
+const clampTitle = (title: string): string => {
+	if (title.length <= MAX_TITLE_CHARS) return title;
+	const cut = title.slice(0, MAX_TITLE_CHARS + 1);
+	const lastSpace = cut.lastIndexOf(' ');
+	return lastSpace > 0 ? title.slice(0, lastSpace).trimEnd() : title.slice(0, MAX_TITLE_CHARS);
+};
+
+// Strip all tokens of a tenant's full name from a title string.
+// Removes each word of the name individually (case-insensitive) so partial
+// matches like first-name-only are also caught.
+const stripTenantNameFromTitle = (title: string, tenantName: string | null): string => {
+	let result = title;
+	if (tenantName) {
+		for (const token of tenantName.trim().split(/\s+/)) {
+			if (token.length < 2) continue; // skip single chars
+			result = result.replace(new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '').trim();
+		}
+	}
+	// Remove any empty or whitespace-only parentheses left behind, e.g. "()" or "( )"
+	result = result.replace(/\(\s*\)/g, '').trim();
+	// Collapse any double spaces left behind
+	return result.replace(/\s{2,}/g, ' ').trim();
+};
+
 const normalizeSubjectTitle = (subject: string) => {
 	const cleaned = subject
 		.replace(/^\s*(re|fwd|fw)\s*:\s*/gi, '')
@@ -1173,7 +1200,7 @@ Non-tenant routing:
 
 Rules:
 - Use tools only.
-- Issue title: 2-5 words, Title Case, no location or unit/building names.
+- Issue title: 2-5 words, Title Case, no location, no unit/building names, no tenant names. Maximum 30 characters. Write a complete, grammatically natural phrase — never truncate mid-word or mid-thought.
 - Issue description: required when creating an issue. One line only, super concise, human readable summary of the current state. Include who reported it (name if known) and what the issue is. Avoid quoting the email body. Avoid list/CSV formatting; write a sentence.
 - Issue urgency: when creating the root issue, set the urgent field.
   - Use workspace_policy urgency rules and emergency heuristics to decide.
@@ -1182,9 +1209,11 @@ Rules:
   - If no policy applies but emergency heuristics apply, set urgent=true.
   - If unsure, omit urgent.
 - Status must be 'todo' when creating a new issue.
-- Subissue title format:
-  - Triage {Issue Title} (${tenantName ? tenantName.split(' ')[0] : 'Tenant'})
+- Subissue title format (max 30 characters, must be grammatically complete):
+  - Triage {Issue Title}
   - Schedule {Vendor Type} for {Issue Title}
+  - Never include the tenant's name or any person's name anywhere in a title.
+  - If the full format exceeds 30 characters, shorten the issue title portion — keep it natural and readable, never cut off mid-word.
 - Subissue parent rules: Triage and Schedule subissues must use root_issue_id as parent. Never use thread_issue_id as the parent for Schedule.
 - Subissue description: required. One line only, super concise, human readable summary of why this subissue exists (use the reasoning as a base). Make it specific to the subissue stage (triage vs schedule) and the reason for that stage (tenant-fixable, policy requirement, etc.). Avoid quoting the email body. Avoid list/CSV formatting; write a sentence.
 - Reasoning: keep as a short, human-readable sentence that can be reused for the subissue description.
@@ -1220,7 +1249,7 @@ ${
 AppFolio source rules (override ALL general draft rules below):
 IMPORTANT: The current issue title and description are the VERBATIM raw work order text copied directly from AppFolio. They must ALWAYS be cleaned up regardless of how short or readable they appear.
 - Step 1 — MANDATORY FIRST ACTION: Call update_issue before any other tool call. No exceptions.
-  - title: 2-5 words, Title Case (e.g., "Leaky Kitchen Faucet", "Broken AC Unit", "Clogged Bathroom Drain", "Ant Infestation", "Broken Washer"). No location, no unit names. Never copy the work order text.
+  - title: 2-5 words, Title Case, maximum 30 characters (e.g., "Leaky Kitchen Faucet", "Broken AC Unit", "Clogged Drain", "Ant Infestation", "Broken Washer"). No location, no unit names, no tenant names. Never copy the work order text. Write a complete, grammatically natural phrase.
   - description: one concise sentence summarising who reported it and what the problem is. Never copy the work order text verbatim.
 - Step 2: Create a triage subissue (and a schedule subissue if a vendor is clearly needed).
 - Step 3: Call draft_appfolio (NOT draft_reply or draft_email — those do not exist for AppFolio source). Use the triage subissue id as issue_id. Draft a short message to the tenant acknowledging the work order and any next steps.
@@ -1558,7 +1587,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 			}
 			try {
 				if (name === 'update_issue') {
-					const title = typeof args.title === 'string' ? args.title.trim() : '';
+					const title = typeof args.title === 'string' ? clampTitle(stripTenantNameFromTitle(args.title.trim(), tenantName)) : '';
 					const desc = typeof args.description === 'string' ? args.description.trim() : '';
 					if (rootIssueId) {
 						const updates: Record<string, string | null> = {};
@@ -1573,7 +1602,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 				}
 
 				if (name === 'create_issue') {
-					const title = typeof args.title === 'string' ? args.title.trim() : '';
+					const title = typeof args.title === 'string' ? clampTitle(stripTenantNameFromTitle(args.title.trim(), tenantName)) : '';
 					const unit = typeof args.unit_id === 'string' ? args.unit_id : unitId;
 					const workspace = typeof args.workspace_id === 'string' ? args.workspace_id : workspaceId;
 					const assignee = defaultAssigneeId;
@@ -1668,7 +1697,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 				}
 
 				if (name === 'create_subissue') {
-					const title = typeof args.title === 'string' ? args.title.trim() : '';
+					const title = typeof args.title === 'string' ? clampTitle(stripTenantNameFromTitle(args.title.trim(), tenantName)) : '';
 					const isTriageSubissue = /^triage\s+/i.test(title);
 					const statusValue = typeof args.status === 'string' ? args.status : 'todo';
 					const status = ['todo', 'in_progress', 'done'].includes(statusValue)
@@ -2876,8 +2905,20 @@ const handleAppfolioWorkOrder = async ({
 
 		const workspaceUnits = await listWorkspaceUnitsForAgent(workspaceId);
 
-		const tenantName = normalizeTenantName(row?.primary_tenant ? String(row.primary_tenant) : null);
-		const tenantEmail = row?.primary_tenant_email ? String(row.primary_tenant_email) : null;
+		// row may be null for stale re-queues — fall back to the activity_log recorded at issue
+		// creation which stores the exact tenant who submitted the work order (data.from / data.from_email).
+		let tenantName = normalizeTenantName(row?.primary_tenant ? String(row.primary_tenant) : null);
+		let tenantEmail: string | null = row?.primary_tenant_email ? String(row.primary_tenant_email) : null;
+		if (!tenantName) {
+			const { data: createdLog } = await supabase
+				.from('activity_logs')
+				.select('data')
+				.eq('issue_id', issueId)
+				.eq('type', 'issue_created')
+				.maybeSingle();
+			if (createdLog?.data?.from) tenantName = normalizeTenantName(String(createdLog.data.from));
+			if (createdLog?.data?.from_email) tenantEmail = String(createdLog.data.from_email);
+		}
 		const description = issueRow.description ?? issueRow.name ?? '';
 
 		await runIssueAgent({
