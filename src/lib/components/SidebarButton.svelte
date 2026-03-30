@@ -1,15 +1,25 @@
 <script>
+	// @ts-nocheck
 	import { getContext } from 'svelte';
+
+	export let onClick = null;
 
 	const sidebarControl = getContext('sidebarControl');
 	const openSidebar = () => sidebarControl?.open?.();
+	const handleClick = () => {
+		if (onClick) {
+			onClick();
+			return;
+		}
+		openSidebar();
+	};
 </script>
 
 <button
 	type="button"
 	aria-label="Open sidebar"
 	class="rounded-md p-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800"
-	on:click={openSidebar}
+	on:click={handleClick}
 >
 	<svg
 		xmlns="http://www.w3.org/2000/svg"

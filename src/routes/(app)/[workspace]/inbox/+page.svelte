@@ -9,8 +9,7 @@
 		primeNotificationsCache
 	} from '$lib/stores/notificationsCache';
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
-	import ChatButton from '$lib/components/ChatButton.svelte';
-	import { openChatPanel, openIssuePanel } from '$lib/stores/rightPanel.js';
+	import { openChatPanel, openIssuePanel, toggleChatPanel } from '$lib/stores/rightPanel.js';
 	import { onMount, onDestroy } from 'svelte';
 
 	export let data;
@@ -108,6 +107,11 @@
 		}
 	}
 
+	const handlePanelClose = () => {
+		selectedNotification = null;
+		openChatPanel();
+	};
+
 	let _resolvedVendors = [];
 	$: {
 		if (data.vendors instanceof Promise) {
@@ -168,7 +172,9 @@
 			activityData: _resolvedActivity,
 			activityLogsData: _resolvedLogs,
 			vendors,
-			allIssues: []
+			allIssues: [],
+			onClose: handlePanelClose,
+			onResolved: resolveAndAdvance
 		});
 		if (!n.is_read && !localReadIds.has(n.id)) {
 			localReadIds = new Set([...localReadIds, n.id]);
@@ -197,8 +203,12 @@
 		<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
 			<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
 			<div class="flex items-center gap-2">
-				<ChatButton />
-				<SidebarButton />
+				<SidebarButton
+					onClick={() => {
+						selectedNotification = null;
+						toggleChatPanel();
+					}}
+				/>
 			</div>
 		</div>
 

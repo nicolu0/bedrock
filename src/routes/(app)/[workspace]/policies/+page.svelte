@@ -5,6 +5,7 @@
 	import { getContext } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
+	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 	import {
 		applyPolicyInsert,
 		applyPolicyUpdate,
@@ -379,7 +380,7 @@
 			>
 				+ New policy
 			</button>
-			<SidebarButton />
+			<SidebarButton onClick={toggleChatPanel} />
 		</div>
 	</div>
 	<div class="flex items-center justify-between px-6 py-2">

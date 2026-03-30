@@ -8,6 +8,7 @@
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import AppfolioDraftMessage from '$lib/components/AppfolioDraftMessage.svelte';
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
+	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 	import { pageReady } from '$lib/stores/pageReady';
 	import { supabase } from '$lib/supabaseClient.js';
 	import { getIssueDetailByReadableId, seedIssueDetail } from '$lib/stores/issueDetailCache.js';
@@ -1431,7 +1432,7 @@
 							/>
 						</svg>
 					</a>
-					<SidebarButton />
+					<SidebarButton onClick={toggleChatPanel} />
 				</div>
 			</div>
 
@@ -1895,7 +1896,7 @@
 						</div>
 					</div>
 				</div>
-				<div class="mt-2 sm:mt-6 sm:grid sm:grid-cols-[3fr_1fr] sm:gap-6">
+				<div class="mt-2 sm:mt-6 sm:grid sm:grid-cols-[2fr_1fr] sm:gap-6">
 					<div class="min-w-0">
 						{#if !_subIssuesLoading && subIssues.length}
 							<div>

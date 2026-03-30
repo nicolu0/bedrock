@@ -6,6 +6,7 @@
 	import { fade, scale } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
+	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 	import { seedIssueDetail } from '$lib/stores/issueDetailCache.js';
 	import {
 		applyIssueInsert,
@@ -620,7 +621,7 @@
 			>
 				+ New issue
 			</button>
-			<SidebarButton />
+			<SidebarButton onClick={toggleChatPanel} />
 		</div>
 	</div>
 	<div class="flex items-center justify-between px-6 py-2">

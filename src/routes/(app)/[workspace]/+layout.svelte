@@ -837,7 +837,7 @@
 			<section class="flex-1 overflow-hidden">
 				<div class="flex h-full min-w-0">
 					<div
-						class={`flex h-full flex-1 flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out ${
+						class={`flex flex-none flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out ${
 							$rightPanel.open ? 'w-1/2 border-r border-neutral-200' : 'w-full'
 						}`}
 					>

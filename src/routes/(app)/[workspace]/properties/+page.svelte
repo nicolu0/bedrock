@@ -7,6 +7,7 @@
 	import { peopleCache } from '$lib/stores/peopleCache.js';
 	import { propertiesCache } from '$lib/stores/propertiesCache.js';
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
+	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 
 	export let data;
 
@@ -353,7 +354,7 @@
 			>
 				+ New property
 			</button>
-			<SidebarButton />
+			<SidebarButton onClick={toggleChatPanel} />
 		</div>
 	</div>
 	<div class="flex items-center gap-2 border-b border-neutral-200 px-6 pb-2">

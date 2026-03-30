@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
+	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 	import {
 		addPersonToCache,
 		replacePersonInCache,
@@ -70,7 +71,7 @@
 				>
 					+ New person
 				</button>
-				<SidebarButton />
+				<SidebarButton onClick={toggleChatPanel} />
 			</div>
 		</div>
 

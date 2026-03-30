@@ -4,6 +4,7 @@
 	import { getContext, setContext } from 'svelte';
 	import { writable } from 'svelte/store';
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
+	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 
 	const showNewUnitModal = writable(false);
 	setContext('showNewUnitModal', showNewUnitModal);
@@ -80,7 +81,7 @@
 					+ New unit
 				</button>
 			{/if}
-			<SidebarButton />
+			<SidebarButton onClick={toggleChatPanel} />
 		</div>
 	</div>
 
