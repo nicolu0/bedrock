@@ -1362,7 +1362,7 @@
 					{/if}
 					<a
 						href={nextIssue ? getIssueHref(nextIssue) : undefined}
-						class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100"
+						class="hidden h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 sm:inline-flex"
 						class:pointer-events-none={!nextIssue}
 						class:opacity-40={!nextIssue}
 						aria-disabled={!nextIssue}
@@ -1382,7 +1382,7 @@
 					</a>
 					<a
 						href={prevIssue ? getIssueHref(prevIssue) : undefined}
-						class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100"
+						class="hidden h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 sm:inline-flex"
 						class:pointer-events-none={!prevIssue}
 						class:opacity-40={!prevIssue}
 						aria-disabled={!prevIssue}
@@ -1421,15 +1421,15 @@
 					</div>
 					<div></div>
 				</div>
-				<div class="mt-6 sm:hidden">
-					<div class="rounded-2xl bg-neutral-50 p-4">
+				<div class="mt-2 sm:hidden">
+					<div class="rounded-2xl">
 						<div class="space-y-3 text-sm text-neutral-600">
 							<div class="grid grid-cols-2 gap-2">
 								<div class="tooltip-target relative">
 									<button
 										type="button"
-										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition ${
-											canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+										class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+											canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
 										}`}
 										disabled={!canEditIssue}
 										aria-disabled={!canEditIssue}
@@ -1502,8 +1502,8 @@
 								<div class="tooltip-target relative">
 									<button
 										type="button"
-										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition ${
-											canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+										class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+											canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
 										}`}
 										disabled={!canEditIssue}
 										aria-disabled={!canEditIssue}
@@ -1582,8 +1582,8 @@
 								<div class="tooltip-target relative">
 									<button
 										type="button"
-										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition ${
-											canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+										class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+											canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
 										}`}
 										disabled={!canEditIssue}
 										aria-disabled={!canEditIssue}
@@ -1639,8 +1639,8 @@
 								<div class="tooltip-target relative">
 									<button
 										type="button"
-										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition ${
-											canEditIssue ? 'hover:bg-stone-100' : 'cursor-default opacity-60'
+										class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+											canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
 										}`}
 										disabled={!canEditIssue}
 										aria-disabled={!canEditIssue}
@@ -1756,9 +1756,9 @@
 							<div class="tooltip-target group relative">
 								<button
 									type="button"
-									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 transition ${
+									class={`flex w-1/2 items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
 										canEditIssue && !isSubissue
-											? 'hover:bg-stone-100'
+											? 'hover:bg-neutral-200'
 											: 'cursor-not-allowed opacity-60'
 									}`}
 									disabled={!canEditIssue || isSubissue}
@@ -2079,7 +2079,7 @@
 												{/if}
 											</div>
 										{/if}
-										<div class="space-y-3 pl-11">
+										<div class="space-y-3 pl-0 sm:pl-11">
 											{#each collectMessagesForIssue(messagesByIssue, issueId) as message}
 												<EmailMessageWithDraft
 													message={{
@@ -2166,7 +2166,7 @@
 												<h3 class="text-base font-semibold text-neutral-900">Assign Vendor</h3>
 											{/if}
 										</div>
-										<div class="space-y-3 pl-11">
+										<div class="space-y-3 pl-0 sm:pl-11">
 											{#each newDraftsByIssue[issueId] ?? [] as draft}
 												{#if draft.channel === 'appfolio'}
 													<AppfolioDraftMessage
@@ -2451,7 +2451,7 @@
 																	{/if}
 																</div>
 															{/if}
-															<div class="space-y-3 pl-11">
+															<div class="space-y-3 pl-0 sm:pl-11">
 																{#each collectMessagesForIssue(messagesByIssue, subIssue.id) as message}
 																	<EmailMessageWithDraft
 																		message={{
@@ -2542,7 +2542,7 @@
 																	</h3>
 																{/if}
 															</div>
-															<div class="space-y-3 pl-11">
+															<div class="space-y-3 pl-0 sm:pl-11">
 																{#each newDraftsByIssue[subIssue.id] ?? [] as draft}
 																	{#if draft.channel === 'appfolio'}
 																		<AppfolioDraftMessage
