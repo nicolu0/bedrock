@@ -116,6 +116,18 @@
 	}
 	$: vendors = _resolvedVendors;
 
+	let _resolvedPeople = [];
+	$: {
+		if (data.people instanceof Promise) {
+			data.people.then((p) => {
+				_resolvedPeople = p ?? [];
+			});
+		} else {
+			_resolvedPeople = data.people ?? [];
+		}
+	}
+	$: people = _resolvedPeople;
+
 	let _now = Date.now();
 	let _ticker;
 	onMount(() => {
@@ -158,11 +170,6 @@
 	}
 </script>
 
-<svelte:window
-	on:keydown={(e) => {
-		if (e.key === 'Escape' && selectedNotification) selectedNotification = null;
-	}}
-/>
 
 <div class="flex h-full overflow-hidden">
 	<!-- Notification list -->
@@ -277,7 +284,8 @@
 				activityData={_resolvedActivity}
 				activityLogsData={_resolvedLogs}
 				{vendors}
-				allIssues={[]}
+				{people}
+				allIssues={(_resolvedNotifications?.notifications ?? []).map((n) => n.issues).filter(Boolean)}
 				on:close={() => (selectedNotification = null)}
 				on:resolved={resolveAndAdvance}
 			/>

@@ -39,7 +39,23 @@
 		appfolioEnabled = enabled;
 	};
 
-	$: if (issueId) loadIssue(issueId);
+	let _lastExternalId = null;
+	$: if (issueId && issueId !== _lastExternalId) {
+		_lastExternalId = issueId;
+		loadIssue(issueId);
+	}
+
+	function navigateTo(id) {
+		loadIssue(id);
+	}
+
+	function handleClose() {
+		if (issue?.parent_id) {
+			loadIssue(issue.parent_id);
+		} else {
+			dispatch('close');
+		}
+	}
 
 	onMount(() => {
 		syncAppfolioSettings();
@@ -74,7 +90,7 @@
 				.select('id, name, status, urgent, description, parent_id')
 				.eq('id', id)
 				.maybeSingle(),
-			supabase.from('issues').select('id, name, status, urgent').eq('parent_id', id)
+			supabase.from('issues').select('id, name, status, urgent, assignee_id').eq('parent_id', id)
 		]);
 
 		console.log('[IssuePanel] DB result', { iss, subs });
@@ -180,16 +196,23 @@
 	};
 
 	$: statusMeta = statusConfig[issue?.status ?? 'todo'] ?? statusConfig.todo;
+
+	let parentIssueCache = {};
 	$: parentIssue = (() => {
 		const pid = issue?.parent_id;
-		const found = pid ? allIssues.find((i) => i.id === pid) : null;
-		console.log('[IssuePanel] parentIssue computation', {
-			parent_id: pid,
-			allIssuesCount: allIssues.length,
-			found
-		});
-		return found ?? null;
+		if (!pid) return null;
+		return allIssues.find((i) => i.id === pid) ?? parentIssueCache[pid] ?? null;
 	})();
+	$: if (issue?.parent_id && !allIssues.find((i) => i.id === issue.parent_id) && !parentIssueCache[issue.parent_id]) {
+		supabase
+			.from('issues')
+			.select('id, name, status')
+			.eq('id', issue.parent_id)
+			.maybeSingle()
+			.then(({ data }) => {
+				if (data) parentIssueCache = { ...parentIssueCache, [data.id]: data };
+			});
+	}
 
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
 
@@ -246,6 +269,8 @@
 	};
 </script>
 
+<svelte:window on:keydown={(e) => { if (e.key === 'Escape') handleClose(); }} />
+
 <div class="flex h-full flex-col">
 	<!-- Header -->
 	<div
@@ -253,14 +278,18 @@
 	>
 		<div class="flex min-w-0 items-center gap-2">
 			{#if parentIssue}
-				<span class="shrink-0 text-neutral-700">{parentIssue.name}</span>
+				<button
+					type="button"
+					class="shrink-0 text-neutral-700 hover:underline"
+					on:click={() => navigateTo(parentIssue.id)}
+				>{parentIssue.name}</button>
 				<span class="text-neutral-300">›</span>
 			{/if}
 			<span class={`h-3 w-3 shrink-0 rounded-full border ${statusMeta.statusClass}`}></span>
 			<span class="truncate text-neutral-500">{issue?.name ?? ''}</span>
 		</div>
 		<button
-			on:click={() => dispatch('close')}
+			on:click={handleClose}
 			class="ml-3 shrink-0 text-neutral-400 transition hover:text-neutral-600"
 			aria-label="Close panel"
 		>
@@ -293,13 +322,14 @@
 		{#if parentIssue}
 			<div class="mt-2 flex items-center gap-2 text-sm">
 				<span class="text-xs text-neutral-400">Parent</span>
-				<a
-					href={`/${$page.params.workspace}/issue/${parentIssue.id}/${slugify(parentIssue.name ?? '')}?from=inbox`}
+				<button
+					type="button"
 					class="flex items-center gap-1.5 text-neutral-600 hover:underline"
+					on:click={() => navigateTo(parentIssue.id)}
 				>
 					<span class="h-2.5 w-2.5 shrink-0 rounded-full border border-neutral-400"></span>
 					<span>{parentIssue.name}</span>
-				</a>
+				</button>
 			</div>
 		{/if}
 
@@ -335,16 +365,23 @@
 					<div class="overflow-hidden">
 						<div class="mt-3">
 							{#each subIssues as subIssue}
-								<a
-									href={`/${$page.params.workspace}/issue/${subIssue.id}/${slugify(subIssue.name)}?from=inbox`}
-									class="flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
+								{@const assigneePerson = people.find((p) => p.user_id === subIssue.assignee_id)}
+								{@const initials = assigneePerson?.name ? assigneePerson.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() : ''}
+								<button
+									type="button"
+									on:click={() => loadIssue(subIssue.id)}
+									class="flex w-full items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
 								>
 									<div class="flex items-center gap-3">
-										<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
-										<span class="text-neutral-800">{subIssue.name}</span>
+										<span class={`h-4 w-4 shrink-0 rounded-full border ${statusConfig[subIssue.status ?? 'todo']?.statusClass ?? 'border-neutral-300'}`}></span>
+										<span class="text-left text-neutral-800">{subIssue.name}</span>
 									</div>
-									<div class="h-6 w-6 rounded-full bg-neutral-200"></div>
-								</a>
+									{#if initials}
+										<div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-xs font-medium text-neutral-600">{initials}</div>
+									{:else}
+										<div class="h-6 w-6 shrink-0 rounded-full bg-neutral-100"></div>
+									{/if}
+								</button>
 							{/each}
 						</div>
 					</div>
