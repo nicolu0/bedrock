@@ -1034,8 +1034,10 @@
 													{#if item.isSubIssue}
 														<div class="flex items-center gap-2 text-sm">
 															<span class="text-neutral-600">{item.title}</span>
-															<span class="text-neutral-300">›</span>
-															<span class="text-neutral-400">{item.parentTitle}</span>
+															<span class="hidden text-neutral-300 sm:inline">›</span>
+															<span class="hidden text-neutral-400 sm:inline"
+																>{item.parentTitle}</span
+															>
 														</div>
 													{:else}
 														<span class="text-sm text-neutral-800">{item.title}</span>
@@ -1045,8 +1047,11 @@
 													<div
 														class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
 													>
-														<span class="px-2 py-0.5">{item.property}</span>
-														<span class="border-l border-neutral-200 px-2 py-0.5">{item.unit}</span>
+														<span class="hidden px-2 py-0.5 sm:inline">{item.property}</span>
+														<span class="hidden border-l border-neutral-200 px-2 py-0.5 sm:inline">
+															{item.unit}
+														</span>
+														<span class="px-2 py-0.5 sm:hidden">Unit {item.unit}</span>
 													</div>
 													{#if item.assigneeBadge}
 														<div
