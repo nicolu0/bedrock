@@ -2865,10 +2865,13 @@ const handleAppfolioWorkOrder = async ({
 			.filter(Boolean)
 			.join('\n\n');
 
+		// Use the default assignee's name as the draft signature, not the workspace admin.
+		const defaultAssigneeIdForName = await getWorkspaceDefaultAssigneeId(workspaceId);
+		const signatureUserId = defaultAssigneeIdForName ?? userId;
 		const { data: userProfile } = await supabase
 			.from('users')
 			.select('name')
-			.eq('id', userId)
+			.eq('id', signatureUserId)
 			.maybeSingle();
 
 		const workspaceUnits = await listWorkspaceUnitsForAgent(workspaceId);
