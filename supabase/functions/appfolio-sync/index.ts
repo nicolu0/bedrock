@@ -304,6 +304,20 @@ async function syncTenants(workspaceId: string, appfolioPropertyIds: number[]): 
 		columns: ['unit_id', 'tenant', 'first_name', 'last_name', 'emails', 'phone_numbers']
 	});
 
+	// Batch-fetch current tenant data so we can skip no-op writes.
+	// Running every minute, unconditional updates generated ~546K WAL writes to units.
+	const { data: currentUnits } = await supabase
+		.from('units')
+		.select('appfolio_unit_id, tenant_name, tenant_email, tenant_phone')
+		.not('appfolio_unit_id', 'is', null);
+	const unitTenantMap = new Map<string, { tenant_name: string | null; tenant_email: string | null; tenant_phone: string | null }>(
+		(currentUnits ?? []).map((u: any) => [u.appfolio_unit_id, {
+			tenant_name: u.tenant_name ?? null,
+			tenant_email: u.tenant_email ?? null,
+			tenant_phone: u.tenant_phone ?? null
+		}])
+	);
+
 	for (const row of rows as any[]) {
 		if (!row.unit_id) continue;
 
@@ -314,6 +328,15 @@ async function syncTenants(workspaceId: string, appfolioPropertyIds: number[]): 
 		const phone = row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : null;
 
 		if (!name && !email && !phone) continue;
+
+		// Skip if tenant data hasn't changed — avoids unnecessary WAL writes.
+		const current = unitTenantMap.get(String(row.unit_id));
+		if (current &&
+			current.tenant_name === name &&
+			current.tenant_email === email &&
+			current.tenant_phone === phone) {
+			continue;
+		}
 
 		const { error } = await supabase
 			.from('units')
