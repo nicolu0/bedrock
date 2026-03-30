@@ -380,15 +380,12 @@
 		return acc;
 	}, {});
 
+	$: hasTasks =
+		subIssues.some((item) => (draftsByIssue[item.id]?.length ?? 0) > 0) ||
+		(draftsByIssue[issueId]?.length ?? 0) > 0;
+
 	$: hasActivity =
-		subIssues.some((item) => {
-			const messages = messagesByIssue[item.id] ?? [];
-			const hasDraft = draftIssueIds.includes(item.id);
-			const hasLogs = (logsByIssue[item.id] ?? []).length > 0;
-			return messages.length || hasDraft || hasLogs;
-		}) ||
-		(messagesByIssue[issueId]?.length ?? 0) > 0 ||
-		(draftsByIssue[issueId]?.length ?? 0) > 0 ||
+		subIssues.some((item) => (logsByIssue[item.id] ?? []).length > 0) ||
 		(logsByIssue[issueId]?.length ?? 0) > 0;
 
 	$: replyDraftsByIssue = Object.values(draftsByIssue ?? {}).reduce((acc, drafts) => {
@@ -1338,7 +1335,7 @@
 	<div class="flex h-full">
 		<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 			<div
-				class="flex items-center justify-between border-b border-neutral-200 px-6 py-2 text-sm text-neutral-600"
+				class="hidden items-center justify-between border-b border-neutral-200 px-6 py-2 text-sm text-neutral-600 sm:flex"
 			>
 				<div
 					class="flex items-center gap-2 transition-opacity duration-150"
@@ -1404,7 +1401,7 @@
 			</div>
 
 			<div
-				class="flex-1 overflow-y-auto px-4 pt-8 pb-20 transition-opacity duration-200 sm:px-10"
+				class="flex-1 overflow-y-auto px-4 pt-4 pb-20 transition-opacity duration-200 sm:px-10 sm:pt-8"
 				class:opacity-0={!$pageReady}
 			>
 				<div class="flex flex-wrap items-start justify-between gap-6">
@@ -1864,7 +1861,7 @@
 					</div>
 				</div>
 				{#if !_subIssuesLoading && subIssues.length}
-					<div class="mt-8">
+					<div class="mt-3 sm:mt-6">
 						<div class="flex items-center gap-2 text-sm text-neutral-600">
 							<div class="tooltip-target relative">
 								<button
@@ -1900,7 +1897,7 @@
 							style:grid-template-rows={subIssuesOpen ? '1fr' : '0fr'}
 						>
 							<div class="overflow-hidden">
-								<div class="mt-3">
+								<div class="mt-2">
 									{#each subIssuesWithAssignees as subIssue}
 										<a
 											href={getSubIssueHref(subIssue)}
@@ -1963,16 +1960,16 @@
 					</div>
 				{/if}
 
-				<div class="mt-8 border-t border-neutral-200 pt-6">
+				<div class="mt-2 border-t border-neutral-200 pt-4 sm:mt-8 sm:pt-6">
 					<div class="flex items-center justify-between">
-						<h2 class="text-base font-semibold text-neutral-800">Activity</h2>
+						<h2 class="text-base font-semibold text-neutral-800">Tasks</h2>
 						<div class="text-sm text-neutral-400">Unsubscribe</div>
 					</div>
-					{#if !hasActivity}
-						<div class="mt-4 text-sm text-neutral-500">No activity yet.</div>
+					{#if !hasTasks}
+						<div class="mt-4 text-sm text-neutral-500">No tasks yet.</div>
 					{:else}
 						<div class="mt-4 space-y-4 text-sm">
-							{#if (messagesByIssue[issueId]?.length ?? 0) > 0 || (draftsByIssue[issueId] ?? []).some((d) => !(messagesByIssue[issueId] ?? []).some((m) => m.id === d.message_id))}
+							{#if (draftsByIssue[issueId]?.length ?? 0) > 0}
 								{#if (messagesByIssue[issueId]?.length ?? 0) > 0 || (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
 									<div class="space-y-3">
 										{#if getThreadSubject(issueId)}
@@ -2204,115 +2201,8 @@
 								{/if}
 							{/if}
 
-							{#each (logsByIssue[issueId] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
-								{#if log.type === 'comment'}
-									<div class="flex items-center gap-3 px-1 py-2">
-										<div class="relative h-8 w-8 shrink-0">
-											<div
-												class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
-												aria-label={getCommentAuthor(log).name}
-											>
-												{getCommentAuthor(log).initial}
-											</div>
-											<div
-												class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
-											>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													viewBox="0 0 16 16"
-													fill="currentColor"
-													class="h-1.5 w-1.5"
-												>
-													<path
-														d="M2 0a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"
-													/>
-												</svg>
-											</div>
-										</div>
-										<div class="flex-1">
-											<div class="rounded-md border-0 bg-white p-0 shadow-none">
-												<div class="flex min-w-0 items-start justify-between gap-4">
-													<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
-													<span class="shrink-0 text-xs text-neutral-400">
-														{formatTimestamp(log.created_at)}
-													</span>
-												</div>
-											</div>
-										</div>
-									</div>
-								{:else}
-									<div class="flex items-center gap-3 px-1 py-2">
-										<div class="relative h-8 w-8 shrink-0">
-											<div
-												class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
-												aria-label={getActivityActor(log).name}
-											>
-												{getActivityActor(log).initial}
-											</div>
-											<div
-												class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
-											>
-												{#if log.type === 'assignee_change'}
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														viewBox="0 0 16 16"
-														fill="currentColor"
-														class="h-2 w-2"
-													>
-														<path
-															d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
-														/>
-													</svg>
-												{:else}
-													<span
-														class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(log)}`}
-													></span>
-												{/if}
-											</div>
-										</div>
-										<div class="flex-1">
-											<div class="rounded-md border-0 bg-white p-0 shadow-none">
-												<div class="flex min-w-0 items-start justify-between gap-4">
-													<p class="flex-1 text-sm text-neutral-700">
-														{#if log.type === 'issue_created'}
-															{#if log.data?.from || log.data?.from_email}
-																{formatTenantName(log.data.from) ?? log.data.from_email} created the issue
-															{:else}
-																Issue created
-															{/if}
-														{:else if log.type === 'status_change'}
-															{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
-																log
-															)}
-														{:else if log.type === 'assignee_change'}
-															{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
-																log
-															)}
-														{:else if log.type === 'appfolio_approved'}
-															Approved by {log?.data?.approved_by ?? getActivityActor(log).name}
-														{/if}
-													</p>
-													<span class="shrink-0 text-xs text-neutral-400">
-														{#if log.type === 'issue_created'}
-															{new Date(log.created_at).toLocaleDateString('en-US', {
-																month: 'short',
-																day: 'numeric',
-																year: 'numeric',
-																timeZone: 'UTC'
-															})}
-														{:else}
-															{formatTimestamp(log.created_at)}
-														{/if}
-													</span>
-												</div>
-											</div>
-										</div>
-									</div>
-								{/if}
-							{/each}
-
 							{#each subIssues as subIssue}
-								{#if (messagesByIssue[subIssue.id]?.length ?? 0) || draftIssueIds.includes(subIssue.id) || (logsByIssue[subIssue.id]?.length ?? 0) > 0}
+								{#if (draftsByIssue[subIssue.id]?.length ?? 0) > 0}
 									<div>
 										<button
 											type="button"
@@ -2343,7 +2233,7 @@
 												{(activityOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
 											</div>
 											<span class="text-neutral-300">
-												{messagesByIssue[subIssue.id]?.length ?? 0}
+												{draftsByIssue[subIssue.id]?.length ?? 0}
 											</span>
 										</button>
 										<div
@@ -2578,115 +2468,6 @@
 															</div>
 														</div>
 													{/if}
-
-													{#each (logsByIssue[subIssue.id] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
-														{#if log.type === 'comment'}
-															<div class="flex items-center gap-3 px-1 py-2">
-																<div class="relative h-8 w-8 shrink-0">
-																	<div
-																		class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
-																		aria-label={getCommentAuthor(log).name}
-																	>
-																		{getCommentAuthor(log).initial}
-																	</div>
-																	<div
-																		class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
-																	>
-																		<svg
-																			xmlns="http://www.w3.org/2000/svg"
-																			viewBox="0 0 16 16"
-																			fill="currentColor"
-																			class="h-1.5 w-1.5"
-																		>
-																			<path
-																				d="M2 0a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"
-																			/>
-																		</svg>
-																	</div>
-																</div>
-																<div class="flex-1">
-																	<div class="rounded-md border-0 bg-white p-0 shadow-none">
-																		<div class="flex min-w-0 items-start justify-between gap-4">
-																			<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
-																			<span class="shrink-0 text-xs text-neutral-400">
-																				{formatTimestamp(log.created_at)}
-																			</span>
-																		</div>
-																	</div>
-																</div>
-															</div>
-														{:else}
-															<div class="flex items-center gap-3 px-1 py-2">
-																<div class="relative h-8 w-8 shrink-0">
-																	<div
-																		class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
-																		aria-label={getActivityActor(log).name}
-																	>
-																		{getActivityActor(log).initial}
-																	</div>
-																	<div
-																		class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
-																	>
-																		{#if log.type === 'assignee_change'}
-																			<svg
-																				xmlns="http://www.w3.org/2000/svg"
-																				viewBox="0 0 16 16"
-																				fill="currentColor"
-																				class="h-2 w-2"
-																			>
-																				<path
-																					d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
-																				/>
-																			</svg>
-																		{:else}
-																			<span
-																				class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(log)}`}
-																			></span>
-																		{/if}
-																	</div>
-																</div>
-																<div class="flex-1">
-																	<div class="rounded-md border-0 bg-white p-0 shadow-none">
-																		<div class="flex min-w-0 items-start justify-between gap-4">
-																			<p class="flex-1 text-sm text-neutral-700">
-																				{#if log.type === 'issue_created'}
-																					{#if log.data?.from || log.data?.from_email}
-																						{formatTenantName(log.data.from) ?? log.data.from_email} created
-																						the issue
-																					{:else}
-																						Issue created
-																					{/if}
-																				{:else if log.type === 'status_change'}
-																					{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
-																						log
-																					)}
-																				{:else if log.type === 'assignee_change'}
-																					{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
-																						log
-																					)}
-																				{:else if log.type === 'appfolio_approved'}
-																					Approved by {log?.data?.approved_by ??
-																						getActivityActor(log).name}
-																				{/if}
-																			</p>
-																			<span class="shrink-0 text-xs text-neutral-400">
-																				{#if log.type === 'issue_created'}
-																					{new Date(log.created_at).toLocaleDateString('en-US', {
-																						month: 'short',
-																						day: 'numeric',
-																						year: 'numeric',
-																						timeZone: 'UTC'
-																					})}
-																				{:else}
-																					{formatTimestamp(log.created_at)}
-																				{/if}
-																			</span>
-																		</div>
-																	</div>
-																</div>
-															</div>
-														{/if}
-													{/each}
 												</div>
 											</div>
 										</div>
@@ -2695,6 +2476,287 @@
 							{/each}
 						</div>
 					{/if}
+
+					<div class="mt-6 border-t border-neutral-200 pt-4 sm:pt-6">
+						<div class="flex items-center justify-between">
+							<h2 class="text-base font-semibold text-neutral-800">Activity</h2>
+							<div class="text-sm text-neutral-400">Unsubscribe</div>
+						</div>
+						{#if !hasActivity}
+							<div class="mt-4 text-sm text-neutral-500">No activity yet.</div>
+						{:else}
+							<div class="mt-4 space-y-4 text-sm">
+								{#each (logsByIssue[issueId] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+									{#if log.type === 'comment'}
+										<div class="flex items-center gap-3 px-1 py-2">
+											<div class="relative h-8 w-8 shrink-0">
+												<div
+													class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
+													aria-label={getCommentAuthor(log).name}
+												>
+													{getCommentAuthor(log).initial}
+												</div>
+												<div
+													class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
+												>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														viewBox="0 0 16 16"
+														fill="currentColor"
+														class="h-1.5 w-1.5"
+													>
+														<path
+															d="M2 0a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"
+														/>
+													</svg>
+												</div>
+											</div>
+											<div class="flex-1">
+												<div class="rounded-md border-0 bg-white p-0 shadow-none">
+													<div class="flex min-w-0 items-start justify-between gap-4">
+														<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
+														<span class="shrink-0 text-xs text-neutral-400">
+															{formatTimestamp(log.created_at)}
+														</span>
+													</div>
+												</div>
+											</div>
+										</div>
+									{:else}
+										<div class="flex items-center gap-3 px-1 py-2">
+											<div class="relative h-8 w-8 shrink-0">
+												<div
+													class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
+													aria-label={getActivityActor(log).name}
+												>
+													{getActivityActor(log).initial}
+												</div>
+												<div
+													class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
+												>
+													{#if log.type === 'assignee_change'}
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															viewBox="0 0 16 16"
+															fill="currentColor"
+															class="h-2 w-2"
+														>
+															<path
+																d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
+															/>
+														</svg>
+													{:else}
+														<span
+															class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(log)}`}
+														></span>
+													{/if}
+												</div>
+											</div>
+											<div class="flex-1">
+												<div class="rounded-md border-0 bg-white p-0 shadow-none">
+													<div class="flex min-w-0 items-start justify-between gap-4">
+														<p class="flex-1 text-sm text-neutral-700">
+															{#if log.type === 'issue_created'}
+																{#if log.data?.from || log.data?.from_email}
+																	{formatTenantName(log.data.from) ?? log.data.from_email} created the
+																	issue
+																{:else}
+																	Issue created
+																{/if}
+															{:else if log.type === 'status_change'}
+																{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
+																	log
+																)}
+															{:else if log.type === 'assignee_change'}
+																{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
+																	log
+																)}
+															{:else if log.type === 'appfolio_approved'}
+																Approved by {log?.data?.approved_by ?? getActivityActor(log).name}
+															{/if}
+														</p>
+														<span class="shrink-0 text-xs text-neutral-400">
+															{#if log.type === 'issue_created'}
+																{new Date(log.created_at).toLocaleDateString('en-US', {
+																	month: 'short',
+																	day: 'numeric',
+																	year: 'numeric',
+																	timeZone: 'UTC'
+																})}
+															{:else}
+																{formatTimestamp(log.created_at)}
+															{/if}
+														</span>
+													</div>
+												</div>
+											</div>
+										</div>
+									{/if}
+								{/each}
+
+								{#each subIssues as subIssue}
+									{#if (logsByIssue[subIssue.id]?.length ?? 0) > 0}
+										<div>
+											<button
+												type="button"
+												class="tooltip-target relative flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
+												on:click={() => toggleActivity(subIssue.id)}
+											>
+												<div
+													class="flex items-center gap-2 rounded-md px-3 py-1.5 transition select-none hover:bg-neutral-100"
+												>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="12"
+														height="12"
+														fill="currentColor"
+														class="transition-transform duration-150 ease-in-out"
+														class:rotate-[-90deg]={!(activityOpen[subIssue.id] ?? true)}
+														viewBox="0 0 16 16"
+													>
+														<path
+															d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+														/>
+													</svg>
+													<span>{subIssue.name}</span>
+												</div>
+												<div
+													class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+												>
+													{(activityOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
+												</div>
+												<span class="text-neutral-300">
+													{logsByIssue[subIssue.id]?.length ?? 0}
+												</span>
+											</button>
+											<div
+												class="grid transition-[grid-template-rows] duration-200 ease-in-out"
+												style:grid-template-rows={(activityOpen[subIssue.id] ?? true)
+													? '1fr'
+													: '0fr'}
+											>
+												<div class="overflow-hidden">
+													<div
+														class="space-y-3 py-2 transition-opacity duration-200"
+														class:opacity-0={!(activityOpen[subIssue.id] ?? true)}
+													>
+														{#each (logsByIssue[subIssue.id] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+															{#if log.type === 'comment'}
+																<div class="flex items-center gap-3 px-1 py-2">
+																	<div class="relative h-8 w-8 shrink-0">
+																		<div
+																			class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
+																			aria-label={getCommentAuthor(log).name}
+																		>
+																			{getCommentAuthor(log).initial}
+																		</div>
+																		<div
+																			class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
+																		>
+																			<svg
+																				xmlns="http://www.w3.org/2000/svg"
+																				viewBox="0 0 16 16"
+																				fill="currentColor"
+																				class="h-1.5 w-1.5"
+																			>
+																				<path
+																					d="M2 0a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"
+																				/>
+																			</svg>
+																		</div>
+																	</div>
+																	<div class="flex-1">
+																		<div class="rounded-md border-0 bg-white p-0 shadow-none">
+																			<div class="flex min-w-0 items-start justify-between gap-4">
+																				<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
+																				<span class="shrink-0 text-xs text-neutral-400">
+																					{formatTimestamp(log.created_at)}
+																				</span>
+																			</div>
+																		</div>
+																	</div>
+																</div>
+															{:else}
+																<div class="flex items-center gap-3 px-1 py-2">
+																	<div class="relative h-8 w-8 shrink-0">
+																		<div
+																			class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
+																			aria-label={getActivityActor(log).name}
+																		>
+																			{getActivityActor(log).initial}
+																		</div>
+																		<div
+																			class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
+																		>
+																			{#if log.type === 'assignee_change'}
+																				<svg
+																					xmlns="http://www.w3.org/2000/svg"
+																					viewBox="0 0 16 16"
+																					fill="currentColor"
+																					class="h-2 w-2"
+																				>
+																					<path
+																						d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
+																					/>
+																				</svg>
+																			{:else}
+																				<span
+																					class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(log)}`}
+																				></span>
+																			{/if}
+																		</div>
+																	</div>
+																	<div class="flex-1">
+																		<div class="rounded-md border-0 bg-white p-0 shadow-none">
+																			<div class="flex min-w-0 items-start justify-between gap-4">
+																				<p class="flex-1 text-sm text-neutral-700">
+																					{#if log.type === 'issue_created'}
+																						{#if log.data?.from || log.data?.from_email}
+																							{formatTenantName(log.data.from) ??
+																								log.data.from_email} created the issue
+																						{:else}
+																							Issue created
+																						{/if}
+																					{:else if log.type === 'status_change'}
+																						{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
+																							log
+																						)}
+																					{:else if log.type === 'assignee_change'}
+																						{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
+																							log
+																						)}
+																					{:else if log.type === 'appfolio_approved'}
+																						Approved by {log?.data?.approved_by ??
+																							getActivityActor(log).name}
+																					{/if}
+																				</p>
+																				<span class="shrink-0 text-xs text-neutral-400">
+																					{#if log.type === 'issue_created'}
+																						{new Date(log.created_at).toLocaleDateString('en-US', {
+																							month: 'short',
+																							day: 'numeric',
+																							year: 'numeric',
+																							timeZone: 'UTC'
+																						})}
+																					{:else}
+																						{formatTimestamp(log.created_at)}
+																					{/if}
+																				</span>
+																			</div>
+																		</div>
+																	</div>
+																</div>
+															{/if}
+														{/each}
+													</div>
+												</div>
+											</div>
+										</div>
+									{/if}
+								{/each}
+							</div>
+						{/if}
+					</div>
 					<div class="mt-6">
 						<div
 							class="rounded-md border border-neutral-100 bg-white px-4 py-3 shadow-[0_2px_6px_rgba(0,0,0,0.08)]"
