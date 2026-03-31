@@ -1441,8 +1441,8 @@
 				class="flex-1 overflow-y-auto px-4 pt-4 pb-20 transition-opacity duration-200 sm:px-10 sm:pt-8"
 				class:opacity-0={!$pageReady}
 			>
-				<div class="mt-2 sm:mt-6 sm:flex sm:gap-6">
-					<div class="min-w-0 sm:w-1/2">
+				<div class="mt-2 sm:flex sm:gap-6">
+					<div class="min-w-0 sm:w-2/3">
 						{#if !_issueLoading && issue}
 							<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
 							<div class="mt-2 text-sm text-neutral-500">
@@ -1452,7 +1452,7 @@
 							<div class="h-7 w-56 animate-pulse rounded bg-neutral-200"></div>
 							<div class="mt-2 h-4 w-80 animate-pulse rounded bg-neutral-100"></div>
 						{/if}
-						<div class="sm:hidden">
+						<div class="sm:hidden mt-4">
 							<div class="rounded-2xl">
 								<div class="space-y-2 text-sm text-neutral-600">
 									<div class="grid grid-cols-2 gap-2">
@@ -1894,7 +1894,7 @@
 								</div>
 							</div>
 						</div>
-						<div class="min-w-0">
+						<div class="min-w-0 mt-4">
 							{#if !_subIssuesLoading && subIssues.length}
 								<div>
 									<button
@@ -1995,10 +1995,11 @@
 							{/if}
 						</div>
 					</div>
-					<div class="mt-2 bg-red-400 w-1/2">
+					<div class="mt-2 w-1/3">
 						<div class="hidden sm:block">
 							<div class="rounded-2xl">
-								<div class="space-y-3 text-sm text-neutral-600">
+								<span class="text-sm font-medium text-neutral-500">Fields</span>
+								<div class="mt-3 space-y-3 text-sm text-neutral-600">
 									<div class="grid grid-cols-2 gap-2">
 										<div class="tooltip-target relative">
 											<button
@@ -2153,7 +2154,7 @@
 											{/if}
 										</div>
 									</div>
-									<div class="grid grid-cols-1 gap-2">
+									<div class="grid grid-cols-2 gap-2">
 										<div class="tooltip-target relative">
 											<button
 												type="button"
@@ -2328,8 +2329,8 @@
 											{/if}
 										</div>
 									</div>
-									<div class="flex flex-col gap-2">
-										<div class="tooltip-target group relative w-full">
+									<div class="flex items-center justify-between gap-2">
+										<div class="tooltip-target group relative w-1/2">
 											<div
 												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
 													canEditIssue && !isSubissue ? 'hover:bg-neutral-200' : 'opacity-60'
