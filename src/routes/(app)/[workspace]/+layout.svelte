@@ -838,7 +838,11 @@
 				<div class="flex h-full min-w-0">
 					<div
 						class={`flex flex-none flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out ${
-							$rightPanel.open ? 'w-1/2 border-r border-neutral-200' : 'w-full'
+							$rightPanel.open
+								? $rightPanel.type === 'issue'
+									? 'w-1/2 border-r border-neutral-200'
+									: 'w-8/12 border-r border-neutral-200'
+								: 'w-full'
 						}`}
 					>
 						<div class="h-full w-full">
@@ -847,7 +851,9 @@
 					</div>
 					{#if $rightPanel.open}
 						<div
-							class="w-1/2 flex-none overflow-y-auto"
+							class={`flex-none overflow-y-auto ${
+								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-4/12'
+							}`}
 							in:fly={{ x: 400, duration: 280, easing: cubicOut }}
 							out:fly={{ x: 400, duration: 220, easing: cubicOut }}
 						>

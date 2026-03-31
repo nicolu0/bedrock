@@ -64,8 +64,7 @@
 					<div class="flex items-center gap-3">
 						<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-50">
 							<svg
-								width="22"
-								height="22"
+								class="h-7 w-7"
 								viewBox="0 0 32 32"
 								fill="none"
 								xmlns="http://www.w3.org/2000/svg"

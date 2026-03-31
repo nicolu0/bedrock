@@ -62,7 +62,6 @@
 				: null;
 		filter = tab;
 		selectedNotification = null;
-		openChatPanel();
 	}
 
 	$: workspaceSlug = $page.params.workspace;
@@ -142,7 +141,6 @@
 		_ticker = setInterval(() => {
 			_now = Date.now();
 		}, 30_000);
-		openChatPanel();
 	});
 	onDestroy(() => clearInterval(_ticker));
 

@@ -10,6 +10,7 @@
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
 	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 	import { pageReady } from '$lib/stores/pageReady';
+	import { rightPanel } from '$lib/stores/rightPanel.js';
 	import { supabase } from '$lib/supabaseClient.js';
 	import { getIssueDetailByReadableId, seedIssueDetail } from '$lib/stores/issueDetailCache.js';
 
@@ -1896,7 +1897,13 @@
 						</div>
 					</div>
 				</div>
-				<div class="mt-2 sm:mt-6 sm:grid sm:grid-cols-[2fr_1fr] sm:gap-6">
+				<div
+					class={`mt-2 sm:mt-6 sm:grid sm:gap-6 ${
+						$rightPanel?.open && $rightPanel?.type === 'chat'
+							? 'sm:grid-cols-[1fr_1fr]'
+							: 'sm:grid-cols-[2fr_1fr]'
+					}`}
+				>
 					<div class="min-w-0">
 						{#if !_subIssuesLoading && subIssues.length}
 							<div>
@@ -2331,55 +2338,99 @@
 								</div>
 								<div class="flex items-center justify-between gap-2">
 									<div class="tooltip-target group relative w-1/2">
-										<button
-											type="button"
+										<div
 											class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-												canEditIssue && !isSubissue
-													? 'hover:bg-neutral-200'
-													: 'cursor-not-allowed opacity-60'
+												canEditIssue && !isSubissue ? 'hover:bg-neutral-200' : 'opacity-60'
 											}`}
-											disabled={!canEditIssue || isSubissue}
-											aria-disabled={!canEditIssue || isSubissue}
-											on:click|stopPropagation={() => {
-												if (!canEditIssue || isSubissue) return;
-												urgentOpen = !urgentOpen;
-												urgentHelpOpen = false;
-												statusOpen = false;
-												assigneeOpen = false;
-												propertyOpen = false;
-												unitOpen = false;
-											}}
 										>
-											{#if displayUrgent}
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="16"
-													height="16"
-													fill="currentColor"
-													class="text-rose-600"
-													viewBox="0 0 16 16"
+											<button
+												type="button"
+												class={`flex min-w-0 flex-1 items-center gap-2 text-left ${
+													canEditIssue && !isSubissue ? '' : 'cursor-not-allowed'
+												}`}
+												disabled={!canEditIssue || isSubissue}
+												aria-disabled={!canEditIssue || isSubissue}
+												on:click|stopPropagation={() => {
+													if (!canEditIssue || isSubissue) return;
+													urgentOpen = !urgentOpen;
+													urgentHelpOpen = false;
+													statusOpen = false;
+													assigneeOpen = false;
+													propertyOpen = false;
+													unitOpen = false;
+												}}
+											>
+												{#if displayUrgent}
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="16"
+														height="16"
+														fill="currentColor"
+														class="text-rose-600"
+														viewBox="0 0 16 16"
+													>
+														<path
+															d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+														/>
+													</svg>
+													<span>Urgent</span>
+												{:else}
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="16"
+														height="16"
+														fill="currentColor"
+														class="text-neutral-400"
+														viewBox="0 0 16 16"
+													>
+														<path
+															d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+														/>
+													</svg>
+													<span>Not urgent</span>
+												{/if}
+											</button>
+											<div class="relative ml-auto">
+												<button
+													type="button"
+													class="inline-flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-600"
+													aria-label="Urgent issue help"
+													aria-expanded={urgentHelpOpen}
+													on:click|stopPropagation={() => {
+														urgentOpen = false;
+														urgentHelpOpen = !urgentHelpOpen;
+														propertyOpen = false;
+														unitOpen = false;
+														statusOpen = false;
+														assigneeOpen = false;
+													}}
+													on:blur={() => (urgentHelpOpen = false)}
 												>
-													<path
-														d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
-													/>
-												</svg>
-												<span>Urgent</span>
-											{:else}
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="16"
-													height="16"
-													fill="currentColor"
-													class="text-neutral-400"
-													viewBox="0 0 16 16"
-												>
-													<path
-														d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
-													/>
-												</svg>
-												<span>Not urgent</span>
-											{/if}
-										</button>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="16"
+														height="16"
+														fill="currentColor"
+														class="bi bi-question-circle"
+														viewBox="0 0 16 16"
+													>
+														<path
+															d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"
+														/>
+														<path
+															d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286m1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94"
+														/>
+													</svg>
+												</button>
+												{#if urgentHelpOpen}
+													<div
+														class="absolute top-full right-0 z-30 mt-2 min-w-[260px] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs leading-snug text-neutral-700 shadow-sm"
+													>
+														Bedrock immediately assigns a vendor for urgent issues.
+													</div>
+												{/if}
+											</div>
+										</div>
 										{#if !rightSidebarMenuOpen}
 											<div
 												class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
@@ -2437,46 +2488,6 @@
 											</div>
 										{/if}
 									</div>
-									<div class="relative ml-auto">
-										<button
-											type="button"
-											class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-400 transition hover:bg-neutral-50 hover:text-neutral-500"
-											aria-label="Urgent issue help"
-											aria-expanded={urgentHelpOpen}
-											on:click|stopPropagation={() => {
-												urgentOpen = false;
-												urgentHelpOpen = !urgentHelpOpen;
-												propertyOpen = false;
-												unitOpen = false;
-												statusOpen = false;
-												assigneeOpen = false;
-											}}
-											on:blur={() => (urgentHelpOpen = false)}
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="16"
-												height="16"
-												fill="currentColor"
-												class="bi bi-question-circle"
-												viewBox="0 0 16 16"
-											>
-												<path
-													d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"
-												/>
-												<path
-													d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286m1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94"
-												/>
-											</svg>
-										</button>
-										{#if urgentHelpOpen}
-											<div
-												class="absolute top-full right-0 z-30 mt-2 min-w-[260px] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs leading-snug text-neutral-700 shadow-sm"
-											>
-												Bedrock immediately assigns a vendor for urgent issues.
-											</div>
-										{/if}
-									</div>
 								</div>
 							</div>
 						</div>
@@ -2526,7 +2537,7 @@
 														</svg>
 													{:else}
 														<svg
-															class="h-6 w-6"
+															class="h-7 w-7"
 															viewBox="0 0 32 32"
 															fill="none"
 															xmlns="http://www.w3.org/2000/svg"
@@ -2642,7 +2653,7 @@
 											{#if !appfolioEnabled}
 												<div class="flex items-center justify-center">
 													<svg
-														class="h-6 w-6"
+														class="h-7 w-7"
 														viewBox="0 0 32 32"
 														fill="none"
 														xmlns="http://www.w3.org/2000/svg"
@@ -2805,8 +2816,7 @@
 																			</svg>
 																		{:else}
 																			<svg
-																				width="18"
-																				height="18"
+																				class="h-7 w-7"
 																				viewBox="0 0 32 32"
 																				fill="none"
 																				xmlns="http://www.w3.org/2000/svg"
@@ -2928,8 +2938,7 @@
 																{#if !appfolioEnabled}
 																	<div class="flex items-center justify-center">
 																		<svg
-																			width="18"
-																			height="18"
+																			class="h-7 w-7"
 																			viewBox="0 0 32 32"
 																			fill="none"
 																			xmlns="http://www.w3.org/2000/svg"
@@ -3602,55 +3611,99 @@
 					</div>
 					<div class="flex w-full items-center gap-2">
 						<div class="tooltip-target group relative">
-							<button
-								type="button"
+							<div
 								class={`-ml-2 flex w-40 items-center gap-2 rounded-sm p-1 px-2 transition ${
-									canEditIssue && !isSubissue
-										? 'hover:bg-stone-100'
-										: 'cursor-not-allowed opacity-60'
+									canEditIssue && !isSubissue ? 'hover:bg-stone-100' : 'opacity-60'
 								}`}
-								disabled={!canEditIssue || isSubissue}
-								aria-disabled={!canEditIssue || isSubissue}
-								on:click|stopPropagation={() => {
-									if (!canEditIssue || isSubissue) return;
-									urgentOpen = !urgentOpen;
-									urgentHelpOpen = false;
-									statusOpen = false;
-									assigneeOpen = false;
-									propertyOpen = false;
-									unitOpen = false;
-								}}
 							>
-								{#if displayUrgent}
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										width="16"
-										height="16"
-										fill="currentColor"
-										class="text-rose-600"
-										viewBox="0 0 16 16"
+								<button
+									type="button"
+									class={`flex min-w-0 flex-1 items-center gap-2 text-left ${
+										canEditIssue && !isSubissue ? '' : 'cursor-not-allowed'
+									}`}
+									disabled={!canEditIssue || isSubissue}
+									aria-disabled={!canEditIssue || isSubissue}
+									on:click|stopPropagation={() => {
+										if (!canEditIssue || isSubissue) return;
+										urgentOpen = !urgentOpen;
+										urgentHelpOpen = false;
+										statusOpen = false;
+										assigneeOpen = false;
+										propertyOpen = false;
+										unitOpen = false;
+									}}
+								>
+									{#if displayUrgent}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											fill="currentColor"
+											class="text-rose-600"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+											/>
+										</svg>
+										<span>Urgent</span>
+									{:else}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											fill="currentColor"
+											class="text-neutral-400"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+											/>
+										</svg>
+										<span>Not urgent</span>
+									{/if}
+								</button>
+								<div class="relative ml-auto">
+									<button
+										type="button"
+										class="inline-flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-600"
+										aria-label="Urgent issue help"
+										aria-expanded={urgentHelpOpen}
+										on:click|stopPropagation={() => {
+											urgentOpen = false;
+											urgentHelpOpen = !urgentHelpOpen;
+											propertyOpen = false;
+											unitOpen = false;
+											statusOpen = false;
+											assigneeOpen = false;
+										}}
+										on:blur={() => (urgentHelpOpen = false)}
 									>
-										<path
-											d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
-										/>
-									</svg>
-									<span>Urgent</span>
-								{:else}
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										width="16"
-										height="16"
-										fill="currentColor"
-										class="text-neutral-400"
-										viewBox="0 0 16 16"
-									>
-										<path
-											d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
-										/>
-									</svg>
-									<span>Not urgent</span>
-								{/if}
-							</button>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											fill="currentColor"
+											class="bi bi-question-circle"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"
+											/>
+											<path
+												d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286m1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94"
+											/>
+										</svg>
+									</button>
+									{#if urgentHelpOpen}
+										<div
+											class="absolute top-full right-0 z-30 mt-2 min-w-[260px] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs leading-snug text-neutral-700 shadow-sm"
+										>
+											Bedrock immediately assigns a vendor for urgent issues.
+										</div>
+									{/if}
+								</div>
+							</div>
 							{#if !rightSidebarMenuOpen}
 								<div
 									class="delayed-tooltip absolute top-full left-[-0.5rem] z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
@@ -3705,44 +3758,6 @@
 										</svg>
 										<span>Not urgent</span>
 									</button>
-								</div>
-							{/if}
-						</div>
-						<div class="relative ml-auto">
-							<button
-								type="button"
-								class="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-400 transition hover:bg-neutral-50 hover:text-neutral-500"
-								aria-label="Urgent issue help"
-								aria-expanded={urgentHelpOpen}
-								on:click|stopPropagation={() => {
-									urgentOpen = false;
-									urgentHelpOpen = !urgentHelpOpen;
-									propertyOpen = false;
-									unitOpen = false;
-									statusOpen = false;
-									assigneeOpen = false;
-								}}
-								on:blur={() => (urgentHelpOpen = false)}
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="16"
-									height="16"
-									fill="currentColor"
-									class="bi bi-question-circle"
-									viewBox="0 0 16 16"
-								>
-									<path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16" />
-									<path
-										d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286m1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94"
-									/>
-								</svg>
-							</button>
-							{#if urgentHelpOpen}
-								<div
-									class="absolute top-full right-0 z-30 mt-2 min-w-[260px] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs leading-snug text-neutral-700 shadow-sm"
-								>
-									Bedrock immediately assigns a vendor for urgent issues.
 								</div>
 							{/if}
 						</div>
