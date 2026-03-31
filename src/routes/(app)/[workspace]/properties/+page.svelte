@@ -6,6 +6,7 @@
 	import { invalidate } from '$app/navigation';
 	import { peopleCache } from '$lib/stores/peopleCache.js';
 	import { propertiesCache } from '$lib/stores/propertiesCache.js';
+	import SidebarButton from '$lib/components/SidebarButton.svelte';
 
 	export let data;
 
@@ -344,13 +345,16 @@
 			</button>
 			<h1 class="text-sm font-normal text-neutral-700">Properties</h1>
 		</div>
-		<button
-			on:click={openNewPropertyModal}
-			type="button"
-			class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
-		>
-			+ New property
-		</button>
+		<div class="flex items-center gap-2">
+			<button
+				on:click={openNewPropertyModal}
+				type="button"
+				class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
+			>
+				+ New property
+			</button>
+			<SidebarButton />
+		</div>
 	</div>
 	<div class="flex items-center gap-2 border-b border-neutral-200 px-6 pb-2">
 		<button

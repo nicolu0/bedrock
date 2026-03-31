@@ -8,9 +8,9 @@
 		updateNotificationInCache,
 		primeNotificationsCache
 	} from '$lib/stores/notificationsCache';
-	import IssuePanel from '$lib/components/IssuePanel.svelte';
-	import { fly } from 'svelte/transition';
-	import { cubicOut } from 'svelte/easing';
+	import SidebarButton from '$lib/components/SidebarButton.svelte';
+	import ChatButton from '$lib/components/ChatButton.svelte';
+	import { openChatPanel, openIssuePanel } from '$lib/stores/rightPanel.js';
 	import { onMount, onDestroy } from 'svelte';
 
 	export let data;
@@ -63,6 +63,7 @@
 				: null;
 		filter = tab;
 		selectedNotification = null;
+		openChatPanel();
 	}
 
 	$: workspaceSlug = $page.params.workspace;
@@ -101,7 +102,10 @@
 		localResolvedIds = new Set([...localResolvedIds, selectedNotification.id]);
 		updateNotificationInCache({ id: selectedNotification.id, is_resolved: true });
 		if (next) handleClick(next);
-		else selectedNotification = null;
+		else {
+			selectedNotification = null;
+			openChatPanel();
+		}
 	}
 
 	let _resolvedVendors = [];
@@ -134,6 +138,7 @@
 		_ticker = setInterval(() => {
 			_now = Date.now();
 		}, 30_000);
+		openChatPanel();
 	});
 	onDestroy(() => clearInterval(_ticker));
 
@@ -157,6 +162,14 @@
 
 	async function handleClick(n) {
 		selectedNotification = n;
+		openIssuePanel({
+			issueId: n.issues?.id,
+			seedIssue: n.issues,
+			activityData: _resolvedActivity,
+			activityLogsData: _resolvedLogs,
+			vendors,
+			allIssues: []
+		});
 		if (!n.is_read && !localReadIds.has(n.id)) {
 			localReadIds = new Set([...localReadIds, n.id]);
 			updateNotificationInCache({ id: n.id, is_read: true });
@@ -170,15 +183,23 @@
 	}
 </script>
 
+<svelte:window
+	on:keydown={(e) => {
+		if (e.key === 'Escape' && selectedNotification) {
+			selectedNotification = null;
+			openChatPanel();
+		}
+	}}
+/>
 
-<div class="flex h-full overflow-hidden">
-	<!-- Notification list -->
-	<div
-		class="flex flex-none flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out
-			{selectedNotification ? 'w-1/2 border-r border-neutral-200' : 'w-full'}"
-	>
-		<div class="flex items-center border-b border-neutral-200 px-6 py-3">
+<div class="h-full">
+	<div class="flex h-full flex-col overflow-y-auto">
+		<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
 			<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
+			<div class="flex items-center gap-2">
+				<ChatButton />
+				<SidebarButton />
+			</div>
 		</div>
 
 		<div class="flex items-center gap-2 px-6 py-2">
@@ -270,25 +291,4 @@
 			</div>
 		{/if}
 	</div>
-
-	<!-- Issue detail panel -->
-	{#if selectedNotification}
-		<div
-			class="w-1/2 flex-none overflow-y-auto"
-			in:fly={{ x: 400, duration: 280, easing: cubicOut }}
-			out:fly={{ x: 400, duration: 220, easing: cubicOut }}
-		>
-			<IssuePanel
-				issueId={selectedNotification.issues?.id}
-				seedIssue={selectedNotification.issues}
-				activityData={_resolvedActivity}
-				activityLogsData={_resolvedLogs}
-				{vendors}
-				{people}
-				allIssues={(_resolvedNotifications?.notifications ?? []).map((n) => n.issues).filter(Boolean)}
-				on:close={() => (selectedNotification = null)}
-				on:resolved={resolveAndAdvance}
-			/>
-		</div>
-	{/if}
 </div>

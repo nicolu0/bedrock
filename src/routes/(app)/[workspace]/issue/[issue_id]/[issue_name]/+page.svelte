@@ -7,6 +7,7 @@
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import AppfolioDraftMessage from '$lib/components/AppfolioDraftMessage.svelte';
+	import SidebarButton from '$lib/components/SidebarButton.svelte';
 	import { pageReady } from '$lib/stores/pageReady';
 	import { supabase } from '$lib/supabaseClient.js';
 	import { getIssueDetailByReadableId, seedIssueDetail } from '$lib/stores/issueDetailCache.js';
@@ -1430,6 +1431,7 @@
 							/>
 						</svg>
 					</a>
+					<SidebarButton />
 				</div>
 			</div>
 
@@ -1893,40 +1895,39 @@
 						</div>
 					</div>
 				</div>
-				<div class="mt-2 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-6">
+				<div class="mt-2 sm:mt-6 sm:grid sm:grid-cols-[3fr_1fr] sm:gap-6">
 					<div class="min-w-0">
 						{#if !_subIssuesLoading && subIssues.length}
 							<div>
-								<div class="flex items-center gap-2 text-sm text-neutral-600">
-									<div class="tooltip-target relative">
-										<button
-											type="button"
-											class="flex items-center gap-2 rounded-md px-1.5 py-1 transition hover:bg-neutral-100"
-											on:click={() => (subIssuesOpen = !subIssuesOpen)}
+								<button
+									type="button"
+									class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
+									on:click={() => (subIssuesOpen = !subIssuesOpen)}
+								>
+									<div
+										class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="12"
+											height="12"
+											fill="currentColor"
+											class="chevron-icon transition-transform duration-150 ease-in-out"
+											class:rotate-[-90deg]={!subIssuesOpen}
+											viewBox="0 0 16 16"
 										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="14"
-												height="14"
-												fill="currentColor"
-												class="text-neutral-400 transition-transform duration-200"
-												class:rotate-[-90deg]={!subIssuesOpen}
-												viewBox="0 0 16 16"
-											>
-												<path
-													d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-												/>
-											</svg>
-											<span class="text-neutral-700">Sub-issues</span>
-										</button>
-										<div
-											class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-										>
-											{subIssuesOpen ? 'Collapse' : 'Expand'}
-										</div>
+											<path
+												d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+											/>
+										</svg>
+										<span>Sub-issues</span>
 									</div>
-									<span class="text-neutral-400">{subIssueProgress}</span>
-								</div>
+									<div
+										class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+									>
+										{subIssuesOpen ? 'Collapse' : 'Expand'}
+									</div>
+								</button>
 								<div
 									class="grid transition-[grid-template-rows] duration-150 ease-in-out"
 									style:grid-template-rows={subIssuesOpen ? '1fr' : '0fr'}
@@ -1952,7 +1953,7 @@
 														subIssueHoverId = null;
 													}}
 												>
-													<div class="flex items-center gap-3">
+													<div class="flex items-center gap-2">
 														<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
 														<span class="text-neutral-800">{subIssue.name}</span>
 													</div>
@@ -2494,14 +2495,11 @@
 								{#if (messagesByIssue[issueId]?.length ?? 0) > 0 || (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
 									<div class="space-y-3">
 										{#if getThreadSubject(issueId)}
-											<div class="flex items-center gap-3 px-1">
-												<div
-													class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-												>
+											<div class="flex items-center gap-2">
+												<div class="flex items-center justify-center">
 													{#if appfolioEnabled}
 														<svg
-															width="18"
-															height="18"
+															class="h-6 w-6"
 															viewBox="0 0 1024 1024"
 															fill="none"
 															xmlns="http://www.w3.org/2000/svg"
@@ -2514,8 +2512,7 @@
 														</svg>
 													{:else if appfolioEnabled}
 														<svg
-															width="18"
-															height="18"
+															class="h-6 w-6"
 															viewBox="0 0 1024 1024"
 															fill="none"
 															xmlns="http://www.w3.org/2000/svg"
@@ -2528,8 +2525,7 @@
 														</svg>
 													{:else}
 														<svg
-															width="18"
-															height="18"
+															class="h-6 w-6"
 															viewBox="0 0 32 32"
 															fill="none"
 															xmlns="http://www.w3.org/2000/svg"
@@ -2574,17 +2570,13 @@
 												</h3>
 											</div>
 										{:else if (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
-											<div class="flex items-center gap-3 px-1">
+											<div class="flex items-center gap-2">
 												{#if !appfolioEnabled}
-													<div
-														class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-													>
+													<div class="flex items-center justify-center">
 														<svg
-															width="18"
-															height="18"
+															class="h-6 w-6 text-neutral-500"
 															viewBox="0 0 16 16"
 															fill="currentColor"
-															class="text-neutral-500"
 														>
 															<path
 																d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
@@ -2597,7 +2589,7 @@
 												{/if}
 											</div>
 										{/if}
-										<div class="space-y-3 pl-0 sm:pl-11">
+										<div class="space-y-3">
 											{#each collectMessagesForIssue(messagesByIssue, issueId) as message}
 												<EmailMessageWithDraft
 													message={{
@@ -2645,21 +2637,18 @@
 
 								{#if (newDraftsByIssue[issueId]?.length ?? 0) > 0}
 									<div class="space-y-3">
-										<div class="flex items-center gap-3 px-1">
+										<div class="flex items-center gap-2">
 											{#if !appfolioEnabled}
-												<div
-													class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-												>
+												<div class="flex items-center justify-center">
 													<svg
-														width="18"
-														height="18"
+														class="h-6 w-6"
 														viewBox="0 0 32 32"
 														fill="none"
 														xmlns="http://www.w3.org/2000/svg"
 													>
 														<path
 															d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
-															fill="white"
+															fill="none"
 														/>
 														<path
 															d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
@@ -2697,8 +2686,7 @@
 													class="flex h-8 w-8 items-center justify-center rounded-full bg-[#007bc7]"
 												>
 													<svg
-														width="18"
-														height="18"
+														class="h-6 w-6"
 														viewBox="0 0 1024 1024"
 														fill="none"
 														xmlns="http://www.w3.org/2000/svg"
@@ -2713,7 +2701,7 @@
 												<h3 class="text-base font-semibold text-neutral-900">Assign Vendor</h3>
 											{/if}
 										</div>
-										<div class="space-y-3 pl-0 sm:pl-11">
+										<div class="space-y-3">
 											{#each newDraftsByIssue[issueId] ?? [] as draft}
 												{#if draft.channel === 'appfolio'}
 													<AppfolioDraftMessage
@@ -2756,18 +2744,18 @@
 									<div>
 										<button
 											type="button"
-											class="tooltip-target relative flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
+											class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
 											on:click={() => toggleTasks(subIssue.id)}
 										>
 											<div
-												class="flex items-center gap-2 rounded-md px-3 py-1.5 transition select-none hover:bg-neutral-100"
+												class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
 											>
 												<svg
 													xmlns="http://www.w3.org/2000/svg"
 													width="12"
 													height="12"
 													fill="currentColor"
-													class="transition-transform duration-150 ease-in-out"
+													class="chevron-icon transition-transform duration-150 ease-in-out"
 													class:rotate-[-90deg]={!(tasksOpen[subIssue.id] ?? true)}
 													viewBox="0 0 16 16"
 												>
@@ -2798,10 +2786,8 @@
 													{#if (messagesByIssue[subIssue.id]?.length ?? 0) > 0 || (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 														<div class="space-y-3">
 															{#if getThreadSubject(subIssue.id)}
-																<div class="flex items-center gap-3 px-1">
-																	<div
-																		class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-																	>
+																<div class="flex items-center gap-2">
+																	<div class="flex items-center justify-center">
 																		{#if appfolioEnabled}
 																			<svg
 																				width="18"
@@ -2864,11 +2850,9 @@
 																	</h3>
 																</div>
 															{:else if (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
-																<div class="flex items-center gap-3 px-1">
+																<div class="flex items-center gap-2">
 																	{#if !appfolioEnabled}
-																		<div
-																			class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-																		>
+																		<div class="flex items-center justify-center">
 																			<svg
 																				width="18"
 																				height="18"
@@ -2891,7 +2875,7 @@
 																	{/if}
 																</div>
 															{/if}
-															<div class="space-y-3 pl-0 sm:pl-11">
+															<div class="space-y-3">
 																{#each collectMessagesForIssue(messagesByIssue, subIssue.id) as message}
 																	<EmailMessageWithDraft
 																		message={{
@@ -2939,11 +2923,9 @@
 
 													{#if (newDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 														<div class="space-y-3">
-															<div class="flex items-center gap-3 px-1">
+															<div class="flex items-center gap-2">
 																{#if !appfolioEnabled}
-																	<div
-																		class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
-																	>
+																	<div class="flex items-center justify-center">
 																		<svg
 																			width="18"
 																			height="18"
@@ -3011,7 +2993,7 @@
 																	</h3>
 																{/if}
 															</div>
-															<div class="space-y-3 pl-0 sm:pl-11">
+															<div class="space-y-3">
 																{#each newDraftsByIssue[subIssue.id] ?? [] as draft}
 																	{#if draft.channel === 'appfolio'}
 																		<AppfolioDraftMessage
@@ -3178,18 +3160,18 @@
 										<div>
 											<button
 												type="button"
-												class="tooltip-target relative flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500"
+												class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
 												on:click={() => toggleActivity(subIssue.id)}
 											>
 												<div
-													class="flex items-center gap-2 rounded-md px-3 py-1.5 transition select-none hover:bg-neutral-100"
+													class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
 												>
 													<svg
 														xmlns="http://www.w3.org/2000/svg"
 														width="12"
 														height="12"
 														fill="currentColor"
-														class="transition-transform duration-150 ease-in-out"
+														class="chevron-icon transition-transform duration-150 ease-in-out"
 														class:rotate-[-90deg]={!(activityOpen[subIssue.id] ?? true)}
 														viewBox="0 0 16 16"
 													>

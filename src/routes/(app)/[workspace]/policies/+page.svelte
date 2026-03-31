@@ -4,6 +4,7 @@
 	import { supabase } from '$lib/supabaseClient';
 	import { getContext } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
+	import SidebarButton from '$lib/components/SidebarButton.svelte';
 	import {
 		applyPolicyInsert,
 		applyPolicyUpdate,
@@ -370,13 +371,16 @@
 			</button>
 			<h1 class="text-sm font-normal text-neutral-700">Policies</h1>
 		</div>
-		<button
-			type="button"
-			class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
-			on:click={openNewPolicyModal}
-		>
-			+ New policy
-		</button>
+		<div class="flex items-center gap-2">
+			<button
+				type="button"
+				class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
+				on:click={openNewPolicyModal}
+			>
+				+ New policy
+			</button>
+			<SidebarButton />
+		</div>
 	</div>
 	<div class="flex items-center justify-between px-6 py-2">
 		<div class="flex items-center gap-2">
