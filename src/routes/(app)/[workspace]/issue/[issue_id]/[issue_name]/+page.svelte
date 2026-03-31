@@ -1452,7 +1452,7 @@
 							<div class="h-7 w-56 animate-pulse rounded bg-neutral-200"></div>
 							<div class="mt-2 h-4 w-80 animate-pulse rounded bg-neutral-100"></div>
 						{/if}
-						<div class="sm:hidden mt-4">
+						<div class="mt-4 sm:hidden">
 							<div class="rounded-2xl">
 								<div class="space-y-2 text-sm text-neutral-600">
 									<div class="grid grid-cols-2 gap-2">
@@ -1894,7 +1894,7 @@
 								</div>
 							</div>
 						</div>
-						<div class="min-w-0 mt-4">
+						<div class="mt-4 min-w-0">
 							{#if !_subIssuesLoading && subIssues.length}
 								<div>
 									<button
@@ -1995,7 +1995,7 @@
 							{/if}
 						</div>
 					</div>
-					<div class="mt-2 w-1/3">
+					<div class="w-1/3">
 						<div class="hidden sm:block">
 							<div class="rounded-2xl">
 								<span class="text-sm font-medium text-neutral-500">Fields</span>
@@ -2488,7 +2488,7 @@
 					</div>
 				</div>
 
-				<div class="mt-4 border-t border-neutral-200 pt-4 sm:mt-8 sm:pt-6">
+				<div class="mt-4 border-t border-neutral-100 pt-4 sm:mt-8 sm:pt-6">
 					<div class="flex items-center justify-between">
 						<h2 class="text-base font-semibold text-neutral-800">Tasks</h2>
 						<div class="text-sm text-neutral-400">Unsubscribe</div>
@@ -3042,7 +3042,7 @@
 						</div>
 					{/if}
 
-					<div class="mt-6 border-t border-neutral-200 pt-4 sm:pt-6">
+					<div class="mt-6 border-t border-neutral-100 pt-4 sm:pt-6">
 						<div class="flex items-center justify-between">
 							<h2 class="text-base font-semibold text-neutral-800">Activity</h2>
 							<div class="text-sm text-neutral-400">Unsubscribe</div>
