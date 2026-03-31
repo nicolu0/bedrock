@@ -1452,7 +1452,7 @@
 							<div class="h-7 w-56 animate-pulse rounded bg-neutral-200"></div>
 							<div class="mt-2 h-4 w-80 animate-pulse rounded bg-neutral-100"></div>
 						{/if}
-						<div class="my-4 sm:hidden">
+						<div class="sm:hidden">
 							<div class="rounded-2xl">
 								<div class="space-y-2 text-sm text-neutral-600">
 									<div class="grid grid-cols-2 gap-2">
@@ -1995,9 +1995,8 @@
 							{/if}
 						</div>
 					</div>
-					<div class="mt-4 bg-red-400">
-						<div class="hidden sm:block sm:w-1/2">
-							<div class="py-2"></div>
+					<div class="mt-2 bg-red-400 w-1/2">
+						<div class="hidden sm:block">
 							<div class="rounded-2xl">
 								<div class="space-y-3 text-sm text-neutral-600">
 									<div class="grid grid-cols-2 gap-2">
@@ -2154,7 +2153,7 @@
 											{/if}
 										</div>
 									</div>
-									<div class="grid grid-cols-2 gap-2">
+									<div class="grid grid-cols-1 gap-2">
 										<div class="tooltip-target relative">
 											<button
 												type="button"
@@ -2329,8 +2328,8 @@
 											{/if}
 										</div>
 									</div>
-									<div class="flex items-center justify-between gap-2">
-										<div class="tooltip-target group relative w-1/2">
+									<div class="flex flex-col gap-2">
+										<div class="tooltip-target group relative w-full">
 											<div
 												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
 													canEditIssue && !isSubissue ? 'hover:bg-neutral-200' : 'opacity-60'
