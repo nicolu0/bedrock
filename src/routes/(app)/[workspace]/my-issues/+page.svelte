@@ -5,6 +5,8 @@
 	import { getContext } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import { goto } from '$app/navigation';
+	import SidebarButton from '$lib/components/SidebarButton.svelte';
+	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 	import { seedIssueDetail } from '$lib/stores/issueDetailCache.js';
 	import {
 		applyIssueInsert,
@@ -611,13 +613,16 @@
 			</button>
 			<h1 class="text-sm font-normal text-neutral-700">My issues</h1>
 		</div>
-		<button
-			type="button"
-			class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
-			on:click={openNewIssueModal}
-		>
-			+ New issue
-		</button>
+		<div class="flex items-center gap-2">
+			<button
+				type="button"
+				class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
+				on:click={openNewIssueModal}
+			>
+				+ New issue
+			</button>
+			<SidebarButton onClick={toggleChatPanel} />
+		</div>
 	</div>
 	<div class="flex items-center justify-between px-6 py-2">
 		<div class="flex items-center gap-2">

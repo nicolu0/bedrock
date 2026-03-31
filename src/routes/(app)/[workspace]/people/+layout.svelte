@@ -4,6 +4,8 @@
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
+	import SidebarButton from '$lib/components/SidebarButton.svelte';
+	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 	import {
 		addPersonToCache,
 		replacePersonInCache,
@@ -59,15 +61,18 @@
 	<div class="space-y-0">
 		<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
 			<h1 class="text-sm font-normal text-neutral-700">People</h1>
-			<button
-				class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
-				on:click={(e) => {
-					e.currentTarget.blur();
-					openNewPersonModal();
-				}}
-			>
-				+ New person
-			</button>
+			<div class="flex items-center gap-2">
+				<button
+					class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
+					on:click={(e) => {
+						e.currentTarget.blur();
+						openNewPersonModal();
+					}}
+				>
+					+ New person
+				</button>
+				<SidebarButton onClick={toggleChatPanel} />
+			</div>
 		</div>
 
 		<div class="border-b border-neutral-200 px-6 py-2">

@@ -2,6 +2,7 @@
 	// @ts-nocheck
 	import { onMount, onDestroy, setContext, tick } from 'svelte';
 	import { fade, scale, fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import { get } from 'svelte/store';
 	import { page, navigating } from '$app/stores';
 	import { browser } from '$app/environment';
@@ -14,8 +15,11 @@
 	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
 	import { pageReady } from '$lib/stores/pageReady';
 	import { agentToasts } from '$lib/stores/agentToasts';
+	import { rightPanel, openChatPanel, closePanel } from '$lib/stores/rightPanel.js';
 	import { supabase } from '$lib/supabaseClient.js';
 	import AgentToasts from '$lib/components/AgentToasts.svelte';
+	import ChatPanel from '$lib/components/ChatPanel.svelte';
+	import IssuePanel from '$lib/components/IssuePanel.svelte';
 	export let data;
 
 	let appMounted = false;
@@ -311,6 +315,7 @@
 	$: isIssueRoute = $page.url.pathname.includes('/issue/');
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: isSettingsRoute = $page.url.pathname.startsWith(`${basePath}/settings`);
+	$: isInboxRoute = $page.url.pathname.startsWith(`${basePath}/inbox`);
 	$: currentPath = $page.url.pathname;
 	$: _activePath = $navigating?.to?.url?.pathname ?? currentPath;
 	$: activeItem = [...navItems, propertiesItem, settingsItem].find(
@@ -391,6 +396,10 @@
 			ensurePeopleMembersCache(workspaceSlug);
 			ensurePeopleCache(workspaceSlug);
 		}
+	}
+
+	$: if (!isInboxRoute && $rightPanel?.type === 'issue') {
+		openChatPanel();
 	}
 
 	let _workspaceChannel = null;
@@ -825,9 +834,49 @@
 					</div>
 				</div>
 			</aside>
-			<section class="flex-1 overflow-y-auto">
-				<div class="h-full w-full">
-					<slot />
+			<section class="flex-1 overflow-hidden">
+				<div class="flex h-full min-w-0">
+					<div
+						class={`flex flex-none flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out ${
+							$rightPanel.open
+								? $rightPanel.type === 'issue'
+									? 'w-1/2 border-r border-neutral-200'
+									: 'w-8/12 border-r border-neutral-200'
+								: 'w-full'
+						}`}
+					>
+						<div class="h-full w-full">
+							<slot />
+						</div>
+					</div>
+					{#if $rightPanel.open}
+						<div
+							class={`flex-none overflow-y-auto ${
+								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-4/12'
+							}`}
+							in:fly={{ x: 400, duration: 280, easing: cubicOut }}
+							out:fly={{ x: 400, duration: 220, easing: cubicOut }}
+						>
+							{#if $rightPanel.type === 'issue'}
+								<IssuePanel
+									issueId={$rightPanel.issueId}
+									seedIssue={$rightPanel.seedIssue}
+									activityData={$rightPanel.activityData}
+									activityLogsData={$rightPanel.activityLogsData}
+									vendors={$rightPanel.vendors}
+									people={$rightPanel.people}
+									allIssues={$rightPanel.allIssues}
+									on:close={() => {
+										closePanel();
+										$rightPanel.onClose?.();
+									}}
+									on:resolved={() => $rightPanel.onResolved?.()}
+								/>
+							{:else}
+								<ChatPanel on:close={() => closePanel()} />
+							{/if}
+						</div>
+					{/if}
 				</div>
 			</section>
 			{#if showSearchModal}

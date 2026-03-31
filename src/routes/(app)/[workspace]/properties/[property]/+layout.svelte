@@ -3,6 +3,8 @@
 	import { page } from '$app/stores';
 	import { getContext, setContext } from 'svelte';
 	import { writable } from 'svelte/store';
+	import SidebarButton from '$lib/components/SidebarButton.svelte';
+	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 
 	const showNewUnitModal = writable(false);
 	setContext('showNewUnitModal', showNewUnitModal);
@@ -46,11 +48,7 @@
 </script>
 
 <div class="space-y-0">
-	<div
-		class={`flex items-center justify-between border-b border-neutral-200 px-6 ${
-			currentPath === `${basePath}/properties/${propertySlug}/units` ? 'py-2.5' : 'py-3'
-		}`}
-	>
+	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
 		<div class="flex items-center gap-2">
 			<button
 				type="button"
@@ -73,15 +71,18 @@
 			</button>
 			<h1 class="text-sm font-normal text-neutral-700">{propertyTitle}</h1>
 		</div>
-		{#if currentPath === `${basePath}/properties/${propertySlug}/units`}
-			<button
-				type="button"
-				on:click={() => ($showNewUnitModal = true)}
-				class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
-			>
-				+ New unit
-			</button>
-		{/if}
+		<div class="flex items-center gap-2">
+			{#if currentPath === `${basePath}/properties/${propertySlug}/units`}
+				<button
+					type="button"
+					on:click={() => ($showNewUnitModal = true)}
+					class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
+				>
+					+ New unit
+				</button>
+			{/if}
+			<SidebarButton onClick={toggleChatPanel} />
+		</div>
 	</div>
 
 	<div class="px-6 py-2">

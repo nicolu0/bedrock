@@ -434,8 +434,7 @@
 											</svg>
 										{:else}
 											<svg
-												width="18"
-												height="18"
+												class="h-[26px] w-[26px]"
 												viewBox="0 0 32 32"
 												fill="none"
 												xmlns="http://www.w3.org/2000/svg"
@@ -600,8 +599,7 @@
 														class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
 													>
 														<svg
-															width="18"
-															height="18"
+															class="h-[26px] w-[26px]"
 															viewBox="0 0 32 32"
 															fill="none"
 															xmlns="http://www.w3.org/2000/svg"
