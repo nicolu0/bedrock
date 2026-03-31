@@ -1443,6 +1443,7 @@
 			>
 				<div class="mt-2 sm:flex sm:gap-6">
 					<div class="min-w-0 sm:w-2/3">
+
 						{#if !_issueLoading && issue}
 							<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
 							<div class="mt-2 text-sm text-neutral-500">
@@ -1995,7 +1996,9 @@
 							{/if}
 						</div>
 					</div>
-					<div class="w-1/3">
+					<div
+						class={`${ $rightPanel?.open && $rightPanel?.type === 'chat' ? 'w-1/2' : 'w-1/3' }`}
+					>
 						<div class="hidden sm:block">
 							<div class="rounded-2xl">
 								<span class="text-sm font-medium text-neutral-500">Fields</span>
