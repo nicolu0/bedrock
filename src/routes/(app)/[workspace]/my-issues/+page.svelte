@@ -1205,4 +1205,222 @@
 	</div>
 </div>
 
-<svelte:body />
+{#if showUrgencyPolicyPrompt}
+	<div class="fixed inset-0 z-40 bg-neutral-900/30" on:click={closeUrgencyPolicyPrompt}></div>
+	<div class="fixed inset-0 z-50 flex items-center justify-center px-4">
+		<div
+			class="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="urgency-policy-title"
+			on:click|stopPropagation
+		>
+			<div class="flex items-start justify-between gap-4">
+				<div>
+					<div id="urgency-policy-title" class="text-lg font-medium text-neutral-800">
+						Update urgency policy?
+					</div>
+					<p class="mt-1 text-xs text-neutral-500">
+						Apply this urgency setting to future issues like this.
+					</p>
+				</div>
+				<button
+					class="text-neutral-400 transition hover:text-neutral-600"
+					on:click={closeUrgencyPolicyPrompt}
+					aria-label="Close"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-5 w-5">
+						<path
+							fill="currentColor"
+							d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7A1 1 0 0 0 5.7 7.11L10.59 12l-4.9 4.89a1 1 0 1 0 1.41 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.41L13.41 12l4.9-4.89a1 1 0 0 0-.01-1.4z"
+						/>
+					</svg>
+				</button>
+			</div>
+			<div class="mt-4 space-y-3">
+				<div>
+					<label class="text-xs text-neutral-500">Maintenance issue</label>
+					<input
+						class="mt-1 w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+						bind:value={urgencyPolicyIssue}
+						required
+						type="text"
+					/>
+				</div>
+				<div>
+					<label class="text-xs text-neutral-500">Urgency</label>
+					<select
+						class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+						bind:value={urgencyPolicyValue}
+					>
+						<option value="urgent">Urgent</option>
+						<option value="not_urgent">Not urgent</option>
+					</select>
+				</div>
+				{#if urgencyPolicyError}
+					<p class="text-xs text-rose-600">{urgencyPolicyError}</p>
+				{/if}
+			</div>
+			<div class="mt-6 flex items-center justify-end gap-3">
+				<button
+					type="button"
+					class="rounded-full border border-neutral-200 px-4 py-2 text-sm text-neutral-600 transition hover:border-neutral-300"
+					on:click={closeUrgencyPolicyPrompt}
+					disabled={urgencyPolicyLoading}
+				>
+					No thanks
+				</button>
+				<button
+					type="button"
+					class="rounded-full bg-neutral-900 px-4 py-2 text-sm text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
+					on:click={saveUrgencyPolicy}
+					disabled={urgencyPolicyLoading}
+				>
+					{#if urgencyPolicyLoading}
+						Saving...
+					{:else}
+						{urgencyPolicyMatchingId ? 'Update policy' : 'Create policy'}
+					{/if}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+{#if showNewIssueModal}
+	<div
+		class="fixed inset-0 z-40 bg-neutral-900/20"
+		transition:fade={{ duration: 120 }}
+		on:click={closeNewIssueModal}
+	></div>
+	<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-4">
+		<div
+			class="pointer-events-auto w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl"
+			transition:scale={{ duration: 140, start: 0.9 }}
+			on:click|stopPropagation
+			role="dialog"
+			aria-modal="true"
+		>
+			<form on:submit|preventDefault={handleCreateIssue}>
+				<div class="flex items-center justify-between">
+					<div class="text-lg font-medium text-neutral-800">New issue</div>
+					<button
+						class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
+						on:click={closeNewIssueModal}
+						type="button"
+						aria-label="Close"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="24"
+							height="24"
+							fill="currentColor"
+							viewBox="0 0 16 16"
+						>
+							<path
+								d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"
+							/>
+						</svg>
+					</button>
+				</div>
+				<div class="mt-5 flex flex-col gap-3">
+					{#if createIssueError}
+						<p class="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-600">
+							{createIssueError}
+						</p>
+					{/if}
+					<input
+						class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+						placeholder="Issue title"
+						name="name"
+						bind:value={newIssueTitle}
+						required
+						type="text"
+					/>
+					<textarea
+						class="min-h-[96px] rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+						placeholder="Description (optional)"
+						name="description"
+						bind:value={newIssueDescription}
+					></textarea>
+					<div>
+						<label class="text-xs text-neutral-500">Property</label>
+						<select
+							class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							bind:value={newIssuePropertyId}
+							on:change={handlePropertyChange}
+							required
+							disabled={!properties.length}
+						>
+							<option value="" disabled>
+								{properties.length ? 'Select a property' : 'No properties available'}
+							</option>
+							{#each properties as property}
+								<option value={property.id}>{property.name}</option>
+							{/each}
+						</select>
+					</div>
+					<div>
+						<label class="text-xs text-neutral-500">Unit</label>
+						<select
+							class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+							bind:value={newIssueUnitId}
+							disabled={!availableUnits.length}
+						>
+							<option value="" disabled>
+								{availableUnits.length ? 'Select a unit' : 'No units available'}
+							</option>
+							{#each availableUnits as unit}
+								<option value={unit.id}>{unit.name}</option>
+							{/each}
+						</select>
+					</div>
+					<div class="grid gap-3 sm:grid-cols-2">
+						<div>
+							<label class="text-xs text-neutral-500">Status</label>
+							<select
+								class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+								bind:value={newIssueStatus}
+								required
+							>
+								{#each statusOptions as option}
+									<option value={option.value}>{option.label}</option>
+								{/each}
+							</select>
+						</div>
+						<div>
+							<label class="text-xs text-neutral-500">Assignee</label>
+							<select
+								class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+								bind:value={newIssueAssigneeId}
+							>
+								<option value="">Unassigned</option>
+								{#each members as member}
+									<option value={member.user_id}>
+										{member.users?.name ?? member.name ?? 'Member'}
+									</option>
+								{/each}
+							</select>
+						</div>
+					</div>
+				</div>
+				<div class="mt-5 flex items-center justify-end gap-2">
+					<button
+						class="rounded-xl border border-stone-200 px-4 py-2 text-sm text-neutral-600 transition-colors hover:bg-stone-50 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
+						on:click={closeNewIssueModal}
+						type="button"
+					>
+						Cancel
+					</button>
+					<button
+						class="rounded-xl bg-stone-800 px-4 py-2 text-sm text-neutral-200 transition-colors hover:bg-stone-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+						disabled={creatingIssue || !newIssueTitle.trim() || !newIssuePropertyId}
+						type="submit"
+					>
+						{creatingIssue ? 'Creating...' : 'Create issue'}
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+{/if}

@@ -94,12 +94,13 @@
 			if (normalized === 'done') return 2;
 			return 3;
 		};
-		const rootIssues = (issues ?? []).filter((issue) => {
-			const parentId = issue?.parentId ?? issue?.parent_id ?? null;
-			return !parentId;
-		});
-		const byPriority = (list) =>
-			(list ?? []).sort((a, b) => {
+		return (issues ?? [])
+			.filter((issue) => issue?.hasUnseenUpdates === true)
+			.filter((issue) => {
+				const parentId = issue?.parentId ?? issue?.parent_id ?? null;
+				return !parentId;
+			})
+			.sort((a, b) => {
 				const aUrgent = a?.urgent ?? false;
 				const bUrgent = b?.urgent ?? false;
 				if (aUrgent !== bUrgent) return aUrgent ? -1 : 1;
@@ -108,12 +109,8 @@
 				const aTs = new Date(a?.updated_at ?? a?.updatedAt ?? 0).getTime();
 				const bTs = new Date(b?.updated_at ?? b?.updatedAt ?? 0).getTime();
 				return bTs - aTs;
-			});
-		const unseen = rootIssues.filter((issue) => issue?.hasUnseenUpdates === true);
-		const primary = unseen.length
-			? unseen
-			: rootIssues.filter((issue) => normalizeStatus(issue?.status) === 'todo');
-		return byPriority(primary).slice(0, 5);
+			})
+			.slice(0, 5);
 	};
 	const shouldShowOverlay = () => {
 		if (!browser || overlayDismissed) return false;
@@ -538,15 +535,11 @@
 					Here’s some updates that occurred while you were away
 				</p>
 				<div class="mt-4 space-y-1 text-left">
-					{#if overlayIssues.length === 0}
-						<div class="pl-3 text-sm text-neutral-500">No updates while you were gone.</div>
-					{:else}
-						{#each overlayIssues as issue}
-							<div on:click|stopPropagation={() => dismissWelcomeOverlay()}>
-								<ChatIssueRow {issue} />
-							</div>
-						{/each}
-					{/if}
+					{#each overlayIssues as issue}
+						<div on:click|stopPropagation={() => dismissWelcomeOverlay()}>
+							<ChatIssueRow {issue} />
+						</div>
+					{/each}
 				</div>
 			</div>
 			{#if !overlayEmptyState}
