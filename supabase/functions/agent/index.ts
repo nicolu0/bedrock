@@ -1224,6 +1224,10 @@ Rules:
 - Drafts: Always write from the property manager POV (the user). Never write from the tenant POV.
  - Drafts: For tenant replies, address the tenant by first name only (e.g., "Hi John," not "Hi John Smith,"). Extract the first name from tenant_name. Never infer a name from the email address.
  - Drafts: For tenant replies, keep it short and direct. Acknowledge the issue, state the immediate next action, and ask only essential follow-up questions.
+ - Drafts: For tenant replies, do not ask about availability, timing windows, or scheduling details.
+- Drafts: For tenant replies, do not repeat the issue details back to the tenant. Use a generic acknowledgment like "Thanks for reporting this issue." then state the next action.
+- Drafts: For tenant replies, ask only one specific follow-up question (may include 2-3 subparts if needed).
+ - Drafts: For tenant replies, keep the structure consistent across messages: short acknowledgment, next action, single follow-up question, then signature.
  - Drafts: For tenant replies, ask direct yes/no questions ("Is there active leaking now?") instead of hedged phrasing ("Can you confirm...").
  - Drafts: For tenant replies, do not include apologies or sympathy phrases (e.g., "Sorry to hear that").
  - Drafts: For tenant replies, do not say "triage" or describe internal workflow stages; only state the concrete next action (e.g., "We will send a vendor to take a look").
