@@ -2,10 +2,13 @@
 	// @ts-nocheck
 	import { createEventDispatcher, onMount } from 'svelte';
 	import { agentToasts } from '$lib/stores/agentToasts';
+	import { searchVendors } from '$lib/utils/vendorSearch';
 	const dispatch = createEventDispatcher();
 
 	export let draft = null;
 	export let approvedBy = null;
+	export let vendors = [];
+	export let recommendedVendors = [];
 
 	let draftBody = draft?.body ?? '';
 	let saveTimeout;
@@ -16,6 +19,35 @@
 	const APPROVAL_KEY = 'appfolio_approved_by';
 	const getApprovalStorageKey = () =>
 		`${APPROVAL_KEY}:${draft?.issue_id ?? 'unknown'}:${draft?.message_id ?? draft?.id ?? 'draft'}`;
+
+	// Vendor picker state
+	let showVendorPicker = false;
+	let vendorSearch = '';
+	let pickerEl;
+
+	$: filteredVendors = searchVendors(vendors, vendorSearch);
+	$: suggestedVendors = recommendedVendors ?? [];
+
+	// IDs already in recommended so we don't show duplicates in "All" section
+	$: suggestedIds = new Set(suggestedVendors.map((v) => v.id));
+
+	$: filteredSuggested = suggestedVendors.filter(
+		(v) => !vendorSearch || searchVendors([v], vendorSearch).length > 0
+	);
+	$: filteredAll = filteredVendors.filter((v) => !suggestedIds.has(v.id));
+
+	// Current recipient vendor display name
+	$: currentRecipientEmail = draft?.recipient_email ?? null;
+	$: currentVendorName =
+		currentRecipientEmail
+			? (vendors.find(
+					(v) => v.email?.toLowerCase() === currentRecipientEmail?.toLowerCase()
+				)?.name ??
+				recommendedVendors.find(
+					(v) => v.email?.toLowerCase() === currentRecipientEmail?.toLowerCase()
+				)?.name ??
+				currentRecipientEmail)
+			: null;
 
 	$: if (draft && (draft.message_id ?? draft.id) !== lastMessageKey) {
 		lastMessageKey = draft.message_id ?? draft.id;
@@ -81,6 +113,31 @@
 		}
 	};
 
+	const changeVendor = async (vendor) => {
+		if (!draft?.issue_id && !draft?.message_id) return;
+		showVendorPicker = false;
+		vendorSearch = '';
+		const prevEmail = draft.recipient_email;
+		draft = { ...draft, recipient_email: vendor.email };
+		try {
+			const body = draft.message_id
+				? { message_id: draft.message_id, recipient_email: vendor.email, channel: 'appfolio' }
+				: { issue_id: draft.issue_id, recipient_email: vendor.email, channel: 'appfolio' };
+			const response = await fetch('/api/email-drafts', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			});
+			if (!response.ok) {
+				draft = { ...draft, recipient_email: prevEmail };
+				showToast('Failed to update vendor.');
+			}
+		} catch {
+			draft = { ...draft, recipient_email: prevEmail };
+			showToast('Failed to update vendor.');
+		}
+	};
+
 	const approveDraft = async () => {
 		if (!draft?.issue_id) return;
 		if (isApproving) return;
@@ -119,7 +176,16 @@
 			textareaEl.style.height = `${textareaEl.scrollHeight}px`;
 		}
 	};
+
+	const handleClickOutside = (e) => {
+		if (showVendorPicker && pickerEl && !pickerEl.contains(e.target)) {
+			showVendorPicker = false;
+			vendorSearch = '';
+		}
+	};
 </script>
+
+<svelte:window on:mousedown={handleClickOutside} />
 
 {#if draft}
 	<div class="overflow-hidden rounded-md border border-neutral-100 bg-white">
@@ -127,6 +193,106 @@
 			<div class="px-4 py-3">
 				<div class="text-sm font-semibold text-neutral-900">Drafted reply</div>
 			</div>
+
+			{#if suggestedVendors.length > 0 || vendors.length > 0}
+				<div class="border-t border-neutral-100 px-4 py-2">
+					<div class="relative flex items-center gap-2" bind:this={pickerEl}>
+						<span class="text-xs text-neutral-500">To:</span>
+						{#if currentVendorName}
+							<span class="text-xs font-medium text-neutral-800">{currentVendorName}</span>
+						{:else}
+							<span class="text-xs text-neutral-400">No vendor selected</span>
+						{/if}
+						<button
+							class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500 hover:bg-neutral-100"
+							type="button"
+							on:click={() => {
+								showVendorPicker = !showVendorPicker;
+								vendorSearch = '';
+							}}
+						>
+							Change
+						</button>
+
+						{#if showVendorPicker}
+							<div
+								class="absolute left-0 top-7 z-20 w-72 overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg"
+							>
+								<div class="border-b border-neutral-100 px-3 py-2">
+									<input
+										class="w-full border-0 bg-transparent p-0 text-xs text-neutral-700 outline-none placeholder:text-neutral-400"
+										placeholder="Search vendors..."
+										bind:value={vendorSearch}
+										autofocus
+									/>
+								</div>
+
+								<div class="max-h-60 overflow-y-auto">
+									{#if filteredSuggested.length > 0}
+										<div class="px-3 pt-2 pb-1">
+											<div class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+												Suggested
+											</div>
+										</div>
+										{#each filteredSuggested as vendor}
+											<button
+												class="flex w-full flex-col px-3 py-1.5 text-left hover:bg-neutral-50"
+												type="button"
+												on:click={() => changeVendor(vendor)}
+											>
+												<div class="flex items-center gap-1.5">
+													{#if vendor.email?.toLowerCase() === currentRecipientEmail?.toLowerCase()}
+														<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+													{:else}
+														<span class="h-1.5 w-1.5 rounded-full bg-transparent"></span>
+													{/if}
+													<span class="text-xs font-medium text-neutral-900">{vendor.name}</span>
+													{#if vendor.trade}
+														<span class="text-xs text-neutral-400">· {vendor.trade}</span>
+													{/if}
+												</div>
+												{#if vendor.reason}
+													<div class="ml-3 text-[10px] text-neutral-400">{vendor.reason}</div>
+												{/if}
+											</button>
+										{/each}
+									{/if}
+
+									{#if filteredAll.length > 0}
+										<div class="px-3 pt-2 pb-1">
+											<div class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+												All Vendors
+											</div>
+										</div>
+										{#each filteredAll as vendor}
+											<button
+												class="flex w-full items-center gap-1.5 px-3 py-1.5 text-left hover:bg-neutral-50"
+												type="button"
+												on:click={() => changeVendor(vendor)}
+											>
+												{#if vendor.email?.toLowerCase() === currentRecipientEmail?.toLowerCase()}
+													<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+												{:else}
+													<span class="h-1.5 w-1.5 rounded-full bg-transparent"></span>
+												{/if}
+												<span class="text-xs font-medium text-neutral-900">{vendor.name}</span>
+												{#if vendor.trade}
+													<span class="text-xs text-neutral-400">· {vendor.trade}</span>
+												{/if}
+											</button>
+										{/each}
+									{/if}
+
+									{#if filteredSuggested.length === 0 && filteredAll.length === 0}
+										<div class="px-3 py-3 text-xs text-neutral-400">No vendors found.</div>
+									{/if}
+								</div>
+							</div>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
 			<div class="border-t border-neutral-100 px-4 py-3">
 				<textarea
 					class="w-full resize-none border-0 bg-transparent p-0 text-sm text-neutral-700 ring-0 outline-none focus:ring-0 focus:outline-none"

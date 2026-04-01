@@ -4,12 +4,14 @@
 	import { agentToasts } from '$lib/stores/agentToasts';
 	import { applyPolicyInsert } from '$lib/stores/policiesCache';
 	import { diffWords } from '$lib/utils/textDiff';
+	import { searchVendors } from '$lib/utils/vendorSearch';
 	const dispatch = createEventDispatcher();
 
 	export let message;
 	export let draft = null;
 	export let vendors = [];
 	export let people = [];
+	export let recommendedVendors = [];
 
 	let draftBody = draft?.body ?? '';
 	let saveTimeout;
@@ -85,11 +87,17 @@
 
 	$: contactOptions = (people ?? []).length ? people : vendors;
 
-	$: filteredPeople = (contactOptions ?? []).filter(
-		(person) =>
-			person.name.toLowerCase().includes(vendorSearch.toLowerCase()) ||
-			person.email.toLowerCase().includes(vendorSearch.toLowerCase())
+	$: suggestedVendors = recommendedVendors ?? [];
+	$: suggestedIds = new Set(suggestedVendors.map((v) => v.id));
+
+	$: filteredSuggested = vendorSearch
+		? searchVendors(suggestedVendors, vendorSearch)
+		: suggestedVendors;
+	$: filteredAll = searchVendors(contactOptions ?? [], vendorSearch).filter(
+		(p) => !suggestedIds.has(p.id)
 	);
+	// Legacy alias used by existing addPerson / togglePerson callers
+	$: filteredPeople = [...filteredSuggested, ...filteredAll];
 
 	const handleWindowClick = () => {
 		showVendorDropdown = false;
@@ -546,50 +554,101 @@
 						</button>
 						{#if showVendorDropdown}
 							<div
-								class="absolute top-full right-0 z-20 mt-1 w-56 rounded-md border border-neutral-200 bg-white shadow-md"
+								class="absolute top-full right-0 z-20 mt-1 w-64 rounded-md border border-neutral-200 bg-white shadow-md"
 								on:click|stopPropagation
 							>
 								<div class="border-b border-neutral-100 px-2 py-1.5">
 									<input
 										type="text"
 										class="w-full border-0 bg-transparent text-xs ring-0 outline-none placeholder:text-neutral-400 focus:ring-0"
-										placeholder="Search people..."
+										placeholder="Search vendors..."
 										bind:value={vendorSearch}
 										on:click|stopPropagation
 									/>
 								</div>
-								<div class="max-h-40 overflow-y-auto">
-									{#each filteredPeople as person}
-										<button
-											type="button"
-											class="flex w-full items-start gap-2 px-3 py-2 text-left text-xs hover:bg-neutral-50"
-											on:click={() => togglePerson(person)}
-										>
-											<span
-												class="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded border border-neutral-200"
+								<div class="max-h-52 overflow-y-auto">
+									{#if filteredSuggested.length > 0}
+										<div class="px-3 pt-2 pb-0.5">
+											<div class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+												Suggested
+											</div>
+										</div>
+										{#each filteredSuggested as person}
+											<button
+												type="button"
+												class="flex w-full flex-col px-3 py-1.5 text-left text-xs hover:bg-neutral-50"
+												on:click={() => togglePerson(person)}
 											>
-												{#if isRecipient(person.email)}
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														width="10"
-														height="10"
-														viewBox="0 0 16 16"
-														fill="currentColor"
+												<div class="flex items-center gap-2">
+													<span
+														class="inline-flex h-4 w-4 items-center justify-center rounded border border-neutral-200"
 													>
-														<path
-															d="M6.173 13.414 1.757 9l1.414-1.414 3.002 3.002 6.65-6.65L14.237 5z"
-														/>
-													</svg>
+														{#if isRecipient(person.email)}
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="10"
+																height="10"
+																viewBox="0 0 16 16"
+																fill="currentColor"
+															>
+																<path
+																	d="M6.173 13.414 1.757 9l1.414-1.414 3.002 3.002 6.65-6.65L14.237 5z"
+																/>
+															</svg>
+														{/if}
+													</span>
+													<span class="font-medium text-neutral-800">{person.name}</span>
+													{#if person.trade}
+														<span class="text-neutral-400">· {person.trade}</span>
+													{/if}
+												</div>
+												{#if person.reason}
+													<div class="ml-6 text-[10px] text-neutral-400">{person.reason}</div>
 												{/if}
-											</span>
-											<span class="flex flex-col items-start">
-												<span class="font-medium text-neutral-800">{person.name}</span>
-												<span class="text-neutral-400">{person.email}</span>
-											</span>
-										</button>
-									{:else}
-										<p class="px-3 py-2 text-xs text-neutral-400">No people found</p>
-									{/each}
+											</button>
+										{/each}
+									{/if}
+
+									{#if filteredAll.length > 0}
+										<div class="px-3 pt-2 pb-0.5">
+											<div class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+												{filteredSuggested.length > 0 ? 'All Vendors' : 'Vendors'}
+											</div>
+										</div>
+										{#each filteredAll as person}
+											<button
+												type="button"
+												class="flex w-full items-start gap-2 px-3 py-1.5 text-left text-xs hover:bg-neutral-50"
+												on:click={() => togglePerson(person)}
+											>
+												<span
+													class="mt-0.5 inline-flex h-4 w-4 items-center justify-center rounded border border-neutral-200"
+												>
+													{#if isRecipient(person.email)}
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															width="10"
+															height="10"
+															viewBox="0 0 16 16"
+															fill="currentColor"
+														>
+															<path
+																d="M6.173 13.414 1.757 9l1.414-1.414 3.002 3.002 6.65-6.65L14.237 5z"
+															/>
+														</svg>
+													{/if}
+												</span>
+												<span class="flex flex-col items-start">
+													<span class="font-medium text-neutral-800">{person.name}</span>
+													<span class="text-neutral-400">{person.email}</span>
+												</span>
+											</button>
+										{/each}
+									{/if}
+
+									{#if filteredSuggested.length === 0 && filteredAll.length === 0}
+										<p class="px-3 py-2 text-xs text-neutral-400">No vendors found</p>
+									{/if}
 								</div>
 							</div>
 						{/if}
