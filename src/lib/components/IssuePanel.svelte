@@ -171,8 +171,6 @@
 		const targetIssueId = issueId ?? message?.issue_id ?? draft?.issue_id ?? null;
 		if (status === 'optimistic') {
 			suppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
-			if (message) applyMessageDelta(message);
-			if (draft) removeDraftFromCache(draft);
 			return;
 		}
 		if (status === 'confirmed') {
@@ -203,7 +201,11 @@
 		if (!pid) return null;
 		return allIssues.find((i) => i.id === pid) ?? parentIssueCache[pid] ?? null;
 	})();
-	$: if (issue?.parent_id && !allIssues.find((i) => i.id === issue.parent_id) && !parentIssueCache[issue.parent_id]) {
+	$: if (
+		issue?.parent_id &&
+		!allIssues.find((i) => i.id === issue.parent_id) &&
+		!parentIssueCache[issue.parent_id]
+	) {
 		supabase
 			.from('issues')
 			.select('id, name, status')
@@ -269,7 +271,11 @@
 	};
 </script>
 
-<svelte:window on:keydown={(e) => { if (e.key === 'Escape') handleClose(); }} />
+<svelte:window
+	on:keydown={(e) => {
+		if (e.key === 'Escape') handleClose();
+	}}
+/>
 
 <div class="flex h-full flex-col">
 	<!-- Header -->
@@ -281,8 +287,8 @@
 				<button
 					type="button"
 					class="shrink-0 text-neutral-700 hover:underline"
-					on:click={() => navigateTo(parentIssue.id)}
-				>{parentIssue.name}</button>
+					on:click={() => navigateTo(parentIssue.id)}>{parentIssue.name}</button
+				>
 				<span class="text-neutral-300">›</span>
 			{/if}
 			<span class={`h-3 w-3 shrink-0 rounded-full border ${statusMeta.statusClass}`}></span>
@@ -366,18 +372,31 @@
 						<div class="mt-3">
 							{#each subIssues as subIssue}
 								{@const assigneePerson = people.find((p) => p.user_id === subIssue.assignee_id)}
-								{@const initials = assigneePerson?.name ? assigneePerson.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() : ''}
+								{@const initials = assigneePerson?.name
+									? assigneePerson.name
+											.split(' ')
+											.map((w) => w[0])
+											.join('')
+											.slice(0, 2)
+											.toUpperCase()
+									: ''}
 								<button
 									type="button"
 									on:click={() => loadIssue(subIssue.id)}
 									class="flex w-full items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
 								>
 									<div class="flex items-center gap-3">
-										<span class={`h-4 w-4 shrink-0 rounded-full border ${statusConfig[subIssue.status ?? 'todo']?.statusClass ?? 'border-neutral-300'}`}></span>
+										<span
+											class={`h-4 w-4 shrink-0 rounded-full border ${statusConfig[subIssue.status ?? 'todo']?.statusClass ?? 'border-neutral-300'}`}
+										></span>
 										<span class="text-left text-neutral-800">{subIssue.name}</span>
 									</div>
 									{#if initials}
-										<div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-xs font-medium text-neutral-600">{initials}</div>
+										<div
+											class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-xs font-medium text-neutral-600"
+										>
+											{initials}
+										</div>
 									{:else}
 										<div class="h-6 w-6 shrink-0 rounded-full bg-neutral-100"></div>
 									{/if}

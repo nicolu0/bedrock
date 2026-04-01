@@ -528,8 +528,6 @@
 		const targetIssueId = issueId ?? message?.issue_id ?? draft?.issue_id ?? null;
 		if (status === 'optimistic') {
 			suppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
-			if (message) applyMessageDelta(message);
-			if (draft) removeDraftFromCache(draft);
 			return;
 		}
 		if (status === 'confirmed') {
@@ -3013,7 +3011,9 @@
 																			{draft}
 																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{:else}
@@ -3028,7 +3028,9 @@
 																			}}
 																			{draft}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{/if}
@@ -3123,7 +3125,9 @@
 																			{draft}
 																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{:else}
@@ -3138,7 +3142,9 @@
 																			}}
 																			{draft}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{/if}
