@@ -298,9 +298,7 @@
 	};
 
 	let filterValueOptions = [];
-	let selectedIssueId = null;
 	let hoveredIssueId = null;
-	let pointerActive = false;
 	$: {
 		if (filterCategory === 'assignee') {
 			const assigneeOptions = [...members]
@@ -344,18 +342,6 @@
 	}
 	$: selectedValue =
 		filterValueOptions.find((option) => option.value === filterValue) ?? filterValueOptions[0];
-
-	$: visibleIssueItems = filteredSections.flatMap((section) =>
-		(section.propertyGroups ?? []).flatMap((group) => group.items ?? [])
-	);
-	$: {
-		const selectedStillVisible = visibleIssueItems.some(
-			(item) => getRowIssueId(item) === selectedIssueId
-		);
-		if (!selectedStillVisible) {
-			selectedIssueId = visibleIssueItems.length ? getRowIssueId(visibleIssueItems[0]) : null;
-		}
-	}
 
 	const groupRowsByProperty = (rows) => {
 		const groups = new Map();
@@ -660,41 +646,6 @@
 		) {
 			return;
 		}
-		if (!visibleIssueItems.length) return;
-		const currentIndex = Math.max(
-			0,
-			visibleIssueItems.findIndex((item) => getRowIssueId(item) === selectedIssueId)
-		);
-		if (event.key === 'j') {
-			event.preventDefault();
-			pointerActive = false;
-			const nextIndex = Math.min(visibleIssueItems.length - 1, currentIndex + 1);
-			const nextId = getRowIssueId(visibleIssueItems[nextIndex]);
-			selectedIssueId = nextId;
-			requestAnimationFrame(() => {
-				document.querySelector(`[data-issue-id="${nextId}"]`)?.scrollIntoView({ block: 'nearest' });
-			});
-		}
-		if (event.key === 'k') {
-			event.preventDefault();
-			pointerActive = false;
-			const nextIndex = Math.max(0, currentIndex - 1);
-			const nextId = getRowIssueId(visibleIssueItems[nextIndex]);
-			selectedIssueId = nextId;
-			requestAnimationFrame(() => {
-				document.querySelector(`[data-issue-id="${nextId}"]`)?.scrollIntoView({ block: 'nearest' });
-			});
-		}
-		if (event.key === 'Enter') {
-			const selectedItem = visibleIssueItems.find(
-				(item) => getRowIssueId(item) === selectedIssueId
-			);
-			if (!selectedItem) return;
-			event.preventDefault();
-			const href = getIssueHref(selectedItem);
-			markIssueSeenFromList(selectedItem);
-			if (href) goto(href);
-		}
 	};
 </script>
 
@@ -907,7 +858,7 @@
 		</div>
 	</div>
 
-	<div class="flex-1 overflow-y-auto">
+	<div class="flex-1 overflow-y-auto" on:mouseleave={() => (hoveredIssueId = null)}>
 		{#if _resolvedIssues === null}
 			<div class="space-y-2 divide-y divide-neutral-100">
 				{#each { length: 4 } as _}
@@ -981,29 +932,17 @@
 										{#each group.items as item}
 											<a
 												class={`block w-full px-6 py-2 text-left transition ${
-													getRowIssueId(item) === selectedIssueId ||
-													(pointerActive && getRowIssueId(item) === hoveredIssueId)
-														? 'bg-stone-50'
-														: ''
+													getRowIssueId(item) === hoveredIssueId ? 'bg-stone-50' : ''
 												}`}
 												href={getIssueHref(item)}
 												data-sveltekit-preload-data="hover"
-												data-issue-id={getRowIssueId(item)}
 												on:click={(event) => handleIssueOpen(event, item)}
 												on:mouseenter={() => {
-													pointerActive = true;
 													const id = getRowIssueId(item);
 													hoveredIssueId = id;
-													selectedIssueId = id;
 												}}
 												on:mouseleave={() => {
-													if (hoveredIssueId === getRowIssueId(item)) hoveredIssueId = null;
-												}}
-												on:focus={() => {
-													pointerActive = true;
-													const id = getRowIssueId(item);
-													hoveredIssueId = id;
-													selectedIssueId = id;
+													hoveredIssueId = null;
 												}}
 											>
 												<div class="flex items-center justify-between gap-4">

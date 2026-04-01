@@ -476,7 +476,14 @@ const listVendors = async (workspaceId: string) => {
 const rankVendors = (
 	vendors: Array<{ id: string; name: string; email: string | null; trade: string | null }>,
 	chosenVendor: { id: string; name: string; email: string | null; trade: string | null } | undefined
-): Array<{ id: string; name: string; trade: string | null; email: string | null; score: number; reason: string }> => {
+): Array<{
+	id: string;
+	name: string;
+	trade: string | null;
+	email: string | null;
+	score: number;
+	reason: string;
+}> => {
 	const chosenTrade = (chosenVendor?.trade ?? '').toLowerCase().trim();
 	const alternatives = vendors
 		.filter((v) => v.id !== chosenVendor?.id)
@@ -1233,6 +1240,13 @@ Rules:
  - Drafts: For tenant replies, do not say "triage" or describe internal workflow stages; only state the concrete next action (e.g., "We will send a vendor to take a look").
  - Drafts: For tenant replies, do not mention property_name or unit_name in the body.
  - Drafts: For tenant replies, do not explain assessment criteria or internal process; only state what will happen next.
+ - Drafts: Template for tenant replies (use as the base format):
+   Hi {FirstName},
+
+   Thanks for reporting this issue. We'll send a vendor to take a look.
+   Is {single direct question} happening right now?
+
+   {UserName}
 - Drafts: End with the user_name as the signature. Never use an email address as the signature.
 - Drafts: Never use default_sender_email in the email body.
  - Drafts: When referencing location in vendor emails, use property_name and unit_name (e.g., "at {property_name}, unit {unit_name}"). Never include a raw UUID in the email body.
