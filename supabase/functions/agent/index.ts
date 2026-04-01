@@ -327,7 +327,12 @@ const emitAgentEvent = async ({
 			.from('agent_events')
 			.upsert(payload, { onConflict: 'workspace_id,issue_id' });
 		if (error) {
-			console.error('agent-events upsert failed', { run_id: runId, issue_id: issueId, stage, error });
+			console.error('agent-events upsert failed', {
+				run_id: runId,
+				issue_id: issueId,
+				stage,
+				error
+			});
 		}
 	} else {
 		// Run-level (no issueId): INSERT first time (tracked in module Set), UPDATE thereafter.
@@ -1217,12 +1222,18 @@ Rules:
 - Reasoning: keep as a short, human-readable sentence that can be reused for the subissue description.
 - Use the workspace_policy to decide triage vs schedule vendor. If the policy instructs drafting emails to cleaners or vendors, do that and skip draft_reply unless the policy explicitly says to reply.
 - Drafts: Always write from the property manager POV (the user). Never write from the tenant POV.
-- Drafts: For tenant replies, address the tenant by first name only (e.g., "Hi John," not "Hi John Smith,"). Extract the first name from tenant_name. Never infer a name from the email address.
+ - Drafts: For tenant replies, address the tenant by first name only (e.g., "Hi John," not "Hi John Smith,"). Extract the first name from tenant_name. Never infer a name from the email address.
+ - Drafts: For tenant replies, keep it short and direct. Acknowledge the issue, state the immediate next action, and ask only essential follow-up questions.
+ - Drafts: For tenant replies, ask direct yes/no questions ("Is there active leaking now?") instead of hedged phrasing ("Can you confirm...").
+ - Drafts: For tenant replies, do not include apologies or sympathy phrases (e.g., "Sorry to hear that").
+ - Drafts: For tenant replies, do not say "triage" or describe internal workflow stages; only state the concrete next action (e.g., "We will send a vendor to take a look").
+ - Drafts: For tenant replies, do not mention property_name or unit_name in the body.
+ - Drafts: For tenant replies, do not explain assessment criteria or internal process; only state what will happen next.
 - Drafts: End with the user_name as the signature. Never use an email address as the signature.
 - Drafts: Never use default_sender_email in the email body.
-- Drafts: When referencing location, use property_name and unit_name (e.g., "at {property_name}, unit {unit_name}"). Never include a raw UUID in the email body.
+ - Drafts: When referencing location in vendor emails, use property_name and unit_name (e.g., "at {property_name}, unit {unit_name}"). Never include a raw UUID in the email body.
 - Drafts: When triaging, draft a short, friendly reply acknowledging the issue and asking one clarifying question about emergency indicators if relevant.
-- Drafts: When scheduling, draft a short, direct vendor email requesting availability and permission to access.
+ - Drafts: Vendor requests should be short and direct. Include only the issue, location (property_name + unit_name), and tenant contact information if available.
 - Drafts: Use draft_reply for replies and draft_email for new outbound emails.
 - Drafts: For Schedule subissues, the draft recipient must be a vendor email or null; never send to sender_email.
 - Drafts: sender_email should not be provided by the agent. The system will use default_sender_email.
