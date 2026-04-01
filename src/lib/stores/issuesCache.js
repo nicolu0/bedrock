@@ -36,10 +36,36 @@ const normalizeStatus = (value) => {
 	return statusOrder.includes(normalized) ? normalized : 'todo';
 };
 
-export const buildSectionsFromIssues = (issues = []) => {
+const getIssueLatestTimestamp = (issue) => {
+	if (!issue) return 0;
+	const value = issue.latestActivityAt ?? issue.updated_at ?? issue.updatedAt ?? null;
+	if (!value) return 0;
+	const ts = new Date(value).getTime();
+	return Number.isFinite(ts) ? ts : 0;
+};
+
+const computeIssueHasUnseenUpdates = (issue, issueReadsById) => {
+	if (!issueReadsById) return false;
+	const latest = getIssueLatestTimestamp(issue);
+	if (!latest) return false;
+	const lastSeenRaw = issueReadsById[issue?.id] ?? null;
+	const lastSeen = lastSeenRaw ? new Date(lastSeenRaw).getTime() : 0;
+	return latest > (Number.isFinite(lastSeen) ? lastSeen : 0);
+};
+
+const applyIssueReadsToIssues = (issues = [], issueReadsById) => {
+	if (!issueReadsById) return issues;
+	return (issues ?? []).map((issue) => ({
+		...issue,
+		hasUnseenUpdates: computeIssueHasUnseenUpdates(issue, issueReadsById)
+	}));
+};
+
+export const buildSectionsFromIssues = (issues = [], issueReadsById = null) => {
 	const normalizedIssues = (issues ?? []).map((issue) => ({
 		...issue,
-		status: normalizeStatus(issue.status)
+		status: normalizeStatus(issue.status),
+		hasUnseenUpdates: computeIssueHasUnseenUpdates(issue, issueReadsById)
 	}));
 	const issuesById = new Map(normalizedIssues.map((issue) => [issue.id ?? issue.issueId, issue]));
 	const childrenByParent = new Map();
@@ -83,7 +109,8 @@ export const buildSectionsFromIssues = (issues = []) => {
 				readableId: subIssue.readableId ?? subIssue.readable_id ?? null,
 				assignees: subIssue.assignees ?? 0,
 				assigneeId: subIssue.assigneeId ?? subIssue.assignee_id ?? null,
-				assignee_id: subIssue.assignee_id ?? subIssue.assigneeId ?? null
+				assignee_id: subIssue.assignee_id ?? subIssue.assigneeId ?? null,
+				hasUnseenUpdates: computeIssueHasUnseenUpdates(subIssue, issueReadsById)
 			}));
 		bucket.items.push({
 			id: issue.id,
@@ -97,6 +124,7 @@ export const buildSectionsFromIssues = (issues = []) => {
 			unit: issue.unit,
 			issueNumber: issue.issueNumber ?? issue.issue_number ?? null,
 			readableId: issue.readableId ?? issue.readable_id ?? null,
+			hasUnseenUpdates: computeIssueHasUnseenUpdates(issue, issueReadsById),
 			subIssues
 		});
 	}
@@ -126,6 +154,7 @@ export const buildSectionsFromIssues = (issues = []) => {
 			readableId: issue.readableId ?? issue.readable_id ?? null,
 			parentTitle: parent.title ?? parent.name,
 			isSubIssue: true,
+			hasUnseenUpdates: computeIssueHasUnseenUpdates(issue, issueReadsById),
 			subIssues: []
 		});
 	}
@@ -327,17 +356,29 @@ export const primeIssuesCache = (workspaceSlug, data, fetchedAt = Date.now()) =>
 	if (!browser || !workspaceSlug || !data) return;
 	issuesCache.update((current) => {
 		if (fetchedAt < current.fetchedAt) return current; // reject stale write
-		const issueReadsUserId = data.issueReadsUserId ?? null;
-		const issueReadsById = issueReadsUserId
+		const incomingReadsUserId = data.issueReadsUserId ?? null;
+		const incomingReadsById = incomingReadsUserId
 			? (data.issueReadsById ?? normalizeIssueReads(data.issueReads))
 			: null;
+		const fallbackReadsUserId = current.data?.issueReadsUserId ?? null;
+		const fallbackReadsById = current.data?.issueReadsById ?? null;
+		const issueReadsUserId = incomingReadsUserId || fallbackReadsUserId;
+		const issueReadsById = incomingReadsById || fallbackReadsById;
+		const normalizedIssues = applyIssueReadsToIssues(data.issues ?? [], issueReadsById);
+		const sections = buildSectionsFromIssues(normalizedIssues, issueReadsById);
 		const payload = {
 			workspace: workspaceSlug,
-			data: { ...data, issueReadsById, issueReadsUserId },
+			data: {
+				...data,
+				issues: normalizedIssues,
+				sections,
+				issueReadsById,
+				issueReadsUserId
+			},
 			fetchedAt
 		};
 		writeSessionCache(payload);
-		primeDetailCacheFromIssuesList(data.issues);
+		primeDetailCacheFromIssuesList(normalizedIssues);
 		return {
 			workspace: workspaceSlug,
 			data: payload.data,
@@ -356,7 +397,15 @@ export const updateIssueReadsInCache = (workspaceSlug, userId, issueReads) => {
 		const existingUserId = state.data.issueReadsUserId ?? null;
 		if (existingUserId && existingUserId !== userId) return state;
 		const issueReadsById = { ...(state.data.issueReadsById ?? {}), ...normalized };
-		const nextData = { ...state.data, issueReadsById, issueReadsUserId: userId };
+		const normalizedIssues = applyIssueReadsToIssues(state.data.issues ?? [], issueReadsById);
+		const sections = buildSectionsFromIssues(normalizedIssues, issueReadsById);
+		const nextData = {
+			...state.data,
+			issues: normalizedIssues,
+			sections,
+			issueReadsById,
+			issueReadsUserId: userId
+		};
 		writeSessionCache({ workspace: workspaceSlug, data: nextData, fetchedAt: state.fetchedAt });
 		return { ...state, data: nextData };
 	});
@@ -392,8 +441,7 @@ export const applyIssueInsert = (
 			parent_id: rawIssue.parent_id ?? null
 		};
 		const issues = [...(state.data.issues ?? []), normalizedIssue];
-
-		const sections = buildSectionsFromIssues(issues);
+		const sections = buildSectionsFromIssues(issues, state.data.issueReadsById ?? null);
 		return { ...state, data: { ...state.data, issues, sections } };
 	});
 };
@@ -402,7 +450,7 @@ export const applyIssueDelete = (issueId) => {
 	issuesCache.update((state) => {
 		if (!state.data) return state;
 		const issues = (state.data.issues ?? []).filter((i) => i.id !== issueId);
-		const sections = buildSectionsFromIssues(issues);
+		const sections = buildSectionsFromIssues(issues, state.data.issueReadsById ?? null);
 		return { ...state, data: { ...state.data, issues, sections } };
 	});
 };
@@ -413,7 +461,7 @@ export const updateIssueStatusInListCache = (issueId, newStatus) => {
 		const issues = (state.data.issues ?? []).map((issue) =>
 			issue.id === issueId ? { ...issue, status: newStatus } : issue
 		);
-		const sections = buildSectionsFromIssues(issues);
+		const sections = buildSectionsFromIssues(issues, state.data.issueReadsById ?? null);
 		return { ...state, data: { ...state.data, issues, sections } };
 	});
 };
@@ -424,7 +472,7 @@ export const updateIssueFieldsInListCache = (issueId, fields) => {
 		const issues = (state.data.issues ?? []).map((i) =>
 			i.id === issueId ? { ...i, ...fields, title: fields.name ?? i.title } : i
 		);
-		const sections = buildSectionsFromIssues(issues);
+		const sections = buildSectionsFromIssues(issues, state.data.issueReadsById ?? null);
 		return { ...state, data: { ...state.data, issues, sections } };
 	});
 };

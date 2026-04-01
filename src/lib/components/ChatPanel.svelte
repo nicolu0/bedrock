@@ -1,19 +1,84 @@
 <script>
 	// @ts-nocheck
 	import { createEventDispatcher } from 'svelte';
+	import { page } from '$app/stores';
 	import MessageThread from '$lib/components/MessageThread.svelte';
-
-	export let messages = [];
-	export let tenant = { name: 'Resident', email: '' };
+	import { chatMessages, addChatMessage } from '$lib/stores/chatMessages.js';
 
 	const dispatch = createEventDispatcher();
+
+	let messageBody = '';
+	let sending = false;
+	let chatTextarea;
+	const tenant = { name: 'You', email: '' };
+
+	const resizeChatTextarea = () => {
+		if (!chatTextarea) return;
+		chatTextarea.style.height = 'auto';
+		chatTextarea.style.height = `${chatTextarea.scrollHeight}px`;
+	};
+
+	const buildHistory = (messages) =>
+		(messages ?? []).slice(-8).map((msg) => ({
+			role: msg.sender === 'agent' ? 'assistant' : 'user',
+			content: msg.message
+		}));
+
+	const sendMessage = async () => {
+		const trimmed = messageBody.trim();
+		if (!trimmed || sending) return;
+		sending = true;
+		const userMessage = {
+			id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+			sender: 'tenant',
+			message: trimmed,
+			timestamp: new Date().toISOString()
+		};
+		const history = buildHistory($chatMessages);
+		addChatMessage(userMessage);
+		messageBody = '';
+		resizeChatTextarea();
+		try {
+			const response = await fetch('/api/chat', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					message: trimmed,
+					workspace_id: $page.data?.workspace?.id,
+					workspace_slug: $page.params.workspace,
+					history
+				})
+			});
+			const data = await response.json().catch(() => ({}));
+			if (!response.ok) throw new Error(data?.error ?? 'Failed to chat');
+			addChatMessage({
+				id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+				sender: 'agent',
+				message: data?.reply ?? 'No response yet.',
+				timestamp: new Date().toISOString()
+			});
+		} catch (error) {
+			addChatMessage({
+				id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+				sender: 'agent',
+				message: 'Sorry, I could not reach chat right now.',
+				timestamp: new Date().toISOString()
+			});
+		} finally {
+			sending = false;
+		}
+	};
+
+	const handleKeydown = (event) => {
+		if (event.key !== 'Enter' || event.shiftKey) return;
+		event.preventDefault();
+		sendMessage();
+	};
 </script>
 
 <div class="flex h-full flex-col">
 	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-3">
-		<div class="flex items-center gap-2 text-neutral-700">
-			<span class="text-sm font-medium">Chat</span>
-		</div>
+		<div class="flex items-center gap-2 text-neutral-700"></div>
 		<button
 			on:click={() => dispatch('close')}
 			class="ml-3 shrink-0 text-neutral-400 transition hover:text-neutral-600"
@@ -35,25 +100,29 @@
 	</div>
 
 	<div class="flex-1 overflow-y-auto px-6 py-4">
-		<MessageThread {messages} {tenant} />
+		<MessageThread messages={$chatMessages} {tenant} />
 	</div>
 
-	<div class="px-6 py-4">
+	<div class="border-t border-neutral-200 px-6 py-4">
 		<div
-			class="rounded-md border border-neutral-100 bg-white px-4 py-3 shadow-[0_2px_6px_rgba(0,0,0,0.08)]"
+			class="rounded-xl border border-neutral-100 bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
 		>
 			<textarea
 				class="w-full resize-none border-0 bg-transparent p-0 text-sm text-neutral-700 outline-none placeholder:text-neutral-400 focus:shadow-none focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
-				disabled
 				placeholder="Ask Bedrock"
 				rows="1"
+				bind:value={messageBody}
+				bind:this={chatTextarea}
+				on:input={resizeChatTextarea}
+				on:keydown={handleKeydown}
 			></textarea>
 			<div class="mt-1 flex items-center justify-end">
 				<button
 					type="button"
 					class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-800 focus-visible:outline-none disabled:opacity-50"
 					aria-label="Send"
-					disabled
+					disabled={!messageBody.trim() || sending}
+					on:click={sendMessage}
 				>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"

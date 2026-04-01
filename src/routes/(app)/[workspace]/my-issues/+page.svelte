@@ -38,10 +38,6 @@
 	let filterCategory = 'assignee';
 	let filterValue = 'any';
 	let filteredSections = [];
-	let _resolvedIssueReadsById = {};
-	let issueReadsLoaded = false;
-	let debugIssueDots = true;
-	let debugLoggedIssueIds = new Set();
 
 	$: _resolvedIssues =
 		$issuesCache?.workspace === $page.params.workspace && $issuesCache?.data
@@ -52,25 +48,18 @@
 			const loadStartedAt = Date.now();
 			data.issuesData.then((d) => {
 				if (browser) primeIssuesCache($page.params.workspace, d, loadStartedAt);
-				const mapped = d?.issueReadsById ?? {};
-				_resolvedIssueReadsById = mapped;
-				issueReadsLoaded = true;
 				if (browser) {
+					const mapped = d?.issueReadsById ?? {};
 					updateIssueReadsInCache($page.params.workspace, currentUserId, mapped);
 				}
 			});
 		} else if (data.issuesData) {
 			if (browser) primeIssuesCache($page.params.workspace, data.issuesData);
-			const mapped = data.issuesData?.issueReadsById ?? {};
-			_resolvedIssueReadsById = mapped;
-			issueReadsLoaded = true;
 			if (browser) {
+				const mapped = data.issuesData?.issueReadsById ?? {};
 				updateIssueReadsInCache($page.params.workspace, currentUserId, mapped);
 			}
 		}
-	}
-	$: if (debugIssueDots && issueReadsLoaded) {
-		debugLoggedIssueIds = new Set();
 	}
 
 	$: if (browser && _resolvedIssues?.sections) {
@@ -203,7 +192,6 @@
 		return acc;
 	}, {});
 	$: members = _resolvedMembers;
-	$: issueReadsById = _resolvedIssueReadsById ?? {};
 	const statusOptions = [
 		{ value: 'todo', label: 'Todo' },
 		{ value: 'in_progress', label: 'In Progress' },
@@ -220,24 +208,7 @@
 		{ value: 'building', label: 'Building' }
 	];
 
-	const hasUnseenUpdates = (item) => {
-		if (!issueReadsLoaded) return false;
-		const latest = getTimestamp(item?.updated_at ?? item?.updatedAt);
-		if (!latest) return false;
-		const lastSeen = getTimestamp(issueReadsById[item?.id]);
-		if (debugIssueDots && item?.id && !debugLoggedIssueIds.has(item.id)) {
-			debugLoggedIssueIds.add(item.id);
-			console.debug('[IssueDot]', {
-				issueId: item.id,
-				updatedAt: item?.updated_at ?? item?.updatedAt ?? null,
-				lastSeenAt: issueReadsById[item?.id] ?? null,
-				latestMs: latest,
-				lastSeenMs: lastSeen,
-				showDot: latest > (lastSeen || 0)
-			});
-		}
-		return latest > (lastSeen || 0);
-	};
+	const hasUnseenUpdates = (item) => Boolean(item?.hasUnseenUpdates);
 
 	const markIssueSeenFromList = async (item) => {
 		if (!browser) return;
@@ -975,12 +946,12 @@
 															{#if item.isSubIssue ? (item.root_urgent ?? item.urgent) : item.urgent}
 																<span
 																	class={`flex items-center justify-center text-rose-500 ${item.isSubIssue ? 'opacity-50' : ''}`}
-																	style="width: 14px; height: 14px;"
+																	style="width: 16px; height: 16px;"
 																>
 																	<svg
 																		xmlns="http://www.w3.org/2000/svg"
-																		width="12"
-																		height="12"
+																		width="14"
+																		height="14"
 																		fill="currentColor"
 																		viewBox="0 0 16 16"
 																	>
@@ -992,12 +963,12 @@
 															{:else}
 																<span
 																	class={`flex items-center justify-center text-neutral-400 ${item.isSubIssue ? 'opacity-50' : ''}`}
-																	style="width: 14px; height: 14px;"
+																	style="width: 16px; height: 16px;"
 																>
 																	<svg
 																		xmlns="http://www.w3.org/2000/svg"
-																		width="12"
-																		height="12"
+																		width="14"
+																		height="14"
 																		fill="currentColor"
 																		viewBox="0 0 16 16"
 																	>
@@ -1082,7 +1053,7 @@
 																</span>
 															{/if}
 															<span
-																class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${
+																class={`h-4 w-4 rounded-full border-[1.5px] ${
 																	statusClassByKey[item.status] ?? section.statusClass
 																}`}
 															></span>
@@ -1103,7 +1074,7 @@
 																			handleStatusSelect(item, option.value)}
 																	>
 																		<span
-																			class={`h-3 w-3 rounded-full border-[1.5px] ${
+																			class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${
 																				statusClassByKey[option.value]
 																			}`}
 																		></span>
@@ -1114,7 +1085,7 @@
 														{/if}
 													</div>
 													{#if item.isSubIssue}
-														<div class="flex min-w-0 items-center gap-2 text-sm">
+														<div class="flex min-w-0 items-center gap-2 text-base">
 															<div class="flex min-w-0 items-center gap-2">
 																<span
 																	class="truncate text-neutral-600 sm:overflow-visible sm:whitespace-normal"
@@ -1123,7 +1094,7 @@
 																</span>
 																{#if hasUnseenUpdates(item)}
 																	<span
-																		class="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500"
+																		class="h-2 w-2 shrink-0 rounded-full bg-sky-500"
 																		aria-label="Issue has updates"
 																	></span>
 																{/if}
@@ -1136,13 +1107,13 @@
 													{:else}
 														<div class="flex items-center gap-2">
 															<span
-																class="truncate text-sm text-neutral-800 sm:overflow-visible sm:whitespace-normal"
+																class="truncate text-base text-neutral-800 sm:overflow-visible sm:whitespace-normal"
 															>
 																{item.title}
 															</span>
 															{#if hasUnseenUpdates(item)}
 																<span
-																	class="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500"
+																	class="h-2 w-2 shrink-0 rounded-full bg-sky-500"
 																	aria-label="Issue has updates"
 																></span>
 															{/if}
@@ -1151,17 +1122,17 @@
 												</div>
 												<div class="flex items-center gap-2">
 													<div
-														class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
+														class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-sm text-neutral-500"
 													>
-														<span class="hidden px-2 py-0.5 sm:inline">{item.property}</span>
-														<span class="hidden border-l border-neutral-200 px-2 py-0.5 sm:inline">
+														<span class="hidden px-2.5 py-1 sm:inline">{item.property}</span>
+														<span class="hidden border-l border-neutral-200 px-2.5 py-1 sm:inline">
 															{item.unit}
 														</span>
-														<span class="px-2 py-0.5 sm:hidden">{item.unit}</span>
+														<span class="px-2.5 py-1 sm:hidden">{item.unit}</span>
 													</div>
 													{#if item.assigneeBadge}
 														<div
-															class={`hidden h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 sm:flex ${item.assigneeBadge.color}`}
+															class={`hidden h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold text-neutral-700 sm:flex ${item.assigneeBadge.color}`}
 															aria-label={item.assigneeBadge.name}
 															title={item.assigneeBadge.name}
 														>
@@ -1169,14 +1140,14 @@
 														</div>
 													{:else}
 														<div
-															class="hidden h-5 w-5 items-center justify-center rounded-full text-neutral-300 sm:flex"
+															class="hidden h-6 w-6 items-center justify-center rounded-full text-neutral-300 sm:flex"
 															aria-label="Unassigned"
 															title="Unassigned"
 														>
 															<svg
 																xmlns="http://www.w3.org/2000/svg"
-																width="16"
-																height="16"
+																width="18"
+																height="18"
 																fill="currentColor"
 																class="bi bi-person-circle"
 																viewBox="0 0 16 16"
