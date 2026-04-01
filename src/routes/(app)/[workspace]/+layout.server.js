@@ -47,22 +47,13 @@ export const load = async ({ locals, params, depends }) => {
 	}
 	const { data: memberWorkspace } = await supabaseAdmin
 		.from('people')
-		.select('role')
+		.select('id, role')
 		.eq('user_id', locals.user.id)
 		.eq('workspace_id', workspaceBySlug?.id ?? '')
 		.maybeSingle();
 	if (memberWorkspace?.role && workspaceBySlug?.id) {
-		let ownerPersonId = null;
 		const normalizedRole = (memberWorkspace.role ?? '').toLowerCase();
-		if (normalizedRole === 'owner') {
-			const { data: ownerPerson } = await supabaseAdmin
-				.from('people')
-				.select('id')
-				.eq('workspace_id', workspaceBySlug.id)
-				.eq('user_id', locals.user.id)
-				.maybeSingle();
-			ownerPersonId = ownerPerson?.id ?? null;
-		}
+		const ownerPersonId = normalizedRole === 'owner' ? (memberWorkspace.id ?? null) : null;
 		const ownerScopeId = normalizedRole === 'owner' ? (ownerPersonId ?? locals.user.id) : null;
 		const properties = loadPropertiesList(
 			locals.supabase,
@@ -96,15 +87,20 @@ export const load = async ({ locals, params, depends }) => {
 	throw error(403, "You don't have access to this workspace.");
 };
 
-const addPropertyCounts = async (adminClient, properties) => {
+const addPropertyCounts = async (adminClient, properties, workspaceId) => {
 	if (!Array.isArray(properties) || properties.length === 0) return properties ?? [];
 	const propertyIds = properties.map((property) => property.id).filter(Boolean);
 	if (propertyIds.length === 0) return properties;
 
-	const { data: units } = await adminClient
-		.from('units')
-		.select('id, property_id')
-		.in('property_id', propertyIds);
+	const [{ data: units }, { data: issues }] = await Promise.all([
+		adminClient.from('units').select('id, property_id').in('property_id', propertyIds),
+		workspaceId
+			? adminClient
+					.from('issues')
+					.select('id, unit_id, property_id')
+					.eq('workspace_id', workspaceId)
+			: adminClient.from('issues').select('id, unit_id, property_id').in('property_id', propertyIds)
+	]);
 
 	const unitCounts = new Map();
 	const unitToProperty = new Map();
@@ -114,18 +110,15 @@ const addPropertyCounts = async (adminClient, properties) => {
 		unitCounts.set(unit.property_id, (unitCounts.get(unit.property_id) ?? 0) + 1);
 	}
 
-	const unitIds = Array.from(unitToProperty.keys());
+	const propertyIdSet = new Set(propertyIds);
 	const issueCounts = new Map();
-	if (unitIds.length) {
-		const { data: issues } = await adminClient
-			.from('issues')
-			.select('id, unit_id')
-			.in('unit_id', unitIds);
-		for (const issue of issues ?? []) {
-			const propertyId = unitToProperty.get(issue?.unit_id);
-			if (!propertyId) continue;
-			issueCounts.set(propertyId, (issueCounts.get(propertyId) ?? 0) + 1);
-		}
+	for (const issue of issues ?? []) {
+		const propertyId =
+			(issue?.property_id && propertyIdSet.has(issue.property_id) ? issue.property_id : null) ??
+			unitToProperty.get(issue?.unit_id) ??
+			null;
+		if (!propertyId) continue;
+		issueCounts.set(propertyId, (issueCounts.get(propertyId) ?? 0) + 1);
 	}
 
 	return properties.map((property) => ({
@@ -148,9 +141,9 @@ const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, 
 		return q;
 	};
 	const { data: properties, error: propertiesError } = await buildQuery(supabase);
-	if (!propertiesError) return addPropertyCounts(adminClient, properties ?? []);
+	if (!propertiesError) return addPropertyCounts(adminClient, properties ?? [], workspaceId);
 	const { data: adminProperties } = await buildQuery(adminClient);
-	return addPropertyCounts(adminClient, adminProperties ?? []);
+	return addPropertyCounts(adminClient, adminProperties ?? [], workspaceId);
 };
 
 const loadUnitsList = async (

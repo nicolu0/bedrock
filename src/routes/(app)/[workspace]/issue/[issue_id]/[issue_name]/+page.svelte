@@ -440,6 +440,11 @@
 		subIssues.some((item) => (draftsByIssue[item.id]?.length ?? 0) > 0) ||
 		(draftsByIssue[issueId]?.length ?? 0) > 0;
 
+	$: recommendedVendorsByIssueId = Object.fromEntries([
+		[issueId, issue?.recommended_vendors ?? []],
+		...subIssues.map((s) => [s.id, s.recommended_vendors ?? []])
+	]);
+
 	$: hasActivity =
 		subIssues.some((item) => (logsByIssue[item.id] ?? []).length > 0) ||
 		(logsByIssue[issueId]?.length ?? 0) > 0;
@@ -1302,7 +1307,6 @@
 									'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, updated_at, channel'
 								)
 								.eq('issue_id', newSub.id)
-								.eq('channel', 'email')
 						]);
 						for (const msg of msgs ?? []) applyMessageDelta(msg);
 						for (const draft of drafts ?? []) applyDraftDelta(draft);
@@ -2718,6 +2722,7 @@
 														{draft}
 														approvedBy={getAppfolioApprovedBy(draft.issue_id)}
 														{vendors}
+														recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 														on:sent={(e) => handleDraftSent(e.detail)}
 													/>
 												{:else}
@@ -2732,6 +2737,7 @@
 														}}
 														{draft}
 														{vendors}
+														recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 														on:sent={(e) => handleDraftSent(e.detail)}
 													/>
 												{/if}
@@ -2821,6 +2827,7 @@
 														{draft}
 														approvedBy={getAppfolioApprovedBy(draft.issue_id)}
 														{vendors}
+														recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 														on:sent={(e) => handleDraftSent(e.detail)}
 													/>
 												{:else}
@@ -2835,6 +2842,7 @@
 														}}
 														{draft}
 														{vendors}
+														recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 														on:sent={(e) => handleDraftSent(e.detail)}
 													/>
 												{/if}
@@ -3003,6 +3011,7 @@
 																			{draft}
 																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
 																			{vendors}
+																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{:else}
@@ -3017,6 +3026,7 @@
 																			}}
 																			{draft}
 																			{vendors}
+																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{/if}
@@ -3111,6 +3121,7 @@
 																			{draft}
 																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
 																			{vendors}
+																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{:else}
@@ -3125,6 +3136,7 @@
 																			}}
 																			{draft}
 																			{vendors}
+																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{/if}

@@ -468,6 +468,58 @@ const listVendors = async (workspaceId: string) => {
 	return data ?? [];
 };
 
+const rankVendors = (
+	vendors: Array<{ id: string; name: string; email: string | null; trade: string | null }>,
+	chosenVendor: { id: string; name: string; email: string | null; trade: string | null } | undefined
+): Array<{ id: string; name: string; trade: string | null; email: string | null; score: number; reason: string }> => {
+	const chosenTrade = (chosenVendor?.trade ?? '').toLowerCase().trim();
+	const alternatives = vendors
+		.filter((v) => v.id !== chosenVendor?.id)
+		.map((v) => {
+			const vTrade = (v.trade ?? '').toLowerCase().trim();
+			let score = 3;
+			let reason = 'Available vendor in this workspace';
+			if (chosenTrade && vTrade) {
+				if (vTrade === chosenTrade) {
+					score = 2;
+					reason = 'Trade match for this work order';
+				} else if (vTrade.includes(chosenTrade) || chosenTrade.includes(vTrade)) {
+					score = 2;
+					reason = 'Available vendor for related trade';
+				}
+			}
+			return { id: v.id, name: v.name, trade: v.trade, email: v.email, score, reason };
+		})
+		.sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
+
+	const result: Array<{
+		id: string;
+		name: string;
+		trade: string | null;
+		email: string | null;
+		score: number;
+		reason: string;
+	}> = [];
+
+	if (chosenVendor) {
+		result.push({
+			id: chosenVendor.id,
+			name: chosenVendor.name,
+			trade: chosenVendor.trade,
+			email: chosenVendor.email,
+			score: 1,
+			reason: chosenTrade ? 'Trade match for this work order' : 'Agent recommended vendor'
+		});
+	}
+
+	const slots = chosenVendor ? 2 : 3;
+	alternatives.slice(0, slots).forEach((v, idx) => {
+		result.push({ ...v, score: idx + (chosenVendor ? 2 : 1) });
+	});
+
+	return result;
+};
+
 const listWorkspaceUnitsForAgent = async (workspaceId: string) => {
 	const { data } = await supabase
 		.from('units')
@@ -1198,7 +1250,8 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
   - title: 2-5 words, Title Case, maximum 30 characters (e.g., "Leaky Kitchen Faucet", "Broken AC Unit", "Clogged Drain", "Ant Infestation", "Broken Washer"). No location, no unit names, no tenant names. Never copy the work order text. Write a complete, grammatically natural phrase.
   - description: one concise sentence summarising who reported it and what the problem is. Never copy the work order text verbatim.
 - Step 2: Create a triage subissue (and a schedule subissue if a vendor is clearly needed).
-- Step 3: Call draft_appfolio (NOT draft_reply or draft_email — those do not exist for AppFolio source). Use the triage subissue id as issue_id. Draft a short message to the tenant acknowledging the work order and any next steps.
+- Step 3: Call draft_appfolio using the triage subissue id as issue_id. Draft a short message to the tenant acknowledging the work order and any next steps. Do NOT set recipient_email on this call — it is a tenant acknowledgement, not a vendor message.
+- Step 3b (only if you created a schedule subissue in Step 2): Call draft_appfolio again, this time using the schedule subissue id as issue_id. Pick the best vendor from the vendors list (prefer trade match). Set recipient_email to that vendor's email. Draft a brief work order request to the vendor describing the issue. This creates the vendor assignment draft that the property manager will review and approve.
 - Step 4: Call done().
 `.trim()
 		: ''
@@ -1955,6 +2008,18 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 							step: i
 						});
 					}
+					if (isScheduleSubissue && normalizedRecipient && vendors.length > 0) {
+						const chosenVendor = vendors.find(
+							(v) => v.email && normalizeEmail(v.email) === normalizedRecipient
+						);
+						const recommended = rankVendors(vendors, chosenVendor ?? undefined);
+						if (recommended.length > 0) {
+							await supabase
+								.from('issues')
+								.update({ recommended_vendors: recommended })
+								.eq('id', issue);
+						}
+					}
 					draftedIssueId = issue;
 					issuedAction = true;
 					result = { ok: true };
@@ -1981,6 +2046,19 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 						workspaceId,
 						channel: 'appfolio'
 					});
+					if (recipientEmail && vendors.length > 0) {
+						const normalizedRec = normalizeEmail(extractEmail(recipientEmail));
+						const chosenVendor = vendors.find(
+							(v) => v.email && normalizeEmail(v.email) === normalizedRec
+						);
+						const recommended = rankVendors(vendors, chosenVendor ?? undefined);
+						if (recommended.length > 0) {
+							await supabase
+								.from('issues')
+								.update({ recommended_vendors: recommended })
+								.eq('id', issue);
+						}
+					}
 					draftedIssueId = issue;
 					issuedAction = true;
 					result = { ok: true };

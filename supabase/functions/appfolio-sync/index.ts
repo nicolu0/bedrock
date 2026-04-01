@@ -142,7 +142,11 @@ async function syncProperties(workspaceId: string, allowedIds: number[] | null =
 	if (allowedIds?.length) {
 		body.properties = { properties_ids: allowedIds.map(String) };
 	}
-	const rows = await appfolioFetch('property_directory', body);
+	const rawRows = await appfolioFetch('property_directory', body);
+	// Filter in code as a safety net — the AppFolio API filter is not always respected
+	const rows = allowedIds?.length
+		? (rawRows as any[]).filter((r) => allowedIds.includes(Number(r.property_id)))
+		: (rawRows as any[]);
 
 	// Batch-fetch all existing Bedrock properties for this workspace upfront
 	const { data: existingProps } = await supabase
@@ -279,9 +283,10 @@ async function syncUnits(workspaceId: string, appfolioPropertyIds: number[]): Pr
 				{
 					property_id: bedrockPropertyId,
 					name: unitName,
-					appfolio_unit_id: String(unitId)
+					appfolio_unit_id: String(unitId),
+					workspace_id: workspaceId
 				},
-				{ onConflict: 'appfolio_unit_id', ignoreDuplicates: false }
+				{ onConflict: 'appfolio_unit_id,workspace_id', ignoreDuplicates: false }
 			);
 			if (error) {
 				console.error(`syncUnits insert error for unit_id=${unitId}:`, error.message);
