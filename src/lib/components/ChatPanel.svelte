@@ -4,10 +4,13 @@
 	import { fly } from 'svelte/transition';
 	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 	import MessageThread from '$lib/components/MessageThread.svelte';
 	import ChatIssueRow from '$lib/components/ChatIssueRow.svelte';
 	import ChatIssueRowLoading from '$lib/components/ChatIssueRowLoading.svelte';
+	import ChatPropertyRow from '$lib/components/ChatPropertyRow.svelte';
 	import { issuesCache } from '$lib/stores/issuesCache';
+	import { propertiesCache } from '$lib/stores/propertiesCache';
 	import {
 		chatMessages,
 		chatStreaming,
@@ -28,6 +31,11 @@
 	let autoScroll = true;
 	let finalTextFromServer = null;
 	const tenant = { name: 'You', email: '' };
+	let showWelcomeOverlay = false;
+	let overlayGreeting = '';
+	let overlayIssues = [];
+	let overlayDismissed = false;
+	const OVERLAY_AWAY_MINUTES = 30;
 
 	const resizeChatTextarea = () => {
 		if (!chatTextarea) return;
@@ -41,9 +49,75 @@
 			content: msg.message
 		}));
 
+	const getIssueReadableId = (issue) =>
+		issue?.readableId ?? issue?.readable_id ?? issue?.issueNumber ?? issue?.issue_number ?? '';
+	const slugify = (value) => {
+		if (!value) return 'issue';
+		const base = value
+			.toString()
+			.toLowerCase()
+			.trim()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/(^-|-$)+/g, '');
+		return base || 'issue';
+	};
+	const getIssueHref = (issue) => {
+		const readableId = getIssueReadableId(issue);
+		if (!readableId) return null;
+		const slug = slugify(issue?.title ?? issue?.name ?? 'issue');
+		return `/${$page.params.workspace}/issue/${readableId}/${slug}`;
+	};
+	const getUserGreeting = () => {
+		const name = $page.data?.user?.name ?? $page.data?.user?.full_name ?? 'there';
+		const hours = new Date().getHours();
+		const greeting = hours < 12 ? 'Good morning' : 'Welcome back';
+		return `${greeting}, ${name}`;
+	};
+	const computeOverlayIssues = () => {
+		const issues = $issuesCache?.data?.issues ?? [];
+		return (issues ?? [])
+			.filter((issue) => issue?.hasUnseenUpdates === true)
+			.sort((a, b) => {
+				const aTs = new Date(a?.updated_at ?? a?.updatedAt ?? 0).getTime();
+				const bTs = new Date(b?.updated_at ?? b?.updatedAt ?? 0).getTime();
+				return bTs - aTs;
+			})
+			.slice(0, 5);
+	};
+	const shouldShowOverlay = () => {
+		if (!browser || overlayDismissed) return false;
+		const lastOpenRaw = localStorage.getItem('chat:last_open_at');
+		const lastOpen = lastOpenRaw ? Number(lastOpenRaw) : 0;
+		const now = Date.now();
+		const awayLongEnough = !lastOpen || now - lastOpen >= OVERLAY_AWAY_MINUTES * 60 * 1000;
+		const issues = computeOverlayIssues();
+		return awayLongEnough && issues.length > 0;
+	};
+	const openWelcomeOverlay = () => {
+		if (!browser) return;
+		overlayGreeting = getUserGreeting();
+		overlayIssues = computeOverlayIssues();
+		showWelcomeOverlay = overlayIssues.length > 0;
+	};
+	const dismissWelcomeOverlay = () => {
+		if (!browser) return;
+		showWelcomeOverlay = false;
+		overlayDismissed = true;
+		localStorage.setItem('chat:dismissed_at', String(Date.now()));
+	};
+	const toggleWelcomeOverlay = () => {
+		if (showWelcomeOverlay) {
+			dismissWelcomeOverlay();
+			return;
+		}
+		overlayDismissed = false;
+		openWelcomeOverlay();
+	};
+
 	const sendMessage = async () => {
 		const trimmed = messageBody.trim();
 		if (!trimmed || sending) return;
+		if (showWelcomeOverlay) dismissWelcomeOverlay();
 		sending = true;
 		startChatStreaming();
 		const userMessage = {
@@ -164,7 +238,9 @@
 	};
 
 	const ISSUE_MARKER_REGEX = /\[\[issue:(\{[\s\S]*?\})\]\]/g;
-	const ISSUE_REF_REGEX = /\[\[issue_ref:([a-zA-Z0-9-]+)\]\]/g;
+	const ISSUE_REF_REGEX = /\[\[issue_ref:([a-zA-Z0-9.-]+)\]\]/g;
+	const PROPERTY_MARKER_REGEX = /\[\[property:(\{[\s\S]*?\})\]\]/g;
+	const PROPERTY_REF_REGEX = /\[\[property_ref:([a-zA-Z0-9.-]+)\]\]/g;
 
 	$: issueMap = new Map(($issuesCache?.data?.issues ?? []).map((item) => [item.id, item]));
 	$: if ($issuesCache?.data?.issues?.length) {
@@ -172,39 +248,64 @@
 			if (item.readableId) issueMap.set(item.readableId, item);
 		}
 	}
+	$: propertyMap = new Map(($propertiesCache ?? []).map((item) => [item.id, item]));
+	$: if (Array.isArray($propertiesCache)) {
+		for (const item of $propertiesCache) {
+			if (item?.name) propertyMap.set(item.name, item);
+		}
+	}
 
 	const parseStreamingSegments = (text = '') => {
 		const segments = [];
-		let lastIndex = 0;
-		const combinedRegex = new RegExp(`${ISSUE_MARKER_REGEX.source}|${ISSUE_REF_REGEX.source}`, 'g');
-		const matches = text.matchAll(combinedRegex);
-		for (const match of matches) {
-			const start = match.index ?? 0;
-			const end = start + match[0].length;
-			const before = text.slice(lastIndex, start);
-			if (before.trim() && !/^[\s,\.-]+$/.test(before)) {
-				segments.push({ type: 'text', value: before });
+		let cursor = 0;
+		const emitText = (value) => {
+			if (!value) return;
+			const cleaned = value.replace(/[\s,\.-]+$/g, '').replace(/^[\s,\.-]+/g, '');
+			if (cleaned.trim()) segments.push({ type: 'text', value: cleaned });
+		};
+		while (cursor < text.length) {
+			const markerStart = text.indexOf('[[', cursor);
+			if (markerStart === -1) {
+				emitText(text.slice(cursor));
+				break;
 			}
-			if (match[1]) {
+			if (markerStart > cursor) {
+				emitText(text.slice(cursor, markerStart));
+			}
+			const markerEnd = text.indexOf(']]', markerStart + 2);
+			if (markerEnd === -1) {
+				segments.push({ type: 'issue-loading' });
+				break;
+			}
+			const markerBody = text.slice(markerStart + 2, markerEnd);
+			if (markerBody.startsWith('issue:')) {
 				let issue = null;
 				try {
-					issue = JSON.parse(match[1]);
+					issue = JSON.parse(markerBody.slice(6));
 				} catch {
 					issue = null;
 				}
 				if (issue) segments.push({ type: 'issue', value: issue });
-			} else if (match[2]) {
-				const ref = match[2];
+			} else if (markerBody.startsWith('issue_ref:')) {
+				const ref = markerBody.slice(10);
 				const issue = issueMap.get(ref);
 				if (issue) segments.push({ type: 'issue', value: issue });
 				else segments.push({ type: 'issue-loading' });
+			} else if (markerBody.startsWith('property:')) {
+				let property = null;
+				try {
+					property = JSON.parse(markerBody.slice(9));
+				} catch {
+					property = null;
+				}
+				if (property) segments.push({ type: 'property', value: property });
+			} else if (markerBody.startsWith('property_ref:')) {
+				const ref = markerBody.slice(13);
+				const property = propertyMap.get(ref);
+				if (property) segments.push({ type: 'property', value: property });
+				else segments.push({ type: 'issue-loading' });
 			}
-			lastIndex = end;
-		}
-		const rest = text.slice(lastIndex);
-		if (rest.trim() && !/^[\s,\.-]+$/.test(rest)) segments.push({ type: 'text', value: rest });
-		if (rest.includes('[[issue_ref:') || rest.endsWith('[[') || rest.endsWith('[[issue_ref')) {
-			segments.push({ type: 'issue-loading' });
+			cursor = markerEnd + 2;
 		}
 		return segments;
 	};
@@ -230,6 +331,10 @@
 		} catch {
 			setChatMessages([]);
 		}
+		if (browser) {
+			localStorage.setItem('chat:last_open_at', String(Date.now()));
+			if (shouldShowOverlay()) openWelcomeOverlay();
+		}
 		await focusInput();
 		await tick();
 		scrollToBottom();
@@ -238,21 +343,45 @@
 	$: if (messagesContainer && autoScroll) {
 		scrollToBottom();
 	}
+	$: if (browser && !showWelcomeOverlay && !overlayDismissed && shouldShowOverlay()) {
+		openWelcomeOverlay();
+	}
 </script>
 
-<div class="flex h-full flex-col">
+<div class="relative flex h-full flex-col">
+	<button
+		type="button"
+		class="absolute top-4 right-4 z-50 flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-500"
+		aria-label="Show updates"
+		on:click={toggleWelcomeOverlay}
+	>
+		<svg
+			xmlns="http://www.w3.org/2000/svg"
+			width="16"
+			height="16"
+			fill="currentColor"
+			class="bi bi-bell-fill"
+			viewBox="0 0 16 16"
+		>
+			<path
+				d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2m.995-14.901a1 1 0 1 0-1.99 0A5 5 0 0 0 3 6c0 1.098-.5 6-2 7h14c-1.5-1-2-5.902-2-7 0-2.42-1.72-4.44-4.005-4.901"
+			/>
+		</svg>
+	</button>
 	<div
 		class="flex-1 overflow-y-auto px-3 pt-6 pb-40"
 		bind:this={messagesContainer}
 		on:scroll={handleScroll}
+		class:pointer-events-none={showWelcomeOverlay}
+		class:overflow-hidden={showWelcomeOverlay}
 	>
 		<MessageThread messages={$chatMessages} {tenant} />
 		{#if $chatStreaming.active}
 			{#if $chatStreaming.text}
-				<div class="w-full space-y-3 pt-6">
+				<div class="w-full space-y-1 pt-2">
 					{#each parseStreamingSegments($chatStreaming.text) as segment}
 						{#if segment.type === 'text'}
-							<div class="w-full max-w-[85%] rounded-2xl px-4 py-4 text-left">
+							<div class="w-full max-w-[85%] rounded-2xl px-4 py-2 text-left">
 								<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
 									{segment.value}
 								</div>
@@ -260,6 +389,10 @@
 						{:else if segment.type === 'issue'}
 							<div class="w-full">
 								<ChatIssueRow issue={segment.value} />
+							</div>
+						{:else if segment.type === 'property'}
+							<div class="w-full">
+								<ChatPropertyRow property={segment.value} />
 							</div>
 						{:else if segment.type === 'issue-loading'}
 							<ChatIssueRowLoading />
@@ -274,7 +407,7 @@
 		{/if}
 	</div>
 
-	<div class="relative px-3 pb-4">
+	<div class="relative z-50 px-3 pb-4">
 		{#if !isAtBottom}
 			<button
 				type="button"
@@ -338,6 +471,26 @@
 			</div>
 		</div>
 	</div>
+
+	{#if showWelcomeOverlay}
+		<div
+			class="absolute inset-0 z-40 flex flex-col w-full px-4 justify-center bg-white/85 text-center backdrop-blur-sm"
+			on:click={dismissWelcomeOverlay}
+		>
+			<div class="text-xl font-semibold text-neutral-900">{overlayGreeting}</div>
+			<p class="mt-2 text-sm text-neutral-600">
+				Here’s some changes that occurred while you were away
+			</p>
+			<div class="mt-4 space-y-1 text-left">
+				{#each overlayIssues as issue}
+					<div on:click|stopPropagation={() => dismissWelcomeOverlay()}>
+						<ChatIssueRow {issue} />
+					</div>
+				{/each}
+			</div>
+			<div class="mt-4 text-xs text-neutral-400">Click anywhere or send a message to dismiss</div>
+		</div>
+	{/if}
 </div>
 
 <style>

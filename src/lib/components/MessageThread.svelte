@@ -2,13 +2,17 @@
 	// @ts-nocheck
 
 	import ChatIssueRow from '$lib/components/ChatIssueRow.svelte';
+	import ChatPropertyRow from '$lib/components/ChatPropertyRow.svelte';
 	import { issuesCache } from '$lib/stores/issuesCache';
+	import { propertiesCache } from '$lib/stores/propertiesCache';
 
 	export let messages = [];
 	export let tenant = { name: 'Tenant', email: '' };
 
 	const ISSUE_MARKER_REGEX = /\[\[issue:(\{[\s\S]*?\})\]\]/g;
-	const ISSUE_REF_REGEX = /\[\[issue_ref:([a-zA-Z0-9-]+)\]\]/g;
+	const ISSUE_REF_REGEX = /\[\[issue_ref:([a-zA-Z0-9.-]+)\]\]/g;
+	const PROPERTY_MARKER_REGEX = /\[\[property:(\{[\s\S]*?\})\]\]/g;
+	const PROPERTY_REF_REGEX = /\[\[property_ref:([a-zA-Z0-9.-]+)\]\]/g;
 
 	$: issueMap = new Map(($issuesCache?.data?.issues ?? []).map((item) => [item.id, item]));
 	$: if ($issuesCache?.data?.issues?.length) {
@@ -16,36 +20,62 @@
 			if (item.readableId) issueMap.set(item.readableId, item);
 		}
 	}
+	$: propertyMap = new Map(($propertiesCache ?? []).map((item) => [item.id, item]));
+	$: if (Array.isArray($propertiesCache)) {
+		for (const item of $propertiesCache) {
+			if (item?.name) propertyMap.set(item.name, item);
+		}
+	}
 
 	const parseSegments = (text = '') => {
 		const segments = [];
-		let lastIndex = 0;
-		const combinedRegex = new RegExp(`${ISSUE_MARKER_REGEX.source}|${ISSUE_REF_REGEX.source}`, 'g');
-		const matches = text.matchAll(combinedRegex);
-		for (const match of matches) {
-			const start = match.index ?? 0;
-			const end = start + match[0].length;
-			const before = text.slice(lastIndex, start);
-			if (before.trim() && !/^[\s,\.-]+$/.test(before)) {
-				segments.push({ type: 'text', value: before });
+		let cursor = 0;
+		const emitText = (value) => {
+			if (!value) return;
+			const cleaned = value.replace(/[\s,\.-]+$/g, '').replace(/^[\s,\.-]+/g, '');
+			if (cleaned.trim()) segments.push({ type: 'text', value: cleaned });
+		};
+		while (cursor < text.length) {
+			const markerStart = text.indexOf('[[', cursor);
+			if (markerStart === -1) {
+				emitText(text.slice(cursor));
+				break;
 			}
-			if (match[1]) {
+			if (markerStart > cursor) {
+				emitText(text.slice(cursor, markerStart));
+			}
+			const markerEnd = text.indexOf(']]', markerStart + 2);
+			if (markerEnd === -1) {
+				break;
+			}
+			const markerBody = text.slice(markerStart + 2, markerEnd);
+			if (markerBody.startsWith('issue:')) {
 				let issue = null;
 				try {
-					issue = JSON.parse(match[1]);
+					issue = JSON.parse(markerBody.slice(6));
 				} catch {
 					issue = null;
 				}
 				if (issue) segments.push({ type: 'issue', value: issue });
-			} else if (match[2]) {
-				const ref = match[2];
+			} else if (markerBody.startsWith('issue_ref:')) {
+				const ref = markerBody.slice(10);
 				const issue = issueMap.get(ref);
 				if (issue) segments.push({ type: 'issue', value: issue });
+			} else if (markerBody.startsWith('property:')) {
+				let property = null;
+				try {
+					property = JSON.parse(markerBody.slice(9));
+				} catch {
+					property = null;
+				}
+				if (property) segments.push({ type: 'property', value: property });
+			} else if (markerBody.startsWith('property_ref:')) {
+				const ref = markerBody.slice(13);
+				const property = propertyMap.get(ref);
+				if (property) segments.push({ type: 'property', value: property });
 			}
-			lastIndex = end;
+			cursor = markerEnd + 2;
 		}
-		const rest = text.slice(lastIndex);
-		if (rest.trim() && !/^[\s,\.-]+$/.test(rest)) segments.push({ type: 'text', value: rest });
 		return segments;
 	};
 </script>
@@ -54,29 +84,35 @@
 	{#if !messages?.length}
 		<div class="mt-3 text-sm text-neutral-500">No messages yet.</div>
 	{:else}
-		<div class="space-y-4">
+		<div class="space-y-5">
 			{#each messages as m (m.id)}
 				{@const isAgent = m?.sender === 'agent'}
 				{@const bubbleText = m?.message ?? ''}
 				{#if isAgent}
-					{#each parseSegments(bubbleText) as segment}
-						{#if segment.type === 'text'}
-							<div class="w-full">
-								<div class="w-full max-w-[85%] rounded-2xl px-4 py-4 text-left">
-									<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
-										{segment.value}
+					<div class="space-y-1">
+						{#each parseSegments(bubbleText) as segment}
+							{#if segment.type === 'text'}
+								<div class="w-full">
+									<div class="w-full max-w-[85%] rounded-2xl px-4 py-2 text-left">
+										<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
+											{segment.value}
+										</div>
 									</div>
 								</div>
-							</div>
-						{:else if segment.type === 'issue'}
-							<div class="w-full">
-								<ChatIssueRow issue={segment.value} />
-							</div>
-						{/if}
-					{/each}
+							{:else if segment.type === 'issue'}
+								<div class="w-full">
+									<ChatIssueRow issue={segment.value} />
+								</div>
+							{:else if segment.type === 'property'}
+								<div class="w-full">
+									<ChatPropertyRow property={segment.value} />
+								</div>
+							{/if}
+						{/each}
+					</div>
 				{:else}
 					<div class="flex w-full justify-end">
-						<div class="w-full max-w-[85%] rounded-2xl bg-neutral-100 px-4 py-4 text-left">
+						<div class="w-full max-w-[85%] rounded-2xl bg-neutral-100 px-4 py-2 text-left">
 							<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
 								{bubbleText}
 							</div>

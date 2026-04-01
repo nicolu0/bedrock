@@ -69,7 +69,7 @@
 
 <a
 	href={issueHref}
-	class="block w-full px-3 py-2 text-left transition hover:bg-stone-50"
+	class="group block w-full px-4 py-2 text-left transition hover:bg-stone-50"
 	data-sveltekit-preload-data="hover"
 	on:mouseenter={(event) => {
 		hoverTooltipVisible = true;
@@ -84,8 +84,8 @@
 		hoverTooltipVisible = false;
 	}}
 >
-	<div class="flex items-center justify-between gap-4">
-		<div class="flex min-w-0 flex-1 items-center gap-2">
+	<div class="relative flex w-full min-w-0 items-center gap-4">
+		<div class="relative z-0 flex min-w-0 flex-1 items-center gap-2">
 			<div class="relative">
 				<span class="-m-1 flex items-center justify-center rounded-md p-1">
 					<span
@@ -131,13 +131,15 @@
 					></span>
 				</span>
 			</div>
-			<div class="flex min-w-0 items-center gap-2">
-				<span class="truncate text-base whitespace-nowrap text-neutral-800">
+			<div class="relative flex min-w-0 flex-1 items-center gap-2">
+				<span class="text-base whitespace-nowrap text-neutral-800">
 					{issue?.title ?? issue?.name ?? 'Issue'}
 				</span>
 			</div>
 		</div>
-		<div class="flex items-center gap-2">
+		<div
+			class="pointer-events-auto absolute top-1/2 right-0 z-20 flex -translate-y-1/2 items-center gap-2 pl-6 transition-opacity duration-75 ease-out group-hover:pointer-events-none group-hover:opacity-0"
+		>
 			<div
 				class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-xs text-neutral-500"
 			>

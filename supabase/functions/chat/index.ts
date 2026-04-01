@@ -122,7 +122,8 @@ const extractReply = (data) => {
 	return data?.choices?.[0]?.message?.content ?? '';
 };
 
-const ISSUE_REF_REGEX = /\[\[issue_ref:([a-zA-Z0-9-]+)\]\]/g;
+const ISSUE_REF_REGEX = /\[\[issue_ref:([a-zA-Z0-9.-]+)\]\]/g;
+const PROPERTY_REF_REGEX = /\[\[property_ref:([a-zA-Z0-9.-]+)\]\]/g;
 
 const isUuid = (value) =>
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -136,6 +137,14 @@ const normalizeStatus = (value) => {
 	if (normalized === 'todo' || normalized === 'to_do' || normalized === 'backlog') return 'todo';
 	return normalized;
 };
+
+const slugify = (value) =>
+	value
+		?.toString()
+		.toLowerCase()
+		.trim()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/(^-|-$)+/g, '') || 'property';
 
 const resolveIssuesByRefs = async (workspaceId, refs) => {
 	if (!workspaceId || !refs?.length) return new Map();
@@ -212,6 +221,34 @@ const replaceIssueRefs = (text, issueMap) =>
 		return `[[issue:${JSON.stringify(issue)}]]`;
 	});
 
+const resolvePropertiesByRefs = async (workspaceId, refs) => {
+	if (!workspaceId || !refs?.length) return new Map();
+	const uniqueRefs = Array.from(new Set(refs.filter(Boolean)));
+	const ids = uniqueRefs.filter((ref) => isUuid(ref));
+	if (!ids.length) return new Map();
+	const { data: properties } = await supabase
+		.from('properties')
+		.select('id, name')
+		.eq('workspace_id', workspaceId)
+		.in('id', ids);
+	const map = new Map();
+	for (const property of properties ?? []) {
+		map.set(property.id, {
+			id: property.id,
+			name: property.name,
+			slug: slugify(property.name)
+		});
+	}
+	return map;
+};
+
+const replacePropertyRefs = (text, propertyMap) =>
+	text.replace(PROPERTY_REF_REGEX, (_match, ref) => {
+		const property = propertyMap.get(ref);
+		if (!property) return '';
+		return `[[property:${JSON.stringify(property)}]]`;
+	});
+
 const sseHeaders = {
 	...corsHeaders,
 	'Content-Type': 'text/event-stream',
@@ -262,13 +299,19 @@ serve(async (req) => {
 			'Answer questions about the product and workspace data. If asked to perform actions, explain how to do it ' +
 			'but do not claim to have completed it. If you are unsure, say so. ' +
 			'When referencing any specific issue, you MUST insert an inline placeholder using the exact format ' +
-			'[[issue_ref:ID]] where ID is an explicit issue id or readable id (like PM-21). ' +
+			'[[issue_ref:ID]] where ID is the issue UUID if available; use readable id only when UUID is not available. ' +
+			'When referencing any specific property, you MUST insert an inline placeholder using the exact format ' +
+			'[[property_ref:ID]] where ID is the property UUID. ' +
 			'Do not include JSON. Placeholders can appear multiple times inline. ' +
 			'If you include an issue_ref marker, do not repeat the issue details (title, status, dates) in text; rely on the card. ' +
+			'If you include a property_ref marker, do not repeat the property details in text; rely on the card. ' +
 			'Never list issue identifiers without an issue_ref marker. ' +
 			'Do not use bullet points, hyphens, numbering, commas, or other separators around issue_ref markers. ' +
 			'If multiple issue_ref markers are needed, output them back-to-back with no characters between, like [[issue_ref:A]][[issue_ref:B]]. ' +
-			'Each issue_ref marker must be the only content on its line.';
+			'Issue_ref markers must never appear mid-sentence. ' +
+			'Each issue_ref marker must be the only content on its own line with no punctuation before or after it. ' +
+			'Avoid extra blank lines; keep issue_ref marker blocks tight with no empty lines between markers. ' +
+			'When returning to normal text after a marker block, resume on the next line only.';
 		const contextPrompt = `Workspace context: ${JSON.stringify({
 			workspace,
 			...context
@@ -310,9 +353,12 @@ serve(async (req) => {
 		if (!wantsStream) {
 			const data = await response.json();
 			const reply = extractReply(data);
-			const refs = Array.from(reply.matchAll(ISSUE_REF_REGEX)).map((m) => m[1]);
-			const issueMap = await resolveIssuesByRefs(workspace?.id ?? null, refs);
-			const finalReply = replaceIssueRefs(reply, issueMap);
+			const issueRefs = Array.from(reply.matchAll(ISSUE_REF_REGEX)).map((m) => m[1]);
+			const propertyRefs = Array.from(reply.matchAll(PROPERTY_REF_REGEX)).map((m) => m[1]);
+			const issueMap = await resolveIssuesByRefs(workspace?.id ?? null, issueRefs);
+			const propertyMap = await resolvePropertiesByRefs(workspace?.id ?? null, propertyRefs);
+			const withIssues = replaceIssueRefs(reply, issueMap);
+			const finalReply = replacePropertyRefs(withIssues, propertyMap);
 			if (threadId) {
 				await supabase.from('chat_messages').insert({
 					thread_id: threadId,
@@ -378,9 +424,12 @@ serve(async (req) => {
 							}
 						}
 					}
-					const refs = Array.from(replyText.matchAll(ISSUE_REF_REGEX)).map((m) => m[1]);
-					const issueMap = await resolveIssuesByRefs(workspace?.id ?? null, refs);
-					const finalReply = replaceIssueRefs(replyText, issueMap);
+					const issueRefs = Array.from(replyText.matchAll(ISSUE_REF_REGEX)).map((m) => m[1]);
+					const propertyRefs = Array.from(replyText.matchAll(PROPERTY_REF_REGEX)).map((m) => m[1]);
+					const issueMap = await resolveIssuesByRefs(workspace?.id ?? null, issueRefs);
+					const propertyMap = await resolvePropertiesByRefs(workspace?.id ?? null, propertyRefs);
+					const withIssues = replaceIssueRefs(replyText, issueMap);
+					const finalReply = replacePropertyRefs(withIssues, propertyMap);
 					sendEvent('final', JSON.stringify({ text: finalReply }));
 					if (threadId) {
 						await supabase.from('chat_messages').insert({
