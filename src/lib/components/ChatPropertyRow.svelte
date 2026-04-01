@@ -24,6 +24,13 @@
 	let hoverTooltipVisible = false;
 	let hoverTooltipX = 0;
 	let hoverTooltipY = 0;
+	const tooltipOffset = 12;
+	const tooltipWidth = 140;
+	const clampX = (value) => {
+		if (typeof window === 'undefined') return value;
+		const max = window.innerWidth - tooltipWidth - 8;
+		return Math.max(8, Math.min(value, max));
+	};
 </script>
 
 <a
@@ -33,11 +40,11 @@
 	on:mouseenter={(event) => {
 		hoverTooltipVisible = true;
 		const rect = event.currentTarget.getBoundingClientRect();
-		hoverTooltipX = event.clientX + 12;
+		hoverTooltipX = clampX(event.clientX + tooltipOffset);
 		hoverTooltipY = rect.bottom + 8;
 	}}
 	on:mousemove={(event) => {
-		hoverTooltipX = event.clientX + 12;
+		hoverTooltipX = clampX(event.clientX + tooltipOffset);
 	}}
 	on:mouseleave={() => {
 		hoverTooltipVisible = false;

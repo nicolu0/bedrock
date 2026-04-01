@@ -352,7 +352,7 @@
 <div class="relative flex h-full flex-col">
 	<button
 		type="button"
-		class="absolute top-4 right-4 z-50 flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-500"
+		class="pointer-events-auto absolute top-3 right-3 z-50 flex h-6 w-6 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-500"
 		aria-label="Show updates"
 		on:click={toggleWelcomeOverlay}
 	>
@@ -370,7 +370,10 @@
 		</svg>
 	</button>
 	<div
-		class="flex-1 overflow-y-auto px-3 pt-6 pb-40"
+		class="pointer-events-none absolute top-0 right-0 left-0 z-40 h-24 bg-gradient-to-b from-white via-white/90 to-transparent"
+	></div>
+	<div
+		class="relative flex-1 overflow-y-auto px-3 pt-6 pb-40"
 		bind:this={messagesContainer}
 		on:scroll={handleScroll}
 		class:pointer-events-none={showWelcomeOverlay}
@@ -475,12 +478,12 @@
 
 	{#if showWelcomeOverlay}
 		<div
-			class="absolute inset-0 z-40 flex h-full w-full flex-col bg-white/85 px-4 text-left backdrop-blur-sm"
+			class="absolute inset-0 z-40 flex h-full w-full flex-col bg-white/85 px-4 pb-24 text-left backdrop-blur-sm"
 			on:click={dismissWelcomeOverlay}
 		>
 			<div class="flex flex-1 flex-col justify-center">
-				<div class="text-xl font-semibold text-neutral-900">{overlayGreeting}</div>
-				<p class="mt-2 text-sm text-neutral-600">
+				<div class="pl-3 text-xl font-semibold text-neutral-900">{overlayGreeting}</div>
+				<p class="mt-2 pl-3 text-sm text-neutral-600">
 					Here’s some updates that occurred while you were away
 				</p>
 				<div class="mt-4 space-y-1 text-left">
@@ -491,7 +494,7 @@
 					{/each}
 				</div>
 			</div>
-			<div class="mb-6 text-center text-xs text-neutral-400">
+			<div class="mb-8 text-center text-xs text-neutral-400">
 				Click anywhere or send a message to dismiss
 			</div>
 		</div>
