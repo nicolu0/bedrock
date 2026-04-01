@@ -1,67 +1,82 @@
 <script>
 	// @ts-nocheck
-	import { onMount } from 'svelte';
+
+	import ChatIssueRow from '$lib/components/ChatIssueRow.svelte';
+	import ChatPropertyRow from '$lib/components/ChatPropertyRow.svelte';
+	import { issuesCache } from '$lib/stores/issuesCache';
+	import { propertiesCache } from '$lib/stores/propertiesCache';
 
 	export let messages = [];
 	export let tenant = { name: 'Tenant', email: '' };
 
-	let expandedIds = [];
+	const ISSUE_MARKER_REGEX = /\[\[issue:(\{[\s\S]*?\})\]\]/g;
+	const ISSUE_REF_REGEX = /\[\[issue_ref:([a-zA-Z0-9.-]+)\]\]/g;
+	const PROPERTY_MARKER_REGEX = /\[\[property:(\{[\s\S]*?\})\]\]/g;
+	const PROPERTY_REF_REGEX = /\[\[property_ref:([a-zA-Z0-9.-]+)\]\]/g;
 
-	const formatTime = (iso) => {
-		if (!iso) return '';
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime())) return '';
-		return d.toLocaleString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			year: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	};
-
-	const senderLabel = (sender) => {
-		if (sender === 'tenant') return tenant?.name ?? 'Tenant';
-		if (sender === 'vendor') return 'Vendor';
-		return 'Bedrock Ops';
-	};
-
-	const senderMeta = (m) => {
-		if (m?.sender === 'tenant') return 'To me';
-		if (m?.sender === 'vendor') return 'To me';
-		return '';
-	};
-
-	const agentToLine = (m) => {
-		const toName = m?.toName ?? tenant?.name ?? 'Tenant';
-		const toEmail = m?.toEmail ?? tenant?.email ?? '';
-		if (!toEmail) return `To ${toName}`;
-		return `To ${toName} <${toEmail}>`;
-	};
-
-	const displayFromName = (m) => {
-		if (m?.sender === 'vendor') return m?.fromName ?? 'Vendor';
-		return senderLabel(m?.sender);
-	};
-
-	const snippet = (value) => {
-		if (!value) return '';
-		return value.replace(/\s+/g, ' ').trim().slice(0, 110);
-	};
-
-	onMount(() => {
-		if (messages?.length && expandedIds.length === 0) {
-			expandedIds = [messages[messages.length - 1].id];
+	$: issueMap = new Map(($issuesCache?.data?.issues ?? []).map((item) => [item.id, item]));
+	$: if ($issuesCache?.data?.issues?.length) {
+		for (const item of $issuesCache.data.issues) {
+			if (item.readableId) issueMap.set(item.readableId, item);
 		}
-	});
-
-	const toggleExpanded = (id) => {
-		if (!id) return;
-		if (expandedIds.includes(id)) {
-			expandedIds = expandedIds.filter((value) => value !== id);
-			return;
+	}
+	$: propertyMap = new Map(($propertiesCache ?? []).map((item) => [item.id, item]));
+	$: if (Array.isArray($propertiesCache)) {
+		for (const item of $propertiesCache) {
+			if (item?.name) propertyMap.set(item.name, item);
 		}
-		expandedIds = [...expandedIds, id];
+	}
+
+	const parseSegments = (text = '') => {
+		const segments = [];
+		let cursor = 0;
+		const emitText = (value) => {
+			if (!value) return;
+			const cleaned = value.replace(/[\s,\.-]+$/g, '').replace(/^[\s,\.-]+/g, '');
+			if (cleaned.trim()) segments.push({ type: 'text', value: cleaned });
+		};
+		while (cursor < text.length) {
+			const markerStart = text.indexOf('[[', cursor);
+			if (markerStart === -1) {
+				emitText(text.slice(cursor));
+				break;
+			}
+			if (markerStart > cursor) {
+				emitText(text.slice(cursor, markerStart));
+			}
+			const markerEnd = text.indexOf(']]', markerStart + 2);
+			if (markerEnd === -1) {
+				break;
+			}
+			const markerBody = text.slice(markerStart + 2, markerEnd);
+			if (markerBody.startsWith('issue:')) {
+				let issue = null;
+				try {
+					issue = JSON.parse(markerBody.slice(6));
+				} catch {
+					issue = null;
+				}
+				if (issue) segments.push({ type: 'issue', value: issue });
+			} else if (markerBody.startsWith('issue_ref:')) {
+				const ref = markerBody.slice(10);
+				const issue = issueMap.get(ref);
+				if (issue) segments.push({ type: 'issue', value: issue });
+			} else if (markerBody.startsWith('property:')) {
+				let property = null;
+				try {
+					property = JSON.parse(markerBody.slice(9));
+				} catch {
+					property = null;
+				}
+				if (property) segments.push({ type: 'property', value: property });
+			} else if (markerBody.startsWith('property_ref:')) {
+				const ref = markerBody.slice(13);
+				const property = propertyMap.get(ref);
+				if (property) segments.push({ type: 'property', value: property });
+			}
+			cursor = markerEnd + 2;
+		}
+		return segments;
 	};
 </script>
 
@@ -69,54 +84,41 @@
 	{#if !messages?.length}
 		<div class="mt-3 text-sm text-neutral-500">No messages yet.</div>
 	{:else}
-		<div class="space-y-3">
-			{#each messages as m, idx (m.id)}
-				{@const prev = idx > 0 ? messages[idx - 1] : null}
-				{#if prev?.channel && m?.channel && prev.channel !== m.channel}
-					<div class="my-4 border-t border-neutral-200/70"></div>
-				{/if}
-				{@const isOpen = expandedIds.includes(m.id)}
+		<div class="space-y-5">
+			{#each messages as m (m.id)}
 				{@const isAgent = m?.sender === 'agent'}
-				<div class={`w-full ${isAgent ? '' : 'flex justify-end'}`}>
-					<button
-						class={`w-full max-w-[85%] rounded-2xl px-5 py-4 text-left transition ${
-							isAgent ? 'bg-transparent' : 'bg-neutral-100'
-						}`}
-						on:click={() => toggleExpanded(m.id)}
-						type="button"
-					>
-						<div class="flex items-start justify-between gap-6">
-							<div class="min-w-0">
-								<div class="flex items-center gap-2">
-									<div class="truncate text-sm font-medium text-neutral-900">
-										{displayFromName(m)}
+				{@const bubbleText = m?.message ?? ''}
+				{#if isAgent}
+					<div class="space-y-1">
+						{#each parseSegments(bubbleText) as segment}
+							{#if segment.type === 'text'}
+								<div class="w-full">
+									<div class="w-full max-w-[85%] rounded-2xl px-4 py-2 text-left">
+										<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
+											{segment.value}
+										</div>
 									</div>
-									{#if !isOpen}
-										<div class="truncate text-sm text-neutral-500">{snippet(m.message)}</div>
-									{/if}
 								</div>
-								{#if isOpen}
-									<div class="mt-1 text-sm text-neutral-500">
-										{m.sender === 'agent' ? agentToLine(m) : senderMeta(m)}
-									</div>
-								{/if}
-							</div>
-							<div class="flex items-center gap-3 text-xs text-neutral-400">
-								<span>{formatTime(m.timestamp)}</span>
+							{:else if segment.type === 'issue'}
+								<div class="w-full">
+									<ChatIssueRow issue={segment.value} />
+								</div>
+							{:else if segment.type === 'property'}
+								<div class="w-full">
+									<ChatPropertyRow property={segment.value} />
+								</div>
+							{/if}
+						{/each}
+					</div>
+				{:else}
+					<div class="flex w-full justify-end">
+						<div class="w-full max-w-[85%] rounded-2xl bg-neutral-100 px-4 py-2 text-left">
+							<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
+								{bubbleText}
 							</div>
 						</div>
-					</button>
-
-					{#if isOpen}
-						<div class="px-5 pb-5">
-							<div class="pt-4">
-								<div class="text-sm leading-relaxed whitespace-pre-wrap text-neutral-800">
-									{m.message}
-								</div>
-							</div>
-						</div>
-					{/if}
-				</div>
+					</div>
+				{/if}
 			{/each}
 		</div>
 	{/if}

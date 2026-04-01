@@ -1536,7 +1536,9 @@
 				class:opacity-0={!$pageReady}
 			>
 				<div class="mt-2 sm:flex sm:gap-6">
-					<div class="min-w-0 sm:w-2/3">
+					<div
+						class={`min-w-0 ${$rightPanel?.open && $rightPanel?.type === 'chat' ? 'sm:w-1/2' : 'sm:w-2/3'}`}
+					>
 						{#if !_issueLoading && issue}
 							<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
 							<div class="mt-2 text-sm text-neutral-500">
@@ -1549,7 +1551,7 @@
 						<div class="mt-4 sm:hidden">
 							<div class="rounded-2xl">
 								<div class="space-y-2 text-sm text-neutral-600">
-									<div class="grid grid-cols-2 gap-2">
+									<div class="grid grid-cols-2 gap-1">
 										<div class="tooltip-target relative">
 											<button
 												type="button"
@@ -2082,7 +2084,7 @@
 																class="subissue-hover-tooltip fixed z-50 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
 																style={`left: ${subIssueTooltipX}px; top: ${subIssueTooltipY}px;`}
 															>
-																Open issue
+																Go to issue
 															</div>
 														{/if}
 													</a>
@@ -2098,7 +2100,7 @@
 						<div class="hidden sm:block">
 							<div class="rounded-2xl">
 								<span class="text-sm font-medium text-neutral-500">Fields</span>
-								<div class="mt-1 space-y-3 text-sm text-neutral-600">
+								<div class="mt-1 space-y-2 text-sm text-neutral-600">
 									<div class="grid grid-cols-2 gap-2">
 										<div class="tooltip-target relative">
 											<button
@@ -3423,7 +3425,7 @@
 					</div>
 					<div class="mt-6">
 						<div
-							class="rounded-md border border-neutral-100 bg-white px-4 py-3 shadow-[0_2px_6px_rgba(0,0,0,0.08)]"
+							class="rounded-xl border border-neutral-100 bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
 						>
 							<textarea
 								class="w-full resize-none border-0 bg-transparent p-0 text-sm text-neutral-700 outline-none placeholder:text-neutral-400 focus:shadow-none focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"

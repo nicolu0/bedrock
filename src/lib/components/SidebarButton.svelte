@@ -18,7 +18,7 @@
 <button
 	type="button"
 	aria-label="Open sidebar"
-	class="rounded-md p-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800"
+	class="rounded-md p-1 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
 	on:click={handleClick}
 >
 	<svg

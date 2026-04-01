@@ -348,8 +348,8 @@
 
 <svelte:window on:click={onWindowClick} on:keydown={onKeydown} />
 
-<div>
-	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
+<div class="flex h-full min-h-0 flex-col">
+	<div class="flex items-center justify-between border-b border-neutral-200 py-2.5 pr-5 pl-6">
 		<div class="flex items-center gap-2">
 			<button
 				type="button"
@@ -530,58 +530,60 @@
 		</div>
 	</div>
 
-	{#if _resolvedPolicies === null}
-		<div class="divide-y divide-neutral-100">
-			{#each { length: 4 } as _}
-				<div class="flex items-center gap-3 px-6 py-2">
-					<div class="skeleton h-3 w-20 rounded-full"></div>
-					<div class="skeleton h-4 w-2/5"></div>
-					<div class="skeleton ml-auto h-5 w-24 rounded-full"></div>
-					<div class="skeleton h-4 w-16 rounded-full"></div>
-				</div>
-			{/each}
-		</div>
-	{:else if filteredPolicies.length === 0}
-		<div class="px-6 py-8 text-sm text-neutral-400">
-			{hasActiveFilter ? 'No policies match the current filter.' : 'No policies yet.'}
-		</div>
-	{:else}
-		<div>
-			{#each filteredPolicies as policy}
-				<div
-					class="flex cursor-pointer items-center justify-between gap-4 px-6 py-2 transition hover:bg-neutral-50"
-					on:click={() => openEditPolicyModal(policy)}
-				>
-					<div class="flex min-w-0 items-center gap-3">
-						<span
-							class={`inline-flex h-5 items-center rounded-full border px-2 text-[10px] font-semibold tracking-wide uppercase ${
-								policyTypeStyles[policy.type] ??
-								'border-neutral-200 bg-neutral-100 text-neutral-600'
-							}`}
-						>
-							{policyTypeLabels[policy.type] ?? policy.type ?? 'Policy'}
-						</span>
-						<div class="min-w-0">
-							<div class="truncate text-sm text-neutral-800">
-								{formatMaintenanceIssueTitle(
-									policy?.meta?.maintenance_issue ?? policy?.description
-								)}
-							</div>
-							<div class="truncate text-xs text-neutral-400">
-								{buildBehaviorDescription(policy)}
+	<div class="flex-1 overflow-y-auto">
+		{#if _resolvedPolicies === null}
+			<div class="divide-y divide-neutral-100">
+				{#each { length: 4 } as _}
+					<div class="flex items-center gap-3 px-6 py-2">
+						<div class="skeleton h-3 w-20 rounded-full"></div>
+						<div class="skeleton h-4 w-2/5"></div>
+						<div class="skeleton ml-auto h-5 w-24 rounded-full"></div>
+						<div class="skeleton h-4 w-16 rounded-full"></div>
+					</div>
+				{/each}
+			</div>
+		{:else if filteredPolicies.length === 0}
+			<div class="px-6 py-8 text-sm text-neutral-400">
+				{hasActiveFilter ? 'No policies match the current filter.' : 'No policies yet.'}
+			</div>
+		{:else}
+			<div>
+				{#each filteredPolicies as policy}
+					<div
+						class="flex cursor-pointer items-center justify-between gap-4 px-6 py-2 transition hover:bg-neutral-50"
+						on:click={() => openEditPolicyModal(policy)}
+					>
+						<div class="flex min-w-0 items-center gap-3">
+							<span
+								class={`inline-flex h-5 items-center rounded-full border px-2 text-[10px] font-semibold tracking-wide uppercase ${
+									policyTypeStyles[policy.type] ??
+									'border-neutral-200 bg-neutral-100 text-neutral-600'
+								}`}
+							>
+								{policyTypeLabels[policy.type] ?? policy.type ?? 'Policy'}
+							</span>
+							<div class="min-w-0">
+								<div class="truncate text-sm text-neutral-800">
+									{formatMaintenanceIssueTitle(
+										policy?.meta?.maintenance_issue ?? policy?.description
+									)}
+								</div>
+								<div class="truncate text-xs text-neutral-400">
+									{buildBehaviorDescription(policy)}
+								</div>
 							</div>
 						</div>
+						<div class="flex shrink-0 items-center gap-3 text-xs text-neutral-500">
+							<span class="hidden sm:inline">{formatDate(policy.createdAt)}</span>
+							<span class="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-500">
+								{policy.createdByName ?? 'Unknown'}
+							</span>
+						</div>
 					</div>
-					<div class="flex shrink-0 items-center gap-3 text-xs text-neutral-500">
-						<span class="hidden sm:inline">{formatDate(policy.createdAt)}</span>
-						<span class="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-500">
-							{policy.createdByName ?? 'Unknown'}
-						</span>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{/if}
+				{/each}
+			</div>
+		{/if}
+	</div>
 </div>
 
 {#if showNewPolicyModal}

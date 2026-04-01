@@ -9,7 +9,11 @@ export const load = async ({ locals, params, depends }) => {
 	if (!locals.user) {
 		throw redirect(303, '/');
 	}
-	const userName = locals.user.user_metadata?.name ?? locals.user.email?.split('@')[0] ?? 'User';
+	let userName =
+		locals.user.user_metadata?.name ??
+		locals.user.user_metadata?.full_name ??
+		locals.user.email?.split('@')[0] ??
+		'User';
 	const [
 		{
 			data: { session }
@@ -25,6 +29,18 @@ export const load = async ({ locals, params, depends }) => {
 			.eq('slug', params.workspace)
 			.maybeSingle()
 	]);
+	if (workspaceBySlug?.id) {
+		const { data: personProfile } = await supabaseAdmin
+			.from('people')
+			.select('name')
+			.eq('workspace_id', workspaceBySlug.id)
+			.eq('user_id', locals.user.id)
+			.maybeSingle();
+		if (personProfile?.name?.trim()) {
+			userName = personProfile.name.trim();
+		}
+	}
+
 	if (workspaceBySlug?.admin_user_id === locals.user.id) {
 		const properties = loadPropertiesList(
 			locals.supabase,
