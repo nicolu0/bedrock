@@ -2,6 +2,42 @@
 import { json } from '@sveltejs/kit';
 import { SUPABASE_SERVICE_ROLE_KEY } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
+import { supabaseAdmin } from '$lib/supabaseAdmin';
+
+const mapMessageToUi = (message) => ({
+	id: message.id,
+	sender: message.sender === 'assistant' ? 'agent' : 'tenant',
+	message: message.content,
+	timestamp: message.created_at
+});
+
+export const GET = async ({ locals }) => {
+	if (!locals?.user) {
+		return json({ error: 'Unauthorized' }, { status: 401 });
+	}
+	const { data: thread } = await supabaseAdmin
+		.from('chat_threads')
+		.select('id')
+		.eq('user_id', locals.user.id)
+		.eq('is_default', true)
+		.maybeSingle();
+	if (!thread?.id) {
+		return json({ thread_id: null, messages: [] }, { status: 200 });
+	}
+	const { data: messages } = await supabaseAdmin
+		.from('chat_messages')
+		.select('id, sender, content, created_at')
+		.eq('thread_id', thread.id)
+		.order('created_at', { ascending: true })
+		.limit(50);
+	return json(
+		{
+			thread_id: thread.id,
+			messages: (messages ?? []).map(mapMessageToUi)
+		},
+		{ status: 200 }
+	);
+};
 
 export const POST = async ({ request, locals }) => {
 	if (!SUPABASE_SERVICE_ROLE_KEY) {

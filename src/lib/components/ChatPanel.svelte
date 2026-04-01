@@ -1,9 +1,14 @@
 <script>
 	// @ts-nocheck
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import MessageThread from '$lib/components/MessageThread.svelte';
-	import { chatMessages, addChatMessage } from '$lib/stores/chatMessages.js';
+	import {
+		chatMessages,
+		addChatMessage,
+		updateChatMessage,
+		setChatMessages
+	} from '$lib/stores/chatMessages.js';
 
 	const dispatch = createEventDispatcher();
 
@@ -36,6 +41,15 @@
 		};
 		const history = buildHistory($chatMessages);
 		addChatMessage(userMessage);
+		const pendingId =
+			crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+		addChatMessage({
+			id: pendingId,
+			sender: 'agent',
+			message: 'Thinking',
+			pending: true,
+			timestamp: new Date().toISOString()
+		});
 		messageBody = '';
 		resizeChatTextarea();
 		try {
@@ -51,17 +65,15 @@
 			});
 			const data = await response.json().catch(() => ({}));
 			if (!response.ok) throw new Error(data?.error ?? 'Failed to chat');
-			addChatMessage({
-				id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-				sender: 'agent',
+			updateChatMessage(pendingId, {
 				message: data?.reply ?? 'No response yet.',
+				pending: false,
 				timestamp: new Date().toISOString()
 			});
 		} catch (error) {
-			addChatMessage({
-				id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-				sender: 'agent',
+			updateChatMessage(pendingId, {
 				message: 'Sorry, I could not reach chat right now.',
+				pending: false,
 				timestamp: new Date().toISOString()
 			});
 		} finally {
@@ -74,19 +86,31 @@
 		event.preventDefault();
 		sendMessage();
 	};
+
+	onMount(async () => {
+		try {
+			const response = await fetch('/api/chat');
+			const data = await response.json().catch(() => ({}));
+			if (response.ok) {
+				setChatMessages(data?.messages ?? []);
+			}
+		} catch {
+			setChatMessages([]);
+		}
+	});
 </script>
 
 <div class="flex h-full flex-col">
-	<div class="flex-1 overflow-y-auto px-6 py-4">
+	<div class="flex-1 overflow-y-auto px-5 py-4">
 		<MessageThread messages={$chatMessages} {tenant} />
 	</div>
 
-	<div class="px-6 py-4">
+	<div class="px-5 py-4">
 		<div
-			class="rounded-xl border border-neutral-100 bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+			class="rounded-xl border border-neutral-100 bg-white px-3 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
 		>
 			<textarea
-				class="w-full resize-none border-0 bg-transparent p-0 text-sm text-neutral-700 outline-none placeholder:text-neutral-400 focus:shadow-none focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
+				class="w-full resize-none border-0 bg-transparent p-0 text-base text-neutral-700 outline-none placeholder:text-neutral-400 focus:shadow-none focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
 				placeholder="Ask Bedrock"
 				rows="1"
 				bind:value={messageBody}

@@ -2,7 +2,7 @@
 import { writable } from 'svelte/store';
 
 const initialState = {
-	open: false,
+	open: true,
 	type: 'chat',
 	issueId: null,
 	seedIssue: null,

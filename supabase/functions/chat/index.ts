@@ -41,6 +41,36 @@ const resolveWorkspace = async (workspaceId, workspaceSlug) => {
 	return null;
 };
 
+const getDefaultThread = async (userId) => {
+	const { data: existing } = await supabase
+		.from('chat_threads')
+		.select('id')
+		.eq('user_id', userId)
+		.eq('is_default', true)
+		.maybeSingle();
+	if (existing?.id) return existing.id;
+	const { data: created } = await supabase
+		.from('chat_threads')
+		.insert({ user_id: userId, is_default: true })
+		.select('id')
+		.single();
+	return created?.id ?? null;
+};
+
+const getThreadHistory = async (threadId) => {
+	if (!threadId) return [];
+	const { data } = await supabase
+		.from('chat_messages')
+		.select('sender, content')
+		.eq('thread_id', threadId)
+		.order('created_at', { ascending: true })
+		.limit(12);
+	return (data ?? []).map((m) => ({
+		role: m.sender === 'assistant' ? 'assistant' : 'user',
+		content: m.content
+	}));
+};
+
 const buildContext = async (workspaceId) => {
 	if (!workspaceId) return { workspace: null };
 	const [issuesRes, propertiesRes, peopleRes, policiesRes] = await Promise.all([
@@ -111,7 +141,15 @@ serve(async (req) => {
 	try {
 		const payload = await req.json();
 		const message = typeof payload?.message === 'string' ? payload.message.trim() : '';
-		const history = Array.isArray(payload?.history) ? payload.history : [];
+		const userId = payload?.user_id ?? null;
+		if (!userId) {
+			return new Response(JSON.stringify({ error: 'Missing user_id' }), {
+				status: 400,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+			});
+		}
+		const threadId = await getDefaultThread(userId);
+		const history = await getThreadHistory(threadId);
 		if (!message) {
 			return new Response(JSON.stringify({ error: 'Missing message' }), {
 				status: 400,
@@ -128,6 +166,17 @@ serve(async (req) => {
 			workspace,
 			...context
 		})}`;
+		if (threadId) {
+			await supabase.from('chat_messages').insert({
+				thread_id: threadId,
+				sender: 'user',
+				content: message
+			});
+			await supabase
+				.from('chat_threads')
+				.update({ updated_at: new Date().toISOString() })
+				.eq('id', threadId);
+		}
 		const messages = [
 			{ role: 'system', content: systemPrompt },
 			{ role: 'system', content: contextPrompt },
@@ -151,6 +200,17 @@ serve(async (req) => {
 		}
 		const data = await response.json();
 		const reply = extractReply(data);
+		if (threadId) {
+			await supabase.from('chat_messages').insert({
+				thread_id: threadId,
+				sender: 'assistant',
+				content: reply
+			});
+			await supabase
+				.from('chat_threads')
+				.update({ updated_at: new Date().toISOString() })
+				.eq('id', threadId);
+		}
 		return new Response(JSON.stringify({ reply }), {
 			status: 200,
 			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
