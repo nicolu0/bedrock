@@ -41,17 +41,22 @@ const resolveWorkspace = async (workspaceId, workspaceSlug) => {
 	return null;
 };
 
-const getDefaultThread = async (userId) => {
-	const { data: existing } = await supabase
+const getDefaultThread = async (userId, workspaceId) => {
+	let query = supabase
 		.from('chat_threads')
 		.select('id')
 		.eq('user_id', userId)
-		.eq('is_default', true)
-		.maybeSingle();
+		.eq('is_default', true);
+	if (workspaceId) {
+		query = query.eq('workspace_id', workspaceId);
+	} else {
+		query = query.is('workspace_id', null);
+	}
+	const { data: existing } = await query.maybeSingle();
 	if (existing?.id) return existing.id;
 	const { data: created } = await supabase
 		.from('chat_threads')
-		.insert({ user_id: userId, is_default: true })
+		.insert({ user_id: userId, workspace_id: workspaceId ?? null, is_default: true })
 		.select('id')
 		.single();
 	return created?.id ?? null;
@@ -284,7 +289,8 @@ serve(async (req) => {
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
 			});
 		}
-		const threadId = await getDefaultThread(userId);
+		const workspace = await resolveWorkspace(payload?.workspace_id, payload?.workspace_slug);
+		const threadId = await getDefaultThread(userId, workspace?.id ?? null);
 		const history = await getThreadHistory(threadId);
 		if (!message) {
 			return new Response(JSON.stringify({ error: 'Missing message' }), {
@@ -292,7 +298,6 @@ serve(async (req) => {
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
 			});
 		}
-		const workspace = await resolveWorkspace(payload?.workspace_id, payload?.workspace_slug);
 		const context = await buildContext(workspace?.id ?? null);
 		const systemPrompt =
 			'You are the Bedrock assistant. You have read-only access to workspace data provided in context. ' +

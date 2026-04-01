@@ -11,16 +11,44 @@ const mapMessageToUi = (message) => ({
 	timestamp: message.created_at
 });
 
-export const GET = async ({ locals }) => {
+const resolveWorkspace = async (workspaceId, workspaceSlug) => {
+	if (workspaceId) {
+		const { data } = await supabaseAdmin
+			.from('workspaces')
+			.select('id, name, slug')
+			.eq('id', workspaceId)
+			.maybeSingle();
+		return data ?? null;
+	}
+	if (workspaceSlug) {
+		const { data } = await supabaseAdmin
+			.from('workspaces')
+			.select('id, name, slug')
+			.eq('slug', workspaceSlug)
+			.maybeSingle();
+		return data ?? null;
+	}
+	return null;
+};
+
+export const GET = async ({ locals, url }) => {
 	if (!locals?.user) {
 		return json({ error: 'Unauthorized' }, { status: 401 });
 	}
-	const { data: thread } = await supabaseAdmin
+	const workspaceId = url.searchParams.get('workspace_id');
+	const workspaceSlug = url.searchParams.get('workspace_slug');
+	const workspace = await resolveWorkspace(workspaceId, workspaceSlug);
+	let threadQuery = supabaseAdmin
 		.from('chat_threads')
 		.select('id')
 		.eq('user_id', locals.user.id)
-		.eq('is_default', true)
-		.maybeSingle();
+		.eq('is_default', true);
+	if (workspace?.id) {
+		threadQuery = threadQuery.eq('workspace_id', workspace.id);
+	} else {
+		threadQuery = threadQuery.is('workspace_id', null);
+	}
+	const { data: thread } = await threadQuery.maybeSingle();
 	if (!thread?.id) {
 		return json({ thread_id: null, messages: [] }, { status: 200 });
 	}

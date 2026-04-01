@@ -476,7 +476,14 @@ const listVendors = async (workspaceId: string) => {
 const rankVendors = (
 	vendors: Array<{ id: string; name: string; email: string | null; trade: string | null }>,
 	chosenVendor: { id: string; name: string; email: string | null; trade: string | null } | undefined
-): Array<{ id: string; name: string; trade: string | null; email: string | null; score: number; reason: string }> => {
+): Array<{
+	id: string;
+	name: string;
+	trade: string | null;
+	email: string | null;
+	score: number;
+	reason: string;
+}> => {
 	const chosenTrade = (chosenVendor?.trade ?? '').toLowerCase().trim();
 	const alternatives = vendors
 		.filter((v) => v.id !== chosenVendor?.id)
@@ -1224,11 +1231,22 @@ Rules:
 - Drafts: Always write from the property manager POV (the user). Never write from the tenant POV.
  - Drafts: For tenant replies, address the tenant by first name only (e.g., "Hi John," not "Hi John Smith,"). Extract the first name from tenant_name. Never infer a name from the email address.
  - Drafts: For tenant replies, keep it short and direct. Acknowledge the issue, state the immediate next action, and ask only essential follow-up questions.
+ - Drafts: For tenant replies, do not ask about availability, timing windows, or scheduling details.
+- Drafts: For tenant replies, do not repeat the issue details back to the tenant. Use a generic acknowledgment like "Thanks for reporting this issue." then state the next action.
+- Drafts: For tenant replies, ask only one specific follow-up question (may include 2-3 subparts if needed).
+ - Drafts: For tenant replies, keep the structure consistent across messages: short acknowledgment, next action, single follow-up question, then signature.
  - Drafts: For tenant replies, ask direct yes/no questions ("Is there active leaking now?") instead of hedged phrasing ("Can you confirm...").
  - Drafts: For tenant replies, do not include apologies or sympathy phrases (e.g., "Sorry to hear that").
  - Drafts: For tenant replies, do not say "triage" or describe internal workflow stages; only state the concrete next action (e.g., "We will send a vendor to take a look").
  - Drafts: For tenant replies, do not mention property_name or unit_name in the body.
  - Drafts: For tenant replies, do not explain assessment criteria or internal process; only state what will happen next.
+ - Drafts: Template for tenant replies (use as the base format):
+   Hi {FirstName},
+
+   Thanks for reporting this issue. We'll send a vendor to take a look.
+   Is {single direct question} happening right now?
+
+   {UserName}
 - Drafts: End with the user_name as the signature. Never use an email address as the signature.
 - Drafts: Never use default_sender_email in the email body.
  - Drafts: When referencing location in vendor emails, use property_name and unit_name (e.g., "at {property_name}, unit {unit_name}"). Never include a raw UUID in the email body.
