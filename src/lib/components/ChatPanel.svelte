@@ -68,7 +68,8 @@
 		return `/${$page.params.workspace}/issue/${readableId}/${slug}`;
 	};
 	const getUserGreeting = () => {
-		const name = $page.data?.user?.name ?? $page.data?.user?.full_name ?? 'there';
+		const name =
+			$page.data?.userName ?? $page.data?.user?.name ?? $page.data?.user?.full_name ?? 'there';
 		const hours = new Date().getHours();
 		const greeting = hours < 12 ? 'Good morning' : 'Welcome back';
 		return `${greeting}, ${name}`;
@@ -474,21 +475,25 @@
 
 	{#if showWelcomeOverlay}
 		<div
-			class="absolute inset-0 z-40 flex flex-col w-full px-4 justify-center bg-white/85 text-center backdrop-blur-sm"
+			class="absolute inset-0 z-40 flex h-full w-full flex-col bg-white/85 px-4 text-left backdrop-blur-sm"
 			on:click={dismissWelcomeOverlay}
 		>
-			<div class="text-xl font-semibold text-neutral-900">{overlayGreeting}</div>
-			<p class="mt-2 text-sm text-neutral-600">
-				Here’s some changes that occurred while you were away
-			</p>
-			<div class="mt-4 space-y-1 text-left">
-				{#each overlayIssues as issue}
-					<div on:click|stopPropagation={() => dismissWelcomeOverlay()}>
-						<ChatIssueRow {issue} />
-					</div>
-				{/each}
+			<div class="flex flex-1 flex-col justify-center">
+				<div class="text-xl font-semibold text-neutral-900">{overlayGreeting}</div>
+				<p class="mt-2 text-sm text-neutral-600">
+					Here’s some updates that occurred while you were away
+				</p>
+				<div class="mt-4 space-y-1 text-left">
+					{#each overlayIssues as issue}
+						<div on:click|stopPropagation={() => dismissWelcomeOverlay()}>
+							<ChatIssueRow {issue} />
+						</div>
+					{/each}
+				</div>
 			</div>
-			<div class="mt-4 text-xs text-neutral-400">Click anywhere or send a message to dismiss</div>
+			<div class="mb-6 text-center text-xs text-neutral-400">
+				Click anywhere or send a message to dismiss
+			</div>
 		</div>
 	{/if}
 </div>
