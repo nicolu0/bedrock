@@ -2084,7 +2084,7 @@
 																class="subissue-hover-tooltip fixed z-50 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
 																style={`left: ${subIssueTooltipX}px; top: ${subIssueTooltipY}px;`}
 															>
-																Open issue
+																Go to issue
 															</div>
 														{/if}
 													</a>

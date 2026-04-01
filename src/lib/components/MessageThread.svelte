@@ -1,10 +1,53 @@
 <script>
 	// @ts-nocheck
 
+	import ChatIssueRow from '$lib/components/ChatIssueRow.svelte';
+	import { issuesCache } from '$lib/stores/issuesCache';
+
 	export let messages = [];
 	export let tenant = { name: 'Tenant', email: '' };
-	export let pending = false;
-	export let pendingText = '';
+
+	const ISSUE_MARKER_REGEX = /\[\[issue:(\{[\s\S]*?\})\]\]/g;
+	const ISSUE_REF_REGEX = /\[\[issue_ref:([a-zA-Z0-9-]+)\]\]/g;
+
+	$: issueMap = new Map(($issuesCache?.data?.issues ?? []).map((item) => [item.id, item]));
+	$: if ($issuesCache?.data?.issues?.length) {
+		for (const item of $issuesCache.data.issues) {
+			if (item.readableId) issueMap.set(item.readableId, item);
+		}
+	}
+
+	const parseSegments = (text = '') => {
+		const segments = [];
+		let lastIndex = 0;
+		const combinedRegex = new RegExp(`${ISSUE_MARKER_REGEX.source}|${ISSUE_REF_REGEX.source}`, 'g');
+		const matches = text.matchAll(combinedRegex);
+		for (const match of matches) {
+			const start = match.index ?? 0;
+			const end = start + match[0].length;
+			const before = text.slice(lastIndex, start);
+			if (before.trim() && !/^[\s,\.-]+$/.test(before)) {
+				segments.push({ type: 'text', value: before });
+			}
+			if (match[1]) {
+				let issue = null;
+				try {
+					issue = JSON.parse(match[1]);
+				} catch {
+					issue = null;
+				}
+				if (issue) segments.push({ type: 'issue', value: issue });
+			} else if (match[2]) {
+				const ref = match[2];
+				const issue = issueMap.get(ref);
+				if (issue) segments.push({ type: 'issue', value: issue });
+			}
+			lastIndex = end;
+		}
+		const rest = text.slice(lastIndex);
+		if (rest.trim() && !/^[\s,\.-]+$/.test(rest)) segments.push({ type: 'text', value: rest });
+		return segments;
+	};
 </script>
 
 <div class="space-y-3">
@@ -15,67 +58,32 @@
 			{#each messages as m (m.id)}
 				{@const isAgent = m?.sender === 'agent'}
 				{@const bubbleText = m?.message ?? ''}
-				<div class={`w-full ${isAgent ? '' : 'flex justify-end'}`}>
-					<div
-						class={`w-full max-w-[85%] rounded-2xl px-4 py-4 text-left ${
-							isAgent ? 'bg-transparent' : 'bg-neutral-100'
-						}`}
-					>
-						<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
-							{bubbleText}
+				{#if isAgent}
+					{#each parseSegments(bubbleText) as segment}
+						{#if segment.type === 'text'}
+							<div class="w-full">
+								<div class="w-full max-w-[85%] rounded-2xl px-4 py-4 text-left">
+									<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
+										{segment.value}
+									</div>
+								</div>
+							</div>
+						{:else if segment.type === 'issue'}
+							<div class="w-full">
+								<ChatIssueRow issue={segment.value} />
+							</div>
+						{/if}
+					{/each}
+				{:else}
+					<div class="flex w-full justify-end">
+						<div class="w-full max-w-[85%] rounded-2xl bg-neutral-100 px-4 py-4 text-left">
+							<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
+								{bubbleText}
+							</div>
 						</div>
 					</div>
-				</div>
+				{/if}
 			{/each}
-			{#if pending}
-				<div class="w-full">
-					<div class="w-full max-w-[85%] rounded-2xl px-4 py-4 text-left">
-						<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
-							<span class="thinking-sheen" data-text={pendingText || 'Thinking'}>
-								{pendingText || 'Thinking'}
-							</span>
-						</div>
-					</div>
-				</div>
-			{/if}
 		</div>
 	{/if}
 </div>
-
-<style>
-	.thinking-sheen {
-		position: relative;
-		display: inline-block;
-		color: #6b7280;
-	}
-
-	.thinking-sheen::after {
-		content: attr(data-text);
-		position: absolute;
-		left: 0;
-		top: 0;
-		width: 100%;
-		color: transparent;
-		background-image: linear-gradient(
-			90deg,
-			rgba(120, 120, 120, 0.2) 0%,
-			rgba(80, 80, 80, 0.95) 45%,
-			rgba(120, 120, 120, 0.2) 90%
-		);
-		background-size: 200% 100%;
-		background-position: 0% 50%;
-		-webkit-background-clip: text;
-		background-clip: text;
-		-webkit-text-fill-color: transparent;
-		animation: thinking-sheen 1.2s ease-in-out infinite;
-	}
-
-	@keyframes thinking-sheen {
-		0% {
-			background-position: 0% 50%;
-		}
-		100% {
-			background-position: 200% 50%;
-		}
-	}
-</style>

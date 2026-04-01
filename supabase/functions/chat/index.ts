@@ -76,7 +76,7 @@ const buildContext = async (workspaceId) => {
 	const [issuesRes, propertiesRes, peopleRes, policiesRes] = await Promise.all([
 		supabase
 			.from('issues')
-			.select('id, readable_id, name, status, urgent, updated_at')
+			.select('id, readable_id, name, status, urgent, created_at, updated_at')
 			.eq('workspace_id', workspaceId)
 			.order('updated_at', { ascending: false })
 			.limit(20),
@@ -121,6 +121,96 @@ const extractReply = (data) => {
 	}
 	return data?.choices?.[0]?.message?.content ?? '';
 };
+
+const ISSUE_REF_REGEX = /\[\[issue_ref:([a-zA-Z0-9-]+)\]\]/g;
+
+const isUuid = (value) =>
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
+const normalizeStatus = (value) => {
+	if (!value) return 'todo';
+	const normalized = String(value).toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
+	if (normalized === 'in_progress') return 'in_progress';
+	if (normalized === 'done' || normalized === 'completed' || normalized === 'complete')
+		return 'done';
+	if (normalized === 'todo' || normalized === 'to_do' || normalized === 'backlog') return 'todo';
+	return normalized;
+};
+
+const resolveIssuesByRefs = async (workspaceId, refs) => {
+	if (!workspaceId || !refs?.length) return new Map();
+	const uniqueRefs = Array.from(new Set(refs.filter(Boolean)));
+	const ids = uniqueRefs.filter((ref) => isUuid(ref));
+	const readableIds = uniqueRefs.filter((ref) => !isUuid(ref));
+	let query = supabase
+		.from('issues')
+		.select(
+			'id, name, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, created_at, updated_at'
+		)
+		.eq('workspace_id', workspaceId);
+	if (ids.length && readableIds.length) {
+		query = query.or(
+			`id.in.(${ids.join(',')}),readable_id.in.(${readableIds
+				.map((value) => `"${value}"`)
+				.join(',')})`
+		);
+	} else if (ids.length) {
+		query = query.in('id', ids);
+	} else if (readableIds.length) {
+		query = query.in('readable_id', readableIds);
+	} else {
+		return new Map();
+	}
+	const { data: issues } = await query;
+	const unitIds = Array.from(new Set((issues ?? []).map((i) => i.unit_id).filter(Boolean)));
+	const { data: units } = unitIds.length
+		? await supabase.from('units').select('id, name, property_id').in('id', unitIds)
+		: { data: [] };
+	const unitMap = new Map((units ?? []).map((u) => [u.id, u]));
+	const propertyIds = Array.from(
+		new Set([
+			...(units ?? []).map((u) => u.property_id).filter(Boolean),
+			...(issues ?? []).map((i) => i.property_id).filter(Boolean)
+		])
+	);
+	const { data: properties } = propertyIds.length
+		? await supabase.from('properties').select('id, name').in('id', propertyIds)
+		: { data: [] };
+	const propertyMap = new Map((properties ?? []).map((p) => [p.id, p]));
+	const normalized = (issues ?? []).map((issue) => {
+		const unit = issue.unit_id ? unitMap.get(issue.unit_id) : null;
+		const resolvedPropertyId = issue.property_id ?? unit?.property_id ?? null;
+		const property = resolvedPropertyId ? propertyMap.get(resolvedPropertyId) : null;
+		return {
+			id: issue.id,
+			issueId: issue.id,
+			title: issue.name,
+			status: normalizeStatus(issue.status),
+			urgent: issue.urgent ?? false,
+			property: property?.name ?? 'Unknown',
+			unit: unit?.name ?? 'Unknown',
+			issueNumber: issue.issue_number ?? null,
+			readableId: issue.readable_id ?? null,
+			assigneeId: issue.assignee_id ?? null,
+			assignee_id: issue.assignee_id ?? null,
+			created_at: issue.created_at ?? null,
+			updated_at: issue.updated_at ?? null
+		};
+	});
+	const map = new Map();
+	for (const issue of normalized) {
+		map.set(issue.id, issue);
+		if (issue.readableId) map.set(issue.readableId, issue);
+	}
+	return map;
+};
+
+const replaceIssueRefs = (text, issueMap) =>
+	text.replace(ISSUE_REF_REGEX, (_match, ref) => {
+		const issue = issueMap.get(ref);
+		if (!issue) return '';
+		return `[[issue:${JSON.stringify(issue)}]]`;
+	});
 
 const sseHeaders = {
 	...corsHeaders,
@@ -170,7 +260,15 @@ serve(async (req) => {
 		const systemPrompt =
 			'You are the Bedrock assistant. You have read-only access to workspace data provided in context. ' +
 			'Answer questions about the product and workspace data. If asked to perform actions, explain how to do it ' +
-			'but do not claim to have completed it. If you are unsure, say so.';
+			'but do not claim to have completed it. If you are unsure, say so. ' +
+			'When referencing any specific issue, you MUST insert an inline placeholder using the exact format ' +
+			'[[issue_ref:ID]] where ID is an explicit issue id or readable id (like PM-21). ' +
+			'Do not include JSON. Placeholders can appear multiple times inline. ' +
+			'If you include an issue_ref marker, do not repeat the issue details (title, status, dates) in text; rely on the card. ' +
+			'Never list issue identifiers without an issue_ref marker. ' +
+			'Do not use bullet points, hyphens, numbering, commas, or other separators around issue_ref markers. ' +
+			'If multiple issue_ref markers are needed, output them back-to-back with no characters between, like [[issue_ref:A]][[issue_ref:B]]. ' +
+			'Each issue_ref marker must be the only content on its line.';
 		const contextPrompt = `Workspace context: ${JSON.stringify({
 			workspace,
 			...context
@@ -212,18 +310,21 @@ serve(async (req) => {
 		if (!wantsStream) {
 			const data = await response.json();
 			const reply = extractReply(data);
+			const refs = Array.from(reply.matchAll(ISSUE_REF_REGEX)).map((m) => m[1]);
+			const issueMap = await resolveIssuesByRefs(workspace?.id ?? null, refs);
+			const finalReply = replaceIssueRefs(reply, issueMap);
 			if (threadId) {
 				await supabase.from('chat_messages').insert({
 					thread_id: threadId,
 					sender: 'assistant',
-					content: reply
+					content: finalReply
 				});
 				await supabase
 					.from('chat_threads')
 					.update({ updated_at: new Date().toISOString() })
 					.eq('id', threadId);
 			}
-			return new Response(JSON.stringify({ reply }), {
+			return new Response(JSON.stringify({ reply: finalReply }), {
 				status: 200,
 				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
 			});
@@ -277,11 +378,15 @@ serve(async (req) => {
 							}
 						}
 					}
+					const refs = Array.from(replyText.matchAll(ISSUE_REF_REGEX)).map((m) => m[1]);
+					const issueMap = await resolveIssuesByRefs(workspace?.id ?? null, refs);
+					const finalReply = replaceIssueRefs(replyText, issueMap);
+					sendEvent('final', JSON.stringify({ text: finalReply }));
 					if (threadId) {
 						await supabase.from('chat_messages').insert({
 							thread_id: threadId,
 							sender: 'assistant',
-							content: replyText
+							content: finalReply
 						});
 						await supabase
 							.from('chat_threads')

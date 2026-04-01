@@ -1,18 +1,32 @@
 <script>
 	// @ts-nocheck
-	import { createEventDispatcher, onMount } from 'svelte';
+	import { createEventDispatcher, onMount, tick } from 'svelte';
+	import { fly } from 'svelte/transition';
 	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import MessageThread from '$lib/components/MessageThread.svelte';
-	import { chatMessages, addChatMessage, setChatMessages } from '$lib/stores/chatMessages.js';
+	import ChatIssueRow from '$lib/components/ChatIssueRow.svelte';
+	import ChatIssueRowLoading from '$lib/components/ChatIssueRowLoading.svelte';
+	import { issuesCache } from '$lib/stores/issuesCache';
+	import {
+		chatMessages,
+		chatStreaming,
+		addChatMessage,
+		setChatMessages,
+		startChatStreaming,
+		updateChatStreamingText,
+		stopChatStreaming
+	} from '$lib/stores/chatMessages.js';
 
 	const dispatch = createEventDispatcher();
 
 	let messageBody = '';
 	let sending = false;
-	let streaming = false;
-	let streamingText = '';
 	let chatTextarea;
+	let messagesContainer;
+	let isAtBottom = true;
+	let autoScroll = true;
+	let finalTextFromServer = null;
 	const tenant = { name: 'You', email: '' };
 
 	const resizeChatTextarea = () => {
@@ -31,8 +45,7 @@
 		const trimmed = messageBody.trim();
 		if (!trimmed || sending) return;
 		sending = true;
-		streaming = true;
-		streamingText = '';
+		startChatStreaming();
 		const userMessage = {
 			id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
 			sender: 'tenant',
@@ -41,8 +54,11 @@
 		};
 		const history = buildHistory($chatMessages);
 		addChatMessage(userMessage);
+		autoScroll = true;
 		messageBody = '';
 		resizeChatTextarea();
+		await tick();
+		scrollToBottom();
 		try {
 			const response = await fetch('/api/chat', {
 				method: 'POST',
@@ -66,6 +82,7 @@
 			const decoder = new TextDecoder();
 			let buffer = '';
 			let replyText = '';
+			finalTextFromServer = null;
 			while (true) {
 				const { value, done } = await reader.read();
 				if (done) break;
@@ -86,8 +103,12 @@
 						const delta = payload?.delta ?? '';
 						if (delta) {
 							replyText += delta;
-							streamingText = replyText;
+							updateChatStreamingText(replyText);
 						}
+					}
+					if (event === 'final') {
+						const payload = JSON.parse(data);
+						finalTextFromServer = payload?.text ?? null;
 					}
 					if (event === 'error') {
 						const payload = JSON.parse(data);
@@ -95,19 +116,21 @@
 					}
 				}
 			}
-			streaming = false;
-			streamingText = '';
-			if (replyText) {
+			stopChatStreaming();
+			const finalMessage = finalTextFromServer ?? replyText;
+			if (finalMessage) {
 				addChatMessage({
 					id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
 					sender: 'agent',
-					message: replyText,
+					message: finalMessage,
 					timestamp: new Date().toISOString()
 				});
+				autoScroll = true;
+				await tick();
+				scrollToBottom();
 			}
 		} catch (error) {
-			streaming = false;
-			streamingText = '';
+			stopChatStreaming();
 			addChatMessage({
 				id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
 				sender: 'agent',
@@ -120,9 +143,78 @@
 	};
 
 	const handleKeydown = (event) => {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			chatTextarea?.blur();
+			return;
+		}
 		if (event.key !== 'Enter' || event.shiftKey) return;
 		event.preventDefault();
 		sendMessage();
+	};
+
+	const focusInput = async () => {
+		await tick();
+		chatTextarea?.focus();
+	};
+
+	const scrollToBottom = () => {
+		if (!messagesContainer) return;
+		messagesContainer.scrollTop = messagesContainer.scrollHeight;
+	};
+
+	const ISSUE_MARKER_REGEX = /\[\[issue:(\{[\s\S]*?\})\]\]/g;
+	const ISSUE_REF_REGEX = /\[\[issue_ref:([a-zA-Z0-9-]+)\]\]/g;
+
+	$: issueMap = new Map(($issuesCache?.data?.issues ?? []).map((item) => [item.id, item]));
+	$: if ($issuesCache?.data?.issues?.length) {
+		for (const item of $issuesCache.data.issues) {
+			if (item.readableId) issueMap.set(item.readableId, item);
+		}
+	}
+
+	const parseStreamingSegments = (text = '') => {
+		const segments = [];
+		let lastIndex = 0;
+		const combinedRegex = new RegExp(`${ISSUE_MARKER_REGEX.source}|${ISSUE_REF_REGEX.source}`, 'g');
+		const matches = text.matchAll(combinedRegex);
+		for (const match of matches) {
+			const start = match.index ?? 0;
+			const end = start + match[0].length;
+			const before = text.slice(lastIndex, start);
+			if (before.trim() && !/^[\s,\.-]+$/.test(before)) {
+				segments.push({ type: 'text', value: before });
+			}
+			if (match[1]) {
+				let issue = null;
+				try {
+					issue = JSON.parse(match[1]);
+				} catch {
+					issue = null;
+				}
+				if (issue) segments.push({ type: 'issue', value: issue });
+			} else if (match[2]) {
+				const ref = match[2];
+				const issue = issueMap.get(ref);
+				if (issue) segments.push({ type: 'issue', value: issue });
+				else segments.push({ type: 'issue-loading' });
+			}
+			lastIndex = end;
+		}
+		const rest = text.slice(lastIndex);
+		if (rest.trim() && !/^[\s,\.-]+$/.test(rest)) segments.push({ type: 'text', value: rest });
+		if (rest.includes('[[issue_ref:') || rest.endsWith('[[') || rest.endsWith('[[issue_ref')) {
+			segments.push({ type: 'issue-loading' });
+		}
+		return segments;
+	};
+
+	const handleScroll = () => {
+		if (!messagesContainer) return;
+		const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+		const atBottom = scrollTop + clientHeight >= scrollHeight - 8;
+		isAtBottom = atBottom;
+		autoScroll = atBottom;
 	};
 
 	onMount(async () => {
@@ -138,20 +230,79 @@
 		} catch {
 			setChatMessages([]);
 		}
+		await focusInput();
+		await tick();
+		scrollToBottom();
 	});
+
+	$: if (messagesContainer && autoScroll) {
+		scrollToBottom();
+	}
 </script>
 
 <div class="flex h-full flex-col">
-	<div class="flex-1 overflow-y-auto px-5 py-4">
-		<MessageThread
-			messages={$chatMessages}
-			{tenant}
-			pending={streaming}
-			pendingText={streamingText}
-		/>
+	<div
+		class="flex-1 overflow-y-auto px-3 pt-6 pb-40"
+		bind:this={messagesContainer}
+		on:scroll={handleScroll}
+	>
+		<MessageThread messages={$chatMessages} {tenant} />
+		{#if $chatStreaming.active}
+			{#if $chatStreaming.text}
+				<div class="w-full space-y-3 pt-6">
+					{#each parseStreamingSegments($chatStreaming.text) as segment}
+						{#if segment.type === 'text'}
+							<div class="w-full max-w-[85%] rounded-2xl px-4 py-4 text-left">
+								<div class="text-base leading-relaxed whitespace-pre-wrap text-neutral-800">
+									{segment.value}
+								</div>
+							</div>
+						{:else if segment.type === 'issue'}
+							<div class="w-full">
+								<ChatIssueRow issue={segment.value} />
+							</div>
+						{:else if segment.type === 'issue-loading'}
+							<ChatIssueRowLoading />
+						{/if}
+					{/each}
+				</div>
+			{:else}
+				<div class="w-full px-4 pt-6">
+					<span class="thinking-sheen" data-text="Thinking">Thinking</span>
+				</div>
+			{/if}
+		{/if}
 	</div>
 
-	<div class="px-5 py-4">
+	<div class="relative px-3 pb-4">
+		{#if !isAtBottom}
+			<button
+				type="button"
+				class="absolute -top-10 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs text-neutral-500 shadow-sm"
+				aria-label="Scroll to bottom"
+				on:click={() => {
+					autoScroll = true;
+					scrollToBottom();
+				}}
+				in:fly={{ y: 6, duration: 160 }}
+				out:fly={{ y: 6, duration: 120 }}
+			>
+				<span>Scroll to bottom</span>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="12"
+					height="12"
+					fill="currentColor"
+					class="bi bi-arrow-down"
+					viewBox="0 0 16 16"
+				>
+					<path
+						fill-rule="evenodd"
+						d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1"
+					/>
+				</svg>
+			</button>
+		{/if}
 		<div
 			class="rounded-xl border border-neutral-100 bg-white px-3 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
 		>
@@ -188,3 +339,41 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	.thinking-sheen {
+		position: relative;
+		display: inline-block;
+		color: #9ca3af;
+	}
+
+	.thinking-sheen::after {
+		content: attr(data-text);
+		position: absolute;
+		left: 0;
+		top: 0;
+		width: 100%;
+		color: transparent;
+		background-image: linear-gradient(
+			90deg,
+			rgba(255, 255, 255, 0.2) 0%,
+			rgba(255, 255, 255, 0.95) 45%,
+			rgba(255, 255, 255, 0.2) 90%
+		);
+		background-size: 200% 100%;
+		background-position: 200% 50%;
+		-webkit-background-clip: text;
+		background-clip: text;
+		-webkit-text-fill-color: transparent;
+		animation: thinking-sheen 1.2s ease-in-out infinite;
+	}
+
+	@keyframes thinking-sheen {
+		0% {
+			background-position: 200% 50%;
+		}
+		100% {
+			background-position: 0% 50%;
+		}
+	}
+</style>
