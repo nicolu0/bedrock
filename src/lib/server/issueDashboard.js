@@ -1166,6 +1166,15 @@ export const actions = {
 				thread_external_id: threadExternalId
 			});
 
+			const nowIso = new Date().toISOString();
+			await locals.supabase.from('issues').update({ updated_at: nowIso }).eq('id', issueRow.id);
+			if (issueRow.parent_id) {
+				await locals.supabase
+					.from('issues')
+					.update({ updated_at: nowIso })
+					.eq('id', issueRow.parent_id);
+			}
+
 			await locals.supabase.from('tasks').update({ status: 'approved' }).eq('id', actionRow.id);
 			return { actionId };
 		}
@@ -1345,6 +1354,15 @@ export const actions = {
 				connection_id: sendConnection.id,
 				issue_id: issueRow.id
 			});
+
+			const nowIso = new Date().toISOString();
+			await locals.supabase.from('issues').update({ updated_at: nowIso }).eq('id', issueRow.id);
+			if (issueRow.parent_id) {
+				await locals.supabase
+					.from('issues')
+					.update({ updated_at: nowIso })
+					.eq('id', issueRow.parent_id);
+			}
 		}
 
 		await locals.supabase

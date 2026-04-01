@@ -62,6 +62,14 @@ export const getIssueDetailByReadableId = (readableId) => {
 };
 
 /**
+ * @param {string} id
+ */
+export const getIssueDetailById = (id) => {
+	if (!id) return null;
+	return memoryCache.get(id) ?? null;
+};
+
+/**
  * Pre-populates the detail cache from the flat issues list.
  * @param {any[]} issuesList
  */

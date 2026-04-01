@@ -12,7 +12,11 @@
 	import { pageReady } from '$lib/stores/pageReady';
 	import { rightPanel } from '$lib/stores/rightPanel.js';
 	import { supabase } from '$lib/supabaseClient.js';
-	import { getIssueDetailByReadableId, seedIssueDetail } from '$lib/stores/issueDetailCache.js';
+	import {
+		getIssueDetailById,
+		getIssueDetailByReadableId,
+		seedIssueDetail
+	} from '$lib/stores/issueDetailCache.js';
 
 	export let data;
 
@@ -86,6 +90,18 @@
 		});
 	};
 
+	const getTimestamp = (value) => {
+		if (!value) return 0;
+		const ts = new Date(value).getTime();
+		return Number.isFinite(ts) ? ts : 0;
+	};
+
+	const getLatestTimestamp = (items, field) =>
+		(items ?? []).reduce((latest, item) => {
+			const next = getTimestamp(item?.[field]);
+			return next > latest ? next : latest;
+		}, 0);
+
 	// ── Local state from server data ────────────────────────────────────────────
 
 	const _initCached = browser ? getIssueDetailByReadableId($page.params.issue_id) : null;
@@ -104,6 +120,9 @@
 	let subIssueTooltipX = 0;
 	let subIssueTooltipY = 0;
 	let subIssueTooltipVisible = false;
+	let issueOpenedAt = 0;
+	let lastMarkedIssueId = null;
+	let lastMarkedAt = 0;
 
 	// ── Streaming resolution for secondary data ───────────────────────────────
 
@@ -269,6 +288,7 @@
 	$: issueDescription = issue?.description ?? '';
 	$: statusKey = issue?.status ?? 'todo';
 	$: statusMeta = statusConfig[statusKey] ?? statusConfig.todo;
+	$: issueUpdatedAt = issue?.updated_at ?? issue?.updatedAt ?? null;
 	$: issueReadableId = issue?.readableId ?? issueKey;
 	let issuePropertyId = issue?.property_id ?? issue?.propertyId ?? null;
 	let issueUnitId = issue?.unit_id ?? issue?.unitId ?? null;
@@ -350,6 +370,39 @@
 
 	$: assigneeName = assignee?.name ?? assignee?.users?.name ?? 'Unassigned';
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
+
+	$: latestIssueActivityAt = (() => {
+		if (!issueId) return 0;
+		const logTime = getLatestTimestamp(logsByIssue[issueId], 'created_at');
+		const draftTime = getLatestTimestamp(draftsByIssue[issueId], 'updated_at');
+		const messageTime = getLatestTimestamp(messagesByIssue[issueId], 'timestamp');
+		const issueTime = getTimestamp(issueUpdatedAt);
+		return Math.max(logTime, draftTime, messageTime, issueTime);
+	})();
+
+	$: if (issueId && issueId !== lastMarkedIssueId) {
+		lastMarkedIssueId = issueId;
+		issueOpenedAt = Date.now();
+		lastMarkedAt = 0;
+	}
+
+	const markIssueSeen = async () => {
+		if (!browser || !issueId) return;
+		await fetch('/api/issue-reads/mark-seen', {
+			method: 'POST',
+			keepalive: true,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ issue_id: issueId })
+		}).catch(() => {});
+	};
+
+	$: if (browser && issueId) {
+		const nextTimestamp = latestIssueActivityAt || issueOpenedAt;
+		if (nextTimestamp && nextTimestamp > lastMarkedAt) {
+			lastMarkedAt = nextTimestamp;
+			markIssueSeen();
+		}
+	}
 
 	// ── Navigation (prev/next removed — no issuesCache) ─────────────────────────
 
@@ -670,6 +723,17 @@
 			.select('id, issue_id, workspace_id, type, body, data, created_by, created_at')
 			.single();
 
+		if (!error) {
+			const nowIso = new Date().toISOString();
+			issue = { ...issue, updated_at: nowIso };
+			fetch('/api/issues/touch', {
+				method: 'POST',
+				keepalive: true,
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ issue_id: issueId })
+			}).catch(() => {});
+		}
+
 		if (error || !created?.id) {
 			removeActivityLogFromCache(optimisticLog);
 			return;
@@ -689,17 +753,38 @@
 
 	const statusCycle = ['todo', 'in_progress', 'done'];
 
+	const syncIssueStatusCaches = (nextStatus) => {
+		if (!browser || !issue?.id) return;
+		const currentDetail = getIssueDetailById(issue.id);
+		seedIssueDetail(
+			{ ...(currentDetail?.issue ?? issue), status: nextStatus },
+			currentDetail?.subIssues ?? []
+		);
+		if (!issue?.parent_id) return;
+		const parentDetail = getIssueDetailById(issue.parent_id);
+		if (!parentDetail?.issue) return;
+		const nextSubIssues = (parentDetail.subIssues ?? []).map((sub) =>
+			sub.id === issue.id ? { ...sub, status: nextStatus } : sub
+		);
+		seedIssueDetail(parentDetail.issue, nextSubIssues);
+	};
+
 	const handleStatusChange = async (newStatus) => {
 		if (!canEditIssue) return;
 		const prevStatus = statusKey;
 		issue = { ...issue, status: newStatus };
 
-		const { error } = await supabase.from('issues').update({ status: newStatus }).eq('id', issueId);
+		const { error } = await supabase
+			.from('issues')
+			.update({ status: newStatus, updated_at: new Date().toISOString() })
+			.eq('id', issueId);
 
 		if (error) {
 			issue = { ...issue, status: prevStatus };
 			return;
 		}
+
+		syncIssueStatusCaches(newStatus);
 
 		if (isAppfolioIssue) {
 			fetch('/api/appfolio-actions/log', {
@@ -730,7 +815,7 @@
 		urgentOpen = false;
 		const { error } = await supabase
 			.from('issues')
-			.update({ urgent: nextUrgent })
+			.update({ urgent: nextUrgent, updated_at: new Date().toISOString() })
 			.eq('id', issueId);
 		if (error) {
 			issue = { ...issue, urgent: prevUrgent };
@@ -775,7 +860,7 @@
 
 		const { error } = await supabase
 			.from('issues')
-			.update({ assignee_id: nextId })
+			.update({ assignee_id: nextId, updated_at: new Date().toISOString() })
 			.eq('id', issueId);
 
 		if (error) {
@@ -827,7 +912,11 @@
 		unitOpen = false;
 		const { error } = await supabase
 			.from('issues')
-			.update({ property_id: nextPropertyId, unit_id: null })
+			.update({
+				property_id: nextPropertyId,
+				unit_id: null,
+				updated_at: new Date().toISOString()
+			})
 			.eq('id', issueId);
 		if (error) {
 			issue = prevIssue;
@@ -868,7 +957,11 @@
 		propertyOpen = false;
 		const { error } = await supabase
 			.from('issues')
-			.update({ unit_id: nextUnitId, property_id: nextPropertyId })
+			.update({
+				unit_id: nextUnitId,
+				property_id: nextPropertyId,
+				updated_at: new Date().toISOString()
+			})
 			.eq('id', issueId);
 		if (error) {
 			issue = prevIssue;
@@ -1157,7 +1250,8 @@
 			property_id: next.property_id ?? issue?.property_id ?? issue?.propertyId ?? null,
 			propertyId: next.property_id ?? issue?.property_id ?? issue?.propertyId ?? null,
 			unit_id: next.unit_id ?? issue?.unit_id ?? issue?.unitId ?? null,
-			unitId: next.unit_id ?? issue?.unit_id ?? issue?.unitId ?? null
+			unitId: next.unit_id ?? issue?.unit_id ?? issue?.unitId ?? null,
+			updated_at: next.updated_at ?? issue?.updated_at ?? null
 		};
 		issueAssigneeId = nextAssigneeId;
 		if ((assignee?.id ?? null) !== nextAssigneeId) assignee = null;
@@ -1443,7 +1537,6 @@
 			>
 				<div class="mt-2 sm:flex sm:gap-6">
 					<div class="min-w-0 sm:w-2/3">
-
 						{#if !_issueLoading && issue}
 							<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
 							<div class="mt-2 text-sm text-neutral-500">
@@ -1953,7 +2046,12 @@
 														}}
 													>
 														<div class="flex items-center gap-2">
-															<span class="h-4 w-4 rounded-full border border-neutral-300"></span>
+															<span
+																class={`h-4 w-4 rounded-full border-[1.5px] ${
+																	statusConfig[subIssue.status ?? 'todo']?.statusClass ??
+																	'border-neutral-300 text-neutral-700'
+																}`}
+															></span>
 															<span class="text-neutral-800">{subIssue.name}</span>
 														</div>
 														{#if subIssue.assignee}
@@ -1996,13 +2094,11 @@
 							{/if}
 						</div>
 					</div>
-					<div
-						class={`${ $rightPanel?.open && $rightPanel?.type === 'chat' ? 'w-1/2' : 'w-1/3' }`}
-					>
+					<div class={`${$rightPanel?.open && $rightPanel?.type === 'chat' ? 'w-1/2' : 'w-1/3'}`}>
 						<div class="hidden sm:block">
 							<div class="rounded-2xl">
 								<span class="text-sm font-medium text-neutral-500">Fields</span>
-								<div class="mt-3 space-y-3 text-sm text-neutral-600">
+								<div class="mt-1 space-y-3 text-sm text-neutral-600">
 									<div class="grid grid-cols-2 gap-2">
 										<div class="tooltip-target relative">
 											<button

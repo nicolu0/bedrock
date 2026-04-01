@@ -12,6 +12,7 @@
 		applyIssueInsert,
 		issuesCache,
 		primeIssuesCache,
+		updateIssueReadsInCache,
 		updateIssueFieldsInListCache,
 		updateIssueStatusInListCache
 	} from '$lib/stores/issuesCache.js';
@@ -37,6 +38,10 @@
 	let filterCategory = 'assignee';
 	let filterValue = 'any';
 	let filteredSections = [];
+	let _resolvedIssueReadsById = {};
+	let issueReadsLoaded = false;
+	let debugIssueDots = true;
+	let debugLoggedIssueIds = new Set();
 
 	$: _resolvedIssues =
 		$issuesCache?.workspace === $page.params.workspace && $issuesCache?.data
@@ -47,10 +52,25 @@
 			const loadStartedAt = Date.now();
 			data.issuesData.then((d) => {
 				if (browser) primeIssuesCache($page.params.workspace, d, loadStartedAt);
+				const mapped = d?.issueReadsById ?? {};
+				_resolvedIssueReadsById = mapped;
+				issueReadsLoaded = true;
+				if (browser) {
+					updateIssueReadsInCache($page.params.workspace, currentUserId, mapped);
+				}
 			});
 		} else if (data.issuesData) {
 			if (browser) primeIssuesCache($page.params.workspace, data.issuesData);
+			const mapped = data.issuesData?.issueReadsById ?? {};
+			_resolvedIssueReadsById = mapped;
+			issueReadsLoaded = true;
+			if (browser) {
+				updateIssueReadsInCache($page.params.workspace, currentUserId, mapped);
+			}
 		}
+	}
+	$: if (debugIssueDots && issueReadsLoaded) {
+		debugLoggedIssueIds = new Set();
 	}
 
 	$: if (browser && _resolvedIssues?.sections) {
@@ -163,6 +183,11 @@
 		? units.filter((unit) => unit.property_id === newIssuePropertyId)
 		: units;
 	let _resolvedMembers = [];
+	const getTimestamp = (value) => {
+		if (!value) return 0;
+		const ts = new Date(value).getTime();
+		return Number.isFinite(ts) ? ts : 0;
+	};
 	$: {
 		if (data.members instanceof Promise) {
 			data.members.then((m) => {
@@ -178,6 +203,7 @@
 		return acc;
 	}, {});
 	$: members = _resolvedMembers;
+	$: issueReadsById = _resolvedIssueReadsById ?? {};
 	const statusOptions = [
 		{ value: 'todo', label: 'Todo' },
 		{ value: 'in_progress', label: 'In Progress' },
@@ -193,6 +219,54 @@
 		{ value: 'status', label: 'Status' },
 		{ value: 'building', label: 'Building' }
 	];
+
+	const hasUnseenUpdates = (item) => {
+		if (!issueReadsLoaded) return false;
+		const latest = getTimestamp(item?.updated_at ?? item?.updatedAt);
+		if (!latest) return false;
+		const lastSeen = getTimestamp(issueReadsById[item?.id]);
+		if (debugIssueDots && item?.id && !debugLoggedIssueIds.has(item.id)) {
+			debugLoggedIssueIds.add(item.id);
+			console.debug('[IssueDot]', {
+				issueId: item.id,
+				updatedAt: item?.updated_at ?? item?.updatedAt ?? null,
+				lastSeenAt: issueReadsById[item?.id] ?? null,
+				latestMs: latest,
+				lastSeenMs: lastSeen,
+				showDot: latest > (lastSeen || 0)
+			});
+		}
+		return latest > (lastSeen || 0);
+	};
+
+	const markIssueSeenFromList = async (item) => {
+		if (!browser) return;
+		const issueId = item?.id ?? item?.issueId ?? null;
+		if (!issueId) return;
+		const latest = getTimestamp(item?.updated_at ?? item?.updatedAt);
+		const seenAt = new Date(Math.max(Date.now(), latest)).toISOString();
+		if (browser) {
+			updateIssueReadsInCache($page.params.workspace, currentUserId, { [issueId]: seenAt });
+		}
+		await fetch('/api/issue-reads/mark-seen', {
+			method: 'POST',
+			keepalive: true,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ issue_id: issueId })
+		}).catch(() => {});
+	};
+
+	const handleIssueOpen = async (event, item) => {
+		if (!event) return;
+		if (event.defaultPrevented) return;
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+			return;
+		}
+		event.preventDefault();
+		const href = getIssueHref(item);
+		markIssueSeenFromList(item);
+		if (href) goto(href);
+	};
 
 	const slugify = (value) => {
 		if (!value) return 'issue';
@@ -329,6 +403,8 @@
 	$: filteredSections = expandedSections
 		.map((section) => {
 			const rows = (section.rows ?? []).filter((row) => {
+				const parentId = row?.parentId ?? row?.parent_id ?? null;
+				if (parentId) return false;
 				if (filterCategory === 'assignee') {
 					if (filterValue === 'any') return true;
 					if (filterValue === 'unassigned') return !row.assigneeId;
@@ -868,6 +944,7 @@
 											class="block w-full px-6 py-2 text-left transition hover:bg-stone-50"
 											href={getIssueHref(item)}
 											data-sveltekit-preload-data="hover"
+											on:click={(event) => handleIssueOpen(event, item)}
 										>
 											<div class="flex items-center justify-between gap-4">
 												<div class="flex min-w-0 flex-1 items-center gap-2.5">
@@ -1038,22 +1115,38 @@
 													</div>
 													{#if item.isSubIssue}
 														<div class="flex min-w-0 items-center gap-2 text-sm">
-															<span
-																class="truncate text-neutral-600 sm:overflow-visible sm:whitespace-normal"
-															>
-																{item.title}
-															</span>
+															<div class="flex min-w-0 items-center gap-2">
+																<span
+																	class="truncate text-neutral-600 sm:overflow-visible sm:whitespace-normal"
+																>
+																	{item.title}
+																</span>
+																{#if hasUnseenUpdates(item)}
+																	<span
+																		class="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500"
+																		aria-label="Issue has updates"
+																	></span>
+																{/if}
+															</div>
 															<span class="hidden text-neutral-300 sm:inline">›</span>
 															<span class="hidden text-neutral-400 sm:inline"
 																>{item.parentTitle}</span
 															>
 														</div>
 													{:else}
-														<span
-															class="truncate text-sm text-neutral-800 sm:overflow-visible sm:whitespace-normal"
-														>
-															{item.title}
-														</span>
+														<div class="flex items-center gap-2">
+															<span
+																class="truncate text-sm text-neutral-800 sm:overflow-visible sm:whitespace-normal"
+															>
+																{item.title}
+															</span>
+															{#if hasUnseenUpdates(item)}
+																<span
+																	class="h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500"
+																	aria-label="Issue has updates"
+																></span>
+															{/if}
+														</div>
 													{/if}
 												</div>
 												<div class="flex items-center gap-2">

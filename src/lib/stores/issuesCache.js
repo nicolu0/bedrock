@@ -24,7 +24,7 @@ const statusConfig = {
 	}
 };
 
-const statusOrder = ['in_progress', 'todo', 'done'];
+const statusOrder = ['todo', 'in_progress', 'done'];
 
 const normalizeStatus = (value) => {
 	if (!value) return 'todo';
@@ -152,6 +152,16 @@ const initialState = {
 	loading: false,
 	error: null,
 	fetchedAt: 0
+};
+
+const normalizeIssueReads = (value) => {
+	if (!value) return {};
+	if (!Array.isArray(value)) return value ?? {};
+	return value.reduce((acc, row) => {
+		if (!row?.issue_id) return acc;
+		acc[row.issue_id] = row.last_seen_at ?? null;
+		return acc;
+	}, {});
 };
 
 export const issuesCache = writable(initialState);
@@ -317,10 +327,38 @@ export const primeIssuesCache = (workspaceSlug, data, fetchedAt = Date.now()) =>
 	if (!browser || !workspaceSlug || !data) return;
 	issuesCache.update((current) => {
 		if (fetchedAt < current.fetchedAt) return current; // reject stale write
-		const payload = { workspace: workspaceSlug, data, fetchedAt };
+		const issueReadsUserId = data.issueReadsUserId ?? null;
+		const issueReadsById = issueReadsUserId
+			? (data.issueReadsById ?? normalizeIssueReads(data.issueReads))
+			: null;
+		const payload = {
+			workspace: workspaceSlug,
+			data: { ...data, issueReadsById, issueReadsUserId },
+			fetchedAt
+		};
 		writeSessionCache(payload);
 		primeDetailCacheFromIssuesList(data.issues);
-		return { workspace: workspaceSlug, data, loading: false, error: null, fetchedAt };
+		return {
+			workspace: workspaceSlug,
+			data: payload.data,
+			loading: false,
+			error: null,
+			fetchedAt
+		};
+	});
+};
+
+export const updateIssueReadsInCache = (workspaceSlug, userId, issueReads) => {
+	if (!browser || !workspaceSlug || !userId) return;
+	const normalized = normalizeIssueReads(issueReads);
+	issuesCache.update((state) => {
+		if (!state.data || state.workspace !== workspaceSlug) return state;
+		const existingUserId = state.data.issueReadsUserId ?? null;
+		if (existingUserId && existingUserId !== userId) return state;
+		const issueReadsById = { ...(state.data.issueReadsById ?? {}), ...normalized };
+		const nextData = { ...state.data, issueReadsById, issueReadsUserId: userId };
+		writeSessionCache({ workspace: workspaceSlug, data: nextData, fetchedAt: state.fetchedAt });
+		return { ...state, data: nextData };
 	});
 };
 

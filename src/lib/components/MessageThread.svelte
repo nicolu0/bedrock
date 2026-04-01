@@ -69,20 +69,19 @@
 	{#if !messages?.length}
 		<div class="mt-3 text-sm text-neutral-500">No messages yet.</div>
 	{:else}
-		<div class="space-y-2">
+		<div class="space-y-3">
 			{#each messages as m, idx (m.id)}
 				{@const prev = idx > 0 ? messages[idx - 1] : null}
 				{#if prev?.channel && m?.channel && prev.channel !== m.channel}
 					<div class="my-4 border-t border-neutral-200/70"></div>
 				{/if}
 				{@const isOpen = expandedIds.includes(m.id)}
-				<div
-					class={`w-full rounded-lg border border-neutral-200/70 bg-white transition ${
-						isOpen ? '' : 'hover:border-neutral-300/70 hover:bg-neutral-50'
-					}`}
-				>
+				{@const isAgent = m?.sender === 'agent'}
+				<div class={`w-full ${isAgent ? '' : 'flex justify-end'}`}>
 					<button
-						class="w-full px-5 py-4 text-left"
+						class={`w-full max-w-[85%] rounded-2xl px-5 py-4 text-left transition ${
+							isAgent ? 'bg-transparent' : 'bg-neutral-100'
+						}`}
 						on:click={() => toggleExpanded(m.id)}
 						type="button"
 					>

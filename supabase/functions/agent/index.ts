@@ -39,6 +39,24 @@ const decodeQuotedPrintable = (input: string) => {
 const normalizeQuotedPrintable = (input: string) =>
 	/=\r?\n|=[0-9A-F]{2}/i.test(input) ? decodeQuotedPrintable(input) : input;
 
+const touchIssueUpdatedAt = async (issueId: string | null, parentId?: string | null) => {
+	if (!issueId) return;
+	const nowIso = new Date().toISOString();
+	await supabase.from('issues').update({ updated_at: nowIso }).eq('id', issueId);
+	let resolvedParentId = parentId ?? null;
+	if (!resolvedParentId) {
+		const { data: issueRow } = await supabase
+			.from('issues')
+			.select('parent_id')
+			.eq('id', issueId)
+			.maybeSingle();
+		resolvedParentId = issueRow?.parent_id ?? null;
+	}
+	if (resolvedParentId) {
+		await supabase.from('issues').update({ updated_at: nowIso }).eq('id', resolvedParentId);
+	}
+};
+
 const stripHtml = (input: string) =>
 	input
 		.replace(/<br\s*\/?\s*>/gi, '\n')
@@ -75,7 +93,9 @@ const stripTenantNameFromTitle = (title: string, tenantName: string | null): str
 	if (tenantName) {
 		for (const token of tenantName.trim().split(/\s+/)) {
 			if (token.length < 2) continue; // skip single chars
-			result = result.replace(new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '').trim();
+			result = result
+				.replace(new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), '')
+				.trim();
 		}
 	}
 	// Remove any empty or whitespace-only parentheses left behind, e.g. "()" or "( )"
@@ -1292,13 +1312,18 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 	const linkThreadTool = {
 		type: 'function',
 		name: 'link_thread_to_issue',
-		description: 'Attach a thread to an issue. issue_id must be a UUID returned by create_issue or create_subissue — never an email address.',
+		description:
+			'Attach a thread to an issue. issue_id must be a UUID returned by create_issue or create_subissue — never an email address.',
 		parameters: {
 			type: 'object',
 			additionalProperties: false,
 			properties: {
 				thread_id: { type: 'string' },
-				issue_id: { type: 'string', description: 'UUID of the issue or subissue (from create_issue/create_subissue result), not an email address' }
+				issue_id: {
+					type: 'string',
+					description:
+						'UUID of the issue or subissue (from create_issue/create_subissue result), not an email address'
+				}
 			},
 			required: ['thread_id', 'issue_id']
 		}
@@ -1359,7 +1384,8 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 	const draftAppfolioTool = {
 		type: 'function',
 		name: 'draft_appfolio',
-		description: 'Create or update a draft AppFolio message for the tenant (use for AppFolio work orders instead of draft_email or draft_reply)',
+		description:
+			'Create or update a draft AppFolio message for the tenant (use for AppFolio work orders instead of draft_email or draft_reply)',
 		parameters: {
 			type: 'object',
 			additionalProperties: false,
@@ -1503,9 +1529,9 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 			if (response.ok) break;
 			const errText = await response.text();
 			if (response.status === 429 && attempt < 3) {
-				const retryAfter = Number(response.headers.get('retry-after') ?? (attempt * 10));
+				const retryAfter = Number(response.headers.get('retry-after') ?? attempt * 10);
 				console.warn(`OpenAI rate limit on attempt ${attempt}/3, retrying in ${retryAfter}s`);
-				await new Promise(r => setTimeout(r, retryAfter * 1000));
+				await new Promise((r) => setTimeout(r, retryAfter * 1000));
 			} else {
 				throw new Error(errText);
 			}
@@ -1587,7 +1613,10 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 			}
 			try {
 				if (name === 'update_issue') {
-					const title = typeof args.title === 'string' ? clampTitle(stripTenantNameFromTitle(args.title.trim(), tenantName)) : '';
+					const title =
+						typeof args.title === 'string'
+							? clampTitle(stripTenantNameFromTitle(args.title.trim(), tenantName))
+							: '';
 					const desc = typeof args.description === 'string' ? args.description.trim() : '';
 					if (rootIssueId) {
 						const updates: Record<string, string | null> = {};
@@ -1602,7 +1631,10 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 				}
 
 				if (name === 'create_issue') {
-					const title = typeof args.title === 'string' ? clampTitle(stripTenantNameFromTitle(args.title.trim(), tenantName)) : '';
+					const title =
+						typeof args.title === 'string'
+							? clampTitle(stripTenantNameFromTitle(args.title.trim(), tenantName))
+							: '';
 					const unit = typeof args.unit_id === 'string' ? args.unit_id : unitId;
 					const workspace = typeof args.workspace_id === 'string' ? args.workspace_id : workspaceId;
 					const assignee = defaultAssigneeId;
@@ -1677,7 +1709,9 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 					} else if (!issue) {
 						throw new Error('link_thread_to_issue missing issue_id');
 					} else if (!UUID_RE.test(issue)) {
-						result = { error: `issue_id must be a UUID (e.g. from create_issue or create_subissue), got "${issue}". Do not pass email addresses as issue_id.` };
+						result = {
+							error: `issue_id must be a UUID (e.g. from create_issue or create_subissue), got "${issue}". Do not pass email addresses as issue_id.`
+						};
 					} else {
 						const linked = await linkThreadToIssue({ threadId: thread, issueId: issue });
 						if (!linked) {
@@ -1697,7 +1731,10 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 				}
 
 				if (name === 'create_subissue') {
-					const title = typeof args.title === 'string' ? clampTitle(stripTenantNameFromTitle(args.title.trim(), tenantName)) : '';
+					const title =
+						typeof args.title === 'string'
+							? clampTitle(stripTenantNameFromTitle(args.title.trim(), tenantName))
+							: '';
 					const isTriageSubissue = /^triage\s+/i.test(title);
 					const statusValue = typeof args.status === 'string' ? args.status : 'todo';
 					const status = ['todo', 'in_progress', 'done'].includes(statusValue)
@@ -1843,7 +1880,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 							body: bodyText,
 							userId,
 							workspaceId,
-							channel: source === 'appfolio' ? 'appfolio' : 'email',
+							channel: source === 'appfolio' ? 'appfolio' : 'email'
 						});
 						if (result.created) {
 							await createDraftNotification({
@@ -2001,7 +2038,8 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 					const issue = typeof args.issue_id === 'string' ? args.issue_id : lastSubissueId;
 					const subject = typeof args.subject === 'string' ? args.subject : '';
 					const bodyText = typeof args.body === 'string' ? args.body : '';
-					const recipientEmail = typeof args.recipient_email === 'string' ? args.recipient_email : null;
+					const recipientEmail =
+						typeof args.recipient_email === 'string' ? args.recipient_email : null;
 					if (!issue || !subject || !bodyText) {
 						throw new Error('draft_appfolio missing required fields');
 					}
@@ -2110,9 +2148,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 			.maybeSingle();
 		const processedTitle = processedIssue?.name?.trim() ?? '';
 		const processedDesc = processedIssue?.description?.trim() ?? '';
-		const notifTitle = processedTitle
-			? `New Work Order — ${processedTitle}`
-			: 'New Work Order';
+		const notifTitle = processedTitle ? `New Work Order — ${processedTitle}` : 'New Work Order';
 		const { data: bedrockPeople } = await supabase
 			.from('people')
 			.select('user_id')
@@ -2490,6 +2526,8 @@ const processMessage = async ({
 			}
 		}
 
+		await touchIssueUpdatedAt(threadRow.issue_id ?? null);
+
 		const { data: refreshedThread } = await supabase
 			.from('threads')
 			.select('issue_id')
@@ -2568,6 +2606,7 @@ const processMessage = async ({
 				.from('messages')
 				.update({ issue_id: issueId, workspace_id: propertyRow.workspace_id })
 				.eq('thread_id', threadRow.id);
+			await touchIssueUpdatedAt(issueId);
 		}
 	} finally {
 		await supabase.from('threads').update({ processing_at: null }).eq('id', threadRow.id);
@@ -2908,7 +2947,9 @@ const handleAppfolioWorkOrder = async ({
 		// row may be null for stale re-queues — fall back to the activity_log recorded at issue
 		// creation which stores the exact tenant who submitted the work order (data.from / data.from_email).
 		let tenantName = normalizeTenantName(row?.primary_tenant ? String(row.primary_tenant) : null);
-		let tenantEmail: string | null = row?.primary_tenant_email ? String(row.primary_tenant_email) : null;
+		let tenantEmail: string | null = row?.primary_tenant_email
+			? String(row.primary_tenant_email)
+			: null;
 		if (!tenantName) {
 			const { data: createdLog } = await supabase
 				.from('activity_logs')

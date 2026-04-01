@@ -24,10 +24,15 @@ export const PATCH = async ({ locals, request }) => {
 	const messageId = body?.message_id;
 	const issueId = body?.issue_id;
 	const draftBody = body?.body;
+	const channel = body?.channel ?? 'email';
 	const hasRecipientEmails = Object.prototype.hasOwnProperty.call(body ?? {}, 'recipient_emails');
 	const normalizedRecipients = hasRecipientEmails
 		? normalizeRecipientList(body?.recipient_emails)
 		: null;
+
+	if (channel !== 'email' && channel !== 'appfolio') {
+		return json({ error: 'Invalid channel' }, { status: 400 });
+	}
 
 	if (!messageId && !issueId) {
 		return json({ error: 'Invalid payload' }, { status: 400 });
@@ -40,11 +45,11 @@ export const PATCH = async ({ locals, request }) => {
 
 	const draftQuery = supabaseAdmin.from('drafts').select('id, issue_id, body, original_body');
 	const { data: draft } = messageId
-		? await draftQuery.eq('message_id', messageId).eq('channel', 'email').maybeSingle()
+		? await draftQuery.eq('message_id', messageId).eq('channel', channel).maybeSingle()
 		: await draftQuery
 				.eq('issue_id', issueId)
 				.is('message_id', null)
-				.eq('channel', 'email')
+				.eq('channel', channel)
 				.maybeSingle();
 
 	if (!draft?.id || !draft.issue_id) {
@@ -107,6 +112,11 @@ export const PATCH = async ({ locals, request }) => {
 	if (error) {
 		return json({ error: error.message }, { status: 400 });
 	}
+
+	await supabaseAdmin
+		.from('issues')
+		.update({ updated_at: new Date().toISOString() })
+		.eq('id', draft.issue_id);
 
 	return json({ ok: true, draft: updatedDraft ?? null });
 };

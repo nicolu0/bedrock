@@ -65,12 +65,16 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(
 					draft.message_id
-						? { message_id: draft.message_id, body: draftBody }
-						: { issue_id: draft.issue_id, body: draftBody }
+						? { message_id: draft.message_id, body: draftBody, channel: 'appfolio' }
+						: { issue_id: draft.issue_id, body: draftBody, channel: 'appfolio' }
 				)
 			});
+			const payload = await response.json().catch(() => null);
 			if (response.ok) {
 				draft.body = draftBody;
+				if (payload?.draft) {
+					draft = { ...draft, ...payload.draft };
+				}
 			}
 		} catch {
 			// ignore save failures
