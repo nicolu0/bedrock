@@ -1,19 +1,17 @@
 <script>
 	// @ts-nocheck
 	import { createEventDispatcher, onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
 	import MessageThread from '$lib/components/MessageThread.svelte';
-	import {
-		chatMessages,
-		addChatMessage,
-		updateChatMessage,
-		setChatMessages
-	} from '$lib/stores/chatMessages.js';
+	import { chatMessages, addChatMessage, setChatMessages } from '$lib/stores/chatMessages.js';
 
 	const dispatch = createEventDispatcher();
 
 	let messageBody = '';
 	let sending = false;
+	let streaming = false;
+	let streamingText = '';
 	let chatTextarea;
 	const tenant = { name: 'You', email: '' };
 
@@ -33,6 +31,8 @@
 		const trimmed = messageBody.trim();
 		if (!trimmed || sending) return;
 		sending = true;
+		streaming = true;
+		streamingText = '';
 		const userMessage = {
 			id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
 			sender: 'tenant',
@@ -41,39 +41,77 @@
 		};
 		const history = buildHistory($chatMessages);
 		addChatMessage(userMessage);
-		const pendingId =
-			crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-		addChatMessage({
-			id: pendingId,
-			sender: 'agent',
-			message: 'Thinking',
-			pending: true,
-			timestamp: new Date().toISOString()
-		});
 		messageBody = '';
 		resizeChatTextarea();
 		try {
 			const response = await fetch('/api/chat', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: {
+					'Content-Type': 'application/json',
+					Accept: 'text/event-stream'
+				},
 				body: JSON.stringify({
 					message: trimmed,
 					workspace_id: $page.data?.workspace?.id,
 					workspace_slug: $page.params.workspace,
-					history
+					history,
+					stream: true
 				})
 			});
-			const data = await response.json().catch(() => ({}));
-			if (!response.ok) throw new Error(data?.error ?? 'Failed to chat');
-			updateChatMessage(pendingId, {
-				message: data?.reply ?? 'No response yet.',
-				pending: false,
-				timestamp: new Date().toISOString()
-			});
+			if (!response.ok || !response.body) {
+				const data = await response.json().catch(() => ({}));
+				throw new Error(data?.error ?? 'Failed to chat');
+			}
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = '';
+			let replyText = '';
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				buffer += decoder.decode(value, { stream: true });
+				const parts = buffer.split('\n\n');
+				buffer = parts.pop() ?? '';
+				for (const part of parts) {
+					const lines = part.split('\n');
+					let event = '';
+					let data = '';
+					for (const line of lines) {
+						if (line.startsWith('event:')) event = line.replace('event:', '').trim();
+						if (line.startsWith('data:')) data = line.replace('data:', '').trim();
+					}
+					if (!data) continue;
+					if (event === 'delta') {
+						const payload = JSON.parse(data);
+						const delta = payload?.delta ?? '';
+						if (delta) {
+							replyText += delta;
+							streamingText = replyText;
+						}
+					}
+					if (event === 'error') {
+						const payload = JSON.parse(data);
+						throw new Error(payload?.error ?? 'Stream error');
+					}
+				}
+			}
+			streaming = false;
+			streamingText = '';
+			if (replyText) {
+				addChatMessage({
+					id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+					sender: 'agent',
+					message: replyText,
+					timestamp: new Date().toISOString()
+				});
+			}
 		} catch (error) {
-			updateChatMessage(pendingId, {
+			streaming = false;
+			streamingText = '';
+			addChatMessage({
+				id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+				sender: 'agent',
 				message: 'Sorry, I could not reach chat right now.',
-				pending: false,
 				timestamp: new Date().toISOString()
 			});
 		} finally {
@@ -92,7 +130,10 @@
 			const response = await fetch('/api/chat');
 			const data = await response.json().catch(() => ({}));
 			if (response.ok) {
-				setChatMessages(data?.messages ?? []);
+				const current = get(chatMessages);
+				if (!current?.length) {
+					setChatMessages(data?.messages ?? []);
+				}
 			}
 		} catch {
 			setChatMessages([]);
@@ -102,7 +143,12 @@
 
 <div class="flex h-full flex-col">
 	<div class="flex-1 overflow-y-auto px-5 py-4">
-		<MessageThread messages={$chatMessages} {tenant} />
+		<MessageThread
+			messages={$chatMessages}
+			{tenant}
+			pending={streaming}
+			pendingText={streamingText}
+		/>
 	</div>
 
 	<div class="px-5 py-4">

@@ -1536,7 +1536,9 @@
 				class:opacity-0={!$pageReady}
 			>
 				<div class="mt-2 sm:flex sm:gap-6">
-					<div class="min-w-0 sm:w-2/3">
+					<div
+						class={`min-w-0 ${$rightPanel?.open && $rightPanel?.type === 'chat' ? 'sm:w-1/2' : 'sm:w-2/3'}`}
+					>
 						{#if !_issueLoading && issue}
 							<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
 							<div class="mt-2 text-sm text-neutral-500">
@@ -1549,7 +1551,7 @@
 						<div class="mt-4 sm:hidden">
 							<div class="rounded-2xl">
 								<div class="space-y-2 text-sm text-neutral-600">
-									<div class="grid grid-cols-2 gap-2">
+									<div class="grid grid-cols-2 gap-1">
 										<div class="tooltip-target relative">
 											<button
 												type="button"
@@ -2098,7 +2100,7 @@
 						<div class="hidden sm:block">
 							<div class="rounded-2xl">
 								<span class="text-sm font-medium text-neutral-500">Fields</span>
-								<div class="mt-1 space-y-3 text-sm text-neutral-600">
+								<div class="mt-1 space-y-2 text-sm text-neutral-600">
 									<div class="grid grid-cols-2 gap-2">
 										<div class="tooltip-target relative">
 											<button

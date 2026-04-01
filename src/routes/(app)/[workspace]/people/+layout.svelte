@@ -58,8 +58,8 @@
 </script>
 
 {#if canViewPeople}
-	<div class="space-y-0">
-		<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
+	<div class="flex h-full min-h-0 flex-col">
+		<div class="flex items-center justify-between border-b border-neutral-200 py-2.5 pr-5 pl-6">
 			<h1 class="text-sm font-normal text-neutral-700">People</h1>
 			<div class="flex items-center gap-2">
 				<button
@@ -92,7 +92,9 @@
 				{/each}
 			</div>
 		</div>
-		<slot />
+		<div class="flex-1 overflow-y-auto">
+			<slot />
+		</div>
 	</div>
 
 	{#if $newPersonModal}

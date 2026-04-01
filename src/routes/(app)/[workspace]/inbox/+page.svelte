@@ -196,36 +196,36 @@
 	}}
 />
 
-<div class="h-full">
-	<div class="flex h-full flex-col overflow-y-auto">
-		<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
-			<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
-			<div class="flex items-center gap-2">
-				<SidebarButton
-					onClick={() => {
-						selectedNotification = null;
-						toggleChatPanel();
-					}}
-				/>
-			</div>
+<div class="flex h-full min-h-0 flex-col">
+	<div class="flex items-center justify-between border-b border-neutral-200 py-2.5 pr-5 pl-6">
+		<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
+		<div class="flex items-center gap-2">
+			<SidebarButton
+				onClick={() => {
+					selectedNotification = null;
+					toggleChatPanel();
+				}}
+			/>
 		</div>
+	</div>
 
-		<div class="flex items-center gap-2 px-6 py-2">
-			{#each ['All', 'Unread', 'Resolved'] as tab}
-				<button
-					class={`rounded-md border px-2.5 py-1 text-xs transition ${
-						filter === tab
-							? 'border-neutral-200 bg-neutral-100 text-neutral-700'
-							: 'border-transparent text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
-					}`}
-					type="button"
-					on:click={() => setFilter(tab)}
-				>
-					{tab}
-				</button>
-			{/each}
-		</div>
+	<div class="flex items-center gap-2 px-6 py-2">
+		{#each ['All', 'Unread', 'Resolved'] as tab}
+			<button
+				class={`rounded-md border px-2.5 py-1 text-xs transition ${
+					filter === tab
+						? 'border-neutral-200 bg-neutral-100 text-neutral-700'
+						: 'border-transparent text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700'
+				}`}
+				type="button"
+				on:click={() => setFilter(tab)}
+			>
+				{tab}
+			</button>
+		{/each}
+	</div>
 
+	<div class="flex-1 overflow-y-auto">
 		{#if _resolvedNotifications === null}
 			<div>
 				{#each { length: 4 } as _}

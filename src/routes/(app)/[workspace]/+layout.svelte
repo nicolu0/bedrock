@@ -15,7 +15,12 @@
 	import { ensurePeopleCache, peopleCache } from '$lib/stores/peopleCache.js';
 	import { pageReady } from '$lib/stores/pageReady';
 	import { agentToasts } from '$lib/stores/agentToasts';
-	import { rightPanel, openChatPanel, closePanel } from '$lib/stores/rightPanel.js';
+	import {
+		rightPanel,
+		openChatPanel,
+		closePanel,
+		toggleChatPanel
+	} from '$lib/stores/rightPanel.js';
 	import { supabase } from '$lib/supabaseClient.js';
 	import AgentToasts from '$lib/components/AgentToasts.svelte';
 	import ChatPanel from '$lib/components/ChatPanel.svelte';
@@ -111,6 +116,12 @@
 	let showSearchModal = false;
 	let searchInput;
 	let searchQuery = '';
+	const isEditableTarget = (target) => {
+		if (!target) return false;
+		if (target.isContentEditable) return true;
+		const tagName = target.tagName?.toLowerCase?.();
+		return tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+	};
 	const openSearchModal = async () => {
 		showSearchModal = true;
 		await tick();
@@ -173,6 +184,9 @@
 	};
 	onMount(() => {
 		appMounted = true;
+		if (window.innerWidth < 1024) {
+			sidebarOpen = false;
+		}
 
 		_origFetch = window.fetch;
 		window.fetch = async (input, init) => {
@@ -200,6 +214,7 @@
 		};
 
 		const onKeydown = (event) => {
+			if (isEditableTarget(event.target)) return;
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
 				event.preventDefault();
 				if (showSearchModal) {
@@ -207,6 +222,16 @@
 				} else {
 					openSearchModal();
 				}
+				return;
+			}
+			if (event.key === '[') {
+				event.preventDefault();
+				sidebarOpen = !sidebarOpen;
+				return;
+			}
+			if (event.key === ']') {
+				event.preventDefault();
+				toggleChatPanel();
 				return;
 			}
 			if (event.key === 'Escape' && showSearchModal) {
@@ -364,7 +389,7 @@
 	const propertiesItem = { id: 'properties', label: 'Properties', href: 'properties' };
 	const settingsItem = { id: 'settings', label: 'Settings', href: 'settings' };
 	let propertiesOpen = true;
-	let sidebarOpen = false;
+	let sidebarOpen = browser ? window.innerWidth >= 1024 : true;
 	const sidebarControl = {
 		open: () => (sidebarOpen = true),
 		close: () => (sidebarOpen = false)
@@ -623,7 +648,7 @@
 				on:click={() => (sidebarOpen = false)}
 			></div>
 			<aside
-				class={`fixed inset-y-0 left-0 z-30 h-screen w-72 overflow-hidden border-r border-neutral-200 bg-neutral-50/95 shadow-xl transition-transform duration-100 ease-out lg:static lg:z-auto lg:w-1/6 lg:translate-x-0 lg:shadow-none ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+				class={`fixed inset-y-0 left-0 z-30 h-screen overflow-hidden border-r border-neutral-200 bg-neutral-50/95 shadow-xl transition-[transform,width] duration-100 ease-out lg:static lg:z-auto lg:shadow-none ${sidebarOpen ? 'w-72 translate-x-0 lg:w-1/6 lg:translate-x-0' : 'w-72 -translate-x-full lg:w-0 lg:translate-x-0 lg:border-r-0'}`}
 			>
 				<div
 					class="flex h-full min-h-0 flex-col transition-opacity duration-150"
@@ -837,22 +862,22 @@
 			<section class="flex-1 overflow-hidden">
 				<div class="flex h-full min-w-0">
 					<div
-						class={`flex flex-none flex-col overflow-y-auto transition-[width] duration-[280ms] ease-out ${
+						class={`flex min-h-0 flex-none flex-col overflow-hidden transition-[width] duration-[280ms] ease-out ${
 							$rightPanel.open
 								? $rightPanel.type === 'issue'
 									? 'w-1/2 border-r border-neutral-200'
-									: 'w-8/12 border-r border-neutral-200'
+									: 'w-7/12 border-r border-neutral-200'
 								: 'w-full'
 						}`}
 					>
-						<div class="h-full w-full">
+						<div class="h-full min-h-0 w-full">
 							<slot />
 						</div>
 					</div>
 					{#if $rightPanel.open}
 						<div
 							class={`flex-none overflow-y-auto ${
-								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-4/12'
+								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-5/12'
 							}`}
 							in:fly={{ x: 400, duration: 280, easing: cubicOut }}
 							out:fly={{ x: 400, duration: 220, easing: cubicOut }}

@@ -322,8 +322,8 @@
 
 <svelte:window on:keydown={onKeydown} on:click={onWindowClick} />
 
-<div class="space-y-2">
-	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
+<div class="flex h-full min-h-0 flex-col gap-2">
+	<div class="flex items-center justify-between border-b border-neutral-200 py-2.5 pr-5 pl-6">
 		<div class="flex items-center gap-2">
 			<button
 				type="button"
@@ -364,7 +364,7 @@
 			All properties
 		</button>
 	</div>
-	<div>
+	<div class="flex-1 overflow-y-auto">
 		{#if properties.length}
 			<div
 				class="grid grid-cols-[1.4fr_0.6fr_0.6fr_0.4fr_2rem] gap-4 px-6 pb-2 text-xs text-neutral-500"

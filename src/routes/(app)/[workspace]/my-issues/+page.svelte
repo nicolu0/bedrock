@@ -636,8 +636,8 @@
 
 <svelte:window on:click={onWindowClick} on:keydown={onKeydown} />
 
-<div>
-	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5">
+<div class="flex h-full min-h-0 flex-col">
+	<div class="flex items-center justify-between border-b border-neutral-200 py-2.5 pr-5 pl-6">
 		<div class="flex items-center gap-2">
 			<button
 				type="button"
@@ -671,7 +671,7 @@
 			<SidebarButton onClick={toggleChatPanel} />
 		</div>
 	</div>
-	<div class="flex items-center justify-between px-6 py-2">
+	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2">
 		<div class="flex items-center gap-2">
 			{#each tabs as tab}
 				<button
@@ -843,252 +843,275 @@
 		</div>
 	</div>
 
-	{#if _resolvedIssues === null}
-		<div class="space-y-2 divide-y divide-neutral-100">
-			{#each { length: 4 } as _}
-				<div class="flex items-center gap-3 px-6 py-2">
-					<div class="skeleton h-3 w-3 flex-shrink-0 rounded-full"></div>
-					<div class="skeleton h-4 w-2/5"></div>
-					<div class="skeleton ml-auto h-5 w-28 rounded-full"></div>
-					<div class="skeleton h-5 w-5 rounded-full"></div>
-				</div>
-			{/each}
-		</div>
-	{:else if filteredSections.length === 0}
-		<div class="px-6 py-8 text-sm text-neutral-400">
-			{hasActiveFilter ? 'No issues match the current filter.' : 'No issues assigned to you.'}
-		</div>
-	{:else}
-		<div>
-			{#each filteredSections as section}
-				<div class={section.rows.length ? '' : 'hidden'}>
-					<div
-						class="flex items-center justify-between border-y border-neutral-200 bg-stone-50 px-6 py-2 text-sm text-neutral-600"
-						style={getSectionGradientStyle(section.statusClass)}
-					>
-						<div class="flex items-center gap-3">
-							<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${section.statusClass}`}></span>
-							<span class="text-sm text-neutral-700">{section.label}</span>
-							<span class="text-sm text-neutral-400">{section.count}</span>
-						</div>
-						<div class="h-4 w-4"></div>
+	<div class="flex-1 overflow-y-auto">
+		{#if _resolvedIssues === null}
+			<div class="space-y-2 divide-y divide-neutral-100">
+				{#each { length: 4 } as _}
+					<div class="flex items-center gap-3 px-6 py-2">
+						<div class="skeleton h-3 w-3 flex-shrink-0 rounded-full"></div>
+						<div class="skeleton h-4 w-2/5"></div>
+						<div class="skeleton ml-auto h-5 w-28 rounded-full"></div>
+						<div class="skeleton h-5 w-5 rounded-full"></div>
 					</div>
-					<div>
-						{#each section.propertyGroups as group}
-							<button
-								type="button"
-								class="tooltip-target group relative flex w-full items-center gap-3 px-6.5 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900"
-								on:click={() => togglePropertyGroup(section.id, group.name)}
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="12"
-									height="12"
-									fill="currentColor"
-									class={`transition ${
-										collapsedPropertyGroups[getPropertyGroupKey(section.id, group.name)]
-											? '-rotate-90'
-											: 'rotate-0'
-									}`}
-									viewBox="0 0 16 16"
+				{/each}
+			</div>
+		{:else if filteredSections.length === 0}
+			<div class="px-6 py-8 text-sm text-neutral-400">
+				{hasActiveFilter ? 'No issues match the current filter.' : 'No issues assigned to you.'}
+			</div>
+		{:else}
+			<div>
+				{#each filteredSections as section, sectionIndex}
+					<div class={section.rows.length ? '' : 'hidden'}>
+						<div
+							class={`flex items-center justify-between border-neutral-200 bg-stone-50 px-6 py-2 text-sm text-neutral-600 ${
+								sectionIndex === 0 ? 'border-b' : 'border-y'
+							}`}
+							style={getSectionGradientStyle(section.statusClass)}
+						>
+							<div class="flex items-center gap-3">
+								<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${section.statusClass}`}
+								></span>
+								<span class="text-sm text-neutral-700">{section.label}</span>
+								<span class="text-sm text-neutral-400">{section.count}</span>
+							</div>
+							<div class="h-4 w-4"></div>
+						</div>
+						<div>
+							{#each section.propertyGroups as group}
+								<button
+									type="button"
+									class="tooltip-target group relative flex w-full items-center gap-3 px-6.5 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900"
+									on:click={() => togglePropertyGroup(section.id, group.name)}
 								>
-									<path
-										d="M1.5 5.5a.5.5 0 0 1 .707 0L8 11.293l5.793-5.793a.5.5 0 1 1 .707.707l-6.147 6.147a.5.5 0 0 1-.707 0L1.5 6.207a.5.5 0 0 1 0-.707"
-									/>
-								</svg>
-								<span
-									class="delayed-tooltip absolute top-full left-6 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-								>
-									{collapsedPropertyGroups[getPropertyGroupKey(section.id, group.name)]
-										? 'Expand'
-										: 'Collapse'}
-								</span>
-								<span class="font-normal text-inherit">{group.name}</span>
-								<div
-									class="flex-1 border-t border-neutral-200 transition group-hover:border-neutral-800"
-								></div>
-							</button>
-							{#if !collapsedPropertyGroups[getPropertyGroupKey(section.id, group.name)]}
-								<div class="mb-2">
-									{#each group.items as item}
-										<a
-											class="block w-full px-6 py-2 text-left transition hover:bg-stone-50"
-											href={getIssueHref(item)}
-											data-sveltekit-preload-data="hover"
-											on:click={(event) => handleIssueOpen(event, item)}
-										>
-											<div class="flex items-center justify-between gap-4">
-												<div class="flex min-w-0 flex-1 items-center gap-2.5">
-													<div class="relative">
-														<button
-															type="button"
-															class={`tooltip-target relative -m-1 flex items-center justify-center rounded-md p-1 transition ${
-																canEditIssue && !item.isSubIssue
-																	? 'hover:bg-neutral-100'
-																	: 'cursor-not-allowed'
-															}`}
-															on:click|stopPropagation|preventDefault={() => {
-																if (!canEditIssue || item.isSubIssue) return;
-																const id = getRowIssueId(item);
-																urgentMenuOpenId = urgentMenuOpenId === id ? null : id;
-																statusMenuOpenId = null;
-															}}
-														>
-															{#if urgentMenuOpenId !== getRowIssueId(item)}
-																<span
-																	class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-																>
-																	{item.isSubIssue
-																		? 'Change urgency in root issue'
-																		: 'Change urgency'}
-																</span>
-															{/if}
-															{#if item.isSubIssue ? (item.root_urgent ?? item.urgent) : item.urgent}
-																<span
-																	class={`flex items-center justify-center text-rose-500 ${item.isSubIssue ? 'opacity-50' : ''}`}
-																	style="width: 16px; height: 16px;"
-																>
-																	<svg
-																		xmlns="http://www.w3.org/2000/svg"
-																		width="14"
-																		height="14"
-																		fill="currentColor"
-																		viewBox="0 0 16 16"
-																	>
-																		<path
-																			d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
-																		/>
-																	</svg>
-																</span>
-															{:else}
-																<span
-																	class={`flex items-center justify-center text-neutral-400 ${item.isSubIssue ? 'opacity-50' : ''}`}
-																	style="width: 16px; height: 16px;"
-																>
-																	<svg
-																		xmlns="http://www.w3.org/2000/svg"
-																		width="14"
-																		height="14"
-																		fill="currentColor"
-																		viewBox="0 0 16 16"
-																	>
-																		<path
-																			d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
-																		/>
-																	</svg>
-																</span>
-															{/if}
-														</button>
-														{#if urgentMenuOpenId === getRowIssueId(item)}
-															<div
-																class="absolute left-0 z-20 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-																on:click|stopPropagation
-															>
-																<div class="sr-only">Change urgency</div>
-																<button
-																	type="button"
-																	class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																		item.urgent ? 'bg-neutral-50' : ''
-																	}`}
-																	on:click|preventDefault={() => handleUrgentSelect(item, true)}
-																>
-																	<svg
-																		xmlns="http://www.w3.org/2000/svg"
-																		width="14"
-																		height="14"
-																		fill="currentColor"
-																		class="text-rose-500"
-																		viewBox="0 0 16 16"
-																	>
-																		<path
-																			d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
-																		/>
-																	</svg>
-																	<span>Urgent</span>
-																</button>
-																<button
-																	type="button"
-																	class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																		!item.urgent ? 'bg-neutral-50' : ''
-																	}`}
-																	on:click|preventDefault={() => handleUrgentSelect(item, false)}
-																>
-																	<svg
-																		xmlns="http://www.w3.org/2000/svg"
-																		width="14"
-																		height="14"
-																		fill="currentColor"
-																		class="text-neutral-400"
-																		viewBox="0 0 16 16"
-																	>
-																		<path
-																			d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
-																		/>
-																	</svg>
-																	<span>Not urgent</span>
-																</button>
-															</div>
-														{/if}
-													</div>
-													<div class="relative">
-														<button
-															type="button"
-															class={`tooltip-target relative -m-1 flex items-center justify-center rounded-md p-1 transition ${
-																canEditIssue
-																	? 'hover:bg-neutral-100'
-																	: 'cursor-not-allowed opacity-60'
-															}`}
-															on:click|stopPropagation|preventDefault={() => {
-																if (!canEditIssue) return;
-																const id = getRowIssueId(item);
-																statusMenuOpenId = statusMenuOpenId === id ? null : id;
-																urgentMenuOpenId = null;
-															}}
-														>
-															{#if statusMenuOpenId !== getRowIssueId(item)}
-																<span
-																	class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-																>
-																	Change status
-																</span>
-															{/if}
-															<span
-																class={`h-4 w-4 rounded-full border-[1.5px] ${
-																	statusClassByKey[item.status] ?? section.statusClass
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="12"
+										height="12"
+										fill="currentColor"
+										class={`transition ${
+											collapsedPropertyGroups[getPropertyGroupKey(section.id, group.name)]
+												? '-rotate-90'
+												: 'rotate-0'
+										}`}
+										viewBox="0 0 16 16"
+									>
+										<path
+											d="M1.5 5.5a.5.5 0 0 1 .707 0L8 11.293l5.793-5.793a.5.5 0 1 1 .707.707l-6.147 6.147a.5.5 0 0 1-.707 0L1.5 6.207a.5.5 0 0 1 0-.707"
+										/>
+									</svg>
+									<span
+										class="delayed-tooltip absolute top-full left-6 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+									>
+										{collapsedPropertyGroups[getPropertyGroupKey(section.id, group.name)]
+											? 'Expand'
+											: 'Collapse'}
+									</span>
+									<span class="font-normal text-inherit">{group.name}</span>
+									<div
+										class="flex-1 border-t border-neutral-200 transition group-hover:border-neutral-800"
+									></div>
+								</button>
+								{#if !collapsedPropertyGroups[getPropertyGroupKey(section.id, group.name)]}
+									<div class="mb-2">
+										{#each group.items as item}
+											<a
+												class="block w-full px-6 py-2 text-left transition hover:bg-stone-50"
+												href={getIssueHref(item)}
+												data-sveltekit-preload-data="hover"
+												on:click={(event) => handleIssueOpen(event, item)}
+											>
+												<div class="flex items-center justify-between gap-4">
+													<div class="flex min-w-0 flex-1 items-center gap-2.5">
+														<div class="relative">
+															<button
+																type="button"
+																class={`tooltip-target relative -m-1 flex items-center justify-center rounded-md p-1 transition ${
+																	canEditIssue && !item.isSubIssue
+																		? 'hover:bg-neutral-100'
+																		: 'cursor-not-allowed'
 																}`}
-															></span>
-														</button>
-														{#if statusMenuOpenId === getRowIssueId(item)}
-															<div
-																class="absolute left-0 z-20 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-																on:click|stopPropagation
+																on:click|stopPropagation|preventDefault={() => {
+																	if (!canEditIssue || item.isSubIssue) return;
+																	const id = getRowIssueId(item);
+																	urgentMenuOpenId = urgentMenuOpenId === id ? null : id;
+																	statusMenuOpenId = null;
+																}}
 															>
-																<div class="sr-only">Change status</div>
-																{#each statusOptions as option}
+																{#if urgentMenuOpenId !== getRowIssueId(item)}
+																	<span
+																		class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+																	>
+																		{item.isSubIssue
+																			? 'Change urgency in root issue'
+																			: 'Change urgency'}
+																	</span>
+																{/if}
+																{#if item.isSubIssue ? (item.root_urgent ?? item.urgent) : item.urgent}
+																	<span
+																		class={`flex items-center justify-center text-rose-500 ${item.isSubIssue ? 'opacity-50' : ''}`}
+																		style="width: 16px; height: 16px;"
+																	>
+																		<svg
+																			xmlns="http://www.w3.org/2000/svg"
+																			width="14"
+																			height="14"
+																			fill="currentColor"
+																			viewBox="0 0 16 16"
+																		>
+																			<path
+																				d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+																			/>
+																		</svg>
+																	</span>
+																{:else}
+																	<span
+																		class={`flex items-center justify-center text-neutral-400 ${item.isSubIssue ? 'opacity-50' : ''}`}
+																		style="width: 16px; height: 16px;"
+																	>
+																		<svg
+																			xmlns="http://www.w3.org/2000/svg"
+																			width="14"
+																			height="14"
+																			fill="currentColor"
+																			viewBox="0 0 16 16"
+																		>
+																			<path
+																				d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+																			/>
+																		</svg>
+																	</span>
+																{/if}
+															</button>
+															{#if urgentMenuOpenId === getRowIssueId(item)}
+																<div
+																	class="absolute left-0 z-20 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+																	on:click|stopPropagation
+																>
+																	<div class="sr-only">Change urgency</div>
 																	<button
 																		type="button"
 																		class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																			item.status === option.value ? 'bg-neutral-50' : ''
+																			item.urgent ? 'bg-neutral-50' : ''
 																		}`}
-																		on:click|preventDefault={() =>
-																			handleStatusSelect(item, option.value)}
+																		on:click|preventDefault={() => handleUrgentSelect(item, true)}
 																	>
-																		<span
-																			class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${
-																				statusClassByKey[option.value]
-																			}`}
-																		></span>
-																		<span>{option.label}</span>
+																		<svg
+																			xmlns="http://www.w3.org/2000/svg"
+																			width="14"
+																			height="14"
+																			fill="currentColor"
+																			class="text-rose-500"
+																			viewBox="0 0 16 16"
+																		>
+																			<path
+																				d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+																			/>
+																		</svg>
+																		<span>Urgent</span>
 																	</button>
-																{/each}
-															</div>
-														{/if}
-													</div>
-													{#if item.isSubIssue}
-														<div class="flex min-w-0 items-center gap-2 text-base">
-															<div class="flex min-w-0 items-center gap-2">
+																	<button
+																		type="button"
+																		class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																			!item.urgent ? 'bg-neutral-50' : ''
+																		}`}
+																		on:click|preventDefault={() => handleUrgentSelect(item, false)}
+																	>
+																		<svg
+																			xmlns="http://www.w3.org/2000/svg"
+																			width="14"
+																			height="14"
+																			fill="currentColor"
+																			class="text-neutral-400"
+																			viewBox="0 0 16 16"
+																		>
+																			<path
+																				d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+																			/>
+																		</svg>
+																		<span>Not urgent</span>
+																	</button>
+																</div>
+															{/if}
+														</div>
+														<div class="relative">
+															<button
+																type="button"
+																class={`tooltip-target relative -m-1 flex items-center justify-center rounded-md p-1 transition ${
+																	canEditIssue
+																		? 'hover:bg-neutral-100'
+																		: 'cursor-not-allowed opacity-60'
+																}`}
+																on:click|stopPropagation|preventDefault={() => {
+																	if (!canEditIssue) return;
+																	const id = getRowIssueId(item);
+																	statusMenuOpenId = statusMenuOpenId === id ? null : id;
+																	urgentMenuOpenId = null;
+																}}
+															>
+																{#if statusMenuOpenId !== getRowIssueId(item)}
+																	<span
+																		class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+																	>
+																		Change status
+																	</span>
+																{/if}
 																<span
-																	class="truncate text-neutral-600 sm:overflow-visible sm:whitespace-normal"
+																	class={`h-4 w-4 rounded-full border-[1.5px] ${
+																		statusClassByKey[item.status] ?? section.statusClass
+																	}`}
+																></span>
+															</button>
+															{#if statusMenuOpenId === getRowIssueId(item)}
+																<div
+																	class="absolute left-0 z-20 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+																	on:click|stopPropagation
+																>
+																	<div class="sr-only">Change status</div>
+																	{#each statusOptions as option}
+																		<button
+																			type="button"
+																			class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																				item.status === option.value ? 'bg-neutral-50' : ''
+																			}`}
+																			on:click|preventDefault={() =>
+																				handleStatusSelect(item, option.value)}
+																		>
+																			<span
+																				class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${
+																					statusClassByKey[option.value]
+																				}`}
+																			></span>
+																			<span>{option.label}</span>
+																		</button>
+																	{/each}
+																</div>
+															{/if}
+														</div>
+														{#if item.isSubIssue}
+															<div class="flex min-w-0 items-center gap-2 text-base">
+																<div class="flex min-w-0 items-center gap-2">
+																	<span
+																		class="truncate text-neutral-600 sm:overflow-visible sm:whitespace-normal"
+																	>
+																		{item.title}
+																	</span>
+																	{#if hasUnseenUpdates(item)}
+																		<span
+																			class="h-2 w-2 shrink-0 rounded-full bg-sky-500"
+																			aria-label="Issue has updates"
+																		></span>
+																	{/if}
+																</div>
+																<span class="hidden text-neutral-300 sm:inline">›</span>
+																<span class="hidden text-neutral-400 sm:inline"
+																	>{item.parentTitle}</span
+																>
+															</div>
+														{:else}
+															<div class="flex items-center gap-2">
+																<span
+																	class="truncate text-base text-neutral-800 sm:overflow-visible sm:whitespace-normal"
 																>
 																	{item.title}
 																</span>
@@ -1099,79 +1122,63 @@
 																	></span>
 																{/if}
 															</div>
-															<span class="hidden text-neutral-300 sm:inline">›</span>
-															<span class="hidden text-neutral-400 sm:inline"
-																>{item.parentTitle}</span
-															>
-														</div>
-													{:else}
-														<div class="flex items-center gap-2">
-															<span
-																class="truncate text-base text-neutral-800 sm:overflow-visible sm:whitespace-normal"
-															>
-																{item.title}
-															</span>
-															{#if hasUnseenUpdates(item)}
-																<span
-																	class="h-2 w-2 shrink-0 rounded-full bg-sky-500"
-																	aria-label="Issue has updates"
-																></span>
-															{/if}
-														</div>
-													{/if}
-												</div>
-												<div class="flex items-center gap-2">
-													<div
-														class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-sm text-neutral-500"
-													>
-														<span class="hidden px-2.5 py-1 sm:inline">{item.property}</span>
-														<span class="hidden border-l border-neutral-200 px-2.5 py-1 sm:inline">
-															{item.unit}
-														</span>
-														<span class="px-2.5 py-1 sm:hidden">{item.unit}</span>
+														{/if}
 													</div>
-													{#if item.assigneeBadge}
+													<div class="flex items-center gap-2">
 														<div
-															class={`hidden h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold text-neutral-700 sm:flex ${item.assigneeBadge.color}`}
-															aria-label={item.assigneeBadge.name}
-															title={item.assigneeBadge.name}
+															class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-sm text-neutral-500"
 														>
-															{item.assigneeBadge.initial}
-														</div>
-													{:else}
-														<div
-															class="hidden h-6 w-6 items-center justify-center rounded-full text-neutral-300 sm:flex"
-															aria-label="Unassigned"
-															title="Unassigned"
-														>
-															<svg
-																xmlns="http://www.w3.org/2000/svg"
-																width="18"
-																height="18"
-																fill="currentColor"
-																class="bi bi-person-circle"
-																viewBox="0 0 16 16"
+															<span class="hidden px-2.5 py-1 sm:inline">{item.property}</span>
+															<span
+																class="hidden border-l border-neutral-200 px-2.5 py-1 sm:inline"
 															>
-																<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
-																<path
-																	fill-rule="evenodd"
-																	d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
-																/>
-															</svg>
+																{item.unit}
+															</span>
+															<span class="px-2.5 py-1 sm:hidden">{item.unit}</span>
 														</div>
-													{/if}
+														{#if item.assigneeBadge}
+															<div
+																class={`hidden h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold text-neutral-700 sm:flex ${item.assigneeBadge.color}`}
+																aria-label={item.assigneeBadge.name}
+																title={item.assigneeBadge.name}
+															>
+																{item.assigneeBadge.initial}
+															</div>
+														{:else}
+															<div
+																class="hidden h-6 w-6 items-center justify-center rounded-full text-neutral-300 sm:flex"
+																aria-label="Unassigned"
+																title="Unassigned"
+															>
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="18"
+																	height="18"
+																	fill="currentColor"
+																	class="bi bi-person-circle"
+																	viewBox="0 0 16 16"
+																>
+																	<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+																	<path
+																		fill-rule="evenodd"
+																		d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+																	/>
+																</svg>
+															</div>
+														{/if}
+													</div>
 												</div>
-											</div>
-										</a>
-									{/each}
-								</div>
-							{/if}
-						{/each}
+											</a>
+										{/each}
+									</div>
+								{/if}
+							{/each}
+						</div>
 					</div>
-				</div>
-			{/each}
-		</div>
-	{/if}
+				{/each}
+			</div>
+		{/if}
+	</div>
 </div>
 
 {#if showUrgencyPolicyPrompt}

@@ -56,18 +56,31 @@ export const POST = async ({ request, locals }) => {
 		user_id: locals.user.id
 	};
 
+	const wantsStream = request.headers.get('accept')?.includes('text/event-stream');
 	const response = await fetch(`${PUBLIC_SUPABASE_URL}/functions/v1/chat`, {
 		method: 'POST',
 		headers: {
 			apikey: SUPABASE_SERVICE_ROLE_KEY,
 			Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-			'Content-Type': 'application/json'
+			'Content-Type': 'application/json',
+			Accept: wantsStream ? 'text/event-stream' : 'application/json'
 		},
 		body: JSON.stringify(body)
 	});
 
 	if (!response.ok) {
 		return json({ error: await response.text() }, { status: response.status });
+	}
+
+	if (wantsStream) {
+		return new Response(response.body, {
+			status: response.status,
+			headers: {
+				'Content-Type': 'text/event-stream',
+				'Cache-Control': 'no-cache',
+				Connection: 'keep-alive'
+			}
+		});
 	}
 
 	const data = await response.json().catch(() => ({}));

@@ -122,6 +122,13 @@ const extractReply = (data) => {
 	return data?.choices?.[0]?.message?.content ?? '';
 };
 
+const sseHeaders = {
+	...corsHeaders,
+	'Content-Type': 'text/event-stream',
+	'Cache-Control': 'no-cache',
+	Connection: 'keep-alive'
+};
+
 serve(async (req) => {
 	if (req.method === 'OPTIONS') {
 		return new Response('ok', { headers: corsHeaders });
@@ -142,6 +149,8 @@ serve(async (req) => {
 		const payload = await req.json();
 		const message = typeof payload?.message === 'string' ? payload.message.trim() : '';
 		const userId = payload?.user_id ?? null;
+		const wantsStream =
+			req.headers.get('accept')?.includes('text/event-stream') || payload?.stream === true;
 		if (!userId) {
 			return new Response(JSON.stringify({ error: 'Missing user_id' }), {
 				status: 400,
@@ -191,30 +200,103 @@ serve(async (req) => {
 			},
 			body: JSON.stringify({
 				model: openaiModel,
-				input: messages
+				input: messages,
+				stream: wantsStream
 			})
 		});
 		if (!response.ok) {
 			const errText = await response.text();
 			throw new Error(errText);
 		}
-		const data = await response.json();
-		const reply = extractReply(data);
-		if (threadId) {
-			await supabase.from('chat_messages').insert({
-				thread_id: threadId,
-				sender: 'assistant',
-				content: reply
+
+		if (!wantsStream) {
+			const data = await response.json();
+			const reply = extractReply(data);
+			if (threadId) {
+				await supabase.from('chat_messages').insert({
+					thread_id: threadId,
+					sender: 'assistant',
+					content: reply
+				});
+				await supabase
+					.from('chat_threads')
+					.update({ updated_at: new Date().toISOString() })
+					.eq('id', threadId);
+			}
+			return new Response(JSON.stringify({ reply }), {
+				status: 200,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
 			});
-			await supabase
-				.from('chat_threads')
-				.update({ updated_at: new Date().toISOString() })
-				.eq('id', threadId);
 		}
-		return new Response(JSON.stringify({ reply }), {
-			status: 200,
-			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+
+		const reader = response.body?.getReader();
+		if (!reader) {
+			throw new Error('Missing stream');
+		}
+		const decoder = new TextDecoder();
+		const encoder = new TextEncoder();
+		let buffer = '';
+		let currentEvent = '';
+		let replyText = '';
+
+		const stream = new ReadableStream({
+			async start(controller) {
+				const sendEvent = (event, data) => {
+					controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+				};
+				try {
+					while (true) {
+						const { value, done } = await reader.read();
+						if (done) break;
+						buffer += decoder.decode(value, { stream: true });
+						const lines = buffer.split('\n');
+						buffer = lines.pop() ?? '';
+						for (const line of lines) {
+							if (line.startsWith('event:')) {
+								currentEvent = line.replace('event:', '').trim();
+								continue;
+							}
+							if (!line.startsWith('data:')) continue;
+							const data = line.replace('data:', '').trim();
+							if (!data || data === '[DONE]') continue;
+							let parsed = null;
+							try {
+								parsed = JSON.parse(data);
+							} catch {
+								parsed = null;
+							}
+							if (currentEvent === 'response.output_text.delta') {
+								const delta = parsed?.delta ?? '';
+								if (delta) {
+									replyText += delta;
+									sendEvent('delta', JSON.stringify({ delta }));
+								}
+							}
+							if (currentEvent === 'response.completed') {
+								sendEvent('done', JSON.stringify({ done: true }));
+							}
+						}
+					}
+					if (threadId) {
+						await supabase.from('chat_messages').insert({
+							thread_id: threadId,
+							sender: 'assistant',
+							content: replyText
+						});
+						await supabase
+							.from('chat_threads')
+							.update({ updated_at: new Date().toISOString() })
+							.eq('id', threadId);
+					}
+					controller.close();
+				} catch (error) {
+					sendEvent('error', JSON.stringify({ error: error?.message ?? 'Stream error' }));
+					controller.close();
+				}
+			}
 		});
+
+		return new Response(stream, { status: 200, headers: sseHeaders });
 	} catch (error) {
 		return new Response(JSON.stringify({ error: error?.message ?? 'Chat failed' }), {
 			status: 500,
