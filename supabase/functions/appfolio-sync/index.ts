@@ -293,59 +293,123 @@ async function syncUnits(workspaceId: string, appfolioPropertyIds: number[]): Pr
 async function syncTenants(workspaceId: string, appfolioPropertyIds: number[]): Promise<void> {
 	await sleep(500);
 
-	// Fetch financially-responsible (primary) tenants for current/notice leases.
-	// Each row has unit_id which links back to appfolio_unit_id on the units table.
+	// Fetch ALL active tenants (all occupant types) for current/notice leases.
+	// Unique constraint: (unit_id, email, name) NULLS NOT DISTINCT — covers tenants
+	// with email, without email, or with neither.
 	const rows = await appfolioFetch('tenant_directory', {
 		tenant_visibility: 'active',
 		tenant_statuses: ['0', '4'], // Current and Notice
-		tenant_types: ['0'],          // Financially Responsible (primary leaseholder)
 		property_visibility: 'active',
 		properties: { properties_ids: appfolioPropertyIds.map(String) },
 		columns: ['unit_id', 'tenant', 'first_name', 'last_name', 'emails', 'phone_numbers']
 	});
 
-	// Batch-fetch current tenant data so we can skip no-op writes.
-	// Running every minute, unconditional updates generated ~546K WAL writes to units.
-	const { data: currentUnits } = await supabase
+	// Fetch workspace admin_user_id — required as non-null FK on tenants rows.
+	const { data: workspace } = await supabase
+		.from('workspaces')
+		.select('admin_user_id')
+		.eq('id', workspaceId)
+		.single();
+	const adminUserId = workspace?.admin_user_id;
+	if (!adminUserId) {
+		console.error(`syncTenants: could not resolve admin_user_id for workspace ${workspaceId}`);
+		return;
+	}
+
+	// Build appfolio_unit_id → bedrock unit.id map for FK resolution.
+	const { data: unitRows } = await supabase
 		.from('units')
-		.select('appfolio_unit_id, tenant_name, tenant_email, tenant_phone')
+		.select('id, appfolio_unit_id')
 		.not('appfolio_unit_id', 'is', null);
-	const unitTenantMap = new Map<string, { tenant_name: string | null; tenant_email: string | null; tenant_phone: string | null }>(
-		(currentUnits ?? []).map((u: any) => [u.appfolio_unit_id, {
-			tenant_name: u.tenant_name ?? null,
-			tenant_email: u.tenant_email ?? null,
-			tenant_phone: u.tenant_phone ?? null
-		}])
+	const unitIdMap = new Map<string, string>(
+		(unitRows ?? []).map((u: any) => [u.appfolio_unit_id, u.id])
 	);
+
+	// First pass: collect all affected bedrock unit IDs so we can fetch existing tenants.
+	const affectedBedrockUnitIds = new Set<string>();
+	for (const row of rows as any[]) {
+		if (!row.unit_id) continue;
+		const bedrockUnitId = unitIdMap.get(String(row.unit_id));
+		if (bedrockUnitId) affectedBedrockUnitIds.add(bedrockUnitId);
+	}
+
+	// Fetch ALL existing tenants in affected units at once — used for change detection
+	// and stale deletion.
+	const { data: existingTenants, error: fetchErr } = affectedBedrockUnitIds.size > 0
+		? await supabase
+			.from('tenants')
+			.select('id, unit_id, email, name, phone')
+			.in('unit_id', [...affectedBedrockUnitIds])
+		: { data: [] as any[], error: null };
+	if (fetchErr) {
+		console.error('syncTenants existing fetch error:', fetchErr.message);
+	}
+
+	// Lookup map keyed by (unit_id, email, name) — matches the unique constraint.
+	// email is lowercased; name is normalized. NULLS are included in the key as empty
+	// string so null::null maps to a unique string.
+	const existingByKey = new Map<string, any>(
+		(existingTenants ?? []).map((t: any) => [
+			`${t.unit_id}::${(t.email ?? '').toLowerCase()}::${t.name ?? ''}`,
+			t
+		])
+	);
+
+	// toUpsertMap deduplicates by (unit_id, email, name) within the batch.
+	// PostgreSQL rejects ON CONFLICT DO UPDATE when the same conflict key appears
+	// more than once in a single statement.
+	const toUpsertMap = new Map<string, any>(); // key: unit_id::email::name
+	const seenKeys = new Set<string>(); // for stale detection
 
 	for (const row of rows as any[]) {
 		if (!row.unit_id) continue;
+		const bedrockUnitId = unitIdMap.get(String(row.unit_id));
+		if (!bedrockUnitId) continue;
 
 		// Prefer the pre-joined full name; fall back to first+last. Normalize "Last, First" → "First Last".
 		const name = normalizeTenantName(row.tenant || [row.first_name, row.last_name].filter(Boolean).join(' ') || null);
-		// emails/phone_numbers may be comma-separated; take the first value
-		const email = row.emails ? String(row.emails).split(',')[0].trim() || null : null;
+		// emails/phone_numbers may be comma-separated; take the first value. Normalize email to lowercase.
+		const rawEmail = row.emails ? String(row.emails).split(',')[0].trim() || null : null;
+		const email = rawEmail ? rawEmail.toLowerCase() : null;
 		const phone = row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : null;
 
-		if (!name && !email && !phone) continue;
+		const key = `${bedrockUnitId}::${email ?? ''}::${name ?? ''}`;
+		seenKeys.add(key);
 
-		// Skip if tenant data hasn't changed — avoids unnecessary WAL writes.
-		const current = unitTenantMap.get(String(row.unit_id));
-		if (current &&
-			current.tenant_name === name &&
-			current.tenant_email === email &&
-			current.tenant_phone === phone) {
-			continue;
-		}
+		// Skip write if phone is the only thing and it's unchanged (name+email are the conflict key).
+		const existing = existingByKey.get(key);
+		if (existing && (existing.phone ?? null) === (phone ?? null)) continue;
 
+		toUpsertMap.set(key, { user_id: adminUserId, unit_id: bedrockUnitId, name, email, phone });
+	}
+
+	// Batch upsert all tenants in chunks of 50.
+	const toUpsert = [...toUpsertMap.values()];
+	const CHUNK = 50;
+	for (let i = 0; i < toUpsert.length; i += CHUNK) {
+		const chunk = toUpsert.slice(i, i + CHUNK);
 		const { error } = await supabase
-			.from('units')
-			.update({ tenant_name: name, tenant_email: email, tenant_phone: phone })
-			.eq('appfolio_unit_id', String(row.unit_id));
-
+			.from('tenants')
+			.upsert(chunk, { onConflict: 'unit_id,email,name', ignoreDuplicates: false });
 		if (error) {
-			console.error(`syncTenants update error for unit_id=${row.unit_id}:`, error.message);
+			console.error(`syncTenants upsert error (chunk ${Math.floor(i / CHUNK)}):`, error.message);
 		}
+	}
+
+	// Stale delete: remove tenants no longer returned by AppFolio.
+	const staleIds = (existingTenants ?? [])
+		.filter((t: any) => {
+			const key = `${t.unit_id}::${(t.email ?? '').toLowerCase()}::${t.name ?? ''}`;
+			return !seenKeys.has(key);
+		})
+		.map((t: any) => t.id);
+	if (staleIds.length > 0) {
+		const { error: delErr } = await supabase.from('tenants').delete().in('id', staleIds);
+		if (delErr) console.error('syncTenants stale delete error:', delErr.message);
+	}
+
+	if (toUpsert.length > 0 || staleIds.length > 0) {
+		console.log(`syncTenants: ${toUpsert.length} upserted, ${staleIds.length} deleted`);
 	}
 }
 
@@ -442,7 +506,7 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 	// without an extra per-row query.
 	const { data: existingIssueRows } = await supabase
 		.from('issues')
-		.select('id, appfolio_id, appfolio_raw_status, appfolio_vendor_id, appfolio_status_notes, vendor_assigned_at, vendor_followup_sent')
+		.select('id, appfolio_id, appfolio_raw_status, appfolio_vendor_id, appfolio_status_notes, vendor_assigned_at, vendor_followup_sent, urgent')
 		.eq('workspace_id', workspaceId)
 		.eq('source', 'appfolio')
 		.not('appfolio_id', 'is', null);
@@ -541,6 +605,8 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 				? description.slice(0, 120)
 				: `Work Order ${row.service_request_number ?? woId}`;
 
+			const rawUrgent = (row.priority ?? '').toLowerCase() === 'urgent';
+
 			// ignoreDuplicates: true — existing issues keep their agent-cleaned title/description.
 			// Tracking columns (status, vendor, notes, urgent) are updated separately below.
 			const { data: upserted, error } = await supabase.from('issues').upsert(
@@ -551,7 +617,7 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 					name,
 					description: description ?? null,
 					status: mapWorkOrderStatus(row.status ?? ''),
-					urgent: (row.priority ?? '').toLowerCase() === 'urgent',
+					urgent: rawUrgent,
 					unit_id: unitId,
 					property_id: propertyId
 				},
@@ -579,22 +645,27 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 				const newNotes = (row.status_notes as string) || null;
 				const notesChanged = !!prev && !!newNotes && newNotes !== (prev.appfolio_status_notes ?? '');
 
-				// Persist tracking columns so future syncs can detect further changes.
-				const updateData: Record<string, any> = {
-					appfolio_raw_status: String(row.status ?? ''),
-					appfolio_status_notes: newNotes,
-					appfolio_vendor_id: row.vendor_id != null ? String(row.vendor_id) : null,
-					urgent: (row.priority ?? '').toLowerCase() === 'urgent'
-				};
-				if (vendorAssigned) {
-					updateData.vendor_assigned_at = new Date().toISOString();
-				}
-				const { error: trackingError } = await supabase
-					.from('issues')
-					.update(updateData)
-					.eq('id', issueId);
-				if (trackingError) {
-					console.error(`syncWorkOrders tracking update error for work_order_id=${woId}:`, trackingError.message);
+				// Persist tracking columns only when something actually changed.
+				// Avoids writing to issues (Realtime-subscribed) on every sync unnecessarily.
+				const urgentChanged = !!prev && (prev.urgent ?? false) !== rawUrgent;
+				const shouldUpdateTracking = isNew || statusChanged || vendorAssigned || notesChanged || urgentChanged;
+				if (shouldUpdateTracking) {
+					const updateData: Record<string, any> = {
+						appfolio_raw_status: String(row.status ?? ''),
+						appfolio_status_notes: newNotes,
+						appfolio_vendor_id: row.vendor_id != null ? String(row.vendor_id) : null,
+						urgent: rawUrgent
+					};
+					if (vendorAssigned) {
+						updateData.vendor_assigned_at = new Date().toISOString();
+					}
+					const { error: trackingError } = await supabase
+						.from('issues')
+						.update(updateData)
+						.eq('id', issueId);
+					if (trackingError) {
+						console.error(`syncWorkOrders tracking update error for work_order_id=${woId}:`, trackingError.message);
+					}
 				}
 
 					if (isNew) {
@@ -724,7 +795,23 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 		};
 		doFetch(1).catch((err) => console.error('dispatchAgentWithRetry unhandled:', err));
 	};
+	// Coalesce by issueId — keep highest-priority event per issue to avoid
+	// duplicate agent runs when multiple fields changed in the same sync.
+	const CHANGE_PRIORITY: Record<string, number> = {
+		new: 5,
+		vendor_assigned: 4,
+		status_changed: 3,
+		notes_changed: 2,
+		vendor_followup: 1
+	};
+	const coalesced = new Map<string, ChangeEvent>();
 	for (const event of changeQueue) {
+		const existing = coalesced.get(event.issueId);
+		if (!existing || (CHANGE_PRIORITY[event.change_type] ?? 0) > (CHANGE_PRIORITY[existing.change_type] ?? 0)) {
+			coalesced.set(event.issueId, event);
+		}
+	}
+	for (const event of coalesced.values()) {
 		dispatchAgentWithRetry(event);
 	}
 }

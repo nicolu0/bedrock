@@ -265,6 +265,10 @@ const clearStaleProcessingEvents = async ({
 		.eq('meta->>thread_id', threadId);
 };
 
+// Tracks run IDs that have already had their first run-level event inserted.
+// Avoids the blind UPDATE→INSERT pattern (2 writes) on first emit for a run.
+const _insertedRunLevelEvents = new Set<string>();
+
 const emitAgentEvent = async ({
 	workspaceId,
 	userId,
@@ -296,118 +300,40 @@ const emitAgentEvent = async ({
 		meta: meta ?? {},
 		updated_at: new Date().toISOString()
 	};
-	let error = null;
-	if (stage === 'processing' && !issueId) {
-		const { data: updatedProcessing, error: updateProcessingError } = await supabase
-			.from('agent_events')
-			.update({
-				step: payload.step,
-				stage: payload.stage,
-				message: payload.message,
-				meta: payload.meta,
-				updated_at: payload.updated_at
-			})
-			.eq('workspace_id', workspaceId)
-			.eq('run_id', runId)
-			.is('issue_id', null)
-			.select('id');
-		if (updateProcessingError) {
-			console.error('agent-events update failed', updateProcessingError);
-		} else if (updatedProcessing?.length) {
-			return;
-		}
-		const insertResult = await supabase.from('agent_events').insert(payload);
-		error = insertResult.error;
-		if (error) {
-			console.error('agent-events insert failed', error);
-		}
-		return;
-	}
-	const updateFields: Record<string, unknown> = {
-		step: payload.step,
-		stage: payload.stage,
-		message: payload.message,
-		meta: payload.meta,
-		updated_at: payload.updated_at
-	};
+
 	if (issueId) {
-		const { data: updatedByIssue, error: updateIssueError } = await supabase
-			.from('agent_events')
-			.update(updateFields)
-			.eq('workspace_id', workspaceId)
-			.eq('issue_id', issueId)
-			.select('id');
-		if (updateIssueError) {
-			console.error('agent-events update failed', {
-				run_id: runId,
-				issue_id: issueId,
-				stage,
-				message,
-				error: updateIssueError
-			});
-			error = updateIssueError;
-		} else if (updatedByIssue?.length) {
-			return;
-		}
-
-		updateFields.issue_id = issueId;
-		const { data: updatedByRun, error: updateRunError } = await supabase
-			.from('agent_events')
-			.update(updateFields)
-			.eq('run_id', runId)
-			.is('issue_id', null)
-			.select('id');
-		if (updateRunError) {
-			console.error('agent-events update failed', {
-				run_id: runId,
-				issue_id: issueId,
-				stage,
-				message,
-				error: updateRunError
-			});
-			error = updateRunError;
-		} else if (updatedByRun?.length) {
-			return;
-		}
-
-		console.warn('agent-events update found no rows', {
-			run_id: runId,
-			issue_id: issueId,
-			stage,
-			message
-		});
-		const upsertResult = await supabase
+		// Single upsert on workspace_id,issue_id — handles insert and update in one write.
+		const { error } = await supabase
 			.from('agent_events')
 			.upsert(payload, { onConflict: 'workspace_id,issue_id' });
-		error = upsertResult.error;
-	} else {
-		const { data: updatedByRun, error: updateRunError } = await supabase
-			.from('agent_events')
-			.update(updateFields)
-			.eq('run_id', runId)
-			.select('id');
-		if (updateRunError) {
-			console.error('agent-events update failed', {
-				run_id: runId,
-				issue_id: null,
-				stage,
-				message,
-				error: updateRunError
-			});
-			error = updateRunError;
-		} else if (!updatedByRun?.length) {
-			console.warn('agent-events update found no rows', {
-				run_id: runId,
-				issue_id: null,
-				stage,
-				message
-			});
-			const insertResult = await supabase.from('agent_events').insert(payload);
-			error = insertResult.error;
+		if (error) {
+			console.error('agent-events upsert failed', { run_id: runId, issue_id: issueId, stage, error });
 		}
-	}
-	if (error) {
-		console.error('agent-events insert failed', error);
+	} else {
+		// Run-level (no issueId): INSERT first time (tracked in module Set), UPDATE thereafter.
+		if (_insertedRunLevelEvents.has(runId)) {
+			const { error } = await supabase
+				.from('agent_events')
+				.update({
+					step: payload.step,
+					stage: payload.stage,
+					message: payload.message,
+					meta: payload.meta,
+					updated_at: payload.updated_at
+				})
+				.eq('run_id', runId)
+				.is('issue_id', null);
+			if (error) {
+				console.error('agent-events update failed', { run_id: runId, stage, error });
+			}
+		} else {
+			const { error } = await supabase.from('agent_events').insert(payload);
+			if (error) {
+				console.error('agent-events insert failed', { run_id: runId, stage, error });
+			} else {
+				_insertedRunLevelEvents.add(runId);
+			}
+		}
 	}
 };
 
