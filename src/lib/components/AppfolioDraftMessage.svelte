@@ -1,7 +1,10 @@
 <script>
 	// @ts-nocheck
 	import { createEventDispatcher, onMount } from 'svelte';
+	import { fade, scale } from 'svelte/transition';
 	import { agentToasts } from '$lib/stores/agentToasts';
+	import { applyPolicyInsert } from '$lib/stores/policiesCache';
+	import { diffWords } from '$lib/utils/textDiff';
 	import { searchVendors } from '$lib/utils/vendorSearch';
 	const dispatch = createEventDispatcher();
 
@@ -16,6 +19,11 @@
 	let textareaEl;
 	let isApproving = false;
 	let approvedByLocal = approvedBy ?? null;
+	let showTonePrompt = false;
+	let tonePromptLoading = false;
+	let tonePromptError = '';
+	let draftOriginal = draft?.original_body ?? null;
+	let draftDiff = draft?.draft_diff ?? null;
 	const APPROVAL_KEY = 'appfolio_approved_by';
 	const getApprovalStorageKey = () =>
 		`${APPROVAL_KEY}:${draft?.issue_id ?? 'unknown'}:${draft?.message_id ?? draft?.id ?? 'draft'}`;
@@ -38,23 +46,31 @@
 
 	// Current recipient vendor display name
 	$: currentRecipientEmail = draft?.recipient_email ?? null;
-	$: currentVendorName =
-		currentRecipientEmail
-			? (vendors.find(
-					(v) => v.email?.toLowerCase() === currentRecipientEmail?.toLowerCase()
-				)?.name ??
-				recommendedVendors.find(
-					(v) => v.email?.toLowerCase() === currentRecipientEmail?.toLowerCase()
-				)?.name ??
-				currentRecipientEmail)
-			: null;
+	$: currentVendorName = currentRecipientEmail
+		? (vendors.find((v) => v.email?.toLowerCase() === currentRecipientEmail?.toLowerCase())?.name ??
+			recommendedVendors.find(
+				(v) => v.email?.toLowerCase() === currentRecipientEmail?.toLowerCase()
+			)?.name ??
+			currentRecipientEmail)
+		: null;
 
 	$: if (draft && (draft.message_id ?? draft.id) !== lastMessageKey) {
 		lastMessageKey = draft.message_id ?? draft.id;
 		draftBody = draft.body ?? '';
+		draftOriginal = draft?.original_body ?? null;
+		draftDiff = draft?.draft_diff ?? null;
 		if (textareaEl) {
 			textareaEl.style.height = 'auto';
 			textareaEl.style.height = `${textareaEl.scrollHeight}px`;
+		}
+	}
+
+	$: if (draft) {
+		if (draft?.original_body && draftOriginal !== draft.original_body) {
+			draftOriginal = draft.original_body;
+		}
+		if (draft?.draft_diff && draftDiff !== draft.draft_diff) {
+			draftDiff = draft.draft_diff;
 		}
 	}
 
@@ -106,10 +122,61 @@
 				draft.body = draftBody;
 				if (payload?.draft) {
 					draft = { ...draft, ...payload.draft };
+					draftOriginal = draft?.original_body ?? draftOriginal;
+					draftDiff = draft?.draft_diff ?? draftDiff;
 				}
 			}
 		} catch {
 			// ignore save failures
+		}
+	};
+
+	const closeTonePrompt = () => {
+		if (tonePromptLoading) return;
+		showTonePrompt = false;
+		tonePromptError = '';
+	};
+
+	const openTonePrompt = () => {
+		tonePromptError = '';
+		showTonePrompt = true;
+	};
+
+	const saveTonePolicy = async () => {
+		if (!draft?.issue_id) {
+			tonePromptError = 'Draft is missing an issue.';
+			return null;
+		}
+		if (!hasToneDiff) {
+			tonePromptError = 'No changes to learn from.';
+			return null;
+		}
+		tonePromptLoading = true;
+		tonePromptError = '';
+		try {
+			const response = await fetch('/api/policies/tone', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					issue_id: draft.issue_id,
+					original_body: originalBodyForDiff,
+					updated_body: draftBody,
+					diff: diffSegments
+				})
+			});
+			const result = await response.json().catch(() => null);
+			if (!response.ok) {
+				throw new Error(result?.error ?? 'Unable to save tone policy.');
+			}
+			if (result?.policy) {
+				applyPolicyInsert(result.policy);
+			}
+			return result?.policy ?? null;
+		} catch (err) {
+			tonePromptError = err?.message ?? 'Unable to save tone policy.';
+			return null;
+		} finally {
+			tonePromptLoading = false;
 		}
 	};
 
@@ -166,6 +233,28 @@
 		}
 	};
 
+	const approveOnce = async () => {
+		closeTonePrompt();
+		await approveDraft();
+	};
+
+	const approveAndSave = async () => {
+		if (tonePromptLoading) return;
+		const policy = await saveTonePolicy();
+		if (!policy) return;
+		closeTonePrompt();
+		await approveDraft();
+	};
+
+	const handleApproveClick = () => {
+		if (isApproving || approvedByLocal) return;
+		if (hasToneDiff) {
+			openTonePrompt();
+			return;
+		}
+		approveDraft();
+	};
+
 	const queueSave = () => {
 		if (saveTimeout) clearTimeout(saveTimeout);
 		saveTimeout = setTimeout(() => {
@@ -183,6 +272,35 @@
 			vendorSearch = '';
 		}
 	};
+
+	const splitDiffColumns = (segments) => {
+		const original = [];
+		const updated = [];
+		(segments ?? []).forEach((segment) => {
+			if (!segment?.text) return;
+			if (segment.type !== 'insert') original.push(segment);
+			if (segment.type !== 'delete') updated.push(segment);
+		});
+		return { original, updated };
+	};
+
+	const hasMeaningfulDiff = (segments) =>
+		(segments ?? []).some((segment) => segment?.type && segment.type !== 'equal');
+
+	$: originalBodyForDiff =
+		typeof draftOriginal === 'string'
+			? draftOriginal
+			: typeof draft?.body === 'string'
+				? draft.body
+				: '';
+	$: diffSegments = (() => {
+		if (Array.isArray(draftDiff) && draftBody === (draft?.body ?? '') && draftDiff.length) {
+			return draftDiff;
+		}
+		return diffWords(originalBodyForDiff, draftBody ?? '');
+	})();
+	$: diffColumns = splitDiffColumns(diffSegments);
+	$: hasToneDiff = hasMeaningfulDiff(diffSegments);
 </script>
 
 <svelte:window on:mousedown={handleClickOutside} />
@@ -216,7 +334,7 @@
 
 						{#if showVendorPicker}
 							<div
-								class="absolute left-0 top-7 z-20 w-72 overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg"
+								class="absolute top-7 left-0 z-20 w-72 overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg"
 							>
 								<div class="border-b border-neutral-100 px-3 py-2">
 									<input
@@ -230,7 +348,9 @@
 								<div class="max-h-60 overflow-y-auto">
 									{#if filteredSuggested.length > 0}
 										<div class="px-3 pt-2 pb-1">
-											<div class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+											<div
+												class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase"
+											>
 												Suggested
 											</div>
 										</div>
@@ -260,7 +380,9 @@
 
 									{#if filteredAll.length > 0}
 										<div class="px-3 pt-2 pb-1">
-											<div class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+											<div
+												class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase"
+											>
 												All Vendors
 											</div>
 										</div>
@@ -310,7 +432,7 @@
 						<button
 							class="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
 							type="button"
-							on:click={approveDraft}
+							on:click={handleApproveClick}
 							disabled={isApproving}
 						>
 							{#if isApproving}
@@ -337,3 +459,5 @@
 		</div>
 	</div>
 {/if}
+
+<svelte:body />

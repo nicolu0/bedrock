@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { onDestroy, createEventDispatcher } from 'svelte';
+	import { fade, scale } from 'svelte/transition';
 	import { agentToasts } from '$lib/stores/agentToasts';
 	import { applyPolicyInsert } from '$lib/stores/policiesCache';
 	import { diffWords } from '$lib/utils/textDiff';
@@ -238,7 +239,11 @@
 	const handleSendClick = () => {
 		if (!draft?.message_id && !draft?.issue_id) return;
 		if (isSending || isSent) return;
-		openTonePrompt();
+		if (hasToneDiff) {
+			openTonePrompt();
+			return;
+		}
+		sendDraft();
 	};
 
 	const saveTonePolicy = async () => {
@@ -569,7 +574,9 @@
 								<div class="max-h-52 overflow-y-auto">
 									{#if filteredSuggested.length > 0}
 										<div class="px-3 pt-2 pb-0.5">
-											<div class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+											<div
+												class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase"
+											>
 												Suggested
 											</div>
 										</div>
@@ -611,7 +618,9 @@
 
 									{#if filteredAll.length > 0}
 										<div class="px-3 pt-2 pb-0.5">
-											<div class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase">
+											<div
+												class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase"
+											>
 												{filteredSuggested.length > 0 ? 'All Vendors' : 'Vendors'}
 											</div>
 										</div>
@@ -790,91 +799,4 @@
 	{/if}
 </div>
 
-{#if showTonePrompt}
-	<div class="fixed inset-0 z-40 bg-neutral-900/30" on:click={closeTonePrompt}></div>
-	<div class="fixed inset-0 z-50 flex items-center justify-center px-4">
-		<div
-			class="w-full max-w-4xl rounded-lg border border-neutral-200 bg-white shadow-xl"
-			role="dialog"
-			aria-modal="true"
-			on:click|stopPropagation
-		>
-			<div class="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
-				<div>
-					<div class="text-base font-semibold text-neutral-900">Draft Tone</div>
-					<div class="text-xs text-neutral-500">Review how the message changed before sending.</div>
-				</div>
-				<button
-					type="button"
-					class="text-sm text-neutral-400 hover:text-neutral-700"
-					on:click={closeTonePrompt}
-					disabled={tonePromptLoading}
-				>
-					Close
-				</button>
-			</div>
-			<div class="px-5 py-4">
-				<div class="grid gap-4 md:grid-cols-2">
-					<div>
-						<div class="text-xs font-semibold text-neutral-600">Original</div>
-						<div
-							class="mt-2 max-h-80 overflow-auto rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm whitespace-pre-wrap text-neutral-700"
-						>
-							{#each diffColumns.original as segment}
-								<span
-									class={segment.type === 'delete' ? 'rounded-sm bg-rose-100 text-rose-800' : ''}
-								>
-									{segment.text}
-								</span>
-							{/each}
-						</div>
-					</div>
-					<div>
-						<div class="text-xs font-semibold text-neutral-600">Current</div>
-						<div
-							class="mt-2 max-h-80 overflow-auto rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm whitespace-pre-wrap text-neutral-700"
-						>
-							{#each diffColumns.updated as segment}
-								<span
-									class={segment.type === 'insert'
-										? 'rounded-sm bg-emerald-100 text-emerald-800'
-										: ''}
-								>
-									{segment.text}
-								</span>
-							{/each}
-						</div>
-					</div>
-				</div>
-				<div class="mt-4 text-sm text-neutral-700">
-					Send messages like this moving forward for similar issues?
-				</div>
-				{#if tonePromptError}
-					<div class="mt-2 text-xs text-rose-600">{tonePromptError}</div>
-				{/if}
-			</div>
-			<div class="flex items-center justify-end gap-2 border-t border-neutral-100 px-5 py-4">
-				<button
-					type="button"
-					class="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 transition hover:border-neutral-300"
-					on:click={sendOnce}
-					disabled={tonePromptLoading || isSending}
-				>
-					Just once
-				</button>
-				<button
-					type="button"
-					class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white transition hover:bg-neutral-800 disabled:opacity-60"
-					on:click={approveAndSend}
-					disabled={!hasToneDiff || tonePromptLoading || isSending}
-				>
-					{#if tonePromptLoading}
-						Saving...
-					{:else}
-						Approve and send
-					{/if}
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<svelte:body />

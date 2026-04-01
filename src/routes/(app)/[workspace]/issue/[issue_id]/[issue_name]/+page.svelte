@@ -3013,7 +3013,9 @@
 																			{draft}
 																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{:else}
@@ -3028,7 +3030,9 @@
 																			}}
 																			{draft}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{/if}
@@ -3123,7 +3127,9 @@
 																			{draft}
 																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{:else}
@@ -3138,7 +3144,9 @@
 																			}}
 																			{draft}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{/if}
@@ -3989,87 +3997,6 @@
 			</div>
 		</aside>
 	</div>
-	{#if showUrgencyPolicyPrompt}
-		<div class="fixed inset-0 z-40 bg-neutral-900/30" on:click={closeUrgencyPolicyPrompt}></div>
-		<div class="fixed inset-0 z-50 flex items-center justify-center px-4">
-			<div
-				class="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl"
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby="urgency-policy-title"
-				on:click|stopPropagation
-			>
-				<div class="flex items-start justify-between gap-4">
-					<div>
-						<div id="urgency-policy-title" class="text-lg font-medium text-neutral-800">
-							Update urgency policy?
-						</div>
-						<p class="mt-1 text-xs text-neutral-500">
-							Apply this urgency setting to future issues like this.
-						</p>
-					</div>
-					<button
-						class="text-neutral-400 transition hover:text-neutral-600"
-						on:click={closeUrgencyPolicyPrompt}
-						aria-label="Close"
-					>
-						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="h-5 w-5">
-							<path
-								fill="currentColor"
-								d="M18.3 5.71a1 1 0 0 0-1.41 0L12 10.59 7.11 5.7A1 1 0 0 0 5.7 7.11L10.59 12l-4.9 4.89a1 1 0 1 0 1.41 1.42L12 13.41l4.89 4.9a1 1 0 0 0 1.42-1.41L13.41 12l4.9-4.89a1 1 0 0 0-.01-1.4z"
-							/>
-						</svg>
-					</button>
-				</div>
-				<div class="mt-4 space-y-3">
-					<div>
-						<label class="text-xs text-neutral-500">Maintenance issue</label>
-						<input
-							class="mt-1 w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
-							bind:value={urgencyPolicyIssue}
-							required
-							type="text"
-						/>
-					</div>
-					<div>
-						<label class="text-xs text-neutral-500">Urgency</label>
-						<select
-							class="mt-1 w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
-							bind:value={urgencyPolicyValue}
-						>
-							<option value="urgent">Urgent</option>
-							<option value="not_urgent">Not urgent</option>
-						</select>
-					</div>
-					{#if urgencyPolicyError}
-						<p class="text-xs text-rose-600">{urgencyPolicyError}</p>
-					{/if}
-				</div>
-				<div class="mt-6 flex items-center justify-end gap-3">
-					<button
-						type="button"
-						class="rounded-full border border-neutral-200 px-4 py-2 text-sm text-neutral-600 transition hover:border-neutral-300"
-						on:click={closeUrgencyPolicyPrompt}
-						disabled={urgencyPolicyLoading}
-					>
-						No thanks
-					</button>
-					<button
-						type="button"
-						class="rounded-full bg-neutral-900 px-4 py-2 text-sm text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
-						on:click={saveUrgencyPolicy}
-						disabled={urgencyPolicyLoading}
-					>
-						{#if urgencyPolicyLoading}
-							Saving...
-						{:else}
-							{urgencyPolicyMatchingId ? 'Update policy' : 'Create policy'}
-						{/if}
-					</button>
-				</div>
-			</div>
-		</div>
-	{/if}
 {:else}
 	<div class="flex h-full flex-col">
 		<div class="border-b border-neutral-200 px-6 py-2">
@@ -4086,6 +4013,8 @@
 		</div>
 	</div>
 {/if}
+
+<svelte:body />
 
 <style>
 	.tooltip-target .delayed-tooltip {

@@ -178,48 +178,4 @@
 	</div>
 </div>
 
-{#if showIgnoreModal}
-	<div
-		class="fixed inset-0 z-40 bg-neutral-900/20"
-		transition:fade={{ duration: 120 }}
-		on:click={closeIgnoreModal}
-	></div>
-	<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-4">
-		<div
-			class="pointer-events-auto w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl"
-			transition:scale={{ duration: 140, start: 0.96 }}
-			role="dialog"
-			aria-modal="true"
-		>
-			<div class="text-lg font-medium text-neutral-800">Ignore this email?</div>
-			<p class="mt-2 text-sm text-neutral-600">
-				You can block this sender or just ignore this one message.
-			</p>
-			<div class="mt-6 flex flex-col gap-3">
-				<button
-					on:click={() => submit('block')}
-					class="rounded-xl border border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-700 transition hover:border-neutral-300"
-					type="button"
-					disabled={submitting}
-				>
-					Block this email
-				</button>
-				<button
-					on:click={() => submit('ignore')}
-					class="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-60"
-					type="button"
-					disabled={submitting}
-				>
-					Ignore once
-				</button>
-				<button
-					on:click={closeIgnoreModal}
-					class="rounded-xl px-4 py-2 text-sm text-neutral-500 transition hover:text-neutral-700"
-					type="button"
-				>
-					Cancel
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<svelte:body />
