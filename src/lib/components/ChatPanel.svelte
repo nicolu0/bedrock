@@ -164,7 +164,7 @@
 	const sendMessage = async () => {
 		const trimmed = messageBody.trim();
 		if (!trimmed || sending) return;
-		if (showWelcomeOverlay && !overlayEmptyState) dismissWelcomeOverlay();
+		if (showWelcomeOverlay) dismissWelcomeOverlay({ force: true });
 		sending = true;
 		startChatStreaming();
 		const userMessage = {

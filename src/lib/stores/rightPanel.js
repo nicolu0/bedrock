@@ -8,7 +8,7 @@ const isMobileChatDisabled = () => {
 };
 
 const initialState = {
-	open: !isMobileChatDisabled(),
+	open: false,
 	type: 'chat',
 	issueId: null,
 	seedIssue: null,

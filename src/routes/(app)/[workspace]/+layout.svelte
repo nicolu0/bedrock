@@ -29,6 +29,8 @@
 
 	let appMounted = false;
 	let isMobileViewport = false;
+	let chatRevealTimer = null;
+	let chatRevealTriggered = false;
 
 	// Navigation loading bar
 	let _navProgress = 0;
@@ -196,8 +198,25 @@
 			if (isMobileViewport && panelState?.open && panelState?.type === 'chat') {
 				closePanel();
 			}
+			if (
+				!isMobileViewport &&
+				chatRevealTriggered &&
+				!panelState?.open &&
+				panelState?.type === 'chat'
+			) {
+				openChatPanel();
+			}
 		};
 		updateMobileViewport();
+		if (!isMobileViewport && !chatRevealTriggered) {
+			chatRevealTriggered = true;
+			chatRevealTimer = setTimeout(() => {
+				const panelState = get(rightPanel);
+				if (!panelState?.open && panelState?.type === 'chat') {
+					openChatPanel();
+				}
+			}, 260);
+		}
 		if (mobileQuery.addEventListener) {
 			mobileQuery.addEventListener('change', updateMobileViewport);
 		} else {
@@ -258,6 +277,10 @@
 		};
 		window.addEventListener('keydown', onKeydown);
 		return () => {
+			if (chatRevealTimer) {
+				clearTimeout(chatRevealTimer);
+				chatRevealTimer = null;
+			}
 			window.removeEventListener('keydown', onKeydown);
 			if (mobileQuery.removeEventListener) {
 				mobileQuery.removeEventListener('change', updateMobileViewport);
@@ -414,7 +437,7 @@
 	const propertiesItem = { id: 'properties', label: 'Properties', href: 'properties' };
 	const settingsItem = { id: 'settings', label: 'Settings', href: 'settings' };
 	let propertiesOpen = true;
-	let sidebarOpen = browser ? window.innerWidth >= 1024 : true;
+	let sidebarOpen = browser ? window.innerWidth >= 1024 : false;
 	const sidebarControl = {
 		open: () => (sidebarOpen = true),
 		close: () => (sidebarOpen = false)

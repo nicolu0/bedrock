@@ -676,13 +676,6 @@
 			<h1 class="text-sm font-normal text-neutral-700">My issues</h1>
 		</div>
 		<div class="flex items-center gap-2">
-			<button
-				type="button"
-				class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
-				on:click={openNewIssueModal}
-			>
-				+ New issue
-			</button>
 			<div class="hidden sm:flex">
 				<SidebarButton onClick={toggleChatPanel} />
 			</div>

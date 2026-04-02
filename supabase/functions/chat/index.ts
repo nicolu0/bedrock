@@ -62,6 +62,24 @@ const getDefaultThread = async (userId, workspaceId) => {
 	return created?.id ?? null;
 };
 
+const resolveThreadId = async (userId, workspaceId, requestedThreadId) => {
+	if (requestedThreadId) {
+		const { data: requested } = await supabase
+			.from('chat_threads')
+			.select('id, user_id, workspace_id')
+			.eq('id', requestedThreadId)
+			.maybeSingle();
+		if (
+			requested?.id &&
+			requested.user_id === userId &&
+			(workspaceId ? requested.workspace_id === workspaceId : requested.workspace_id == null)
+		) {
+			return requested.id;
+		}
+	}
+	return getDefaultThread(userId, workspaceId);
+};
+
 const getThreadHistory = async (threadId) => {
 	if (!threadId) return [];
 	const { data } = await supabase
@@ -290,7 +308,17 @@ serve(async (req) => {
 			});
 		}
 		const workspace = await resolveWorkspace(payload?.workspace_id, payload?.workspace_slug);
-		const threadId = await getDefaultThread(userId, workspace?.id ?? null);
+		const threadId = await resolveThreadId(
+			userId,
+			workspace?.id ?? null,
+			payload?.thread_id ?? null
+		);
+		if (!threadId) {
+			return new Response(JSON.stringify({ error: 'Unable to create chat thread' }), {
+				status: 500,
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+			});
+		}
 		const history = await getThreadHistory(threadId);
 		if (!message) {
 			return new Response(JSON.stringify({ error: 'Missing message' }), {

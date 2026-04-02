@@ -82,7 +82,7 @@
 
 <div class="space-y-3">
 	{#if !messages?.length}
-		<div class="mt-3 text-sm text-neutral-500">No messages yet.</div>
+		<div></div>
 	{:else}
 		<div class="space-y-5">
 			{#each messages as m (m.id)}
