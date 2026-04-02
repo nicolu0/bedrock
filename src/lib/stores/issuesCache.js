@@ -417,6 +417,8 @@ export const applyIssueInsert = (
 ) => {
 	issuesCache.update((state) => {
 		if (!state.data) return state;
+		// Skip subissues — they should not appear in the top-level issues list
+		if (rawIssue.parent_id) return state;
 		// Idempotency guard
 		if ((state.data.issues ?? []).some((i) => i.id === rawIssue.id)) return state;
 
