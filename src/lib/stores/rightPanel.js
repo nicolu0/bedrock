@@ -3,12 +3,12 @@ import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
 const isMobileChatDisabled = () => {
-	if (!browser || typeof window === 'undefined' || !window.matchMedia) return false;
+	if (!browser || typeof window === 'undefined' || !window.matchMedia) return true;
 	return window.matchMedia('(max-width: 639px)').matches;
 };
 
 const initialState = {
-	open: true,
+	open: !isMobileChatDisabled(),
 	type: 'chat',
 	issueId: null,
 	seedIssue: null,
