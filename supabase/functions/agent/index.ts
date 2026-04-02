@@ -131,6 +131,26 @@ const extractEmail = (fromValue: string) => {
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
+const encodeBase64Url = (value: string) =>
+	btoa(value).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+const pickLowestLoadAssignee = (candidates: Array<any>, issues: Array<any>) => {
+	const counts = new Map<string, number>();
+	for (const candidate of candidates ?? []) {
+		if (candidate?.user_id) counts.set(candidate.user_id, 0);
+	}
+	for (const issue of issues ?? []) {
+		if (!issue?.assignee_id || !counts.has(issue.assignee_id)) continue;
+		counts.set(issue.assignee_id, (counts.get(issue.assignee_id) ?? 0) + 1);
+	}
+	return [...counts.entries()]
+		.sort((a, b) => {
+			if (a[1] !== b[1]) return a[1] - b[1];
+			return String(a[0]).localeCompare(String(b[0]));
+		})
+		.map(([userId]) => userId)[0];
+};
+
 const getHeaderValue = (headers: Array<{ name: string; value: string }>, name: string) =>
 	headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
 
@@ -653,6 +673,38 @@ const normalizePolicyLabel = (value: string) =>
 		.replace(/[^a-z0-9\s]/g, ' ')
 		.replace(/\s+/g, ' ');
 
+const findAutoPolicyMatch = (rows: Array<any>, haystack: string) => {
+	const normalizedHaystack = normalizePolicyLabel(haystack);
+	if (!normalizedHaystack) return null;
+	const haystackTokens = normalizedHaystack.split(' ').filter(Boolean);
+	for (const row of rows ?? []) {
+		const meta = row?.meta ?? {};
+		const issue =
+			typeof meta?.maintenance_issue === 'string'
+				? meta.maintenance_issue
+				: typeof row?.description === 'string'
+					? row.description
+					: '';
+		const template = typeof meta?.template === 'string' ? meta.template : '';
+		const normalizedIssue = normalizePolicyLabel(issue);
+		if (!normalizedIssue || !template) continue;
+		const issueTokens = normalizedIssue.split(' ').filter(Boolean);
+		const tokenMatch = issueTokens.length
+			? issueTokens.every((token) =>
+					haystackTokens.some((hay) => hay.startsWith(token) || token.startsWith(hay))
+				)
+			: false;
+		if (normalizedHaystack.includes(normalizedIssue) || tokenMatch) {
+			return {
+				id: row?.id ?? null,
+				issue: issue.trim(),
+				template: template.trim()
+			};
+		}
+	}
+	return null;
+};
+
 const findUrgencyPolicyMatch = (rows: Array<any>, haystack: string) => {
 	const normalizedHaystack = normalizePolicyLabel(haystack);
 	if (!normalizedHaystack) return null;
@@ -1094,6 +1146,155 @@ const upsertEmailDraft = async ({
 	return { draftId, created };
 };
 
+const buildReplyHeaders = async ({
+	accessToken,
+	externalId
+}: {
+	accessToken: string;
+	externalId: string;
+}) => {
+	if (!accessToken || !externalId) return [];
+	const messageMetaRes = await fetch(
+		`https://gmail.googleapis.com/gmail/v1/users/me/messages/${externalId}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References&metadataHeaders=In-Reply-To`,
+		{
+			headers: { Authorization: `Bearer ${accessToken}` }
+		}
+	);
+	if (!messageMetaRes.ok) return [];
+	const metaPayload = await messageMetaRes.json().catch(() => null);
+	const headers = metaPayload?.payload?.headers ?? [];
+	const getHeader = (name: string) =>
+		headers.find((h: any) => h?.name?.toLowerCase() === name.toLowerCase())?.value ?? null;
+	const messageIdHeader = getHeader('Message-ID');
+	const referencesHeader = getHeader('References');
+	const inReplyToHeader = getHeader('In-Reply-To');
+	if (!messageIdHeader) return [];
+	const combinedRefs = [referencesHeader, inReplyToHeader, messageIdHeader]
+		.filter(Boolean)
+		.join(' ');
+	return [`In-Reply-To: ${messageIdHeader}`, `References: ${combinedRefs}`];
+};
+
+const sendGmailReply = async ({
+	accessToken,
+	fromEmail,
+	toEmails,
+	subject,
+	body,
+	threadExternalId,
+	replyMessageExternalId
+}: {
+	accessToken: string;
+	fromEmail: string;
+	toEmails: string[];
+	subject: string;
+	body: string;
+	threadExternalId: string | null;
+	replyMessageExternalId: string | null;
+}) => {
+	if (!accessToken) throw new Error('Missing Gmail access token');
+	if (!fromEmail) throw new Error('Missing sender email');
+	if (!toEmails?.length) throw new Error('Missing recipient email');
+	const replyHeaders = replyMessageExternalId
+		? await buildReplyHeaders({ accessToken, externalId: replyMessageExternalId })
+		: [];
+	const subjectLine = subject?.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`;
+	const rawEmail = [
+		`From: ${fromEmail}`,
+		`To: ${toEmails.join(', ')}`,
+		`Subject: ${subjectLine}`,
+		...replyHeaders,
+		'MIME-Version: 1.0',
+		'Content-Type: text/plain; charset=UTF-8',
+		'',
+		body
+	].join('\n');
+
+	const sendResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+		method: 'POST',
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({
+			raw: encodeBase64Url(rawEmail),
+			threadId: threadExternalId ?? undefined
+		})
+	});
+	if (!sendResponse.ok) {
+		const detail = await sendResponse.text();
+		throw new Error(detail || 'Gmail send failed');
+	}
+	const payload = await sendResponse.json().catch(() => null);
+	return {
+		externalId: payload?.id ?? null,
+		threadExternalId: payload?.threadId ?? threadExternalId
+	};
+};
+
+const autoApproveAppfolioDraft = async ({
+	workspaceId,
+	issueId,
+	approvedById,
+	approvedByName
+}: {
+	workspaceId: string;
+	issueId: string;
+	approvedById: string;
+	approvedByName: string;
+}) => {
+	const { data: bedrockPeople } = await supabase
+		.from('people')
+		.select('user_id, users(name)')
+		.eq('workspace_id', workspaceId)
+		.eq('role', 'bedrock')
+		.not('user_id', 'is', null);
+	const candidates = (bedrockPeople ?? []).filter((row: any) => row?.user_id);
+	if (!candidates.length) return null;
+	const candidateIds = candidates.map((row: any) => row.user_id);
+	const { data: openIssues } = await supabase
+		.from('issues')
+		.select('id, assignee_id, status')
+		.eq('workspace_id', workspaceId)
+		.neq('status', 'done')
+		.in('assignee_id', candidateIds);
+	const assigneeId = pickLowestLoadAssignee(candidates, openIssues ?? []);
+	if (!assigneeId) return null;
+	await supabase
+		.from('issues')
+		.update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
+		.eq('id', issueId);
+	const assigneeName =
+		candidates.find((row: any) => row.user_id === assigneeId)?.users?.name ?? null;
+	await supabase.from('activity_logs').insert({
+		workspace_id: workspaceId,
+		issue_id: issueId,
+		type: 'appfolio_approved',
+		data: {
+			approved_by: approvedByName,
+			approved_by_id: approvedById,
+			assignee_id: assigneeId,
+			assignee_name: assigneeName,
+			auto: true
+		},
+		created_by: approvedById
+	});
+	if (bedrockPeople?.length) {
+		await supabase.from('notifications').insert(
+			bedrockPeople.map((p: any) => ({
+				workspace_id: workspaceId,
+				issue_id: issueId,
+				user_id: p.user_id,
+				title: 'Auto-approved draft',
+				body: `${approvedByName} auto-approved a draft`,
+				type: 'draft_approved',
+				requires_action: true
+			}))
+		);
+	}
+	return { assigneeId, assigneeName };
+};
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const linkThreadToIssue = async ({ threadId, issueId }: { threadId: string; issueId: string }) => {
@@ -1137,7 +1338,10 @@ const runIssueAgent = async ({
 	workspaceUnits,
 	source,
 	runId: providedRunId,
-	skipInitialEvent
+	skipInitialEvent,
+	autoPolicies,
+	autoPolicyMatch,
+	gmailSendContext
 }: {
 	subject: string;
 	body: string;
@@ -1174,7 +1378,24 @@ const runIssueAgent = async ({
 	source?: string | null;
 	runId?: string | null;
 	skipInitialEvent?: boolean;
+	autoPolicies?: Array<any>;
+	autoPolicyMatch?: { id: string | null; issue: string; template: string } | null;
+	gmailSendContext?: {
+		accessToken: string;
+		connectionId: string;
+		connectionEmail: string;
+	} | null;
 }) => {
+	const autoPolicyRows = Array.isArray(autoPolicies) ? autoPolicies : [];
+	const autoPolicyBlock = autoPolicyMatch
+		? `Auto reply policy:
+- When drafting tenant replies for the issue "${autoPolicyMatch.issue}", use the template below as the base.
+- Keep the structure and tone; update the recipient name and signature to match the current tenant and user_name.
+- Adjust the follow-up question if the situation requires a different question.
+Template:
+${autoPolicyMatch.template}`
+		: '';
+	const autoApprovedIssueIds = new Set<string>();
 	const system = `You are Bedrock, an assistant for property management.
 Your job is to link this email thread to the most specific issue (prefer a subissue when appropriate). If no match exists, create a new issue and then create one subissue for the next step.
 
@@ -1284,7 +1505,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 - Step 4: Call done().
 `.trim()
 		: ''
-}`.trim();
+}${autoPolicyBlock ? `\n${autoPolicyBlock}` : ''}`.trim();
 	const updateIssueTool = {
 		type: 'function',
 		name: 'update_issue',
@@ -1474,6 +1695,9 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 				open_issues: openIssues,
 				vendors,
 				workspace_policy: policyText,
+				auto_policy: autoPolicyMatch
+					? { issue: autoPolicyMatch.issue, template: autoPolicyMatch.template }
+					: null,
 				tenant_name: tenantName,
 				tenant_email: tenantEmail,
 				user_name: userName,
@@ -1812,7 +2036,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 
 					const { data: messageRow } = await supabase
 						.from('messages')
-						.select('id, thread_id')
+						.select('id, thread_id, external_id')
 						.eq('id', messageId)
 						.maybeSingle();
 					if (!messageRow?.thread_id) {
@@ -1821,7 +2045,9 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 
 					const { data: threadRow } = await supabase
 						.from('threads')
-						.select('id, issue_id, participant_type, participant_id, tenant_id')
+						.select(
+							'id, issue_id, participant_type, participant_id, tenant_id, external_id, connection_id'
+						)
 						.eq('id', messageRow.thread_id)
 						.maybeSingle();
 					if (!threadRow?.id) {
@@ -1839,6 +2065,9 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 						issueName = issueRow?.name ?? '';
 						if (issueName) issueNameCache.set(issueIdForReply, issueName);
 					}
+					const policyHaystack = issueName || `${subject ?? ''} ${body ?? ''}`;
+					const resolvedAutoPolicy =
+						findAutoPolicyMatch(autoPolicyRows, policyHaystack) ?? autoPolicyMatch;
 
 					let recipientEmail = '';
 					if (threadRow.participant_type === 'tenant') {
@@ -1877,6 +2106,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 						throw new Error('draft_reply recipient invalid');
 					}
 
+					let autoSent = false;
 					try {
 						const result = await upsertEmailDraft({
 							issueId: issueIdForReply,
@@ -1890,7 +2120,50 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 							workspaceId,
 							channel: source === 'appfolio' ? 'appfolio' : 'email'
 						});
-						if (result.created) {
+						if (
+							resolvedAutoPolicy &&
+							source !== 'appfolio' &&
+							gmailSendContext?.accessToken &&
+							normalizedRecipient
+						) {
+							const sendResult = await sendGmailReply({
+								accessToken: gmailSendContext.accessToken,
+								fromEmail: gmailSendContext.connectionEmail,
+								toEmails: [normalizedRecipient],
+								subject,
+								body: bodyText,
+								threadExternalId: threadRow?.external_id ?? null,
+								replyMessageExternalId: messageRow?.external_id ?? null
+							});
+							await supabase.from('messages').insert({
+								thread_id: threadRow?.id ?? null,
+								issue_id: issueIdForReply,
+								message: bodyText,
+								sender: 'agent',
+								subject,
+								timestamp: new Date().toISOString(),
+								channel: 'gmail',
+								direction: 'outbound',
+								delivery_status: 'sent',
+								connection_id: gmailSendContext.connectionId,
+								external_id: sendResult.externalId
+							});
+							await supabase.from('activity_logs').insert({
+								workspace_id: workspaceId,
+								issue_id: issueIdForReply,
+								type: 'email_outbound',
+								data: {
+									auto: true,
+									auto_policy_id: resolvedAutoPolicy?.id ?? null,
+									draft_id: result.draftId,
+									message_id: messageId
+								},
+								created_by: userId
+							});
+							await supabase.from('drafts').delete().eq('id', result.draftId);
+							autoSent = true;
+						}
+						if (result.created && !autoSent) {
 							await createDraftNotification({
 								workspaceId,
 								issueId: issueIdForReply,
@@ -2063,6 +2336,22 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 					if (!issue || !subject || !bodyText) {
 						throw new Error('draft_appfolio missing required fields');
 					}
+					let policyIssueName = '';
+					const policyIssueId = rootIssueId ?? issue;
+					if (policyIssueId) {
+						policyIssueName = issueNameCache.get(policyIssueId) ?? '';
+						if (!policyIssueName) {
+							const { data: issueRow } = await supabase
+								.from('issues')
+								.select('name')
+								.eq('id', policyIssueId)
+								.maybeSingle();
+							policyIssueName = issueRow?.name ?? '';
+							if (policyIssueName) issueNameCache.set(policyIssueId, policyIssueName);
+						}
+					}
+					const resolvedAutoPolicy =
+						findAutoPolicyMatch(autoPolicyRows, policyIssueName) ?? autoPolicyMatch;
 					await upsertEmailDraft({
 						issueId: issue,
 						messageId: null,
@@ -2075,6 +2364,18 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 						workspaceId,
 						channel: 'appfolio'
 					});
+					if (resolvedAutoPolicy && source === 'appfolio') {
+						const approvalKey = policyIssueId ?? issue;
+						if (approvalKey && !autoApprovedIssueIds.has(approvalKey)) {
+							autoApprovedIssueIds.add(approvalKey);
+							await autoApproveAppfolioDraft({
+								workspaceId,
+								issueId: issue,
+								approvedById: userId,
+								approvedByName: userName ?? 'Bedrock'
+							});
+						}
+					}
 					if (recipientEmail && vendors.length > 0) {
 						const normalizedRec = normalizeEmail(extractEmail(recipientEmail));
 						const chosenVendor = vendors.find(
@@ -2512,6 +2813,23 @@ const processMessage = async ({
 		urgencyPolicies = [];
 	}
 
+	let autoPolicies: Array<any> = [];
+	try {
+		const { data } = await supabase
+			.from('workspace_policies')
+			.select('id, description, meta')
+			.eq('workspace_id', propertyRow.workspace_id)
+			.eq('type', 'auto')
+			.order('updated_at', { ascending: false });
+		autoPolicies = data ?? [];
+	} catch {
+		autoPolicies = [];
+	}
+	const autoPolicyMatch = findAutoPolicyMatch(
+		autoPolicies,
+		`${messageSubject ?? ''} ${cleanedBody ?? ''}`
+	);
+
 	const urgencyDecision = getUrgencyDecision(
 		urgencyPolicies,
 		messageSubject ?? '',
@@ -2627,7 +2945,14 @@ const processMessage = async ({
 			relatedIssues,
 			workspaceUnits,
 			runId,
-			skipInitialEvent: true
+			skipInitialEvent: true,
+			autoPolicies,
+			autoPolicyMatch,
+			gmailSendContext: {
+				accessToken,
+				connectionId: connection.id,
+				connectionEmail: connection.email ?? ''
+			}
 		});
 		issueId = created?.issueId ?? issueId;
 		currentRunId = created?.runId ?? currentRunId;
@@ -2961,6 +3286,18 @@ const handleAppfolioWorkOrder = async ({
 		} catch {
 			urgencyPolicies = [];
 		}
+		let autoPolicies: Array<any> = [];
+		try {
+			const { data } = await supabase
+				.from('workspace_policies')
+				.select('id, description, meta')
+				.eq('workspace_id', workspaceId)
+				.eq('type', 'auto')
+				.order('updated_at', { ascending: false });
+			autoPolicies = data ?? [];
+		} catch {
+			autoPolicies = [];
+		}
 		const urgencyPolicyText = buildUrgencyPolicyText(urgencyPolicies);
 		const policyText = [policyRow?.policy_text ?? '', urgencyPolicyText]
 			.filter(Boolean)
@@ -2994,6 +3331,7 @@ const handleAppfolioWorkOrder = async ({
 			if (createdLog?.data?.from_email) tenantEmail = String(createdLog.data.from_email);
 		}
 		const description = issueRow.description ?? issueRow.name ?? '';
+		const autoPolicyMatch = findAutoPolicyMatch(autoPolicies, issueRow.name ?? description);
 
 		await runIssueAgent({
 			subject: issueRow.name,
@@ -3016,7 +3354,9 @@ const handleAppfolioWorkOrder = async ({
 			rootIssueId: issueId, // issue already exists — skip create_issue
 			workspaceUnits,
 			source: 'appfolio',
-			runId: null
+			runId: null,
+			autoPolicies,
+			autoPolicyMatch
 		});
 	}
 };

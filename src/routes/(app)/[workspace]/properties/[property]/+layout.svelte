@@ -81,7 +81,9 @@
 					+ New unit
 				</button>
 			{/if}
-			<SidebarButton onClick={toggleChatPanel} />
+			<div class="hidden sm:flex">
+				<SidebarButton onClick={toggleChatPanel} />
+			</div>
 		</div>
 	</div>
 

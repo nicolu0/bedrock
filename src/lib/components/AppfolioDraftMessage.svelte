@@ -1,7 +1,8 @@
 <script>
 	// @ts-nocheck
 	import { createEventDispatcher, onMount } from 'svelte';
-	import { fade, scale } from 'svelte/transition';
+	import TonePromptModal from '$lib/components/TonePromptModal.svelte';
+	import AutoPromptModal from '$lib/components/AutoPromptModal.svelte';
 	import { agentToasts } from '$lib/stores/agentToasts';
 	import { applyPolicyInsert } from '$lib/stores/policiesCache';
 	import { diffWords } from '$lib/utils/textDiff';
@@ -22,6 +23,9 @@
 	let showTonePrompt = false;
 	let tonePromptLoading = false;
 	let tonePromptError = '';
+	let showAutoPrompt = false;
+	let autoPromptLoading = false;
+	let autoPromptError = '';
 	let draftOriginal = draft?.original_body ?? null;
 	let draftDiff = draft?.draft_diff ?? null;
 	const APPROVAL_KEY = 'appfolio_approved_by';
@@ -72,6 +76,11 @@
 		if (draft?.draft_diff && draftDiff !== draft.draft_diff) {
 			draftDiff = draft.draft_diff;
 		}
+	}
+
+	$: if (textareaEl) {
+		textareaEl.style.height = 'auto';
+		textareaEl.style.height = `${textareaEl.scrollHeight}px`;
 	}
 
 	$: if (approvedBy && !approvedByLocal) {
@@ -137,6 +146,17 @@
 		showTonePrompt = true;
 	};
 
+	const closeAutoPrompt = () => {
+		if (autoPromptLoading) return;
+		showAutoPrompt = false;
+		autoPromptError = '';
+	};
+
+	const openAutoPrompt = () => {
+		autoPromptError = '';
+		showAutoPrompt = true;
+	};
+
 	const saveTonePolicy = async () => {
 		if (!draft?.issue_id) {
 			tonePromptError = 'Draft is missing an issue.';
@@ -172,6 +192,42 @@
 			return null;
 		} finally {
 			tonePromptLoading = false;
+		}
+	};
+
+	const saveAutoPolicy = async () => {
+		if (!draft?.issue_id) {
+			autoPromptError = 'Draft is missing an issue.';
+			return null;
+		}
+		if (!draftBody?.trim()) {
+			autoPromptError = 'Message template is empty.';
+			return null;
+		}
+		autoPromptLoading = true;
+		autoPromptError = '';
+		try {
+			const response = await fetch('/api/policies/auto', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					issue_id: draft.issue_id,
+					template: draftBody
+				})
+			});
+			const result = await response.json().catch(() => null);
+			if (!response.ok) {
+				throw new Error(result?.error ?? 'Unable to save auto policy.');
+			}
+			if (result?.policy) {
+				applyPolicyInsert(result.policy);
+			}
+			return result?.policy ?? null;
+		} catch (err) {
+			autoPromptError = err?.message ?? 'Unable to save auto policy.';
+			return null;
+		} finally {
+			autoPromptLoading = false;
 		}
 	};
 
@@ -230,7 +286,7 @@
 
 	const approveOnce = async () => {
 		closeTonePrompt();
-		await approveDraft();
+		openAutoPrompt();
 	};
 
 	const approveAndSave = async () => {
@@ -238,7 +294,7 @@
 		const policy = await saveTonePolicy();
 		if (!policy) return;
 		closeTonePrompt();
-		await approveDraft();
+		openAutoPrompt();
 	};
 
 	const handleApproveClick = () => {
@@ -247,7 +303,20 @@
 			openTonePrompt();
 			return;
 		}
-		approveDraft();
+		openAutoPrompt();
+	};
+
+	const requireApproval = async () => {
+		closeAutoPrompt();
+		await approveDraft();
+	};
+
+	const automateReply = async () => {
+		if (autoPromptLoading) return;
+		const policy = await saveAutoPolicy();
+		if (!policy) return;
+		closeAutoPrompt();
+		await approveDraft();
 	};
 
 	const queueSave = () => {
@@ -455,116 +524,27 @@
 			</div>
 		</div>
 
-		{#if showTonePrompt}
-			<div
-				class="fixed inset-0 z-40 bg-neutral-900/30"
-				on:click={closeTonePrompt}
-				transition:fade={{ duration: 160 }}
-			></div>
-			<div
-				class="fixed inset-0 z-50 flex items-center justify-center px-4"
-				on:click={closeTonePrompt}
-			>
-				<div
-					class="w-full max-w-4xl rounded-lg border border-neutral-200 bg-white shadow-xl"
-					role="dialog"
-					aria-modal="true"
-					on:click|stopPropagation
-					transition:scale={{ duration: 180, start: 0.96 }}
-				>
-					<div class="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
-						<div>
-							<div class="text-base font-semibold text-neutral-900">Draft Tone</div>
-							<div class="text-xs text-neutral-500">
-								Review how the message changed before approving.
-							</div>
-						</div>
-						<button
-							type="button"
-							class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:ring-1 focus-visible:ring-stone-400 focus-visible:outline-none"
-							on:click={closeTonePrompt}
-							disabled={tonePromptLoading}
-							aria-label="Close"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="24"
-								height="24"
-								fill="currentColor"
-								viewBox="0 0 16 16"
-							>
-								<path
-									d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"
-								/>
-							</svg>
-						</button>
-					</div>
-					<div class="px-5 py-4">
-						<div class="grid gap-4 md:grid-cols-2">
-							<div>
-								<div class="text-xs font-semibold text-neutral-600">Original</div>
-								<div
-									class="mt-2 max-h-80 overflow-auto rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm whitespace-pre-wrap text-neutral-700"
-								>
-									{#each diffColumns.original as segment}
-										<span
-											class={segment.type === 'delete'
-												? 'rounded-sm bg-rose-100 text-rose-800'
-												: ''}
-										>
-											{segment.text}
-										</span>
-									{/each}
-								</div>
-							</div>
-							<div>
-								<div class="text-xs font-semibold text-neutral-600">Current</div>
-								<div
-									class="mt-2 max-h-80 overflow-auto rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm whitespace-pre-wrap text-neutral-700"
-								>
-									{#each diffColumns.updated as segment}
-										<span
-											class={segment.type === 'insert'
-												? 'rounded-sm bg-emerald-100 text-emerald-800'
-												: ''}
-										>
-											{segment.text}
-										</span>
-									{/each}
-								</div>
-							</div>
-						</div>
-						<div class="mt-4 text-sm text-neutral-700">
-							Use this tone for similar Appfolio drafts moving forward?
-						</div>
-						{#if tonePromptError}
-							<div class="mt-2 text-xs text-rose-600">{tonePromptError}</div>
-						{/if}
-					</div>
-					<div class="flex items-center justify-end gap-2 border-t border-neutral-100 px-5 py-4">
-						<button
-							type="button"
-							class="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 transition hover:border-neutral-300"
-							on:click={approveOnce}
-							disabled={tonePromptLoading || isApproving}
-						>
-							Approve once
-						</button>
-						<button
-							type="button"
-							class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white transition hover:bg-neutral-800 disabled:opacity-60"
-							on:click={approveAndSave}
-							disabled={!hasToneDiff || tonePromptLoading || isApproving}
-						>
-							{#if tonePromptLoading}
-								Saving...
-							{:else}
-								Approve and save
-							{/if}
-						</button>
-					</div>
-				</div>
-			</div>
-		{/if}
+		<TonePromptModal
+			show={showTonePrompt}
+			{diffColumns}
+			errorMessage={tonePromptError}
+			onClose={closeTonePrompt}
+			onSecondary={approveOnce}
+			onPrimary={approveAndSave}
+			isLoading={tonePromptLoading}
+			secondaryDisabled={tonePromptLoading || isApproving}
+			primaryDisabled={!hasToneDiff || tonePromptLoading || isApproving}
+		/>
+		<AutoPromptModal
+			show={showAutoPrompt}
+			template={draftBody}
+			errorMessage={autoPromptError}
+			onClose={closeAutoPrompt}
+			onSecondary={requireApproval}
+			onPrimary={automateReply}
+			isLoading={autoPromptLoading}
+			secondaryDisabled={autoPromptLoading || isApproving}
+			primaryDisabled={autoPromptLoading || isApproving}
+		/>
 	</div>
 {/if}

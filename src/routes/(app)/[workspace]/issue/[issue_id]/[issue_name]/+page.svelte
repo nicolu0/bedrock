@@ -348,10 +348,10 @@
 	$: assignableMembers = [...assignmentPool]
 		.filter((member) => {
 			const r = (member?.role ?? '').toLowerCase();
-			return (r === 'admin' || r === 'member') && Boolean(member?.user_id);
+			return (r === 'admin' || r === 'bedrock' || r === 'member') && Boolean(member?.user_id);
 		})
 		.sort((a, b) => {
-			const order = { admin: 0, member: 1 };
+			const order = { admin: 0, bedrock: 1, member: 2 };
 			const rA = (a?.role ?? '').toLowerCase();
 			const rB = (b?.role ?? '').toLowerCase();
 			const roleDiff = (order[rA] ?? 9) - (order[rB] ?? 9);
@@ -1529,7 +1529,9 @@
 							/>
 						</svg>
 					</a>
-					<SidebarButton onClick={toggleChatPanel} />
+					<div class="hidden sm:flex">
+						<SidebarButton onClick={toggleChatPanel} />
+					</div>
 				</div>
 			</div>
 
