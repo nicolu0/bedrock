@@ -513,10 +513,10 @@ export const loadPeopleMembers = async (workspaceId) => {
 
 export const loadVendors = async (workspaceId) => {
 	const { data: vendors } = await supabaseAdmin
-		.from('people')
-		.select('id, name, email, role, user_id')
+		.from('vendors')
+		.select('id, name, email, trade')
 		.eq('workspace_id', workspaceId)
-		.eq('role', 'vendor');
+		.order('name', { ascending: true });
 	return vendors ?? [];
 };
 

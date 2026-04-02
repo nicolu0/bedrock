@@ -280,15 +280,20 @@
 					message_id: draft.message_id ?? null
 				})
 			});
-			if (!response.ok) throw new Error('approve failed');
 			const payload = await response.json().catch(() => null);
+			if (!response.ok) {
+				const reason = payload?.error ?? `HTTP ${response.status}`;
+				console.error('[AppfolioDraft] approve failed:', reason, payload);
+				throw new Error(reason);
+			}
 			approvedByLocal = payload?.approved_by ?? approvedByLocal ?? 'You';
 			const assigneeName = payload?.assignee_name ?? null;
 			showToast(
 				assigneeName ? `Approved and assigned to ${assigneeName}.` : 'Approved and assigned.'
 			);
-		} catch {
-			showToast('Appfolio approval failed.');
+		} catch (err) {
+			console.error('[AppfolioDraft] approve error:', err);
+			showToast(`Approval failed: ${err?.message ?? 'unknown error'}`);
 		} finally {
 			isApproving = false;
 		}

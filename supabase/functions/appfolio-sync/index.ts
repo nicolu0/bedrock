@@ -466,10 +466,9 @@ async function syncVendors(workspaceId: string, appfolioPropertyIds: number[]): 
 
 	for (const row of filtered) {
 		const vendorId = row.vendor_id;
-		const { error } = await supabase.from('people').upsert(
+		const { error } = await supabase.from('vendors').upsert(
 			{
 				workspace_id: workspaceId,
-				role: 'vendor',
 				appfolio_vendor_id: String(vendorId),
 				name: row.company_name || row.name || String(vendorId),
 				trade: row.vendor_trades ?? null,

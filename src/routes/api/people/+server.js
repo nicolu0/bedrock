@@ -36,13 +36,36 @@ export const GET = async ({ locals, url }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
-	const { data: people } = await supabaseAdmin
-		.from('people')
-		.select('id, name, email, role, trade, notes, pending, created_at, user_id')
-		.eq('workspace_id', workspace.id)
-		.order('name', { ascending: true });
+	const [{ data: people }, { data: vendorRows }] = await Promise.all([
+		supabaseAdmin
+			.from('people')
+			.select('id, name, email, role, trade, notes, pending, created_at, user_id')
+			.eq('workspace_id', workspace.id)
+			.order('name', { ascending: true }),
+		supabaseAdmin
+			.from('vendors')
+			.select('id, name, email, trade, note, phone, created_at')
+			.eq('workspace_id', workspace.id)
+			.order('name', { ascending: true })
+	]);
 
-	return json(people ?? []);
+	const mergedVendors = (vendorRows ?? []).map((v) => ({
+		id: v.id,
+		name: v.name,
+		email: v.email,
+		role: 'vendor',
+		trade: v.trade,
+		notes: v.note,
+		pending: false,
+		created_at: v.created_at,
+		user_id: null
+	}));
+
+	return json(
+		[...(people ?? []), ...mergedVendors].sort((a, b) =>
+			(a.name ?? '').localeCompare(b.name ?? '')
+		)
+	);
 };
 
 export const POST = async ({ locals, request, url }) => {
@@ -60,6 +83,34 @@ export const POST = async ({ locals, request, url }) => {
 	const allowed = await canAccessPeople(workspace.id, locals.user.id);
 	if (!allowed) {
 		return json({ error: 'Forbidden' }, { status: 403 });
+	}
+
+	if (role === 'vendor') {
+		const { data: vendorData, error: vendorError } = await supabaseAdmin
+			.from('vendors')
+			.insert({
+				workspace_id: workspace.id,
+				name,
+				email,
+				trade,
+				note: notes
+			})
+			.select('id, name, email, trade, note, created_at')
+			.single();
+		if (vendorError) {
+			return json({ error: vendorError.message }, { status: 500 });
+		}
+		return json({
+			id: vendorData.id,
+			name: vendorData.name,
+			email: vendorData.email,
+			role: 'vendor',
+			trade: vendorData.trade,
+			notes: vendorData.note,
+			pending: false,
+			created_at: vendorData.created_at,
+			user_id: null
+		});
 	}
 
 	const inviteEligible = role === 'admin' || role === 'member';
@@ -166,6 +217,30 @@ export const PATCH = async ({ locals, request }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
+	if (role === 'vendor') {
+		const { data: vendorData, error: vendorError } = await supabaseAdmin
+			.from('vendors')
+			.update({ name, email, trade, note: notes })
+			.eq('id', id)
+			.eq('workspace_id', workspace.id)
+			.select('id, name, email, trade, note, created_at')
+			.single();
+		if (vendorError) {
+			return json({ error: vendorError.message }, { status: 500 });
+		}
+		return json({
+			id: vendorData.id,
+			name: vendorData.name,
+			email: vendorData.email,
+			role: 'vendor',
+			trade: vendorData.trade,
+			notes: vendorData.note,
+			pending: false,
+			created_at: vendorData.created_at,
+			user_id: null
+		});
+	}
+
 	const { data, error } = await supabaseAdmin
 		.from('people')
 		.update({ name, email, role, trade, notes, updated_at: new Date().toISOString() })
@@ -196,6 +271,25 @@ export const DELETE = async ({ locals, request }) => {
 	const allowed = await canAccessPeople(workspace.id, locals.user.id);
 	if (!allowed) {
 		return json({ error: 'Forbidden' }, { status: 403 });
+	}
+
+	const { data: vendorCheck } = await supabaseAdmin
+		.from('vendors')
+		.select('id')
+		.eq('id', id)
+		.eq('workspace_id', workspace.id)
+		.maybeSingle();
+
+	if (vendorCheck?.id) {
+		const { error } = await supabaseAdmin
+			.from('vendors')
+			.delete()
+			.eq('id', id)
+			.eq('workspace_id', workspace.id);
+		if (error) {
+			return json({ error: error.message }, { status: 500 });
+		}
+		return json({ id });
 	}
 
 	const { data: person } = await supabaseAdmin

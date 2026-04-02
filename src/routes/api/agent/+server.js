@@ -36,10 +36,9 @@ const listWorkspaceUnitsForAgent = async (workspaceId) => {
 
 const listVendors = async (workspaceId) => {
 	const { data } = await supabaseAdmin
-		.from('people')
+		.from('vendors')
 		.select('id, name, email, trade')
 		.eq('workspace_id', workspaceId)
-		.eq('role', 'vendor')
 		.order('name', { ascending: true });
 	return data ?? [];
 };
@@ -2261,10 +2260,9 @@ When you believe you have completed the task, call done().
 							throw new Error('draft_reply missing vendor_id');
 						}
 						const { data: vendorRow } = await supabaseAdmin
-							.from('people')
+							.from('vendors')
 							.select('email')
 							.eq('id', vendorId)
-							.eq('role', 'vendor')
 							.maybeSingle();
 						recipientEmail = vendorRow?.email ?? '';
 					} else if (threadRow.participant_type === 'unknown') {

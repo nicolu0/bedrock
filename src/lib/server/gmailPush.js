@@ -180,9 +180,17 @@ const getWorkspacePersonMatch = async ({ workspaceId, senderEmail }) => {
 		.select('id, role')
 		.eq('workspace_id', workspaceId)
 		.ilike('email', senderEmail)
-		.in('role', ['admin', 'bedrock', 'member', 'vendor'])
+		.in('role', ['admin', 'bedrock', 'member'])
 		.maybeSingle();
-	return data ?? null;
+	if (data) return data;
+	const { data: vendorData } = await supabase
+		.from('vendors')
+		.select('id')
+		.eq('workspace_id', workspaceId)
+		.ilike('email', senderEmail)
+		.maybeSingle();
+	if (vendorData) return { id: vendorData.id, role: 'vendor' };
+	return null;
 };
 
 const getPolicyMatch = async ({ workspaceId, senderEmail }) => {
