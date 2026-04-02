@@ -485,10 +485,9 @@ const listOpenIssues = async (unitId: string | null) => {
 
 const listVendors = async (workspaceId: string) => {
 	const { data } = await supabase
-		.from('people')
+		.from('vendors')
 		.select('id, name, email, trade')
 		.eq('workspace_id', workspaceId)
-		.eq('role', 'vendor')
 		.order('name', { ascending: true });
 	return data ?? [];
 };
@@ -615,9 +614,17 @@ const getWorkspacePersonMatch = async ({
 		.select('id, role')
 		.eq('workspace_id', workspaceId)
 		.ilike('email', senderEmail)
-		.in('role', ['admin', 'member', 'vendor'])
+		.in('role', ['admin', 'member'])
 		.maybeSingle();
-	return data ?? null;
+	if (data) return data;
+	const { data: vendorData } = await supabase
+		.from('vendors')
+		.select('id')
+		.eq('workspace_id', workspaceId)
+		.ilike('email', senderEmail)
+		.maybeSingle();
+	if (vendorData) return { id: vendorData.id, role: 'vendor' };
+	return null;
 };
 
 const getPolicyMatch = async ({
@@ -2087,10 +2094,9 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 							throw new Error('draft_reply missing vendor_id');
 						}
 						const { data: vendorRow } = await supabase
-							.from('people')
+							.from('vendors')
 							.select('email')
 							.eq('id', vendorId)
-							.eq('role', 'vendor')
 							.maybeSingle();
 						recipientEmail = vendorRow?.email ?? '';
 					} else if (threadRow.participant_type === 'unknown') {

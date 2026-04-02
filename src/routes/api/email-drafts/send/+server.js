@@ -289,10 +289,9 @@ export const POST = async ({ locals, request }) => {
 	if (!messageId) {
 		const primaryRecipient = effectiveRecipients[0]?.trim() ?? '';
 		const { data: vendorRow } = await supabaseAdmin
-			.from('people')
+			.from('vendors')
 			.select('id')
 			.eq('workspace_id', workspaceId)
-			.eq('role', 'vendor')
 			.ilike('email', primaryRecipient)
 			.maybeSingle();
 		const { data: createdThread, error: threadError } = await supabaseAdmin
