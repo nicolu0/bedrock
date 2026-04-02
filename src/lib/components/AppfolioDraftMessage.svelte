@@ -28,6 +28,7 @@
 	let autoPromptError = '';
 	let draftOriginal = draft?.original_body ?? null;
 	let draftDiff = draft?.draft_diff ?? null;
+	let showOriginal = false;
 	const APPROVAL_KEY = 'appfolio_approved_by';
 	const getApprovalStorageKey = () =>
 		`${APPROVAL_KEY}:${draft?.issue_id ?? 'unknown'}:${draft?.message_id ?? draft?.id ?? 'draft'}`;
@@ -36,6 +37,15 @@
 	let showVendorPicker = false;
 	let vendorSearch = '';
 	let pickerEl;
+	let changeButtonEl;
+	let dropdownEl;
+	let pickerStyle = '';
+
+	const updatePickerPosition = () => {
+		if (!changeButtonEl) return;
+		const rect = changeButtonEl.getBoundingClientRect();
+		pickerStyle = `position:fixed;top:${rect.bottom + 4}px;left:${rect.left}px;z-index:50;`;
+	};
 
 	$: filteredVendors = searchVendors(vendors, vendorSearch);
 	$: suggestedVendors = recommendedVendors ?? [];
@@ -331,7 +341,15 @@
 	};
 
 	const handleClickOutside = (e) => {
-		if (showVendorPicker && pickerEl && !pickerEl.contains(e.target)) {
+		if (showVendorPicker && !pickerEl?.contains(e.target) && !dropdownEl?.contains(e.target)) {
+			showVendorPicker = false;
+			vendorSearch = '';
+		}
+	};
+
+	const handleKeydown = (e) => {
+		if (showVendorPicker && e.key === 'Escape') {
+			e.stopPropagation();
 			showVendorPicker = false;
 			vendorSearch = '';
 		}
@@ -367,43 +385,47 @@
 	$: hasToneDiff = hasMeaningfulDiff(diffSegments);
 </script>
 
-<svelte:window on:mousedown={handleClickOutside} />
+<svelte:window on:mousedown={handleClickOutside} on:keydown|capture={handleKeydown} />
 
 {#if draft}
 	<div>
-		<div class="overflow-hidden rounded-md border border-neutral-100 bg-white">
+		<div class="rounded-md border border-neutral-100 bg-white">
 			<div class="bg-white">
-				<div class="px-4 py-3">
-					<div class="text-sm font-semibold text-neutral-900">Drafted reply</div>
-				</div>
-
-				{#if suggestedVendors.length > 0 || vendors.length > 0}
-					<div class="border-t border-neutral-100 px-4 py-2">
+				{#if currentRecipientEmail || suggestedVendors.length > 0 || vendors.length > 0}
+					<div class="px-4 py-2">
 						<div class="relative flex items-center gap-2" bind:this={pickerEl}>
 							<span class="text-xs text-neutral-500">To:</span>
 							{#if currentVendorName}
 								<span class="text-xs font-medium text-neutral-800">{currentVendorName}</span>
+							{:else if !currentRecipientEmail}
+								<span class="text-xs font-medium text-neutral-800">Tenant</span>
 							{:else}
 								<span class="text-xs text-neutral-400">No vendor selected</span>
 							{/if}
+							{#if currentRecipientEmail || currentVendorName}
 							<button
-								class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500 hover:bg-neutral-100"
+								bind:this={changeButtonEl}
+								class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500 hover:bg-neutral-100 focus:outline-none focus:ring-0"
 								type="button"
 								on:click={() => {
 									showVendorPicker = !showVendorPicker;
 									vendorSearch = '';
+									if (showVendorPicker) updatePickerPosition();
 								}}
 							>
 								Change
 							</button>
+							{/if}
 
 							{#if showVendorPicker}
 								<div
-									class="absolute top-7 left-0 z-20 w-72 overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg"
+									bind:this={dropdownEl}
+									class="w-72 overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg"
+									style={pickerStyle}
 								>
 									<div class="border-b border-neutral-100 px-3 py-2">
 										<input
-											class="w-full border-0 bg-transparent p-0 text-xs text-neutral-700 outline-none placeholder:text-neutral-400"
+											class="w-full border-0 bg-transparent p-0 text-xs text-neutral-700 outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-neutral-400"
 											placeholder="Search vendors..."
 											bind:value={vendorSearch}
 											autofocus
@@ -488,14 +510,58 @@
 						bind:this={textareaEl}
 						on:input={queueSave}
 					/>
+					{#if showOriginal}
+						<div class="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+							<div class="grid gap-4 md:grid-cols-2">
+								<div>
+									<div class="text-xs font-semibold text-neutral-600">Original</div>
+									<div class="mt-2 text-sm whitespace-pre-wrap text-neutral-700">
+										{#each diffColumns.original as segment}
+											<span
+												class={segment.type === 'delete'
+													? 'rounded-sm bg-rose-100 text-rose-800'
+													: ''}
+											>
+												{segment.text}
+											</span>
+										{/each}
+									</div>
+								</div>
+								<div>
+									<div class="text-xs font-semibold text-neutral-600">Current</div>
+									<div class="mt-2 text-sm whitespace-pre-wrap text-neutral-700">
+										{#each diffColumns.updated as segment}
+											<span
+												class={segment.type === 'insert'
+													? 'rounded-sm bg-emerald-100 text-emerald-800'
+													: ''}
+											>
+												{segment.text}
+											</span>
+										{/each}
+									</div>
+								</div>
+							</div>
+						</div>
+					{/if}
 					<div class="mt-3 flex items-center justify-between">
+						<div class="flex items-center gap-3">
+							<button
+								type="button"
+								class="inline-flex items-center gap-2 text-xs text-neutral-500 transition hover:text-neutral-900 disabled:opacity-50"
+								on:click={() => (showOriginal = !showOriginal)}
+								disabled={!originalBodyForDiff && !draftBody}
+							>
+								{showOriginal ? 'Hide original' : 'View original'}
+							</button>
+						</div>
 						{#if approvedByLocal}
 							<span class="text-xs font-semibold text-emerald-700">
 								Approved by {approvedByLocal}
 							</span>
 						{:else}
 							<button
-								class="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
+								class="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
 								type="button"
 								on:click={handleApproveClick}
 								disabled={isApproving}
