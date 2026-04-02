@@ -360,6 +360,8 @@
 			? $notificationsCache.data.notifications
 			: [];
 	$: inboxCount = _inboxNotifications.filter((n) => !n.is_read && !n.is_resolved).length;
+	$: inboxCountLabel = String(inboxCount);
+	$: inboxCountCompact = inboxCountLabel.length === 1;
 	$: isIssueRoute = $page.url.pathname.includes('/issue/');
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	$: isSettingsRoute = $page.url.pathname.startsWith(`${basePath}/settings`);
@@ -777,16 +779,16 @@
 									{#if item.id === 'inbox' && inboxCount > 0}
 										<span class="ml-auto inline-flex min-w-[18px] items-center justify-center">
 											<span
-												class="inline-flex h-5 min-w-5 items-center justify-center rounded bg-neutral-200/70 px-1.5 text-[11px] leading-none font-medium text-neutral-800"
+												class="inline-flex items-center justify-center rounded bg-neutral-200/70 px-2 py-1 text-[11px] leading-none font-medium whitespace-nowrap text-neutral-800"
 											>
-												<span class="relative h-3.5 min-w-[1ch] overflow-hidden">
+												<span class="inline-flex whitespace-nowrap">
 													{#key inboxCount}
 														<span
 															in:fly={{ y: 6, duration: 160, delay: 260 }}
 															out:fly={{ y: -6, duration: 160, opacity: 0 }}
-															class="absolute inset-0 inline-flex items-center justify-center"
+															class="inline-flex items-center justify-center"
 														>
-															{inboxCount}
+															{inboxCountLabel}
 														</span>
 													{/key}
 												</span>
