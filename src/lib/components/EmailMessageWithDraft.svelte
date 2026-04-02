@@ -515,7 +515,7 @@
 <svelte:window on:click={handleWindowClick} />
 
 <div>
-	<div class="overflow-hidden rounded-md border border-neutral-100 bg-white">
+	<div class="overflow-visible rounded-md border border-neutral-100 bg-white">
 		{#if !draft}
 			<button
 				type="button"
@@ -677,13 +677,6 @@
 										{/if}
 
 										{#if filteredAll.length > 0}
-											<div class="px-3 pt-2 pb-0.5">
-												<div
-													class="text-[10px] font-semibold tracking-wide text-neutral-400 uppercase"
-												>
-													{filteredSuggested.length > 0 ? 'All Vendors' : 'Vendors'}
-												</div>
-											</div>
 											{#each filteredAll as person}
 												<button
 													type="button"
