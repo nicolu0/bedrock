@@ -2608,9 +2608,9 @@
 										{#if getThreadSubject(issueId)}
 											<div class="flex items-center gap-2">
 												<div class="flex items-center justify-center">
-													{#if isAppfolioIssue}
+													{#if (messagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
 														<svg
-															class="h-6 w-6"
+															class="h-7 w-7"
 															viewBox="0 0 1024 1024"
 															fill="none"
 															xmlns="http://www.w3.org/2000/svg"
@@ -2623,9 +2623,9 @@
 															/>
 															</g>
 														</svg>
-													{:else if isAppfolioIssue}
+													{:else if (messagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
 														<svg
-															class="h-6 w-6"
+															class="h-7 w-7"
 															viewBox="0 0 1024 1024"
 															fill="none"
 															xmlns="http://www.w3.org/2000/svg"
@@ -2686,7 +2686,7 @@
 											</div>
 										{:else if (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
 											<div class="flex items-center gap-2">
-												{#if !isAppfolioIssue}
+												{#if !(replyDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
 													<div class="flex items-center justify-center">
 														<svg
 															class="h-6 w-6 text-neutral-500"
@@ -2755,7 +2755,7 @@
 								{#if (newDraftsByIssue[issueId]?.length ?? 0) > 0}
 									<div class="space-y-3">
 										<div class="flex items-center gap-2">
-											{#if !isAppfolioIssue}
+											{#if !(newDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
 												<div class="flex items-center justify-center">
 													<svg
 														class="h-[26px] w-[26px]"
@@ -2800,7 +2800,7 @@
 												<h3 class="text-base font-semibold text-neutral-900">Email drafted</h3>
 											{:else}
 													<svg
-														class="h-6 w-6"
+														class="h-7 w-7"
 														viewBox="0 0 1024 1024"
 														fill="none"
 														xmlns="http://www.w3.org/2000/svg"
@@ -2907,10 +2907,9 @@
 															{#if getThreadSubject(subIssue.id)}
 																<div class="flex items-center gap-2">
 																	<div class="flex items-center justify-center">
-																		{#if isAppfolioIssue}
+																		{#if (messagesByIssue[subIssue.id] ?? []).some((m) => m.channel === 'appfolio')}
 																			<svg
-																				width="18"
-																				height="18"
+																				class="h-7 w-7"
 																				viewBox="0 0 1024 1024"
 																				fill="none"
 																				xmlns="http://www.w3.org/2000/svg"
@@ -2971,7 +2970,7 @@
 																</div>
 															{:else if (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 																<div class="flex items-center gap-2">
-																	{#if !isAppfolioIssue}
+																	{#if !(replyDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
 																		<div class="flex items-center justify-center">
 																			<svg
 																				width="18"
@@ -3050,7 +3049,7 @@
 													{#if (newDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 														<div class="space-y-3">
 															<div class="flex items-center gap-2">
-																{#if !isAppfolioIssue}
+																{#if !(newDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
 																	<div class="flex items-center justify-center">
 																		<svg
 																			class="h-[26px] w-[26px]"
@@ -3097,8 +3096,7 @@
 																	</h3>
 																{:else}
 																		<svg
-																			width="18"
-																			height="18"
+																			class="h-7 w-7"
 																			viewBox="0 0 1024 1024"
 																			fill="none"
 																			xmlns="http://www.w3.org/2000/svg"
