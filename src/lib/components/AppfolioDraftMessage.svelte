@@ -299,6 +299,12 @@
 			}
 			approvedByLocal = payload?.approved_by ?? approvedByLocal ?? 'You';
 			const assigneeName = payload?.assignee_name ?? null;
+			dispatch('assigneeUpdated', {
+				issueId: payload?.issue_id ?? draft.issue_id,
+				parentIssueId: payload?.parent_issue_id ?? null,
+				assigneeId: payload?.assignee_id ?? null,
+				assigneeName
+			});
 			showToast(
 				assigneeName ? `Approved and assigned to ${assigneeName}.` : 'Approved and assigned.'
 			);

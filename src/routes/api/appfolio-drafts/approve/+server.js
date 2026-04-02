@@ -28,7 +28,7 @@ export const POST = async ({ locals, request }) => {
 
 	const { data: issue } = await supabaseAdmin
 		.from('issues')
-		.select('id, workspace_id, name')
+		.select('id, workspace_id, name, parent_id')
 		.eq('id', issueId)
 		.maybeSingle();
 	if (!issue?.id || !issue.workspace_id) {
@@ -85,6 +85,13 @@ export const POST = async ({ locals, request }) => {
 		.update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
 		.eq('id', issue.id);
 
+	if (issue.parent_id) {
+		await supabaseAdmin
+			.from('issues')
+			.update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
+			.eq('id', issue.parent_id);
+	}
+
 	const { data: approver } = await supabaseAdmin
 		.from('users')
 		.select('name')
@@ -126,6 +133,8 @@ export const POST = async ({ locals, request }) => {
 		ok: true,
 		approved_by: approvedBy,
 		assignee_id: assigneeId,
-		assignee_name: assigneeName
+		assignee_name: assigneeName,
+		issue_id: issue.id,
+		parent_issue_id: issue.parent_id ?? null
 	});
 };

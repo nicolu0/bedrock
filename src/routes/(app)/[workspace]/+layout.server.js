@@ -3,11 +3,12 @@ import { redirect, error } from '@sveltejs/kit';
 import { ensureWorkspace } from '$lib/server/workspaces';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
-export const load = async ({ locals, params, depends }) => {
+export const load = async ({ locals, params, depends, url }) => {
 	depends('app:properties');
 	depends('app:units');
 	if (!locals.user) {
-		throw redirect(303, '/');
+		const returnTo = encodeURIComponent(`${url.pathname}${url.search}`);
+		throw redirect(303, `/login?returnTo=${returnTo}`);
 	}
 	let userName =
 		locals.user.user_metadata?.name ??

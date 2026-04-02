@@ -3,8 +3,15 @@ import { fail, redirect } from '@sveltejs/kit';
 import { ensureWorkspace, getWorkspaceForUser } from '$lib/server/workspaces';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
+const getSafeReturnTo = (value) => {
+	if (!value || typeof value !== 'string') return null;
+	if (value.startsWith('/') && !value.startsWith('//')) return value;
+	return null;
+};
+
 /** @type {import('./$types').PageServerLoad} */
 export const load = async ({ locals, url }) => {
+	const returnTo = getSafeReturnTo(url.searchParams.get('returnTo'));
 	if (!locals.user) {
 		const inviteToken = url.searchParams.get('invite');
 		let inviteEmail = null;
@@ -29,10 +36,13 @@ export const load = async ({ locals, url }) => {
 				}
 			}
 		}
-		return { inviteToken, inviteEmail, inviteName };
+		return { inviteToken, inviteEmail, inviteName, returnTo };
 	}
 	await ensureWorkspace(locals.supabase, locals.user);
 	const workspace = await getWorkspaceForUser(locals.supabase, locals.user);
+	if (returnTo) {
+		throw redirect(303, returnTo);
+	}
 	if (workspace?.slug) {
 		throw redirect(303, `/${workspace.slug}`);
 	}
@@ -46,6 +56,7 @@ export const actions = {
 		const email = form.get('email');
 		const password = form.get('password');
 		const inviteToken = form.get('invite_token') || null;
+		const returnTo = getSafeReturnTo(form.get('return_to'));
 
 		if (!email || !password) {
 			return fail(400, { error: 'Email and password are required.' });
@@ -62,6 +73,9 @@ export const actions = {
 		}
 
 		const workspace = await ensureWorkspace(locals.supabase, authData.user);
+		if (returnTo) {
+			throw redirect(303, returnTo);
+		}
 		if (workspace?.slug) {
 			throw redirect(303, `/${workspace.slug}`);
 		}
