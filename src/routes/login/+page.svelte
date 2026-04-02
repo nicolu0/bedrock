@@ -30,7 +30,7 @@
 <div class="relative flex min-h-screen flex-col items-center justify-center bg-white px-6">
 	<div
 		class={`flex w-full flex-col items-center justify-center transition-opacity duration-200 ${
-			loading ? 'opacity-35' : 'opacity-100'
+			loading ? 'pointer-events-none opacity-0' : 'opacity-100'
 		}`}
 	>
 		<a
@@ -88,7 +88,7 @@
 	</div>
 	{#if loading}
 		<div
-			class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-white/85 px-6 text-center backdrop-blur-sm"
+			class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-white px-6 text-center"
 			aria-live="polite"
 		>
 			<div
