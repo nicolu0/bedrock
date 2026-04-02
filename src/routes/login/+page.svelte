@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { enhance } from '$app/forms';
 	const defaultEmail = 'jose@lapropertymgmt.com';
 	/** @type {HTMLInputElement | null} */
@@ -11,7 +11,8 @@
 
 	$: emailValue = data.inviteEmail ?? defaultEmail;
 
-	onMount(() => {
+	onMount(async () => {
+		await tick();
 		passwordInput?.focus();
 		passwordInput?.select?.();
 	});
