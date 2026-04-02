@@ -561,7 +561,7 @@
 							</span>
 						{:else}
 							<button
-								class="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
+								class="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
 								type="button"
 								on:click={handleApproveClick}
 								disabled={isApproving}
