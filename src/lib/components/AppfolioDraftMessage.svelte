@@ -390,12 +390,8 @@
 	<div>
 		<div class="rounded-md border border-neutral-100 bg-white">
 			<div class="bg-white">
-				<div class="px-4 py-3">
-					<div class="text-sm font-semibold text-neutral-900">Drafted reply</div>
-				</div>
-
 				{#if currentRecipientEmail || suggestedVendors.length > 0 || vendors.length > 0}
-					<div class="border-t border-neutral-100 px-4 py-2">
+					<div class="px-4 py-2">
 						<div class="relative flex items-center gap-2" bind:this={pickerEl}>
 							<span class="text-xs text-neutral-500">To:</span>
 							{#if currentVendorName}
@@ -502,6 +498,12 @@
 								</div>
 							{/if}
 						</div>
+					</div>
+				{/if}
+
+				{#if draft?.subject}
+					<div class="border-t border-neutral-100 px-4 py-2">
+						<div class="text-sm text-neutral-900">{draft.subject}</div>
 					</div>
 				{/if}
 
