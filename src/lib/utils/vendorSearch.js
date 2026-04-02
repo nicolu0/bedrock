@@ -25,20 +25,24 @@ export function searchVendors(vendors, query) {
 	const q = query.trim().toLowerCase();
 	if (!q) return vendors;
 
-	// Find all trade aliases that match the query
-	const matchedTrades = Object.entries(TRADE_ALIASES)
-		.filter(([key, aliases]) => key.includes(q) || aliases.some((a) => a.includes(q)))
-		.flatMap(([, aliases]) => aliases);
+	const terms = q.split(/\s+/).filter(Boolean);
+
+	// Find all trade aliases that match each term
+	const tradeAliasesForTerm = (term) =>
+		Object.entries(TRADE_ALIASES)
+			.filter(([key, aliases]) => key.includes(term) || aliases.some((a) => a.includes(term)))
+			.flatMap(([, aliases]) => aliases);
+
+	const termMatchesVendor = (term, name, email, trade) =>
+		name.includes(term) ||
+		email.includes(term) ||
+		trade.includes(term) ||
+		tradeAliasesForTerm(term).some((t) => trade.includes(t));
 
 	return vendors.filter((v) => {
 		const name = (v.name ?? '').toLowerCase();
 		const email = (v.email ?? '').toLowerCase();
 		const trade = (v.trade ?? '').toLowerCase();
-		return (
-			name.includes(q) ||
-			email.includes(q) ||
-			trade.includes(q) ||
-			matchedTrades.some((t) => trade.includes(t))
-		);
+		return terms.every((term) => termMatchesVendor(term, name, email, trade));
 	});
 }
