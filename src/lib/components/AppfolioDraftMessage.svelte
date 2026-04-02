@@ -47,6 +47,11 @@
 		pickerStyle = `position:fixed;top:${rect.bottom + 4}px;left:${rect.left}px;z-index:50;`;
 	};
 
+	const handlePickerReposition = () => {
+		if (!showVendorPicker) return;
+		updatePickerPosition();
+	};
+
 	$: filteredVendors = searchVendors(vendors, vendorSearch);
 	$: suggestedVendors = recommendedVendors ?? [];
 
@@ -107,6 +112,12 @@
 		if (stored && !approvedByLocal) {
 			approvedByLocal = stored;
 		}
+		window.addEventListener('scroll', handlePickerReposition, true);
+		window.addEventListener('resize', handlePickerReposition);
+		return () => {
+			window.removeEventListener('scroll', handlePickerReposition, true);
+			window.removeEventListener('resize', handlePickerReposition);
+		};
 	});
 
 	const showToast = (message, id) => {
@@ -408,18 +419,18 @@
 								<span class="text-xs text-neutral-400">No vendor selected</span>
 							{/if}
 							{#if currentRecipientEmail || currentVendorName}
-							<button
-								bind:this={changeButtonEl}
-								class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500 hover:bg-neutral-100 focus:outline-none focus:ring-0"
-								type="button"
-								on:click={() => {
-									showVendorPicker = !showVendorPicker;
-									vendorSearch = '';
-									if (showVendorPicker) updatePickerPosition();
-								}}
-							>
-								Change
-							</button>
+								<button
+									bind:this={changeButtonEl}
+									class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500 hover:bg-neutral-100 focus:ring-0 focus:outline-none"
+									type="button"
+									on:click={() => {
+										showVendorPicker = !showVendorPicker;
+										vendorSearch = '';
+										if (showVendorPicker) updatePickerPosition();
+									}}
+								>
+									Change
+								</button>
 							{/if}
 
 							{#if showVendorPicker}
@@ -430,7 +441,7 @@
 								>
 									<div class="border-b border-neutral-100 px-3 py-2">
 										<input
-											class="w-full border-0 bg-transparent p-0 text-xs text-neutral-700 outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-neutral-400"
+											class="w-full border-0 bg-transparent p-0 text-xs text-neutral-700 ring-0 outline-none placeholder:text-neutral-400 focus:ring-0 focus:outline-none"
 											placeholder="Search vendors..."
 											bind:value={vendorSearch}
 											autofocus

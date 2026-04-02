@@ -77,6 +77,14 @@
 	};
 	const computeOverlayIssues = () => {
 		const issues = $issuesCache?.data?.issues ?? [];
+		const issuesById = new Map((issues ?? []).map((issue) => [issue?.id, issue]));
+		const parentUpdates = new Map();
+		for (const issue of issues ?? []) {
+			const parentId = issue?.parentId ?? issue?.parent_id ?? null;
+			if (!parentId) continue;
+			if (issue?.hasUnseenUpdates !== true) continue;
+			parentUpdates.set(parentId, true);
+		}
 		const normalizeStatus = (value) => {
 			if (!value) return 'todo';
 			const normalized = String(value).toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
@@ -95,11 +103,13 @@
 			return 3;
 		};
 		return (issues ?? [])
-			.filter((issue) => issue?.hasUnseenUpdates === true)
 			.filter((issue) => {
 				const parentId = issue?.parentId ?? issue?.parent_id ?? null;
-				return !parentId;
+				return !parentId || !issuesById.has(parentId);
 			})
+			.filter(
+				(issue) => issue?.hasUnseenUpdates === true || parentUpdates.get(issue?.id ?? null) === true
+			)
 			.sort((a, b) => {
 				const aUrgent = a?.urgent ?? false;
 				const bUrgent = b?.urgent ?? false;
@@ -135,16 +145,16 @@
 		overlayIssues = computeOverlayIssues();
 		showWelcomeOverlay = true;
 	};
-	const dismissWelcomeOverlay = () => {
+	const dismissWelcomeOverlay = ({ force = false } = {}) => {
 		if (!browser) return;
-		if (overlayEmptyState) return;
+		if (overlayEmptyState && !force) return;
 		showWelcomeOverlay = false;
 		overlayDismissed = true;
 		localStorage.setItem('chat:dismissed_at', String(Date.now()));
 	};
 	const toggleWelcomeOverlay = () => {
 		if (showWelcomeOverlay) {
-			dismissWelcomeOverlay();
+			dismissWelcomeOverlay({ force: true });
 			return;
 		}
 		overlayDismissed = false;
@@ -154,7 +164,7 @@
 	const sendMessage = async () => {
 		const trimmed = messageBody.trim();
 		if (!trimmed || sending) return;
-		if (showWelcomeOverlay) dismissWelcomeOverlay();
+		if (showWelcomeOverlay && !overlayEmptyState) dismissWelcomeOverlay();
 		sending = true;
 		startChatStreaming();
 		const userMessage = {
@@ -376,7 +386,8 @@
 		}
 		if (browser) {
 			localStorage.setItem('chat:last_open_at', String(Date.now()));
-			const noMessagesYet = (loadedMessages ?? []).length === 0;
+			const currentMessages = get(chatMessages);
+			const noMessagesYet = (currentMessages ?? []).length === 0;
 			if (noMessagesYet) {
 				overlayDismissed = false;
 				openEmptyUpdatesOverlay();
@@ -400,14 +411,14 @@
 <div class="relative flex h-full flex-col">
 	<button
 		type="button"
-		class="pointer-events-auto absolute top-3 right-3 z-50 flex h-6 w-6 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-500"
+		class="pointer-events-auto absolute top-3 right-3 z-50 flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-500"
 		aria-label="Show updates"
 		on:click={toggleWelcomeOverlay}
 	>
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
-			width="16"
-			height="16"
+			width="13"
+			height="13"
 			fill="currentColor"
 			class="bi bi-bell-fill"
 			viewBox="0 0 16 16"
@@ -418,10 +429,10 @@
 		</svg>
 	</button>
 	<div
-		class="pointer-events-none absolute top-0 right-0 left-0 z-40 h-24 bg-gradient-to-b from-white via-white/90 to-transparent"
+		class="pointer-events-none absolute top-0 right-0 left-0 z-40 h-16 bg-gradient-to-b from-white via-white/90 to-transparent"
 	></div>
 	<div
-		class="relative flex-1 overflow-y-auto px-3 pt-6 pb-40"
+		class="relative flex-1 overflow-y-auto px-3 pt-16 pb-40"
 		bind:this={messagesContainer}
 		on:scroll={handleScroll}
 		class:pointer-events-none={showWelcomeOverlay}
@@ -527,7 +538,7 @@
 	{#if showWelcomeOverlay}
 		<div
 			class="absolute inset-0 z-40 flex h-full w-full flex-col bg-white/85 px-4 pb-24 text-left backdrop-blur-sm"
-			on:click={dismissWelcomeOverlay}
+			on:click={() => !overlayEmptyState && dismissWelcomeOverlay()}
 		>
 			<div class="flex flex-1 flex-col justify-center">
 				<div class="pl-3 text-xl font-semibold text-neutral-900">{overlayGreeting}</div>
@@ -536,7 +547,11 @@
 				</p>
 				<div class="mt-4 space-y-1 text-left">
 					{#each overlayIssues as issue}
-						<div on:click|stopPropagation={() => dismissWelcomeOverlay()}>
+						<div
+							on:click|stopPropagation={() => {
+								if (!overlayEmptyState) dismissWelcomeOverlay();
+							}}
+						>
 							<ChatIssueRow {issue} />
 						</div>
 					{/each}
