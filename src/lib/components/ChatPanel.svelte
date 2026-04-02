@@ -35,6 +35,7 @@
 	let overlayGreeting = '';
 	let overlayIssues = [];
 	let overlayDismissed = false;
+	let overlayEmptyState = false;
 	const OVERLAY_AWAY_MINUTES = 30;
 
 	const resizeChatTextarea = () => {
@@ -76,9 +77,35 @@
 	};
 	const computeOverlayIssues = () => {
 		const issues = $issuesCache?.data?.issues ?? [];
+		const normalizeStatus = (value) => {
+			if (!value) return 'todo';
+			const normalized = String(value).toLowerCase().trim().replace(/\s+/g, '_').replace(/-/g, '_');
+			if (normalized === 'in_progress') return 'in_progress';
+			if (normalized === 'done' || normalized === 'completed' || normalized === 'complete')
+				return 'done';
+			if (normalized === 'todo' || normalized === 'to_do' || normalized === 'backlog')
+				return 'todo';
+			return normalized;
+		};
+		const statusRank = (value) => {
+			const normalized = normalizeStatus(value);
+			if (normalized === 'todo') return 0;
+			if (normalized === 'in_progress') return 1;
+			if (normalized === 'done') return 2;
+			return 3;
+		};
 		return (issues ?? [])
 			.filter((issue) => issue?.hasUnseenUpdates === true)
+			.filter((issue) => {
+				const parentId = issue?.parentId ?? issue?.parent_id ?? null;
+				return !parentId;
+			})
 			.sort((a, b) => {
+				const aUrgent = a?.urgent ?? false;
+				const bUrgent = b?.urgent ?? false;
+				if (aUrgent !== bUrgent) return aUrgent ? -1 : 1;
+				const statusDiff = statusRank(a?.status) - statusRank(b?.status);
+				if (statusDiff !== 0) return statusDiff;
 				const aTs = new Date(a?.updated_at ?? a?.updatedAt ?? 0).getTime();
 				const bTs = new Date(b?.updated_at ?? b?.updatedAt ?? 0).getTime();
 				return bTs - aTs;
@@ -96,12 +123,21 @@
 	};
 	const openWelcomeOverlay = () => {
 		if (!browser) return;
+		overlayEmptyState = false;
 		overlayGreeting = getUserGreeting();
 		overlayIssues = computeOverlayIssues();
 		showWelcomeOverlay = overlayIssues.length > 0;
 	};
+	const openEmptyUpdatesOverlay = () => {
+		if (!browser) return;
+		overlayEmptyState = true;
+		overlayGreeting = getUserGreeting();
+		overlayIssues = computeOverlayIssues();
+		showWelcomeOverlay = true;
+	};
 	const dismissWelcomeOverlay = () => {
 		if (!browser) return;
+		if (overlayEmptyState) return;
 		showWelcomeOverlay = false;
 		overlayDismissed = true;
 		localStorage.setItem('chat:dismissed_at', String(Date.now()));
@@ -320,13 +356,19 @@
 	};
 
 	onMount(async () => {
+		let loadedMessages = [];
 		try {
-			const response = await fetch('/api/chat');
+			const params = new URLSearchParams();
+			if ($page.data?.workspace?.id) params.set('workspace_id', $page.data.workspace.id);
+			if ($page.params.workspace) params.set('workspace_slug', $page.params.workspace);
+			const url = params.toString() ? `/api/chat?${params.toString()}` : '/api/chat';
+			const response = await fetch(url);
 			const data = await response.json().catch(() => ({}));
 			if (response.ok) {
 				const current = get(chatMessages);
 				if (!current?.length) {
-					setChatMessages(data?.messages ?? []);
+					loadedMessages = data?.messages ?? [];
+					setChatMessages(loadedMessages);
 				}
 			}
 		} catch {
@@ -334,7 +376,13 @@
 		}
 		if (browser) {
 			localStorage.setItem('chat:last_open_at', String(Date.now()));
-			if (shouldShowOverlay()) openWelcomeOverlay();
+			const noMessagesYet = (loadedMessages ?? []).length === 0;
+			if (noMessagesYet) {
+				overlayDismissed = false;
+				openEmptyUpdatesOverlay();
+			} else if (shouldShowOverlay()) {
+				openWelcomeOverlay();
+			}
 		}
 		await focusInput();
 		await tick();
@@ -494,9 +542,11 @@
 					{/each}
 				</div>
 			</div>
-			<div class="mb-8 text-center text-xs text-neutral-400">
-				Click anywhere or send a message to dismiss
-			</div>
+			{#if !overlayEmptyState}
+				<div class="mb-8 text-center text-xs text-neutral-400">
+					Click anywhere or send a message to dismiss
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>

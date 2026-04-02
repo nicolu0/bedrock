@@ -17,8 +17,9 @@ export const POST = async ({ locals, request }) => {
 	const urgency = typeof body?.urgency === 'string' ? body.urgency.trim() : '';
 	const maintenanceIssue =
 		typeof body?.maintenance_issue === 'string' ? body.maintenance_issue.trim() : '';
+	const template = typeof body?.template === 'string' ? body.template.trim() : '';
 
-	const allowedTypes = new Set(['urgency']);
+	const allowedTypes = new Set(['urgency', 'auto']);
 	if (!allowedTypes.has(type)) {
 		return json({ error: 'Invalid policy type.' }, { status: 400 });
 	}
@@ -32,6 +33,9 @@ export const POST = async ({ locals, request }) => {
 	}
 	if (!maintenanceIssue) {
 		return json({ error: 'Maintenance issue is required.' }, { status: 400 });
+	}
+	if (type === 'auto' && !template) {
+		return json({ error: 'Template is required.' }, { status: 400 });
 	}
 
 	const workspace = await resolveWorkspace(workspaceSlug, locals.user.id);
@@ -48,7 +52,8 @@ export const POST = async ({ locals, request }) => {
 			meta: {
 				source: 'manual',
 				urgency: type === 'urgency' ? urgency || null : null,
-				maintenance_issue: maintenanceIssue || null
+				maintenance_issue: maintenanceIssue || null,
+				template: type === 'auto' ? template || null : null
 			}
 		})
 		.select('id, type, email, description, meta, created_at, created_by, users:created_by(name)')
@@ -78,12 +83,13 @@ export const PATCH = async ({ locals, request }) => {
 	const urgency = typeof body?.urgency === 'string' ? body.urgency.trim() : '';
 	const maintenanceIssue =
 		typeof body?.maintenance_issue === 'string' ? body.maintenance_issue.trim() : '';
+	const template = typeof body?.template === 'string' ? body.template.trim() : '';
 
 	if (!policyId) {
 		return json({ error: 'Policy id is required.' }, { status: 400 });
 	}
 
-	const allowedTypes = new Set(['urgency']);
+	const allowedTypes = new Set(['urgency', 'auto']);
 	if (!allowedTypes.has(type)) {
 		return json({ error: 'Invalid policy type.' }, { status: 400 });
 	}
@@ -94,6 +100,9 @@ export const PATCH = async ({ locals, request }) => {
 	}
 	if (!maintenanceIssue) {
 		return json({ error: 'Maintenance issue is required.' }, { status: 400 });
+	}
+	if (type === 'auto' && !template) {
+		return json({ error: 'Template is required.' }, { status: 400 });
 	}
 
 	const workspace = await resolveWorkspace(workspaceSlug, locals.user.id);
@@ -112,7 +121,8 @@ export const PATCH = async ({ locals, request }) => {
 	const meta = {
 		...(existing.meta ?? {}),
 		urgency: type === 'urgency' ? urgency || null : null,
-		maintenance_issue: maintenanceIssue || null
+		maintenance_issue: maintenanceIssue || null,
+		template: type === 'auto' ? template || null : null
 	};
 
 	const { data, error } = await supabaseAdmin

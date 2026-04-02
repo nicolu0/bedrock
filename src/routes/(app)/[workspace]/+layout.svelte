@@ -28,6 +28,7 @@
 	export let data;
 
 	let appMounted = false;
+	let isMobileViewport = false;
 
 	// Navigation loading bar
 	let _navProgress = 0;
@@ -188,6 +189,21 @@
 			sidebarOpen = false;
 		}
 
+		const mobileQuery = window.matchMedia('(max-width: 639px)');
+		const updateMobileViewport = () => {
+			isMobileViewport = mobileQuery.matches;
+			const panelState = get(rightPanel);
+			if (isMobileViewport && panelState?.open && panelState?.type === 'chat') {
+				closePanel();
+			}
+		};
+		updateMobileViewport();
+		if (mobileQuery.addEventListener) {
+			mobileQuery.addEventListener('change', updateMobileViewport);
+		} else {
+			mobileQuery.addListener(updateMobileViewport);
+		}
+
 		_origFetch = window.fetch;
 		window.fetch = async (input, init) => {
 			const url = input instanceof Request ? input.url : String(input);
@@ -231,7 +247,9 @@
 			}
 			if (event.key === ']') {
 				event.preventDefault();
-				toggleChatPanel();
+				if (!isMobileViewport) {
+					toggleChatPanel();
+				}
 				return;
 			}
 			if (event.key === 'Escape' && showSearchModal) {
@@ -241,6 +259,11 @@
 		window.addEventListener('keydown', onKeydown);
 		return () => {
 			window.removeEventListener('keydown', onKeydown);
+			if (mobileQuery.removeEventListener) {
+				mobileQuery.removeEventListener('change', updateMobileViewport);
+			} else {
+				mobileQuery.removeListener(updateMobileViewport);
+			}
 		};
 	});
 
@@ -423,8 +446,11 @@
 		}
 	}
 
-	$: if (!isInboxRoute && $rightPanel?.type === 'issue') {
+	$: if (!isInboxRoute && $rightPanel?.type === 'issue' && !isMobileViewport) {
 		openChatPanel();
+	}
+	$: if (isMobileViewport && $rightPanel?.open && $rightPanel?.type === 'chat') {
+		closePanel();
 	}
 
 	let _workspaceChannel = null;
@@ -874,7 +900,7 @@
 							<slot />
 						</div>
 					</div>
-					{#if $rightPanel.open}
+					{#if $rightPanel.open && !(isMobileViewport && $rightPanel.type === 'chat')}
 						<div
 							class={`flex-none overflow-y-auto ${
 								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-5/12'
