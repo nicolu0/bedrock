@@ -24,6 +24,15 @@
 	let showVendorPicker = false;
 	let vendorSearch = '';
 	let pickerEl;
+	let changeButtonEl;
+	let dropdownEl;
+	let pickerStyle = '';
+
+	const updatePickerPosition = () => {
+		if (!changeButtonEl) return;
+		const rect = changeButtonEl.getBoundingClientRect();
+		pickerStyle = `position:fixed;top:${rect.bottom + 4}px;left:${rect.left}px;z-index:50;`;
+	};
 
 	$: filteredVendors = searchVendors(vendors, vendorSearch);
 	$: suggestedVendors = recommendedVendors ?? [];
@@ -178,49 +187,65 @@
 	};
 
 	const handleClickOutside = (e) => {
-		if (showVendorPicker && pickerEl && !pickerEl.contains(e.target)) {
+		if (showVendorPicker && !pickerEl?.contains(e.target) && !dropdownEl?.contains(e.target)) {
+			showVendorPicker = false;
+			vendorSearch = '';
+		}
+	};
+
+	const handleKeydown = (e) => {
+		if (showVendorPicker && e.key === 'Escape') {
+			e.stopPropagation();
 			showVendorPicker = false;
 			vendorSearch = '';
 		}
 	};
 </script>
 
-<svelte:window on:mousedown={handleClickOutside} />
+<svelte:window on:mousedown={handleClickOutside} on:keydown|capture={handleKeydown} />
 
 {#if draft}
-	<div class="overflow-hidden rounded-md border border-neutral-100 bg-white">
+	<div class="rounded-md border border-neutral-100 bg-white">
 		<div class="bg-white">
 			<div class="px-4 py-3">
 				<div class="text-sm font-semibold text-neutral-900">Drafted reply</div>
 			</div>
 
-			{#if suggestedVendors.length > 0 || vendors.length > 0}
+			{#if currentRecipientEmail || suggestedVendors.length > 0 || vendors.length > 0}
 				<div class="border-t border-neutral-100 px-4 py-2">
 					<div class="relative flex items-center gap-2" bind:this={pickerEl}>
 						<span class="text-xs text-neutral-500">To:</span>
 						{#if currentVendorName}
 							<span class="text-xs font-medium text-neutral-800">{currentVendorName}</span>
+						{:else if !currentRecipientEmail}
+							<span class="text-xs font-medium text-neutral-800">Tenant</span>
 						{:else}
 							<span class="text-xs text-neutral-400">No vendor selected</span>
 						{/if}
+						{#if currentRecipientEmail || currentVendorName}
 						<button
-							class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500 hover:bg-neutral-100"
+							bind:this={changeButtonEl}
+							class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500 hover:bg-neutral-100 focus:outline-none focus:ring-0"
 							type="button"
 							on:click={() => {
 								showVendorPicker = !showVendorPicker;
 								vendorSearch = '';
+								if (showVendorPicker) updatePickerPosition();
 							}}
 						>
 							Change
 						</button>
+						{/if}
 
 						{#if showVendorPicker}
 							<div
-								class="absolute left-0 top-7 z-20 w-72 overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg"
+								bind:this={dropdownEl}
+								class="w-72 overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg"
+								style={pickerStyle}
 							>
 								<div class="border-b border-neutral-100 px-3 py-2">
 									<input
-										class="w-full border-0 bg-transparent p-0 text-xs text-neutral-700 outline-none placeholder:text-neutral-400"
+										class="w-full border-0 bg-transparent p-0 text-xs text-neutral-700 outline-none ring-0 focus:ring-0 focus:outline-none placeholder:text-neutral-400"
 										placeholder="Search vendors..."
 										bind:value={vendorSearch}
 										autofocus
