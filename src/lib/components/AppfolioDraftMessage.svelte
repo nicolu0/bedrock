@@ -501,12 +501,6 @@
 					</div>
 				{/if}
 
-				{#if draft?.subject}
-					<div class="border-t border-neutral-100 px-4 py-2">
-						<div class="text-sm text-neutral-900">{draft.subject}</div>
-					</div>
-				{/if}
-
 				<div class="border-t border-neutral-100 px-4 py-3">
 					<textarea
 						class="w-full resize-none border-0 bg-transparent p-0 text-sm text-neutral-700 ring-0 outline-none focus:ring-0 focus:outline-none"
