@@ -683,7 +683,9 @@
 			>
 				+ New issue
 			</button>
-			<SidebarButton onClick={toggleChatPanel} />
+			<div class="hidden sm:flex">
+				<SidebarButton onClick={toggleChatPanel} />
+			</div>
 		</div>
 	</div>
 	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2">

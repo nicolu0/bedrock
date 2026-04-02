@@ -348,10 +348,10 @@
 	$: assignableMembers = [...assignmentPool]
 		.filter((member) => {
 			const r = (member?.role ?? '').toLowerCase();
-			return (r === 'admin' || r === 'member') && Boolean(member?.user_id);
+			return (r === 'admin' || r === 'bedrock' || r === 'member') && Boolean(member?.user_id);
 		})
 		.sort((a, b) => {
-			const order = { admin: 0, member: 1 };
+			const order = { admin: 0, bedrock: 1, member: 2 };
 			const rA = (a?.role ?? '').toLowerCase();
 			const rB = (b?.role ?? '').toLowerCase();
 			const roleDiff = (order[rA] ?? 9) - (order[rB] ?? 9);
@@ -528,8 +528,6 @@
 		const targetIssueId = issueId ?? message?.issue_id ?? draft?.issue_id ?? null;
 		if (status === 'optimistic') {
 			suppressDraftKey(draftKey ?? draft?.message_id ?? draft?.id);
-			if (message) applyMessageDelta(message);
-			if (draft) removeDraftFromCache(draft);
 			return;
 		}
 		if (status === 'confirmed') {
@@ -1531,7 +1529,9 @@
 							/>
 						</svg>
 					</a>
-					<SidebarButton onClick={toggleChatPanel} />
+					<div class="hidden sm:flex">
+						<SidebarButton onClick={toggleChatPanel} />
+					</div>
 				</div>
 			</div>
 
@@ -3013,7 +3013,9 @@
 																			{draft}
 																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{:else}
@@ -3028,7 +3030,9 @@
 																			}}
 																			{draft}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{/if}
@@ -3123,7 +3127,9 @@
 																			{draft}
 																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{:else}
@@ -3138,7 +3144,9 @@
 																			}}
 																			{draft}
 																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
 																		/>
 																	{/if}

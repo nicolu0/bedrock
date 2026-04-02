@@ -354,7 +354,9 @@
 			>
 				+ New property
 			</button>
-			<SidebarButton onClick={toggleChatPanel} />
+			<div class="hidden sm:flex">
+				<SidebarButton onClick={toggleChatPanel} />
+			</div>
 		</div>
 	</div>
 	<div class="flex items-center gap-2 border-b border-neutral-200 px-6 pb-2">

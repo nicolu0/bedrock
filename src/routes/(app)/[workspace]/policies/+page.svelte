@@ -22,6 +22,7 @@
 	let newPolicyType = 'urgency';
 	let newPolicyUrgency = 'urgent';
 	let newPolicyMaintenanceIssue = '';
+	let newPolicyTemplate = '';
 	let editingPolicyId = null;
 	let selectedPolicy = null;
 	let createPolicyError = '';
@@ -58,18 +59,24 @@
 	}
 	$: policies = _resolvedPolicies ?? [];
 
-	const policyTypeOptions = [{ value: 'urgency', label: 'Urgency' }];
+	const policyTypeOptions = [
+		{ value: 'urgency', label: 'Urgency' },
+		{ value: 'auto', label: 'Auto' }
+	];
 	const policyTypeFilterOptions = [
 		{ value: 'urgency', label: 'Urgency' },
-		{ value: 'tone', label: 'Tone' }
+		{ value: 'tone', label: 'Tone' },
+		{ value: 'auto', label: 'Auto' }
 	];
 	const policyTypeLabels = {
 		urgency: 'Urgency',
-		tone: 'Tone'
+		tone: 'Tone',
+		auto: 'Auto'
 	};
 	const policyTypeStyles = {
 		urgency: 'border-rose-200 bg-rose-50 text-rose-700',
-		tone: 'border-emerald-200 bg-emerald-50 text-emerald-700'
+		tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+		auto: 'border-sky-200 bg-sky-50 text-sky-700'
 	};
 	const maintenanceIssueOptions = [
 		'toilet clog',
@@ -150,6 +157,13 @@
 			if (status === 'error') return 'Tone description failed to generate.';
 			return 'Generating tone description...';
 		}
+		if (policy?.type === 'auto') {
+			const template = policy?.meta?.template ?? '';
+			if (template && typeof template === 'string') {
+				return template.length > 140 ? `${template.slice(0, 140)}...` : template;
+			}
+			return 'Auto reply template.';
+		}
 		if (policy?.type !== 'urgency') return policy?.description || 'No description';
 		const issue = formatMaintenanceIssueDescription(
 			policy?.meta?.maintenance_issue ?? policy?.description
@@ -184,7 +198,9 @@
 		}).format(date);
 	};
 
-	$: canSubmit = Boolean(newPolicyMaintenanceIssue.trim());
+	$: canSubmit =
+		Boolean(newPolicyMaintenanceIssue.trim()) &&
+		(newPolicyType !== 'auto' || Boolean(newPolicyTemplate.trim()));
 	$: maintenanceIssueLabel = newPolicyMaintenanceIssue.trim();
 	$: behaviorDescription =
 		maintenanceIssueLabel && newPolicyType === 'urgency'
@@ -206,6 +222,7 @@
 		newPolicyType = 'urgency';
 		newPolicyUrgency = 'urgent';
 		newPolicyMaintenanceIssue = '';
+		newPolicyTemplate = '';
 		editingPolicyId = null;
 		selectedPolicy = null;
 		createPolicyError = '';
@@ -224,6 +241,7 @@
 		newPolicyType = policy.type ?? 'urgency';
 		newPolicyUrgency = policy?.meta?.urgency ?? 'urgent';
 		newPolicyMaintenanceIssue = policy?.meta?.maintenance_issue ?? policy?.description ?? '';
+		newPolicyTemplate = policy?.meta?.template ?? '';
 		createPolicyError = '';
 		if (policy.type === 'tone') {
 			refreshTonePolicy(policy.id);
@@ -317,6 +335,7 @@
 					type: newPolicyType,
 					urgency: newPolicyType === 'urgency' ? newPolicyUrgency : null,
 					maintenance_issue: newPolicyMaintenanceIssue.trim() || null,
+					template: newPolicyType === 'auto' ? newPolicyTemplate.trim() : null,
 					email: null,
 					description: null
 				})
@@ -380,7 +399,9 @@
 			>
 				+ New policy
 			</button>
-			<SidebarButton onClick={toggleChatPanel} />
+			<div class="hidden sm:flex">
+				<SidebarButton onClick={toggleChatPanel} />
+			</div>
 		</div>
 	</div>
 	<div class="flex items-center justify-between px-6 py-2">
@@ -765,6 +786,17 @@
 									<option value="urgent">Urgent</option>
 									<option value="not_urgent">Not urgent</option>
 								</select>
+							</div>
+						{/if}
+						{#if newPolicyType === 'auto'}
+							<div>
+								<label class="text-xs text-neutral-500">Example reply</label>
+								<textarea
+									class="mt-1 min-h-[120px] w-full rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
+									placeholder="Add the reply template"
+									bind:value={newPolicyTemplate}
+									required
+								></textarea>
 							</div>
 						{/if}
 						{#if behaviorDescription}

@@ -200,12 +200,14 @@
 	<div class="flex items-center justify-between border-b border-neutral-200 py-2.5 pr-5 pl-6">
 		<h1 class="text-sm font-normal text-neutral-700">Inbox</h1>
 		<div class="flex items-center gap-2">
-			<SidebarButton
-				onClick={() => {
-					selectedNotification = null;
-					toggleChatPanel();
-				}}
-			/>
+			<div class="hidden sm:flex">
+				<SidebarButton
+					onClick={() => {
+						selectedNotification = null;
+						toggleChatPanel();
+					}}
+				/>
+			</div>
 		</div>
 	</div>
 

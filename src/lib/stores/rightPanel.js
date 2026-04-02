@@ -1,5 +1,11 @@
 // @ts-nocheck
 import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
+
+const isMobileChatDisabled = () => {
+	if (!browser || typeof window === 'undefined' || !window.matchMedia) return false;
+	return window.matchMedia('(max-width: 639px)').matches;
+};
 
 const initialState = {
 	open: true,
@@ -18,6 +24,10 @@ const initialState = {
 export const rightPanel = writable(initialState);
 
 export const openChatPanel = () => {
+	if (isMobileChatDisabled()) {
+		rightPanel.update((state) => ({ ...state, open: false, type: 'chat' }));
+		return;
+	}
 	rightPanel.update((state) => ({
 		...state,
 		open: true,
@@ -36,6 +46,12 @@ export const openChatPanel = () => {
 
 export const toggleChatPanel = () => {
 	rightPanel.update((state) => {
+		if (isMobileChatDisabled()) {
+			if (state.open && state.type === 'chat') {
+				return { ...state, open: false };
+			}
+			return state;
+		}
 		if (state.open && state.type === 'chat') {
 			return { ...state, open: false };
 		}
