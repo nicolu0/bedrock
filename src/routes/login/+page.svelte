@@ -1,6 +1,7 @@
 <script>
 	import { enhance } from '$app/forms';
 	export let form;
+	/** @type {import('./$types').PageData & { returnTo?: string | null }} */
 	export let data;
 </script>
 
@@ -13,6 +14,7 @@
 	<div class="anim-auth-2 w-full max-w-xs">
 		<form method="POST" action="?/login" use:enhance class="flex flex-col gap-4">
 			<input type="hidden" name="invite_token" value={data.inviteToken ?? ''} />
+			<input type="hidden" name="return_to" value={data.returnTo ?? ''} />
 			{#if form?.error}
 				<p class="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-600">{form.error}</p>
 			{/if}

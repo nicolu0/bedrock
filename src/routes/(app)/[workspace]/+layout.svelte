@@ -784,8 +784,7 @@
 												<span class="inline-flex whitespace-nowrap">
 													{#key inboxCount}
 														<span
-															in:fly={{ y: 6, duration: 160, delay: 260 }}
-															out:fly={{ y: -6, duration: 160, opacity: 0 }}
+															in:fly={{ y: 6, duration: 160 }}
 															class="inline-flex items-center justify-center"
 														>
 															{inboxCountLabel}
