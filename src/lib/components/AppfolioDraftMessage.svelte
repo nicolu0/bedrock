@@ -28,6 +28,7 @@
 	let autoPromptError = '';
 	let draftOriginal = draft?.original_body ?? null;
 	let draftDiff = draft?.draft_diff ?? null;
+	let showOriginal = false;
 	const APPROVAL_KEY = 'appfolio_approved_by';
 	const getApprovalStorageKey = () =>
 		`${APPROVAL_KEY}:${draft?.issue_id ?? 'unknown'}:${draft?.message_id ?? draft?.id ?? 'draft'}`;
@@ -509,7 +510,51 @@
 						bind:this={textareaEl}
 						on:input={queueSave}
 					/>
+					{#if showOriginal}
+						<div class="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+							<div class="grid gap-4 md:grid-cols-2">
+								<div>
+									<div class="text-xs font-semibold text-neutral-600">Original</div>
+									<div class="mt-2 text-sm whitespace-pre-wrap text-neutral-700">
+										{#each diffColumns.original as segment}
+											<span
+												class={segment.type === 'delete'
+													? 'rounded-sm bg-rose-100 text-rose-800'
+													: ''}
+											>
+												{segment.text}
+											</span>
+										{/each}
+									</div>
+								</div>
+								<div>
+									<div class="text-xs font-semibold text-neutral-600">Current</div>
+									<div class="mt-2 text-sm whitespace-pre-wrap text-neutral-700">
+										{#each diffColumns.updated as segment}
+											<span
+												class={segment.type === 'insert'
+													? 'rounded-sm bg-emerald-100 text-emerald-800'
+													: ''}
+											>
+												{segment.text}
+											</span>
+										{/each}
+									</div>
+								</div>
+							</div>
+						</div>
+					{/if}
 					<div class="mt-3 flex items-center justify-between">
+						<div class="flex items-center gap-3">
+							<button
+								type="button"
+								class="inline-flex items-center gap-2 text-xs text-neutral-500 transition hover:text-neutral-900 disabled:opacity-50"
+								on:click={() => (showOriginal = !showOriginal)}
+								disabled={!originalBodyForDiff && !draftBody}
+							>
+								{showOriginal ? 'Hide original' : 'View original'}
+							</button>
+						</div>
 						{#if approvedByLocal}
 							<span class="text-xs font-semibold text-emerald-700">
 								Approved by {approvedByLocal}
