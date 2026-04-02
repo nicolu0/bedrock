@@ -1,8 +1,20 @@
 <script>
+	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
+	const defaultEmail = 'jose@lapropertymgmt.com';
+	/** @type {HTMLInputElement | null} */
+	let passwordInput = null;
+	let emailValue = '';
 	export let form;
 	/** @type {import('./$types').PageData & { returnTo?: string | null }} */
 	export let data;
+
+	$: emailValue = data.inviteEmail ?? defaultEmail;
+
+	onMount(() => {
+		passwordInput?.focus();
+		passwordInput?.select?.();
+	});
 </script>
 
 <div class="flex min-h-screen flex-col items-center justify-center bg-white px-6">
@@ -27,7 +39,7 @@
 					autocomplete="email"
 					class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
 					placeholder="jane@company.com"
-					value={data.inviteEmail ?? ''}
+					value={emailValue}
 					required
 				/>
 			</div>
@@ -40,6 +52,8 @@
 					autocomplete="current-password"
 					class="rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm text-neutral-800 outline-none focus:border-stone-500"
 					placeholder="••••••••"
+					bind:this={passwordInput}
+					autofocus
 					required
 				/>
 			</div>
