@@ -457,7 +457,7 @@ async function syncVendors(workspaceId: string, appfolioPropertyIds: number[]): 
 	// Fetch all active vendors from AppFolio and filter to those in our work order set
 	const rows = await appfolioFetch('vendor_directory', {
 		vendor_visibility: 'active',
-		columns: ['vendor_id', 'company_name', 'name', 'vendor_trades', 'email', 'phone_numbers']
+		columns: ['vendor_id', 'company_name', 'name', 'vendor_trades', 'email', 'phone_numbers', 'street', 'city', 'state', 'zip']
 	});
 
 	const filtered = (rows as any[]).filter(
@@ -472,7 +472,12 @@ async function syncVendors(workspaceId: string, appfolioPropertyIds: number[]): 
 				appfolio_vendor_id: String(vendorId),
 				name: row.company_name || row.name || String(vendorId),
 				trade: row.vendor_trades ?? null,
-				email: row.email ? String(row.email).split(',')[0].trim() || null : null
+				email: row.email ? String(row.email).split(',')[0].trim() || null : null,
+				phone: row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : null,
+				street: row.street ?? null,
+				city: row.city ?? null,
+				state: row.state ?? null,
+				zip: row.zip ?? null
 			},
 			{ onConflict: 'workspace_id,appfolio_vendor_id', ignoreDuplicates: false }
 		);

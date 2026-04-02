@@ -37,6 +37,8 @@ export const GET = async ({ locals, url }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
-	const data = await loadIssuesData(workspace.id, locals.user.id, role, ownerPersonId);
+	const data = await loadIssuesData(workspace.id, locals.user.id, role, ownerPersonId, {
+		includeSubIssues: false
+	});
 	return json(data);
 };
