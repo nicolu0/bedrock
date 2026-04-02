@@ -521,10 +521,30 @@ export const loadVendors = async (workspaceId) => {
 };
 
 export const loadPeople = async (workspaceId) => {
-	const { data: people } = await supabaseAdmin
-		.from('people')
-		.select('id, name, email, role, trade, notes, pending, created_at, user_id')
-		.eq('workspace_id', workspaceId)
-		.order('name', { ascending: true });
-	return people ?? [];
+	const [{ data: people }, { data: vendorRows }] = await Promise.all([
+		supabaseAdmin
+			.from('people')
+			.select('id, name, email, role, trade, notes, pending, created_at, user_id')
+			.eq('workspace_id', workspaceId)
+			.order('name', { ascending: true }),
+		supabaseAdmin
+			.from('vendors')
+			.select('id, name, email, trade, note, phone, created_at')
+			.eq('workspace_id', workspaceId)
+			.order('name', { ascending: true })
+	]);
+	const mergedVendors = (vendorRows ?? []).map((v) => ({
+		id: v.id,
+		name: v.name,
+		email: v.email,
+		role: 'vendor',
+		trade: v.trade,
+		notes: v.note,
+		pending: false,
+		created_at: v.created_at,
+		user_id: null
+	}));
+	return [...(people ?? []), ...mergedVendors].sort((a, b) =>
+		(a.name ?? '').localeCompare(b.name ?? '')
+	);
 };
