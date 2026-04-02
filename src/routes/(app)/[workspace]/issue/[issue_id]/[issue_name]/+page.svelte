@@ -361,12 +361,29 @@
 			return nameA.localeCompare(nameB);
 		});
 
-	$: subIssuesWithAssignees = subIssues.map((subIssue) => {
-		const assigneeId = subIssue?.assigneeId ?? subIssue?.assignee_id ?? null;
-		const resolved =
-			resolveAssigneeFromId(assigneeId, membersByUserId) ?? placeholderAssignee(assigneeId);
-		return { ...subIssue, assignee: resolved };
-	});
+	let subIssueAssigneeOverrides = new Map();
+	const setSubIssueAssigneeOverride = (id, assigneeId) => {
+		if (!id) return;
+		const next = new Map(subIssueAssigneeOverrides);
+		if (assigneeId) {
+			next.set(id, assigneeId);
+		} else {
+			next.delete(id);
+		}
+		subIssueAssigneeOverrides = next;
+	};
+
+	const buildSubIssuesWithAssignees = (items) =>
+		(items ?? []).map((subIssue) => {
+			const overrideAssigneeId = subIssueAssigneeOverrides.get(subIssue?.id) ?? null;
+			const assigneeId =
+				overrideAssigneeId ?? subIssue?.assigneeId ?? subIssue?.assignee_id ?? null;
+			const resolved =
+				resolveAssigneeFromId(assigneeId, membersByUserId) ?? placeholderAssignee(assigneeId);
+			return { ...subIssue, assignee: resolved };
+		});
+
+	$: subIssuesWithAssignees = buildSubIssuesWithAssignees(subIssues);
 
 	$: assigneeName = assignee?.name ?? assignee?.users?.name ?? 'Unassigned';
 	$: subIssueProgress = `${subIssues.filter((item) => item.status === 'done').length}/${subIssues.length}`;
@@ -548,6 +565,50 @@
 			}
 			if (draft) applyDraftDelta(draft);
 		}
+	};
+
+	const handleAppfolioAssigneeUpdate = (detail) => {
+		const nextAssigneeId = detail?.assigneeId ?? null;
+		if (!nextAssigneeId || !issue?.id) return;
+		const targetIds = new Set([detail?.issueId, detail?.parentIssueId].filter(Boolean));
+		const isRootTarget = targetIds.has(issue.id);
+		const isSubIssueTarget = Boolean(
+			detail?.issueId && subIssues.some((sub) => sub.id === detail.issueId)
+		);
+		if (!isRootTarget && !isSubIssueTarget) return;
+		const nextAssignee =
+			resolveAssigneeFromId(nextAssigneeId, membersByUserId) ?? placeholderAssignee(nextAssigneeId);
+		if (isRootTarget) {
+			issue = {
+				...issue,
+				assignee_id: nextAssigneeId,
+				assigneeId: nextAssigneeId,
+				updated_at: new Date().toISOString()
+			};
+			issueAssigneeId = nextAssigneeId;
+			assignee = nextAssignee;
+		}
+		if (isSubIssueTarget) {
+			setSubIssueAssigneeOverride(detail.issueId, nextAssigneeId);
+			const nextPayload = {
+				id: detail.issueId,
+				assignee_id: nextAssigneeId,
+				parent_id: detail?.parentIssueId ?? issue.id,
+				updated_at: new Date().toISOString()
+			};
+			const updatedSubIssues = subIssues.map((sub) =>
+				sub.id === detail.issueId ? mergeSubIssue(sub, nextPayload) : sub
+			);
+			subIssues = sortSubIssues(updatedSubIssues);
+			if (Array.isArray(_resolvedSubIssues)) {
+				const updatedResolved = _resolvedSubIssues.map((sub) =>
+					sub.id === detail.issueId ? mergeSubIssue(sub, nextPayload) : sub
+				);
+				_resolvedSubIssues = sortSubIssues(updatedResolved);
+			}
+			subIssuesWithAssignees = buildSubIssuesWithAssignees(subIssues);
+		}
+		if (browser) seedIssueDetail(issue, subIssues);
 	};
 
 	// ── Activity log helpers ─────────────────────────────────────────────────────
@@ -1238,6 +1299,36 @@
 	let _issueChannel = null;
 	let _subIssueChannel = null;
 
+	const mergeSubIssue = (current, next) => {
+		const nextAssigneeId = next?.assignee_id ?? next?.assigneeId ?? null;
+		return {
+			...current,
+			id: next?.id ?? current?.id,
+			name: next?.name ?? current?.name,
+			status: next?.status ?? current?.status,
+			assigneeId: nextAssigneeId ?? current?.assigneeId ?? current?.assignee_id ?? null,
+			assignee_id: nextAssigneeId ?? current?.assignee_id ?? current?.assigneeId ?? null,
+			parent_id: next?.parent_id ?? current?.parent_id ?? issueId,
+			issueNumber: next?.issue_number ?? next?.issueNumber ?? current?.issueNumber ?? null,
+			readableId: next?.readable_id ?? next?.readableId ?? current?.readableId ?? null,
+			recommended_vendors: next?.recommended_vendors ?? current?.recommended_vendors ?? []
+		};
+	};
+
+	const applySubIssueDelta = (next) => {
+		if (!next?.id) return;
+		const updated = subIssues.some((s) => s.id === next.id)
+			? subIssues.map((s) => (s.id === next.id ? mergeSubIssue(s, next) : s))
+			: [...subIssues, mergeSubIssue(null, next)];
+		subIssues = sortSubIssues(updated);
+		if (Array.isArray(_resolvedSubIssues)) {
+			const resolvedUpdated = _resolvedSubIssues.some((s) => s.id === next.id)
+				? _resolvedSubIssues.map((s) => (s.id === next.id ? mergeSubIssue(s, next) : s))
+				: [..._resolvedSubIssues, mergeSubIssue(null, next)];
+			_resolvedSubIssues = sortSubIssues(resolvedUpdated);
+		}
+	};
+
 	const applyIssueDelta = (next) => {
 		if (!next?.id) return;
 		const nextAssigneeId = next.assignee_id ?? null;
@@ -1292,6 +1383,9 @@
 					};
 					if (!subIssues.some((s) => s.id === sub.id)) {
 						subIssues = sortSubIssues([...subIssues, sub]);
+						if (Array.isArray(_resolvedSubIssues)) {
+							_resolvedSubIssues = sortSubIssues([..._resolvedSubIssues, sub]);
+						}
 
 						// Catch-up: fetch any messages/drafts/logs written before the channel subscribes
 						const [{ data: msgs }, { data: drafts }] = await Promise.all([
@@ -1317,6 +1411,13 @@
 							.eq('issue_id', newSub.id);
 						for (const log of logs ?? []) applyActivityLogDelta(log);
 					}
+				}
+			)
+			.on(
+				'postgres_changes',
+				{ event: 'UPDATE', schema: 'public', table: 'issues', filter: `parent_id=eq.${issueId}` },
+				({ new: updatedSub }) => {
+					if (updatedSub) applySubIssueDelta(updatedSub);
 				}
 			)
 			.subscribe();
@@ -2617,10 +2718,10 @@
 														>
 															<circle cx="512" cy="512" r="512" fill="#007bc7" />
 															<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
-															<path
-																d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-																fill="white"
-															/>
+																<path
+																	d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																	fill="white"
+																/>
 															</g>
 														</svg>
 													{:else if (messagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
@@ -2632,10 +2733,10 @@
 														>
 															<circle cx="512" cy="512" r="512" fill="#007bc7" />
 															<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
-															<path
-																d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-																fill="white"
-															/>
+																<path
+																	d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																	fill="white"
+																/>
 															</g>
 														</svg>
 													{:else}
@@ -2730,6 +2831,7 @@
 														{vendors}
 														recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 														on:sent={(e) => handleDraftSent(e.detail)}
+														on:assigneeUpdated={(e) => handleAppfolioAssigneeUpdate(e.detail)}
 													/>
 												{:else}
 													<EmailMessageWithDraft
@@ -2799,23 +2901,25 @@
 												</div>
 												<h3 class="text-base font-semibold text-neutral-900">Email drafted</h3>
 											{:else}
-													<svg
-														class="h-7 w-7"
-														viewBox="0 0 1024 1024"
-														fill="none"
-														xmlns="http://www.w3.org/2000/svg"
-													>
-														<circle cx="512" cy="512" r="512" fill="#007bc7" />
-														<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
+												<svg
+													class="h-7 w-7"
+													viewBox="0 0 1024 1024"
+													fill="none"
+													xmlns="http://www.w3.org/2000/svg"
+												>
+													<circle cx="512" cy="512" r="512" fill="#007bc7" />
+													<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
 														<path
 															d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
 															fill="white"
 														/>
-														</g>
-													</svg>
+													</g>
+												</svg>
 												<h3 class="text-base font-semibold text-neutral-900">
-														{(newDraftsByIssue[issueId] ?? []).some((d) => d.recipient_email) ? 'Assign Vendor' : 'Drafted reply'}
-													</h3>
+													{(newDraftsByIssue[issueId] ?? []).some((d) => d.recipient_email)
+														? 'Assign Vendor'
+														: 'Drafted reply'}
+												</h3>
 											{/if}
 										</div>
 										<div class="space-y-3">
@@ -2835,6 +2939,7 @@
 														{vendors}
 														recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 														on:sent={(e) => handleDraftSent(e.detail)}
+														on:assigneeUpdated={(e) => handleAppfolioAssigneeUpdate(e.detail)}
 													/>
 												{:else}
 													<EmailMessageWithDraft
@@ -2915,11 +3020,13 @@
 																				xmlns="http://www.w3.org/2000/svg"
 																			>
 																				<circle cx="512" cy="512" r="512" fill="#007bc7" />
-																				<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
-																				<path
-																					d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-																					fill="white"
-																				/>
+																				<g
+																					transform="translate(512,512) scale(1.25) translate(-512,-512)"
+																				>
+																					<path
+																						d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																						fill="white"
+																					/>
 																				</g>
 																			</svg>
 																		{:else}
@@ -3022,6 +3129,8 @@
 																				draft.issue_id
 																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
+																			on:assigneeUpdated={(e) =>
+																				handleAppfolioAssigneeUpdate(e.detail)}
 																		/>
 																	{:else}
 																		<EmailMessageWithDraft
@@ -3095,22 +3204,28 @@
 																		Draft email
 																	</h3>
 																{:else}
-																		<svg
-																			class="h-7 w-7"
-																			viewBox="0 0 1024 1024"
-																			fill="none"
-																			xmlns="http://www.w3.org/2000/svg"
+																	<svg
+																		class="h-7 w-7"
+																		viewBox="0 0 1024 1024"
+																		fill="none"
+																		xmlns="http://www.w3.org/2000/svg"
+																	>
+																		<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																		<g
+																			transform="translate(512,512) scale(1.25) translate(-512,-512)"
 																		>
-																			<circle cx="512" cy="512" r="512" fill="#007bc7" />
-																			<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
 																			<path
 																				d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
 																				fill="white"
 																			/>
-																			</g>
-																		</svg>
+																		</g>
+																	</svg>
 																	<h3 class="text-base font-semibold text-neutral-900">
-																		{(newDraftsByIssue[subIssue.id] ?? []).some((d) => d.recipient_email) ? 'Assign Vendor' : 'Drafted reply'}
+																		{(newDraftsByIssue[subIssue.id] ?? []).some(
+																			(d) => d.recipient_email
+																		)
+																			? 'Assign Vendor'
+																			: 'Drafted reply'}
 																	</h3>
 																{/if}
 															</div>
@@ -3133,6 +3248,8 @@
 																				draft.issue_id
 																			] ?? []}
 																			on:sent={(e) => handleDraftSent(e.detail)}
+																			on:assigneeUpdated={(e) =>
+																				handleAppfolioAssigneeUpdate(e.detail)}
 																		/>
 																	{:else}
 																		<EmailMessageWithDraft

@@ -1267,10 +1267,21 @@ const autoApproveAppfolioDraft = async ({
 		.in('assignee_id', candidateIds);
 	const assigneeId = pickLowestLoadAssignee(candidates, openIssues ?? []);
 	if (!assigneeId) return null;
+	const { data: issueRow } = await supabase
+		.from('issues')
+		.select('id, parent_id')
+		.eq('id', issueId)
+		.maybeSingle();
 	await supabase
 		.from('issues')
 		.update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
 		.eq('id', issueId);
+	if (issueRow?.parent_id) {
+		await supabase
+			.from('issues')
+			.update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
+			.eq('id', issueRow.parent_id);
+	}
 	const assigneeName =
 		candidates.find((row: any) => row.user_id === assigneeId)?.users?.name ?? null;
 	await supabase.from('activity_logs').insert({
