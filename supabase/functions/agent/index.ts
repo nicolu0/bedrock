@@ -2488,7 +2488,10 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 	if (source === 'appfolio' && rootIssueId) {
 		await supabase
 			.from('issues')
-			.update({ agent_processed_at: new Date().toISOString() })
+			.update({
+				agent_processed_at: new Date().toISOString(),
+				assignee_id: defaultAssigneeId ?? null
+			})
 			.eq('id', rootIssueId);
 
 		// Notify bedrock users now that the issue is fully processed (cleaned title + description).
