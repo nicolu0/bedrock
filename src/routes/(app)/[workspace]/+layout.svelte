@@ -942,7 +942,7 @@
 							$rightPanel.open
 								? $rightPanel.type === 'issue'
 									? 'w-1/2 border-r border-neutral-200'
-									: 'w-7/12 border-r border-neutral-200'
+									: 'w-2/3 border-r border-neutral-200'
 								: 'w-full'
 						}`}
 					>
@@ -953,7 +953,7 @@
 					{#if $rightPanel.open && !(isMobileViewport && $rightPanel.type === 'chat')}
 						<div
 							class={`relative z-0 flex-none overflow-y-auto ${
-								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-5/12'
+								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-1/3'
 							}`}
 							in:fly={{ x: 400, duration: 280, easing: cubicOut }}
 							out:fly={{ x: 400, duration: 220, easing: cubicOut }}

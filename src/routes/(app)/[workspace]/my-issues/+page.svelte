@@ -37,7 +37,10 @@
 	let filterValueOpen = false;
 	let filterCategory = 'assignee';
 	let filterValue = 'any';
+	let showClosedIssues = true;
 	let filteredSections = [];
+	let dividerTooltipX = 0;
+	let dividerTooltipY = 0;
 
 	$: _resolvedIssues =
 		$issuesCache?.workspace === $page.params.workspace && $issuesCache?.data
@@ -286,6 +289,27 @@
 		return { name, initial, color };
 	};
 
+	const getUnitDisplay = (value) => {
+		const normalized = (value ?? '').toString().trim();
+		if (!normalized) return '-';
+		const lowered = normalized.toLowerCase();
+		if (lowered === 'unknown' || lowered === 'unknown unit') return '-';
+		return normalized;
+	};
+
+	const getCreatedAgeLabel = (createdValue, lastActivityValue) => {
+		if (!createdValue) return null;
+		const createdAt = new Date(createdValue).getTime();
+		if (!Number.isFinite(createdAt)) return null;
+		if (lastActivityValue) {
+			const lastActivityAt = new Date(lastActivityValue).getTime();
+			if (Number.isFinite(lastActivityAt) && lastActivityAt > createdAt) return null;
+		}
+		const diffDays = Math.floor((Date.now() - createdAt) / (24 * 60 * 60 * 1000));
+		if (diffDays < 2) return null;
+		return `Created ${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+	};
+
 	const getSectionGradientStyle = (statusClass) => {
 		if (!statusClass) return '';
 		if (statusClass.includes('orange')) {
@@ -372,9 +396,26 @@
 		};
 	};
 
+	const updateDividerTooltipPosition = (event) => {
+		if (!event?.currentTarget) return;
+		const tooltip = event.currentTarget.querySelector('[data-divider-tooltip="true"]');
+		const rect = event.currentTarget.getBoundingClientRect();
+		const viewportWidth = window?.innerWidth ?? document?.documentElement?.clientWidth ?? 0;
+		const tooltipWidth = tooltip?.getBoundingClientRect?.().width ?? 0;
+		const gutter = 12;
+		let left = event.clientX + 8;
+		left = Math.max(gutter, left);
+		if (viewportWidth) {
+			left = Math.min(left, viewportWidth - tooltipWidth - gutter);
+		}
+		dividerTooltipX = left;
+		dividerTooltipY = rect.bottom - 6;
+	};
+
 	$: filteredSections = expandedSections
 		.map((section) => {
 			const rows = (section.rows ?? []).filter((row) => {
+				if (!showClosedIssues && String(row.status ?? '') === 'done') return false;
 				const parentId = row?.parentId ?? row?.parent_id ?? null;
 				if (parentId) return false;
 				if (filterCategory === 'assignee') {
@@ -739,8 +780,8 @@
 									<span class="truncate">{selectedCategory?.label ?? 'Category'}</span>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
-										width="12"
-										height="12"
+										width="10"
+										height="10"
 										fill="currentColor"
 										viewBox="0 0 16 16"
 									>
@@ -822,6 +863,30 @@
 								{/if}
 							</div>
 						</div>
+						<div class="border-t border-neutral-200 px-3 py-2">
+							<button
+								type="button"
+								class="flex w-full items-center justify-between gap-3 text-xs text-neutral-600"
+								role="switch"
+								aria-checked={showClosedIssues}
+								on:click|stopPropagation={() => {
+									showClosedIssues = !showClosedIssues;
+								}}
+							>
+								<span>Show completed issues</span>
+								<span
+									class={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+										showClosedIssues ? 'bg-indigo-400' : 'bg-neutral-300'
+									}`}
+								>
+									<span
+										class={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+											showClosedIssues ? 'translate-x-4' : 'translate-x-1'
+										}`}
+									></span>
+								</span>
+							</button>
+						</div>
 					</div>
 				{/if}
 
@@ -889,12 +954,40 @@
 						</div>
 						<div>
 							{#each section.propertyGroups as group}
+								{@const isCollapsed = isPropertyGroupCollapsed(section.id, group.name)}
 								<button
 									type="button"
-									class="group flex w-full items-center gap-3 px-6.5 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900"
+									class="tooltip-target group relative flex w-full items-center gap-3 px-6.5 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900"
 									on:click={() => togglePropertyGroup(section.id, group.name)}
+									on:mouseenter={updateDividerTooltipPosition}
+									on:mousemove={updateDividerTooltipPosition}
+									aria-expanded={!isCollapsed}
 								>
+									<span
+										class="relative flex items-center text-neutral-400 transition group-hover:text-neutral-700"
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="12"
+											height="12"
+											fill="currentColor"
+											class="chevron-icon transition-transform duration-150 ease-in-out"
+											class:rotate-[-90deg]={isCollapsed}
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+											/>
+										</svg>
+									</span>
 									<span class="font-normal text-inherit">{group.name}</span>
+									<span
+										data-divider-tooltip="true"
+										class="delayed-tooltip fixed z-20 mt-0 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+										style={`left: ${dividerTooltipX}px; top: ${dividerTooltipY}px;`}
+									>
+										Collapse
+									</span>
 									<div
 										class="flex-1 border-t border-neutral-200 transition group-hover:border-neutral-800"
 									></div>
@@ -950,8 +1043,8 @@
 																	>
 																		<svg
 																			xmlns="http://www.w3.org/2000/svg"
-																			width="14"
-																			height="14"
+																			width="12"
+																			height="12"
 																			fill="currentColor"
 																			viewBox="0 0 16 16"
 																		>
@@ -1121,16 +1214,51 @@
 														{/if}
 													</div>
 													<div class="flex items-center gap-2">
+														{#if getCreatedAgeLabel(item.created_at ?? item.createdAt, item.latestActivityAt ?? item.updated_at ?? item.updatedAt)}
+															<div class="flex items-center gap-1 text-xs text-red-300">
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="12"
+																	height="12"
+																	fill="currentColor"
+																	class="text-red-300"
+																	viewBox="0 0 16 16"
+																	aria-hidden="true"
+																>
+																	<path
+																		d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71z"
+																	/>
+																	<path
+																		d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0"
+																	/>
+																</svg>
+																<span>
+																	{getCreatedAgeLabel(
+																		item.created_at ?? item.createdAt,
+																		item.latestActivityAt ?? item.updated_at ?? item.updatedAt
+																	)}
+																</span>
+															</div>
+														{/if}
 														<div
 															class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-sm text-neutral-500"
 														>
-															<span class="hidden px-2.5 py-1 sm:inline">{item.property}</span>
-															<span
-																class="hidden border-l border-neutral-200 px-2.5 py-1 sm:inline"
-															>
-																{item.unit}
+															<span class="flex items-center gap-1 px-2.5 py-1">
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="14"
+																	height="14"
+																	fill="currentColor"
+																	class="text-neutral-400"
+																	viewBox="0 0 16 16"
+																	aria-hidden="true"
+																>
+																	<path
+																		d="M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5"
+																	/>
+																</svg>
+																<span>{getUnitDisplay(item.unit)}</span>
 															</span>
-															<span class="px-2.5 py-1 sm:hidden">{item.unit}</span>
 														</div>
 														{#if item.assigneeBadge}
 															<div
