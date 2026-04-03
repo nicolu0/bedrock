@@ -1,6 +1,6 @@
 <script>
 	// @ts-nocheck
-	import { createEventDispatcher, onMount } from 'svelte';
+	import { createEventDispatcher, onMount, tick } from 'svelte';
 	import TonePromptModal from '$lib/components/TonePromptModal.svelte';
 	import AutoPromptModal from '$lib/components/AutoPromptModal.svelte';
 	import { agentToasts } from '$lib/stores/agentToasts';
@@ -39,7 +39,72 @@
 	let pickerEl;
 	let changeButtonEl;
 	let dropdownEl;
+	let searchInputEl;
 	let pickerStyle = '';
+
+	const getVendorGreetingName = (name) => {
+		const trimmed = name?.trim();
+		if (!trimmed) return null;
+		if (trimmed.includes(',')) {
+			const afterComma = trimmed.split(',')[1]?.trim();
+			if (afterComma) return afterComma.split(/\s+/)[0] ?? null;
+		}
+		const lowered = trimmed.toLowerCase();
+		const companyIndicators = [
+			'llc',
+			'inc',
+			'company',
+			'co',
+			'corp',
+			'corporation',
+			'group',
+			'partners',
+			'brothers',
+			'bros',
+			'services',
+			'service',
+			'construction',
+			'builders',
+			'plumbing',
+			'electrical',
+			'electric',
+			'hvac',
+			'heating',
+			'cooling',
+			'air',
+			'conditioning',
+			'maintenance',
+			'repair',
+			'roofing',
+			'landscaping',
+			'cleaning',
+			'painting'
+		];
+		if (companyIndicators.some((indicator) => lowered.includes(indicator))) {
+			return trimmed;
+		}
+		const firstWord = trimmed.split(/\s+/)[0];
+		return firstWord || trimmed;
+	};
+
+	const updateDraftGreeting = (body, greetingName) => {
+		if (!greetingName) return body ?? '';
+		const lines = String(body ?? '').split('\n');
+		let replaced = false;
+		const nextLines = lines.map((line) => {
+			if (replaced) return line;
+			const trimmed = line.trim();
+			if (trimmed.toLowerCase().startsWith('hi,')) {
+				replaced = true;
+				return `Hi, ${greetingName}`;
+			}
+			return line;
+		});
+		if (replaced) return nextLines.join('\n');
+		const remaining = [...nextLines];
+		while (remaining.length && remaining[0].trim() === '') remaining.shift();
+		return [`Hi, ${greetingName}`, '', ...remaining].join('\n');
+	};
 
 	const updatePickerPosition = () => {
 		if (!changeButtonEl) return;
@@ -254,26 +319,79 @@
 
 	const changeVendor = async (vendor) => {
 		if (!draft?.issue_id && !draft?.message_id) return;
+		if (!vendor?.email) {
+			showToast('Selected vendor is missing an email address.');
+			return;
+		}
 		showVendorPicker = false;
 		vendorSearch = '';
 		const prevEmail = draft.recipient_email;
-		draft = { ...draft, recipient_email: vendor.email };
+		const prevBody = draftBody;
+		const greetingName = getVendorGreetingName(vendor.name);
+		const nextBody = updateDraftGreeting(draftBody, greetingName);
+		draftBody = nextBody;
+		draft = {
+			...draft,
+			recipient_email: vendor.email,
+			recipient_emails: [vendor.email],
+			body: nextBody
+		};
 		try {
 			const body = draft.message_id
-				? { message_id: draft.message_id, recipient_email: vendor.email, channel: 'appfolio' }
-				: { issue_id: draft.issue_id, recipient_email: vendor.email, channel: 'appfolio' };
+				? {
+						message_id: draft.message_id,
+						recipient_emails: [vendor.email],
+						channel: 'appfolio',
+						...(nextBody !== prevBody ? { body: nextBody } : {})
+					}
+				: {
+						issue_id: draft.issue_id,
+						recipient_emails: [vendor.email],
+						channel: 'appfolio',
+						...(nextBody !== prevBody ? { body: nextBody } : {})
+					};
 			const response = await fetch('/api/email-drafts', {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(body)
 			});
 			if (!response.ok) {
-				draft = { ...draft, recipient_email: prevEmail };
+				draft = {
+					...draft,
+					recipient_email: prevEmail,
+					recipient_emails: prevEmail ? [prevEmail] : null,
+					body: prevBody
+				};
+				draftBody = prevBody;
 				showToast('Failed to update vendor.');
+				return;
+			}
+			const payload = await response.json().catch(() => null);
+			if (payload?.draft) {
+				draft = { ...draft, ...payload.draft };
+				draftBody = draft?.body ?? draftBody;
+				draftOriginal = draft?.original_body ?? draftOriginal;
+				draftDiff = draft?.draft_diff ?? draftDiff;
 			}
 		} catch {
-			draft = { ...draft, recipient_email: prevEmail };
+			draft = {
+				...draft,
+				recipient_email: prevEmail,
+				recipient_emails: prevEmail ? [prevEmail] : null,
+				body: prevBody
+			};
+			draftBody = prevBody;
 			showToast('Failed to update vendor.');
+		}
+	};
+
+	const toggleVendorPicker = async () => {
+		showVendorPicker = !showVendorPicker;
+		vendorSearch = '';
+		if (showVendorPicker) {
+			updatePickerPosition();
+			await tick();
+			searchInputEl?.focus();
 		}
 	};
 
@@ -429,11 +547,7 @@
 									bind:this={changeButtonEl}
 									class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500 hover:bg-neutral-100 focus:ring-0 focus:outline-none"
 									type="button"
-									on:click={() => {
-										showVendorPicker = !showVendorPicker;
-										vendorSearch = '';
-										if (showVendorPicker) updatePickerPosition();
-									}}
+									on:click={toggleVendorPicker}
 								>
 									Change
 								</button>
@@ -447,6 +561,7 @@
 								>
 									<div class="border-b border-neutral-100 px-3 py-2">
 										<input
+											bind:this={searchInputEl}
 											class="w-full border-0 bg-transparent p-0 text-xs text-neutral-700 ring-0 outline-none placeholder:text-neutral-400 focus:ring-0 focus:outline-none"
 											placeholder="Search vendors..."
 											bind:value={vendorSearch}
