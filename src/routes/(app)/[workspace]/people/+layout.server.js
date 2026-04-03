@@ -11,5 +11,6 @@ export const load = async ({ parent, depends }) => {
 		return { people: [], currentUserId: userId };
 	}
 
-	return { people: loadPeople(workspace.id), currentUserId: userId };
+	const people = await loadPeople(workspace.id);
+	return { people, currentUserId: userId };
 };

@@ -1519,7 +1519,7 @@ Rules:
 - Drafts: Always write from the property manager POV (the user). Never write from the tenant POV.
  - Drafts: For tenant replies, address the tenant by first name only (e.g., "Hi John," not "Hi John Smith,"). Extract the first name from tenant_name. Never infer a name from the email address.
  - Drafts: For tenant replies, keep it short and direct. Acknowledge the issue, state the immediate next action, and ask only essential follow-up questions.
- - Drafts: For tenant replies, do not ask about availability, timing windows, or scheduling details.
+- Drafts: For tenant replies, do not ask about availability, timing windows, or scheduling details.
 - Drafts: For tenant replies, do not repeat the issue details back to the tenant. Use a generic acknowledgment like "Thanks for reporting this issue." then state the next action.
 - Drafts: For tenant replies, ask only one specific follow-up question (may include 2-3 subparts if needed).
  - Drafts: For tenant replies, keep the structure consistent across messages: short acknowledgment, next action, single follow-up question, then signature.
@@ -2606,6 +2606,15 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 				}
 
 				if (name === 'done') {
+					const ensured = await ensureRequiredSubissuesAndVendorDraft();
+					if (ensured.triageId) {
+						lastTriageSubissueId = ensured.triageId;
+						lastSubissueId = ensured.triageId;
+					}
+					if (ensured.scheduleId) {
+						lastScheduleSubissueId = ensured.scheduleId;
+						lastSubissueId = lastSubissueId ?? ensured.scheduleId;
+					}
 					const doneIssueId =
 						primaryIssueId ??
 						linkedIssueId ??
@@ -3563,6 +3572,7 @@ const handleAppfolioWorkOrder = async ({
 			urgencyDecision: null,
 			tenantName,
 			tenantEmail,
+			tenantPhone: null,
 			userName: userProfile?.name ?? 'Bedrock',
 			defaultSenderEmail: null,
 			replyMessageId: null,

@@ -411,7 +411,7 @@
 <div class="relative flex h-full flex-col">
 	<button
 		type="button"
-		class="pointer-events-auto absolute top-3 right-3 z-50 flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-500"
+		class="pointer-events-auto absolute top-3 right-3 z-30 flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-500"
 		aria-label="Show updates"
 		on:click={toggleWelcomeOverlay}
 	>
@@ -429,7 +429,7 @@
 		</svg>
 	</button>
 	<div
-		class="pointer-events-none absolute top-0 right-0 left-0 z-40 h-16 bg-gradient-to-b from-white via-white/90 to-transparent"
+		class="pointer-events-none absolute top-0 right-0 left-0 z-20 h-16 bg-gradient-to-b from-white via-white/90 to-transparent"
 	></div>
 	<div
 		class="relative flex-1 overflow-y-auto px-3 pt-16 pb-40"
@@ -470,7 +470,7 @@
 		{/if}
 	</div>
 
-	<div class="relative z-50 px-3 pb-4">
+	<div class="relative z-30 px-3 pb-4">
 		{#if !isAtBottom}
 			<button
 				type="button"

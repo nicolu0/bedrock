@@ -512,16 +512,26 @@ export const loadPeopleMembers = async (workspaceId) => {
 };
 
 export const loadVendors = async (workspaceId) => {
-	const { data: vendors } = await supabaseAdmin
+	let response = await supabaseAdmin
 		.from('vendors')
-		.select('id, name, email, trade')
+		.select('id, name, email, trade, preference_index')
 		.eq('workspace_id', workspaceId)
+		.order('trade', { ascending: true })
+		.order('preference_index', { ascending: true })
 		.order('name', { ascending: true });
-	return vendors ?? [];
+	if (response.error?.message?.includes('preference_index')) {
+		response = await supabaseAdmin
+			.from('vendors')
+			.select('id, name, email, trade')
+			.eq('workspace_id', workspaceId)
+			.order('trade', { ascending: true })
+			.order('name', { ascending: true });
+	}
+	return response.data ?? [];
 };
 
 export const loadPeople = async (workspaceId) => {
-	const [{ data: people }, { data: vendorRows }] = await Promise.all([
+	const [{ data: people }, vendorResponse] = await Promise.all([
 		supabaseAdmin
 			.from('people')
 			.select('id, name, email, role, trade, notes, pending, created_at, user_id')
@@ -529,10 +539,22 @@ export const loadPeople = async (workspaceId) => {
 			.order('name', { ascending: true }),
 		supabaseAdmin
 			.from('vendors')
-			.select('id, name, email, trade, note, phone, created_at')
+			.select('id, name, email, trade, note, phone, created_at, preference_index')
 			.eq('workspace_id', workspaceId)
+			.order('trade', { ascending: true })
+			.order('preference_index', { ascending: true })
 			.order('name', { ascending: true })
 	]);
+	let vendorRows = vendorResponse.data;
+	if (vendorResponse.error?.message?.includes('preference_index')) {
+		const fallback = await supabaseAdmin
+			.from('vendors')
+			.select('id, name, email, trade, note, phone, created_at')
+			.eq('workspace_id', workspaceId)
+			.order('trade', { ascending: true })
+			.order('name', { ascending: true });
+		vendorRows = fallback.data;
+	}
 	const mergedVendors = (vendorRows ?? []).map((v) => ({
 		id: v.id,
 		name: v.name,
@@ -542,7 +564,8 @@ export const loadPeople = async (workspaceId) => {
 		notes: v.note,
 		pending: false,
 		created_at: v.created_at,
-		user_id: null
+		user_id: null,
+		preference_index: v.preference_index
 	}));
 	return [...(people ?? []), ...mergedVendors].sort((a, b) =>
 		(a.name ?? '').localeCompare(b.name ?? '')

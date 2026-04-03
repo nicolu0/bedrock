@@ -35,12 +35,22 @@ const listWorkspaceUnitsForAgent = async (workspaceId) => {
 };
 
 const listVendors = async (workspaceId) => {
-	const { data } = await supabaseAdmin
+	let response = await supabaseAdmin
 		.from('vendors')
-		.select('id, name, email, trade')
+		.select('id, name, email, trade, preference_index')
 		.eq('workspace_id', workspaceId)
+		.order('trade', { ascending: true })
+		.order('preference_index', { ascending: true })
 		.order('name', { ascending: true });
-	return data ?? [];
+	if (response.error?.message?.includes('preference_index')) {
+		response = await supabaseAdmin
+			.from('vendors')
+			.select('id, name, email, trade')
+			.eq('workspace_id', workspaceId)
+			.order('trade', { ascending: true })
+			.order('name', { ascending: true });
+	}
+	return response.data ?? [];
 };
 
 const listWorkspaceAssignees = async (workspaceId) => {
