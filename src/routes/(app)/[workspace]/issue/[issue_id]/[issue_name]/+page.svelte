@@ -452,6 +452,7 @@
 		if (!draft?.issue_id) return acc;
 		const key = draft.message_id ?? draft.id;
 		if (key && suppressedDraftKeys.has(key)) return acc;
+		if (draft?.channel === 'appfolio' && isAppfolioDraftApproved(draft)) return acc;
 		if (!acc[draft.issue_id]) acc[draft.issue_id] = [];
 		acc[draft.issue_id].push(draft);
 		return acc;
@@ -510,6 +511,42 @@
 		if (approved.length) acc[id] = approved;
 		return acc;
 	}, {});
+
+	$: approvedAppfolioDraftMap = Object.values(approvedAppfolioDraftsByIssue ?? {}).reduce(
+		(acc, entries) => {
+			(entries ?? []).forEach((entry) => {
+				const draftId = entry?.draft?.id ?? null;
+				if (draftId) acc[draftId] = entry;
+			});
+			return acc;
+		},
+		{}
+	);
+
+	const isAppfolioDraftApproved = (draft) =>
+		Boolean(draft?.id && approvedAppfolioDraftMap?.[draft.id]);
+
+	const isFollowupDraft = (draft) =>
+		String(draft?.body ?? '')
+			.trim()
+			.toLowerCase()
+			.startsWith('just checking in');
+
+	const hasFollowupDraft = (drafts) => (drafts ?? []).some((draft) => isFollowupDraft(draft));
+
+	const getIssueNameForId = (id) => {
+		if (!id) return '';
+		if (id === issue?.id) return issue?.name ?? '';
+		return subIssues.find((sub) => sub.id === id)?.name ?? '';
+	};
+
+	const getFollowupLabelForIssue = (id) => {
+		const name = getIssueNameForId(id);
+		return /^schedule\s+/i.test(name) ? 'Follow up w/ vendor' : 'Follow up w/ tenant';
+	};
+
+	const getApprovedByForDraft = (draft) =>
+		approvedAppfolioDraftMap?.[draft?.id]?.log?.data?.approved_by ?? null;
 
 	// ── Local mutation helpers ───────────────────────────────────────────────────
 
@@ -591,6 +628,28 @@
 				removeMessageFromCache({ id: tempId, issue_id: targetIssueId });
 			}
 			if (draft) applyDraftDelta(draft);
+		}
+	};
+
+	const handleAppfolioDraftApproved = (detail) => {
+		if (!detail) return;
+		const approvedDraft = detail?.approvedDraft ?? null;
+		const followupDraft = detail?.followupDraft ?? null;
+		if (approvedDraft) removeDraftFromCache(approvedDraft);
+		if (followupDraft) {
+			if (!followupDraft._optimistic && approvedDraft?.message_id) {
+				const entries = Object.entries(emailDraftsByMessageId ?? {});
+				for (const [, draft] of entries) {
+					if (
+						draft?.issue_id === approvedDraft.issue_id &&
+						draft?.message_id === approvedDraft.message_id &&
+						String(draft?.id ?? '').startsWith('optimistic-')
+					) {
+						removeDraftFromCache(draft);
+					}
+				}
+			}
+			applyDraftDelta(followupDraft);
 		}
 	};
 
@@ -2908,7 +2967,11 @@
 												</div>
 											{:else if (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
 												<div class="flex items-center gap-2">
-													{#if !(replyDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
+													{#if hasFollowupDraft(replyDraftsByIssue[issueId])}
+														<h3 class="text-base font-semibold text-neutral-900">
+															{getFollowupLabelForIssue(issueId)}
+														</h3>
+													{:else if !(replyDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
 														<div class="flex items-center justify-center">
 															<svg
 																class="h-6 w-6 text-neutral-500"
@@ -2936,7 +2999,7 @@
 														draft={null}
 													/>
 												{/each}
-												{#each replyDraftsByIssue[issueId] ?? [] as draft}
+												{#each replyDraftsByIssue[issueId] ?? [] as draft (draft.id ?? draft.message_id)}
 													{#if draft.channel === 'appfolio'}
 														<AppfolioDraftMessage
 															message={{
@@ -2948,10 +3011,12 @@
 																timestampLabel: formatTimestamp(draft.updated_at)
 															}}
 															{draft}
-															approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+															approvedBy={getApprovedByForDraft(draft)}
 															{vendors}
 															recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+															issueName={issue?.name ?? ''}
 															on:sent={(e) => handleDraftSent(e.detail)}
+															on:draftApproved={(e) => handleAppfolioDraftApproved(e.detail)}
 															on:assigneeUpdated={(e) => handleAppfolioAssigneeUpdate(e.detail)}
 														/>
 													{:else}
@@ -2978,7 +3043,25 @@
 									{#if (newDraftsByIssue[issueId]?.length ?? 0) > 0}
 										<div class="space-y-3">
 											<div class="flex items-center gap-2">
-												{#if !(newDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
+												{#if hasFollowupDraft(newDraftsByIssue[issueId])}
+													<svg
+														class="h-7 w-7"
+														viewBox="0 0 1024 1024"
+														fill="none"
+														xmlns="http://www.w3.org/2000/svg"
+													>
+														<circle cx="512" cy="512" r="512" fill="#007bc7" />
+														<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
+															<path
+																d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																fill="white"
+															/>
+														</g>
+													</svg>
+													<h3 class="text-base font-semibold text-neutral-900">
+														{getFollowupLabelForIssue(issueId)}
+													</h3>
+												{:else if !(newDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
 													<div class="flex items-center justify-center">
 														<svg
 															class="h-[26px] w-[26px]"
@@ -3044,7 +3127,7 @@
 												{/if}
 											</div>
 											<div class="space-y-3">
-												{#each newDraftsByIssue[issueId] ?? [] as draft}
+												{#each newDraftsByIssue[issueId] ?? [] as draft (draft.id ?? draft.message_id)}
 													{#if draft.channel === 'appfolio'}
 														<AppfolioDraftMessage
 															message={{
@@ -3056,10 +3139,12 @@
 																timestampLabel: formatTimestamp(draft.updated_at)
 															}}
 															{draft}
-															approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+															approvedBy={getApprovedByForDraft(draft)}
 															{vendors}
 															recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+															issueName={issue?.name ?? ''}
 															on:sent={(e) => handleDraftSent(e.detail)}
+															on:draftApproved={(e) => handleAppfolioDraftApproved(e.detail)}
 															on:assigneeUpdated={(e) => handleAppfolioAssigneeUpdate(e.detail)}
 														/>
 													{:else}
@@ -3198,7 +3283,11 @@
 																	</div>
 																{:else if (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 																	<div class="flex items-center gap-2">
-																		{#if !(replyDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
+																		{#if hasFollowupDraft(replyDraftsByIssue[subIssue.id])}
+																			<h3 class="text-base font-semibold text-neutral-900">
+																				{getFollowupLabelForIssue(subIssue.id)}
+																			</h3>
+																		{:else if !(replyDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
 																			<div class="flex items-center justify-center">
 																				<svg
 																					width="18"
@@ -3232,7 +3321,7 @@
 																			draft={null}
 																		/>
 																	{/each}
-																	{#each replyDraftsByIssue[subIssue.id] ?? [] as draft}
+																	{#each replyDraftsByIssue[subIssue.id] ?? [] as draft (draft.id ?? draft.message_id)}
 																		{#if draft.channel === 'appfolio'}
 																			<AppfolioDraftMessage
 																				message={{
@@ -3244,12 +3333,15 @@
 																					timestampLabel: formatTimestamp(draft.updated_at)
 																				}}
 																				{draft}
-																				approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+																				approvedBy={getApprovedByForDraft(draft)}
 																				{vendors}
 																				recommendedVendors={recommendedVendorsByIssueId[
 																					draft.issue_id
 																				] ?? []}
+																				issueName={subIssue?.name ?? ''}
 																				on:sent={(e) => handleDraftSent(e.detail)}
+																				on:draftApproved={(e) =>
+																					handleAppfolioDraftApproved(e.detail)}
 																				on:assigneeUpdated={(e) =>
 																					handleAppfolioAssigneeUpdate(e.detail)}
 																			/>
@@ -3279,7 +3371,27 @@
 														{#if (newDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 															<div class="space-y-3">
 																<div class="flex items-center gap-2">
-																	{#if !(newDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
+																	{#if hasFollowupDraft(newDraftsByIssue[subIssue.id])}
+																		<svg
+																			class="h-7 w-7"
+																			viewBox="0 0 1024 1024"
+																			fill="none"
+																			xmlns="http://www.w3.org/2000/svg"
+																		>
+																			<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																			<g
+																				transform="translate(512,512) scale(1.25) translate(-512,-512)"
+																			>
+																				<path
+																					d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																					fill="white"
+																				/>
+																			</g>
+																		</svg>
+																		<h3 class="text-base font-semibold text-neutral-900">
+																			{getFollowupLabelForIssue(subIssue.id)}
+																		</h3>
+																	{:else if !(newDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
 																		<div class="flex items-center justify-center">
 																			<svg
 																				class="h-[26px] w-[26px]"
@@ -3351,7 +3463,7 @@
 																	{/if}
 																</div>
 																<div class="space-y-3">
-																	{#each newDraftsByIssue[subIssue.id] ?? [] as draft}
+																	{#each newDraftsByIssue[subIssue.id] ?? [] as draft (draft.id ?? draft.message_id)}
 																		{#if draft.channel === 'appfolio'}
 																			<AppfolioDraftMessage
 																				message={{
@@ -3363,12 +3475,15 @@
 																					timestampLabel: formatTimestamp(draft.updated_at)
 																				}}
 																				{draft}
-																				approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+																				approvedBy={getApprovedByForDraft(draft)}
 																				{vendors}
 																				recommendedVendors={recommendedVendorsByIssueId[
 																					draft.issue_id
 																				] ?? []}
+																				issueName={subIssue?.name ?? ''}
 																				on:sent={(e) => handleDraftSent(e.detail)}
+																				on:draftApproved={(e) =>
+																					handleAppfolioDraftApproved(e.detail)}
 																				on:assigneeUpdated={(e) =>
 																					handleAppfolioAssigneeUpdate(e.detail)}
 																			/>

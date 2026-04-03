@@ -14,10 +14,11 @@
 	export let vendors = [];
 	export let recommendedVendors = [];
 	export let readonly = false;
+	export let issueName = '';
 
 	let draftBody = draft?.body ?? '';
 	let saveTimeout;
-	let lastMessageKey = draft?.message_id ?? draft?.id ?? null;
+	let lastMessageKey = draft?.id ?? null;
 	let textareaEl;
 	let isApproving = false;
 	let approvedByLocal = approvedBy ?? null;
@@ -32,7 +33,7 @@
 	let showOriginal = false;
 	const APPROVAL_KEY = 'appfolio_approved_by';
 	const getApprovalStorageKey = () =>
-		`${APPROVAL_KEY}:${draft?.issue_id ?? 'unknown'}:${draft?.message_id ?? draft?.id ?? 'draft'}`;
+		`${APPROVAL_KEY}:${draft?.issue_id ?? 'unknown'}:${draft?.id ?? 'draft'}`;
 
 	// Vendor picker state
 	let showVendorPicker = false;
@@ -139,11 +140,12 @@
 			currentRecipientEmail)
 		: null;
 
-	$: if (draft && (draft.message_id ?? draft.id) !== lastMessageKey) {
-		lastMessageKey = draft.message_id ?? draft.id;
+	$: if (draft && draft.id !== lastMessageKey) {
+		lastMessageKey = draft.id;
 		draftBody = draft.body ?? '';
 		draftOriginal = draft?.original_body ?? null;
 		draftDiff = draft?.draft_diff ?? null;
+		approvedByLocal = approvedBy ?? null;
 		if (textareaEl) {
 			textareaEl.style.height = 'auto';
 			textareaEl.style.height = `${textareaEl.scrollHeight}px`;
@@ -406,6 +408,34 @@
 		if (!draft?.issue_id) return;
 		if (isApproving) return;
 		isApproving = true;
+		const normalizedIssueName = (issueName ?? '').toString();
+		const isTriage = /^triage\s+/i.test(normalizedIssueName);
+		const isSchedule = /^schedule\s+/i.test(normalizedIssueName);
+		const followupBody = isSchedule
+			? 'Just checking in to see if you scheduled with the tenant.'
+			: isTriage
+				? 'Just checking in if the vendor got in contact with you to schedule.'
+				: null;
+		if (followupBody) {
+			dispatch('draftApproved', {
+				approvedDraft: draft,
+				followupDraft: {
+					id: `optimistic-${draft.id ?? draft.message_id ?? Date.now()}`,
+					issue_id: draft.issue_id,
+					message_id: draft.message_id ?? null,
+					sender_email: draft.sender_email ?? '',
+					recipient_email: draft.recipient_email ?? null,
+					recipient_emails: draft.recipient_emails ?? null,
+					subject: draft.subject ?? null,
+					body: followupBody,
+					original_body: followupBody,
+					draft_diff: null,
+					channel: 'appfolio',
+					updated_at: new Date().toISOString(),
+					_optimistic: true
+				}
+			});
+		}
 		try {
 			const response = await fetch('/api/appfolio-drafts/approve', {
 				method: 'POST',
@@ -424,6 +454,10 @@
 			}
 			approvedByLocal = payload?.approved_by ?? approvedByLocal ?? 'You';
 			const assigneeName = payload?.assignee_name ?? null;
+			dispatch('draftApproved', {
+				approvedDraft: draft,
+				followupDraft: payload?.followup_draft ?? null
+			});
 			dispatch('assigneeUpdated', {
 				issueId: payload?.issue_id ?? draft.issue_id,
 				parentIssueId: payload?.parent_issue_id ?? null,

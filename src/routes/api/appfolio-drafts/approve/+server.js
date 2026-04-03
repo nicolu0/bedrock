@@ -147,6 +147,7 @@ export const POST = async ({ locals, request }) => {
 		: isTriage
 			? 'Just checking in if the vendor got in contact with you to schedule.'
 			: null;
+	let followupDraft = null;
 
 	if (followupBody) {
 		const originalMessageId = approvedDraft?.message_id ?? messageId ?? null;
@@ -173,7 +174,16 @@ export const POST = async ({ locals, request }) => {
 			channel: 'appfolio',
 			updated_at: new Date().toISOString()
 		};
-		await supabaseAdmin.from('drafts').insert(followupPayload);
+		const { data: createdFollowup } = await supabaseAdmin
+			.from('drafts')
+			.insert(followupPayload)
+			.select(
+				'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, original_body, draft_diff, updated_at, channel'
+			)
+			.single();
+		if (createdFollowup?.id) {
+			followupDraft = createdFollowup;
+		}
 	}
 
 	await supabaseAdmin
@@ -209,6 +219,7 @@ export const POST = async ({ locals, request }) => {
 		assignee_id: assigneeId,
 		assignee_name: assigneeName,
 		issue_id: issue.id,
-		parent_issue_id: issue.parent_id ?? null
+		parent_issue_id: issue.parent_id ?? null,
+		followup_draft: followupDraft ?? null
 	});
 };
