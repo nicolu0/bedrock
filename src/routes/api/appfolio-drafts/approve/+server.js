@@ -149,10 +149,20 @@ export const POST = async ({ locals, request }) => {
 			: null;
 
 	if (followupBody) {
+		const originalMessageId = approvedDraft?.message_id ?? messageId ?? null;
+		if (approvedDraft?.id) {
+			await supabaseAdmin
+				.from('drafts')
+				.update({
+					message_id: `approved-${approvedDraft.id}`,
+					updated_at: new Date().toISOString()
+				})
+				.eq('id', approvedDraft.id);
+		}
 		const followupSubject = approvedDraft?.subject ?? issue.name ?? 'Follow up on scheduling';
 		const followupPayload = {
 			issue_id: issue.id,
-			message_id: approvedDraft?.message_id ?? messageId ?? null,
+			message_id: originalMessageId,
 			sender_email: approvedDraft?.sender_email ?? '',
 			recipient_email: approvedDraft?.recipient_email ?? null,
 			recipient_emails: approvedDraft?.recipient_emails ?? null,
@@ -163,35 +173,7 @@ export const POST = async ({ locals, request }) => {
 			channel: 'appfolio',
 			updated_at: new Date().toISOString()
 		};
-
-		if (approvedDraft?.id) {
-			await supabaseAdmin.from('drafts').update(followupPayload).eq('id', approvedDraft.id);
-		} else if (followupPayload.message_id) {
-			const { data: existingByMessage } = await supabaseAdmin
-				.from('drafts')
-				.select('id')
-				.eq('message_id', followupPayload.message_id)
-				.eq('channel', 'appfolio')
-				.maybeSingle();
-			if (existingByMessage?.id) {
-				await supabaseAdmin.from('drafts').update(followupPayload).eq('id', existingByMessage.id);
-			} else {
-				await supabaseAdmin.from('drafts').insert(followupPayload);
-			}
-		} else {
-			const { data: existingByIssue } = await supabaseAdmin
-				.from('drafts')
-				.select('id')
-				.eq('issue_id', issue.id)
-				.is('message_id', null)
-				.eq('channel', 'appfolio')
-				.maybeSingle();
-			if (existingByIssue?.id) {
-				await supabaseAdmin.from('drafts').update(followupPayload).eq('id', existingByIssue.id);
-			} else {
-				await supabaseAdmin.from('drafts').insert(followupPayload);
-			}
-		}
+		await supabaseAdmin.from('drafts').insert(followupPayload);
 	}
 
 	await supabaseAdmin

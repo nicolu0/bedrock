@@ -69,7 +69,10 @@
 					</svg>
 				</button>
 			</div>
-			<div class="flex-1 overflow-auto px-5 pt-2 pb-24 md:pb-4">
+			<div
+				class="flex-1 overflow-auto px-5 pt-2 pb-24 md:pb-4"
+				style="padding-bottom: calc(6rem + env(safe-area-inset-bottom));"
+			>
 				<p class="text-sm text-neutral-600">
 					Bedrock can automatically reply with a message guideline for similar issues that occur.
 				</p>
@@ -106,7 +109,10 @@
 					{/if}
 				</button>
 			</div>
-			<div class="fixed right-4 bottom-4 flex items-center gap-2 md:hidden">
+			<div
+				class="fixed right-4 bottom-4 flex items-center gap-2 md:hidden"
+				style="bottom: calc(1rem + env(safe-area-inset-bottom)); right: calc(1rem + env(safe-area-inset-right));"
+			>
 				<button
 					type="button"
 					class="rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-semibold text-neutral-700 shadow-md transition hover:border-neutral-300"

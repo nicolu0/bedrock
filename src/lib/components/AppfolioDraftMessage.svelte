@@ -174,9 +174,11 @@
 
 	onMount(() => {
 		if (typeof window === 'undefined') return;
-		const stored = window.localStorage.getItem(getApprovalStorageKey());
-		if (stored && !approvedByLocal) {
-			approvedByLocal = stored;
+		if (approvedBy) {
+			const stored = window.localStorage.getItem(getApprovalStorageKey());
+			if (stored && !approvedByLocal) {
+				approvedByLocal = stored;
+			}
 		}
 		window.addEventListener('scroll', handlePickerReposition, true);
 		window.addEventListener('resize', handlePickerReposition);
