@@ -13,6 +13,7 @@
 	export let approvedBy = null;
 	export let vendors = [];
 	export let recommendedVendors = [];
+	export let readonly = false;
 
 	let draftBody = draft?.body ?? '';
 	let saveTimeout;
@@ -194,6 +195,7 @@
 	};
 
 	const saveDraft = async () => {
+		if (readonly) return;
 		if (!draft?.message_id && !draft?.issue_id) return;
 		if (draftBody === draft?.body) return;
 		try {
@@ -318,6 +320,7 @@
 	};
 
 	const changeVendor = async (vendor) => {
+		if (readonly) return;
 		if (!draft?.issue_id && !draft?.message_id) return;
 		if (!vendor?.email) {
 			showToast('Selected vendor is missing an email address.');
@@ -386,6 +389,7 @@
 	};
 
 	const toggleVendorPicker = async () => {
+		if (readonly) return;
 		showVendorPicker = !showVendorPicker;
 		vendorSearch = '';
 		if (showVendorPicker) {
@@ -396,6 +400,7 @@
 	};
 
 	const approveDraft = async () => {
+		if (readonly) return;
 		if (!draft?.issue_id) return;
 		if (isApproving) return;
 		isApproving = true;
@@ -470,6 +475,7 @@
 	};
 
 	const queueSave = () => {
+		if (readonly) return;
 		if (saveTimeout) clearTimeout(saveTimeout);
 		saveTimeout = setTimeout(() => {
 			saveDraft();
@@ -542,7 +548,7 @@
 							{:else}
 								<span class="text-xs text-neutral-400">No vendor selected</span>
 							{/if}
-							{#if currentRecipientEmail || currentVendorName}
+							{#if (currentRecipientEmail || currentVendorName) && !readonly}
 								<button
 									bind:this={changeButtonEl}
 									class="ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-neutral-500 hover:bg-neutral-100 focus:ring-0 focus:outline-none"
@@ -553,7 +559,7 @@
 								</button>
 							{/if}
 
-							{#if showVendorPicker}
+							{#if showVendorPicker && !readonly}
 								<div
 									bind:this={dropdownEl}
 									class="w-72 overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg"
@@ -646,6 +652,7 @@
 						bind:value={draftBody}
 						bind:this={textareaEl}
 						on:input={queueSave}
+						{readonly}
 					/>
 					{#if showOriginal}
 						<div class="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-3">
@@ -696,7 +703,7 @@
 							<span class="text-xs font-semibold text-emerald-700">
 								Approved by {approvedByLocal}
 							</span>
-						{:else}
+						{:else if !readonly}
 							<button
 								class="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50"
 								type="button"

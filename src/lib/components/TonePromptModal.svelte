@@ -30,13 +30,16 @@
 
 {#if show}
 	<div
-		class="fixed inset-0 z-40 bg-neutral-900/30"
+		class="fixed inset-0 z-40 hidden bg-neutral-900/30 md:block"
 		on:click={handleClose}
 		transition:fade={{ duration: 160 }}
 	></div>
-	<div class="fixed inset-0 z-50 flex items-center justify-center px-4" on:click={handleClose}>
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center p-0 md:px-4"
+		on:click={handleClose}
+	>
 		<div
-			class="w-full max-w-4xl rounded-lg border border-neutral-200 bg-white shadow-xl"
+			class="flex h-full w-full flex-col border border-neutral-200 bg-white shadow-xl md:h-auto md:max-h-[85vh] md:max-w-4xl md:rounded-lg"
 			role="dialog"
 			aria-modal="true"
 			on:click|stopPropagation
@@ -66,7 +69,7 @@
 					</svg>
 				</button>
 			</div>
-			<div class="px-5 py-4">
+			<div class="flex-1 overflow-auto px-5 py-4 pb-24 md:pb-4">
 				<div class="grid gap-4 md:grid-cols-2">
 					<div>
 						<div class="text-xs font-semibold text-neutral-600">Original</div>
@@ -103,7 +106,7 @@
 					<div class="mt-2 text-xs text-rose-600">{errorMessage}</div>
 				{/if}
 			</div>
-			<div class="flex items-center justify-end gap-2 px-5 py-4">
+			<div class="hidden items-center justify-end gap-2 px-5 py-4 md:flex">
 				<button
 					type="button"
 					class="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 transition hover:border-neutral-300"
@@ -115,6 +118,28 @@
 				<button
 					type="button"
 					class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white transition hover:bg-neutral-800 disabled:opacity-60"
+					on:click={handlePrimary}
+					disabled={primaryDisabled}
+				>
+					{#if isLoading}
+						Saving...
+					{:else}
+						{primaryLabel}
+					{/if}
+				</button>
+			</div>
+			<div class="fixed right-4 bottom-4 flex items-center gap-2 md:hidden">
+				<button
+					type="button"
+					class="rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-semibold text-neutral-700 shadow-md transition hover:border-neutral-300"
+					on:click={handleSecondary}
+					disabled={secondaryDisabled}
+				>
+					{secondaryLabel}
+				</button>
+				<button
+					type="button"
+					class="rounded-full bg-neutral-900 px-4 py-2 text-xs font-semibold text-white shadow-md transition hover:bg-neutral-800 disabled:opacity-60"
 					on:click={handlePrimary}
 					disabled={primaryDisabled}
 				>

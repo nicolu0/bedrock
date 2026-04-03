@@ -488,6 +488,29 @@
 		return acc;
 	}, {});
 
+	$: approvedAppfolioDraftsByIssue = Object.entries(logsByIssue ?? {}).reduce((acc, [id, logs]) => {
+		const approved = (logs ?? [])
+			.filter((log) => log?.type === 'appfolio_approved' && log?.data?.draft)
+			.map((log) => {
+				const draft = log?.data?.draft ?? {};
+				return {
+					log,
+					draft: {
+						id: draft?.id ?? log?.data?.draft_id ?? null,
+						issue_id: log?.issue_id ?? id,
+						message_id: draft?.message_id ?? null,
+						subject: draft?.subject ?? null,
+						body: draft?.body ?? '',
+						recipient_email: draft?.recipient_email ?? null,
+						recipient_emails: draft?.recipient_emails ?? null,
+						channel: draft?.channel ?? 'appfolio'
+					}
+				};
+			});
+		if (approved.length) acc[id] = approved;
+		return acc;
+	}, {});
+
 	// ── Local mutation helpers ───────────────────────────────────────────────────
 
 	function applyActivityLogDelta(log) {
@@ -1719,310 +1742,275 @@
 				</div>
 			</div>
 
-			<div class="flex-1 min-h-0 overflow-visible" class:opacity-0={!$pageReady}>
+			<div class="min-h-0 flex-1 overflow-visible" class:opacity-0={!$pageReady}>
 				<div
 					class="h-full overflow-y-auto px-4 pt-4 pb-20 transition-opacity duration-200 sm:px-10 sm:pt-8"
 				>
 					<div class="mt-2 sm:flex sm:gap-6">
-					<div
-						class={`min-w-0 ${$rightPanel?.open && $rightPanel?.type === 'chat' ? 'sm:w-1/2' : 'sm:w-2/3'}`}
-					>
-						{#if !_issueLoading && issue}
-							<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
-							<div class="mt-2 text-sm text-neutral-500">
-								{issueDescription || 'Add description...'}
-							</div>
-						{:else}
-							<div class="h-7 w-56 animate-pulse rounded bg-neutral-200"></div>
-							<div class="mt-2 h-4 w-80 animate-pulse rounded bg-neutral-100"></div>
-						{/if}
-						<div class="mt-4 sm:hidden">
-							<div class="rounded-2xl">
-								<div class="space-y-2 text-sm text-neutral-600">
-									<div class="grid grid-cols-2 gap-1">
-										<div class="tooltip-target relative">
-											<button
-												type="button"
-												bind:this={propertyAnchorMobile}
-												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-													canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
-												}`}
-												disabled={!canEditIssue}
-												aria-disabled={!canEditIssue}
-												on:click|stopPropagation={() => {
-													if (!canEditIssue) return;
-													propertyOpen = !propertyOpen;
-													unitOpen = false;
-													statusOpen = false;
-													assigneeOpen = false;
-													urgentOpen = false;
-													urgentHelpOpen = false;
-													if (propertyOpen) refreshOpenFieldMenus();
-												}}
-											>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="14"
-													height="14"
-													fill="currentColor"
-													class="text-neutral-400"
-													viewBox="0 0 16 16"
+						<div
+							class={`min-w-0 ${$rightPanel?.open && $rightPanel?.type === 'chat' ? 'sm:w-1/2' : 'sm:w-2/3'}`}
+						>
+							{#if !_issueLoading && issue}
+								<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
+								<div class="mt-2 text-sm text-neutral-500">
+									{issueDescription || 'Add description...'}
+								</div>
+							{:else}
+								<div class="h-7 w-56 animate-pulse rounded bg-neutral-200"></div>
+								<div class="mt-2 h-4 w-80 animate-pulse rounded bg-neutral-100"></div>
+							{/if}
+							<div class="mt-4 sm:hidden">
+								<div class="rounded-2xl">
+									<div class="space-y-2 text-sm text-neutral-600">
+										<div class="grid grid-cols-2 gap-1">
+											<div class="tooltip-target relative">
+												<button
+													type="button"
+													bind:this={propertyAnchorMobile}
+													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+														canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+													}`}
+													disabled={!canEditIssue}
+													aria-disabled={!canEditIssue}
+													on:click|stopPropagation={() => {
+														if (!canEditIssue) return;
+														propertyOpen = !propertyOpen;
+														unitOpen = false;
+														statusOpen = false;
+														assigneeOpen = false;
+														urgentOpen = false;
+														urgentHelpOpen = false;
+														if (propertyOpen) refreshOpenFieldMenus();
+													}}
 												>
-													<path
-														d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
-													/>
-												</svg>
-												<span class="truncate text-neutral-700">{propertyName}</span>
-											</button>
-											{#if !rightSidebarMenuOpen}
-												<div
-													class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-												>
-													Change property
-												</div>
-											{/if}
-											{#if propertyOpen && canEditIssue}
-											<div
-												class="fixed z-[100] w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-												style={propertyMenuStyle}
-												on:click|stopPropagation
-											>
-													<button
-														type="button"
-														class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-															!issuePropertyId ? 'bg-neutral-50' : ''
-														}`}
-														on:click={() => handlePropertySelect(null)}
-													>
-														<span>No property</span>
-														{#if !issuePropertyId}
-															<span class="text-xs text-neutral-400">Selected</span>
-														{/if}
-													</button>
-													<div class="my-1 h-px bg-neutral-100"></div>
-													{#each properties as property}
-														<button
-															type="button"
-															class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																issuePropertyId === property.id ? 'bg-neutral-50' : ''
-															}`}
-															on:click={() => handlePropertySelect(property.id)}
-														>
-															<span class="truncate">{property.name}</span>
-															{#if issuePropertyId === property.id}
-																<span class="text-xs text-neutral-400">Selected</span>
-															{/if}
-														</button>
-													{/each}
-												</div>
-											{/if}
-										</div>
-										<div class="tooltip-target relative">
-											<button
-												type="button"
-												bind:this={unitAnchorMobile}
-												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-													canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
-												}`}
-												disabled={!canEditIssue}
-												aria-disabled={!canEditIssue}
-												on:click|stopPropagation={() => {
-													if (!canEditIssue) return;
-													unitOpen = !unitOpen;
-													propertyOpen = false;
-													statusOpen = false;
-													assigneeOpen = false;
-													urgentOpen = false;
-													urgentHelpOpen = false;
-													if (unitOpen) refreshOpenFieldMenus();
-												}}
-											>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="14"
-													height="14"
-													fill="currentColor"
-													class="text-neutral-400"
-													viewBox="0 0 16 16"
-												>
-													<path
-														d="M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5"
-													/>
-												</svg>
-												<span class="truncate text-neutral-700">{unitName}</span>
-											</button>
-											{#if !rightSidebarMenuOpen}
-												<div
-													class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-												>
-													Change unit
-												</div>
-											{/if}
-											{#if unitOpen && canEditIssue}
-											<div
-												class="fixed z-[100] w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-												style={unitMenuStyle}
-												on:click|stopPropagation
-											>
-													<button
-														type="button"
-														class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-															!issueUnitId ? 'bg-neutral-50' : ''
-														}`}
-														on:click={() => handleUnitSelect(null)}
-													>
-														<span>No unit</span>
-														{#if !issueUnitId}
-															<span class="text-xs text-neutral-400">Selected</span>
-														{/if}
-													</button>
-													<div class="my-1 h-px bg-neutral-100"></div>
-													{#if availableUnits.length}
-														{#each availableUnits as unit}
-															<button
-																type="button"
-																class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																	issueUnitId === unit.id ? 'bg-neutral-50' : ''
-																}`}
-																on:click={() => handleUnitSelect(unit.id)}
-															>
-																<span class="truncate">{unit.name}</span>
-																{#if issueUnitId === unit.id}
-																	<span class="text-xs text-neutral-400">Selected</span>
-																{/if}
-															</button>
-														{/each}
-													{:else}
-														<div class="px-3 py-2 text-neutral-400">No units available.</div>
-													{/if}
-												</div>
-											{/if}
-										</div>
-									</div>
-									<div class="grid grid-cols-2 gap-2">
-										<div class="tooltip-target relative">
-										<button
-											type="button"
-											bind:this={statusAnchorMobile}
-											class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-												canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
-											}`}
-												disabled={!canEditIssue}
-												aria-disabled={!canEditIssue}
-											on:click|stopPropagation={() => {
-												if (!canEditIssue) return;
-												statusOpen = !statusOpen;
-												propertyOpen = false;
-												unitOpen = false;
-												assigneeOpen = false;
-												urgentOpen = false;
-												urgentHelpOpen = false;
-												if (statusOpen) refreshOpenFieldMenus();
-											}}
-										>
-												<span
-													class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
-												></span>
-												<span>{statusMeta.label}</span>
-											</button>
-											{#if !rightSidebarMenuOpen}
-												<div
-													class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-												>
-													Change status
-												</div>
-											{/if}
-											{#if statusOpen && canEditIssue}
-										<div
-											class="fixed z-[100] w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-											style={statusMenuStyle}
-											on:click|stopPropagation
-										>
-													{#each statusCycle as status}
-														<button
-															type="button"
-															class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																statusKey === status ? 'bg-neutral-50' : ''
-															}`}
-															on:click={() => {
-																statusOpen = false;
-																handleStatusChange(status);
-															}}
-														>
-															<span
-																class={`h-4 w-4 rounded-full border-[1.5px] ${
-																	(statusConfig[status] ?? statusConfig.todo).statusClass
-																}`}
-															></span>
-															<span>{(statusConfig[status] ?? statusConfig.todo).label}</span>
-														</button>
-													{/each}
-												</div>
-											{/if}
-										</div>
-										<div class="tooltip-target relative">
-										<button
-											type="button"
-											bind:this={assigneeAnchorMobile}
-											class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-												canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
-											}`}
-												disabled={!canEditIssue}
-												aria-disabled={!canEditIssue}
-											on:click|stopPropagation={() => {
-												if (!canEditIssue) return;
-												assigneeOpen = !assigneeOpen;
-												propertyOpen = false;
-												unitOpen = false;
-												statusOpen = false;
-												urgentOpen = false;
-												urgentHelpOpen = false;
-												if (assigneeOpen) refreshOpenFieldMenus();
-											}}
-										>
-												{#if assignee}
-													<div
-														class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(assignee).color}`}
-														aria-label={getAssigneeAvatar(assignee).name}
-													>
-														{getAssigneeAvatar(assignee).initial}
-													</div>
-												{:else}
 													<svg
 														xmlns="http://www.w3.org/2000/svg"
-														width="16"
-														height="16"
+														width="14"
+														height="14"
 														fill="currentColor"
 														class="text-neutral-400"
 														viewBox="0 0 16 16"
 													>
-														<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
 														<path
-															fill-rule="evenodd"
-															d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+															d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
 														/>
 													</svg>
-												{/if}
-												<span class="truncate">{assigneeName}</span>
-											</button>
-											{#if !rightSidebarMenuOpen}
-												<div
-													class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-												>
-													Change assignee
-												</div>
-											{/if}
-											{#if assigneeOpen && canEditIssue}
-										<div
-											class="fixed z-[100] w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-											style={assigneeMenuStyle}
-											on:click|stopPropagation
-										>
-													<button
-														type="button"
-														class="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50"
-														on:click={() => handleAssigneeSelect(null)}
+													<span class="truncate text-neutral-700">{propertyName}</span>
+												</button>
+												{#if !rightSidebarMenuOpen}
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
 													>
+														Change property
+													</div>
+												{/if}
+												{#if propertyOpen && canEditIssue}
+													<div
+														class="fixed z-[100] w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+														style={propertyMenuStyle}
+														on:click|stopPropagation
+													>
+														<button
+															type="button"
+															class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																!issuePropertyId ? 'bg-neutral-50' : ''
+															}`}
+															on:click={() => handlePropertySelect(null)}
+														>
+															<span>No property</span>
+															{#if !issuePropertyId}
+																<span class="text-xs text-neutral-400">Selected</span>
+															{/if}
+														</button>
+														<div class="my-1 h-px bg-neutral-100"></div>
+														{#each properties as property}
+															<button
+																type="button"
+																class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																	issuePropertyId === property.id ? 'bg-neutral-50' : ''
+																}`}
+																on:click={() => handlePropertySelect(property.id)}
+															>
+																<span class="truncate">{property.name}</span>
+																{#if issuePropertyId === property.id}
+																	<span class="text-xs text-neutral-400">Selected</span>
+																{/if}
+															</button>
+														{/each}
+													</div>
+												{/if}
+											</div>
+											<div class="tooltip-target relative">
+												<button
+													type="button"
+													bind:this={unitAnchorMobile}
+													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+														canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+													}`}
+													disabled={!canEditIssue}
+													aria-disabled={!canEditIssue}
+													on:click|stopPropagation={() => {
+														if (!canEditIssue) return;
+														unitOpen = !unitOpen;
+														propertyOpen = false;
+														statusOpen = false;
+														assigneeOpen = false;
+														urgentOpen = false;
+														urgentHelpOpen = false;
+														if (unitOpen) refreshOpenFieldMenus();
+													}}
+												>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="14"
+														height="14"
+														fill="currentColor"
+														class="text-neutral-400"
+														viewBox="0 0 16 16"
+													>
+														<path
+															d="M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5"
+														/>
+													</svg>
+													<span class="truncate text-neutral-700">{unitName}</span>
+												</button>
+												{#if !rightSidebarMenuOpen}
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													>
+														Change unit
+													</div>
+												{/if}
+												{#if unitOpen && canEditIssue}
+													<div
+														class="fixed z-[100] w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+														style={unitMenuStyle}
+														on:click|stopPropagation
+													>
+														<button
+															type="button"
+															class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																!issueUnitId ? 'bg-neutral-50' : ''
+															}`}
+															on:click={() => handleUnitSelect(null)}
+														>
+															<span>No unit</span>
+															{#if !issueUnitId}
+																<span class="text-xs text-neutral-400">Selected</span>
+															{/if}
+														</button>
+														<div class="my-1 h-px bg-neutral-100"></div>
+														{#if availableUnits.length}
+															{#each availableUnits as unit}
+																<button
+																	type="button"
+																	class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																		issueUnitId === unit.id ? 'bg-neutral-50' : ''
+																	}`}
+																	on:click={() => handleUnitSelect(unit.id)}
+																>
+																	<span class="truncate">{unit.name}</span>
+																	{#if issueUnitId === unit.id}
+																		<span class="text-xs text-neutral-400">Selected</span>
+																	{/if}
+																</button>
+															{/each}
+														{:else}
+															<div class="px-3 py-2 text-neutral-400">No units available.</div>
+														{/if}
+													</div>
+												{/if}
+											</div>
+										</div>
+										<div class="grid grid-cols-2 gap-2">
+											<div class="tooltip-target relative">
+												<button
+													type="button"
+													bind:this={statusAnchorMobile}
+													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+														canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+													}`}
+													disabled={!canEditIssue}
+													aria-disabled={!canEditIssue}
+													on:click|stopPropagation={() => {
+														if (!canEditIssue) return;
+														statusOpen = !statusOpen;
+														propertyOpen = false;
+														unitOpen = false;
+														assigneeOpen = false;
+														urgentOpen = false;
+														urgentHelpOpen = false;
+														if (statusOpen) refreshOpenFieldMenus();
+													}}
+												>
+													<span
+														class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
+													></span>
+													<span>{statusMeta.label}</span>
+												</button>
+												{#if !rightSidebarMenuOpen}
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													>
+														Change status
+													</div>
+												{/if}
+												{#if statusOpen && canEditIssue}
+													<div
+														class="fixed z-[100] w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+														style={statusMenuStyle}
+														on:click|stopPropagation
+													>
+														{#each statusCycle as status}
+															<button
+																type="button"
+																class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																	statusKey === status ? 'bg-neutral-50' : ''
+																}`}
+																on:click={() => {
+																	statusOpen = false;
+																	handleStatusChange(status);
+																}}
+															>
+																<span
+																	class={`h-4 w-4 rounded-full border-[1.5px] ${
+																		(statusConfig[status] ?? statusConfig.todo).statusClass
+																	}`}
+																></span>
+																<span>{(statusConfig[status] ?? statusConfig.todo).label}</span>
+															</button>
+														{/each}
+													</div>
+												{/if}
+											</div>
+											<div class="tooltip-target relative">
+												<button
+													type="button"
+													bind:this={assigneeAnchorMobile}
+													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+														canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+													}`}
+													disabled={!canEditIssue}
+													aria-disabled={!canEditIssue}
+													on:click|stopPropagation={() => {
+														if (!canEditIssue) return;
+														assigneeOpen = !assigneeOpen;
+														propertyOpen = false;
+														unitOpen = false;
+														statusOpen = false;
+														urgentOpen = false;
+														urgentHelpOpen = false;
+														if (assigneeOpen) refreshOpenFieldMenus();
+													}}
+												>
+													{#if assignee}
+														<div
+															class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(assignee).color}`}
+															aria-label={getAssigneeAvatar(assignee).name}
+														>
+															{getAssigneeAvatar(assignee).initial}
+														</div>
+													{:else}
 														<svg
 															xmlns="http://www.w3.org/2000/svg"
 															width="16"
@@ -2037,236 +2025,27 @@
 																d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
 															/>
 														</svg>
-														<span class="font-medium text-neutral-500"> Unassigned </span>
-													</button>
-													<div class="my-1 h-px bg-neutral-100"></div>
-													{#if membersLoading}
-														<div class="px-3 py-2 text-neutral-400">Loading members...</div>
-													{:else if assignableMembers.length}
-														{#each assignableMembers as member}
-															<button
-																type="button"
-																class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																	assignee?.id === member.user_id ? 'bg-neutral-50' : ''
-																}`}
-																on:click={() => handleAssigneeSelect(member)}
-															>
-																<div
-																	class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getMemberAvatar(member).color}`}
-																	aria-label={getMemberAvatar(member).name}
-																>
-																	{getMemberAvatar(member).initial}
-																</div>
-																<span class="truncate">
-																	{member.users?.name ??
-																		member.name ??
-																		member.users?.id ??
-																		member.user_id ??
-																		'Unknown member'}
-																</span>
-																<span
-																	class="ml-auto rounded-full bg-stone-100 px-2 py-0.5 font-medium text-neutral-600"
-																>
-																	{roleLabels[member.role] ?? member.role}
-																</span>
-															</button>
-														{/each}
-													{:else if membersReady}
-														<div class="px-3 py-2 text-neutral-400">No members found.</div>
-													{:else}
-														<div class="px-3 py-2 text-neutral-400">Unable to load members.</div>
 													{/if}
-												</div>
-											{/if}
-										</div>
-									</div>
-									<div class="tooltip-target group relative">
-										<button
-											type="button"
-											bind:this={urgentAnchorMobile}
-											class={`flex w-1/2 items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-												canEditIssue && !isSubissue
-													? 'hover:bg-neutral-200'
-													: 'cursor-not-allowed opacity-60'
-											}`}
-											disabled={!canEditIssue || isSubissue}
-											aria-disabled={!canEditIssue || isSubissue}
-											on:click|stopPropagation={() => {
-												if (!canEditIssue || isSubissue) return;
-												urgentOpen = !urgentOpen;
-												urgentHelpOpen = false;
-												statusOpen = false;
-												assigneeOpen = false;
-												propertyOpen = false;
-												unitOpen = false;
-												if (urgentOpen) refreshOpenFieldMenus();
-											}}
-										>
-											{#if displayUrgent}
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="16"
-													height="16"
-													fill="currentColor"
-													class="text-rose-600"
-													viewBox="0 0 16 16"
-												>
-													<path
-														d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
-													/>
-												</svg>
-												<span>Urgent</span>
-											{:else}
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="16"
-													height="16"
-													fill="currentColor"
-													class="text-neutral-400"
-													viewBox="0 0 16 16"
-												>
-													<path
-														d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
-													/>
-												</svg>
-												<span>Not urgent</span>
-											{/if}
-										</button>
-										{#if !rightSidebarMenuOpen}
-											<div
-												class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-											>
-												{isSubissue ? 'Change urgency in the root issue' : 'Change urgency'}
-											</div>
-										{/if}
-										{#if urgentOpen && canEditIssue && !isSubissue}
-										<div
-											class="fixed z-[100] w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-											style={urgentMenuStyle}
-											on:click|stopPropagation
-										>
-												<button
-													type="button"
-													class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-														displayUrgent ? 'bg-neutral-50' : ''
-													}`}
-													on:click={() => handleUrgentChange(true)}
-												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														width="16"
-														height="16"
-														fill="currentColor"
-														class="text-rose-600"
-														viewBox="0 0 16 16"
-													>
-														<path
-															d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
-														/>
-													</svg>
-													<span>Urgent</span>
+													<span class="truncate">{assigneeName}</span>
 												</button>
-												<button
-													type="button"
-													class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-														!displayUrgent ? 'bg-neutral-50' : ''
-													}`}
-													on:click={() => handleUrgentChange(false)}
-												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														width="16"
-														height="16"
-														fill="currentColor"
-														class="text-neutral-400"
-														viewBox="0 0 16 16"
+												{#if !rightSidebarMenuOpen}
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
 													>
-														<path
-															d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
-														/>
-													</svg>
-													<span>Not urgent</span>
-												</button>
-											</div>
-										{/if}
-									</div>
-								</div>
-							</div>
-						</div>
-						<div class="mt-4 min-w-0">
-							{#if !_subIssuesLoading && subIssues.length}
-								<div>
-									<button
-										type="button"
-										class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
-										on:click={() => (subIssuesOpen = !subIssuesOpen)}
-									>
-										<div
-											class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="12"
-												height="12"
-												fill="currentColor"
-												class="chevron-icon transition-transform duration-150 ease-in-out"
-												class:rotate-[-90deg]={!subIssuesOpen}
-												viewBox="0 0 16 16"
-											>
-												<path
-													d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-												/>
-											</svg>
-											<span>Sub-issues</span>
-										</div>
-										<div
-											class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-										>
-											{subIssuesOpen ? 'Collapse' : 'Expand'}
-										</div>
-									</button>
-									<div
-										class="grid transition-[grid-template-rows] duration-150 ease-in-out"
-										style:grid-template-rows={subIssuesOpen ? '1fr' : '0fr'}
-									>
-										<div class="overflow-hidden">
-											<div class="mt-2">
-												{#each subIssuesWithAssignees as subIssue}
-													<a
-														href={getSubIssueHref(subIssue)}
-														class="relative flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
-														on:mouseenter={(event) => {
-															subIssueHoverId = subIssue.id;
-															subIssueTooltipVisible = true;
-															const rect = event.currentTarget.getBoundingClientRect();
-															subIssueTooltipX = event.clientX + 12;
-															subIssueTooltipY = rect.bottom + 8;
-														}}
-														on:mousemove={(event) => {
-															subIssueTooltipX = event.clientX + 12;
-														}}
-														on:mouseleave={() => {
-															subIssueTooltipVisible = false;
-															subIssueHoverId = null;
-														}}
+														Change assignee
+													</div>
+												{/if}
+												{#if assigneeOpen && canEditIssue}
+													<div
+														class="fixed z-[100] w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+														style={assigneeMenuStyle}
+														on:click|stopPropagation
 													>
-														<div class="flex items-center gap-2">
-															<span
-																class={`h-4 w-4 rounded-full border-[1.5px] ${
-																	statusConfig[subIssue.status ?? 'todo']?.statusClass ??
-																	'border-neutral-300 text-neutral-700'
-																}`}
-															></span>
-															<span class="text-neutral-800">{subIssue.name}</span>
-														</div>
-														{#if subIssue.assignee}
-															<div
-																class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(subIssue.assignee).color}`}
-																aria-label={getAssigneeAvatar(subIssue.assignee).name}
-															>
-																{getAssigneeAvatar(subIssue.assignee).initial}
-															</div>
-														{:else}
+														<button
+															type="button"
+															class="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50"
+															on:click={() => handleAssigneeSelect(null)}
+														>
 															<svg
 																xmlns="http://www.w3.org/2000/svg"
 																width="16"
@@ -2281,266 +2060,85 @@
 																	d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
 																/>
 															</svg>
+															<span class="font-medium text-neutral-500"> Unassigned </span>
+														</button>
+														<div class="my-1 h-px bg-neutral-100"></div>
+														{#if membersLoading}
+															<div class="px-3 py-2 text-neutral-400">Loading members...</div>
+														{:else if assignableMembers.length}
+															{#each assignableMembers as member}
+																<button
+																	type="button"
+																	class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																		assignee?.id === member.user_id ? 'bg-neutral-50' : ''
+																	}`}
+																	on:click={() => handleAssigneeSelect(member)}
+																>
+																	<div
+																		class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getMemberAvatar(member).color}`}
+																		aria-label={getMemberAvatar(member).name}
+																	>
+																		{getMemberAvatar(member).initial}
+																	</div>
+																	<span class="truncate">
+																		{member.users?.name ??
+																			member.name ??
+																			member.users?.id ??
+																			member.user_id ??
+																			'Unknown member'}
+																	</span>
+																	<span
+																		class="ml-auto rounded-full bg-stone-100 px-2 py-0.5 font-medium text-neutral-600"
+																	>
+																		{roleLabels[member.role] ?? member.role}
+																	</span>
+																</button>
+															{/each}
+														{:else if membersReady}
+															<div class="px-3 py-2 text-neutral-400">No members found.</div>
+														{:else}
+															<div class="px-3 py-2 text-neutral-400">Unable to load members.</div>
 														{/if}
-														{#if subIssueTooltipVisible && subIssueHoverId === subIssue.id}
-															<div
-																class="subissue-hover-tooltip fixed z-50 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-																style={`left: ${subIssueTooltipX}px; top: ${subIssueTooltipY}px;`}
-															>
-																Go to issue
-															</div>
-														{/if}
-													</a>
-												{/each}
+													</div>
+												{/if}
 											</div>
 										</div>
-									</div>
-								</div>
-							{/if}
-						</div>
-					</div>
-					<div class={`${$rightPanel?.open && $rightPanel?.type === 'chat' ? 'w-1/2' : 'w-1/3'}`}>
-						<div class="hidden sm:block">
-							<div class="rounded-2xl">
-								<span class="text-sm font-medium text-neutral-500">Fields</span>
-								<div class="mt-1 space-y-2 text-sm text-neutral-600">
-									<div class="grid grid-cols-2 gap-2">
-										<div class="tooltip-target relative">
+										<div class="tooltip-target group relative">
 											<button
 												type="button"
-												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-													canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+												bind:this={urgentAnchorMobile}
+												class={`flex w-1/2 items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+													canEditIssue && !isSubissue
+														? 'hover:bg-neutral-200'
+														: 'cursor-not-allowed opacity-60'
 												}`}
-												disabled={!canEditIssue}
-												aria-disabled={!canEditIssue}
+												disabled={!canEditIssue || isSubissue}
+												aria-disabled={!canEditIssue || isSubissue}
 												on:click|stopPropagation={() => {
-													if (!canEditIssue) return;
-													propertyOpen = !propertyOpen;
-													unitOpen = false;
+													if (!canEditIssue || isSubissue) return;
+													urgentOpen = !urgentOpen;
+													urgentHelpOpen = false;
 													statusOpen = false;
 													assigneeOpen = false;
-													urgentOpen = false;
-													urgentHelpOpen = false;
-												}}
-											>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="14"
-													height="14"
-													fill="currentColor"
-													class="text-neutral-400"
-													viewBox="0 0 16 16"
-												>
-													<path
-														d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
-													/>
-												</svg>
-												<span class="truncate text-neutral-700">{propertyName}</span>
-											</button>
-											{#if !rightSidebarMenuOpen}
-												<div
-													class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-												>
-													Change property
-												</div>
-											{/if}
-											{#if propertyOpen && canEditIssue}
-											<div
-												class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
-												on:click|stopPropagation
-											>
-													<button
-														type="button"
-														class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-															!issuePropertyId ? 'bg-neutral-50' : ''
-														}`}
-														on:click={() => handlePropertySelect(null)}
-													>
-														<span>No property</span>
-														{#if !issuePropertyId}
-															<span class="text-xs text-neutral-400">Selected</span>
-														{/if}
-													</button>
-													<div class="my-1 h-px bg-neutral-100"></div>
-													{#each properties as property}
-														<button
-															type="button"
-															class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																issuePropertyId === property.id ? 'bg-neutral-50' : ''
-															}`}
-															on:click={() => handlePropertySelect(property.id)}
-														>
-															<span class="truncate">{property.name}</span>
-															{#if issuePropertyId === property.id}
-																<span class="text-xs text-neutral-400">Selected</span>
-															{/if}
-														</button>
-													{/each}
-												</div>
-											{/if}
-										</div>
-										<div class="tooltip-target relative">
-											<button
-												type="button"
-												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-													canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
-												}`}
-												disabled={!canEditIssue}
-												aria-disabled={!canEditIssue}
-												on:click|stopPropagation={() => {
-													if (!canEditIssue) return;
-													unitOpen = !unitOpen;
-													propertyOpen = false;
-													statusOpen = false;
-													assigneeOpen = false;
-													urgentOpen = false;
-													urgentHelpOpen = false;
-												}}
-											>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="14"
-													height="14"
-													fill="currentColor"
-													class="text-neutral-400"
-													viewBox="0 0 16 16"
-												>
-													<path
-														d="M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5"
-													/>
-												</svg>
-												<span class="truncate text-neutral-700">{unitName}</span>
-											</button>
-											{#if !rightSidebarMenuOpen}
-												<div
-													class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-												>
-													Change unit
-												</div>
-											{/if}
-											{#if unitOpen && canEditIssue}
-											<div
-												class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
-												on:click|stopPropagation
-											>
-													<button
-														type="button"
-														class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-															!issueUnitId ? 'bg-neutral-50' : ''
-														}`}
-														on:click={() => handleUnitSelect(null)}
-													>
-														<span>No unit</span>
-														{#if !issueUnitId}
-															<span class="text-xs text-neutral-400">Selected</span>
-														{/if}
-													</button>
-													<div class="my-1 h-px bg-neutral-100"></div>
-													{#if availableUnits.length}
-														{#each availableUnits as unit}
-															<button
-																type="button"
-																class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																	issueUnitId === unit.id ? 'bg-neutral-50' : ''
-																}`}
-																on:click={() => handleUnitSelect(unit.id)}
-															>
-																<span class="truncate">{unit.name}</span>
-																{#if issueUnitId === unit.id}
-																	<span class="text-xs text-neutral-400">Selected</span>
-																{/if}
-															</button>
-														{/each}
-													{:else}
-														<div class="px-3 py-2 text-neutral-400">No units available.</div>
-													{/if}
-												</div>
-											{/if}
-										</div>
-									</div>
-									<div class="grid grid-cols-2 gap-2">
-										<div class="tooltip-target relative">
-											<button
-												type="button"
-												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-													canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
-												}`}
-												disabled={!canEditIssue}
-												aria-disabled={!canEditIssue}
-												on:click|stopPropagation={() => {
-													if (!canEditIssue) return;
-													statusOpen = !statusOpen;
 													propertyOpen = false;
 													unitOpen = false;
-													assigneeOpen = false;
-													urgentOpen = false;
-													urgentHelpOpen = false;
+													if (urgentOpen) refreshOpenFieldMenus();
 												}}
 											>
-												<span
-													class={`h-4 w-4 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
-												></span>
-												<span>{statusMeta.label}</span>
-											</button>
-											{#if !rightSidebarMenuOpen}
-												<div
-													class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-												>
-													Change status
-												</div>
-											{/if}
-											{#if statusOpen && canEditIssue}
-											<div
-												class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
-												on:click|stopPropagation
-											>
-													{#each statusCycle as status}
-														<button
-															type="button"
-															class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																statusKey === status ? 'bg-neutral-50' : ''
-															}`}
-															on:click={() => {
-																statusOpen = false;
-																handleStatusChange(status);
-															}}
-														>
-															<span
-																class={`h-4 w-4 rounded-full border-[1.5px] ${
-																	(statusConfig[status] ?? statusConfig.todo).statusClass
-																}`}
-															></span>
-															<span>{(statusConfig[status] ?? statusConfig.todo).label}</span>
-														</button>
-													{/each}
-												</div>
-											{/if}
-										</div>
-										<div class="tooltip-target relative">
-											<button
-												type="button"
-												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-													canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
-												}`}
-												disabled={!canEditIssue}
-												aria-disabled={!canEditIssue}
-												on:click|stopPropagation={() => {
-													if (!canEditIssue) return;
-													assigneeOpen = !assigneeOpen;
-													propertyOpen = false;
-													unitOpen = false;
-													statusOpen = false;
-													urgentOpen = false;
-													urgentHelpOpen = false;
-												}}
-											>
-												{#if assignee}
-													<div
-														class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(assignee).color}`}
-														aria-label={getAssigneeAvatar(assignee).name}
+												{#if displayUrgent}
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="16"
+														height="16"
+														fill="currentColor"
+														class="text-rose-600"
+														viewBox="0 0 16 16"
 													>
-														{getAssigneeAvatar(assignee).initial}
-													</div>
+														<path
+															d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+														/>
+													</svg>
+													<span>Urgent</span>
 												{:else}
 													<svg
 														xmlns="http://www.w3.org/2000/svg"
@@ -2550,184 +2148,13 @@
 														class="text-neutral-400"
 														viewBox="0 0 16 16"
 													>
-														<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
 														<path
-															fill-rule="evenodd"
-															d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+															d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
 														/>
 													</svg>
+													<span>Not urgent</span>
 												{/if}
-												<span class="truncate text-neutral-700">{assigneeName}</span>
 											</button>
-											{#if !rightSidebarMenuOpen}
-												<div
-													class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-												>
-													Change assignee
-												</div>
-											{/if}
-											{#if assigneeOpen && canEditIssue}
-											<div
-												class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
-												on:click|stopPropagation
-											>
-													<button
-														type="button"
-														class="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50"
-														on:click={() => handleAssigneeSelect(null)}
-													>
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															width="16"
-															height="16"
-															fill="currentColor"
-															class="text-neutral-400"
-															viewBox="0 0 16 16"
-														>
-															<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
-															<path
-																fill-rule="evenodd"
-																d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
-															/>
-														</svg>
-														<span class="font-medium text-neutral-500"> Unassigned </span>
-													</button>
-													<div class="my-1 h-px bg-neutral-100"></div>
-													{#if membersLoading}
-														<div class="px-3 py-2 text-neutral-400">Loading members...</div>
-													{:else if assignableMembers.length}
-														{#each assignableMembers as member}
-															<button
-																type="button"
-																class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																	assignee?.id === member.user_id ? 'bg-neutral-50' : ''
-																}`}
-																on:click={() => handleAssigneeSelect(member)}
-															>
-																<div
-																	class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getMemberAvatar(member).color}`}
-																	aria-label={getMemberAvatar(member).name}
-																>
-																	{getMemberAvatar(member).initial}
-																</div>
-																<span class="truncate">
-																	{member.users?.name ??
-																		member.name ??
-																		member.users?.id ??
-																		member.user_id ??
-																		'Unknown member'}
-																</span>
-																<span
-																	class="ml-auto rounded-full bg-stone-100 px-2 py-0.5 font-medium text-neutral-600"
-																>
-																	{roleLabels[member.role] ?? member.role}
-																</span>
-															</button>
-														{/each}
-													{:else if membersReady}
-														<div class="px-3 py-2 text-neutral-400">No members found.</div>
-													{:else}
-														<div class="px-3 py-2 text-neutral-400">Unable to load members.</div>
-													{/if}
-												</div>
-											{/if}
-										</div>
-									</div>
-									<div class="flex items-center justify-between gap-2">
-										<div class="tooltip-target group relative w-1/2">
-											<div
-												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-													canEditIssue && !isSubissue ? 'hover:bg-neutral-200' : 'opacity-60'
-												}`}
-											>
-												<button
-													type="button"
-													class={`flex min-w-0 flex-1 items-center gap-2 text-left ${
-														canEditIssue && !isSubissue ? '' : 'cursor-not-allowed'
-													}`}
-													disabled={!canEditIssue || isSubissue}
-													aria-disabled={!canEditIssue || isSubissue}
-													on:click|stopPropagation={() => {
-														if (!canEditIssue || isSubissue) return;
-														urgentOpen = !urgentOpen;
-														urgentHelpOpen = false;
-														statusOpen = false;
-														assigneeOpen = false;
-														propertyOpen = false;
-														unitOpen = false;
-													}}
-												>
-													{#if displayUrgent}
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															width="16"
-															height="16"
-															fill="currentColor"
-															class="text-rose-600"
-															viewBox="0 0 16 16"
-														>
-															<path
-																d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
-															/>
-														</svg>
-														<span>Urgent</span>
-													{:else}
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															width="16"
-															height="16"
-															fill="currentColor"
-															class="text-neutral-400"
-															viewBox="0 0 16 16"
-														>
-															<path
-																d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
-															/>
-														</svg>
-														<span>Not urgent</span>
-													{/if}
-												</button>
-												<div class="relative ml-auto">
-													<button
-														type="button"
-														class="inline-flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-600"
-														aria-label="Urgent issue help"
-														aria-expanded={urgentHelpOpen}
-														on:click|stopPropagation={() => {
-															urgentOpen = false;
-															urgentHelpOpen = !urgentHelpOpen;
-															propertyOpen = false;
-															unitOpen = false;
-															statusOpen = false;
-															assigneeOpen = false;
-														}}
-														on:blur={() => (urgentHelpOpen = false)}
-													>
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															width="16"
-															height="16"
-															fill="currentColor"
-															class="bi bi-question-circle"
-															viewBox="0 0 16 16"
-														>
-															<path
-																d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"
-															/>
-															<path
-																d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286m1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94"
-															/>
-														</svg>
-													</button>
-													{#if urgentHelpOpen}
-														<div
-															class="absolute top-full right-0 z-30 mt-2 min-w-[260px] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs leading-snug text-neutral-700 shadow-sm"
-														>
-															Bedrock immediately assigns a vendor for urgent issues.
-														</div>
-													{/if}
-												</div>
-											</div>
 											{#if !rightSidebarMenuOpen}
 												<div
 													class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
@@ -2736,10 +2163,11 @@
 												</div>
 											{/if}
 											{#if urgentOpen && canEditIssue && !isSubissue}
-											<div
-												class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
-												on:click|stopPropagation
-											>
+												<div
+													class="fixed z-[100] w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+													style={urgentMenuStyle}
+													on:click|stopPropagation
+												>
 													<button
 														type="button"
 														class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
@@ -2788,56 +2216,770 @@
 									</div>
 								</div>
 							</div>
+							<div class="mt-4 min-w-0">
+								{#if !_subIssuesLoading && subIssues.length}
+									<div>
+										<button
+											type="button"
+											class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
+											on:click={() => (subIssuesOpen = !subIssuesOpen)}
+										>
+											<div
+												class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="12"
+													height="12"
+													fill="currentColor"
+													class="chevron-icon transition-transform duration-150 ease-in-out"
+													class:rotate-[-90deg]={!subIssuesOpen}
+													viewBox="0 0 16 16"
+												>
+													<path
+														d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+													/>
+												</svg>
+												<span>Sub-issues</span>
+											</div>
+											<div
+												class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+											>
+												{subIssuesOpen ? 'Collapse' : 'Expand'}
+											</div>
+										</button>
+										<div
+											class="grid transition-[grid-template-rows] duration-150 ease-in-out"
+											style:grid-template-rows={subIssuesOpen ? '1fr' : '0fr'}
+										>
+											<div class="overflow-hidden">
+												<div class="mt-2">
+													{#each subIssuesWithAssignees as subIssue}
+														<a
+															href={getSubIssueHref(subIssue)}
+															class="relative flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
+															on:mouseenter={(event) => {
+																subIssueHoverId = subIssue.id;
+																subIssueTooltipVisible = true;
+																const rect = event.currentTarget.getBoundingClientRect();
+																subIssueTooltipX = event.clientX + 12;
+																subIssueTooltipY = rect.bottom + 8;
+															}}
+															on:mousemove={(event) => {
+																subIssueTooltipX = event.clientX + 12;
+															}}
+															on:mouseleave={() => {
+																subIssueTooltipVisible = false;
+																subIssueHoverId = null;
+															}}
+														>
+															<div class="flex items-center gap-2">
+																<span
+																	class={`h-4 w-4 rounded-full border-[1.5px] ${
+																		statusConfig[subIssue.status ?? 'todo']?.statusClass ??
+																		'border-neutral-300 text-neutral-700'
+																	}`}
+																></span>
+																<span class="text-neutral-800">{subIssue.name}</span>
+															</div>
+															{#if subIssue.assignee}
+																<div
+																	class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(subIssue.assignee).color}`}
+																	aria-label={getAssigneeAvatar(subIssue.assignee).name}
+																>
+																	{getAssigneeAvatar(subIssue.assignee).initial}
+																</div>
+															{:else}
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="16"
+																	height="16"
+																	fill="currentColor"
+																	class="text-neutral-400"
+																	viewBox="0 0 16 16"
+																>
+																	<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+																	<path
+																		fill-rule="evenodd"
+																		d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+																	/>
+																</svg>
+															{/if}
+															{#if subIssueTooltipVisible && subIssueHoverId === subIssue.id}
+																<div
+																	class="subissue-hover-tooltip fixed z-50 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+																	style={`left: ${subIssueTooltipX}px; top: ${subIssueTooltipY}px;`}
+																>
+																	Go to issue
+																</div>
+															{/if}
+														</a>
+													{/each}
+												</div>
+											</div>
+										</div>
+									</div>
+								{/if}
+							</div>
+						</div>
+						<div class={`${$rightPanel?.open && $rightPanel?.type === 'chat' ? 'w-1/2' : 'w-1/3'}`}>
+							<div class="hidden sm:block">
+								<div class="rounded-2xl">
+									<span class="text-sm font-medium text-neutral-500">Fields</span>
+									<div class="mt-1 space-y-2 text-sm text-neutral-600">
+										<div class="grid grid-cols-2 gap-2">
+											<div class="tooltip-target relative">
+												<button
+													type="button"
+													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+														canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+													}`}
+													disabled={!canEditIssue}
+													aria-disabled={!canEditIssue}
+													on:click|stopPropagation={() => {
+														if (!canEditIssue) return;
+														propertyOpen = !propertyOpen;
+														unitOpen = false;
+														statusOpen = false;
+														assigneeOpen = false;
+														urgentOpen = false;
+														urgentHelpOpen = false;
+													}}
+												>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="14"
+														height="14"
+														fill="currentColor"
+														class="text-neutral-400"
+														viewBox="0 0 16 16"
+													>
+														<path
+															d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
+														/>
+													</svg>
+													<span class="truncate text-neutral-700">{propertyName}</span>
+												</button>
+												{#if !rightSidebarMenuOpen}
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													>
+														Change property
+													</div>
+												{/if}
+												{#if propertyOpen && canEditIssue}
+													<div
+														class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+														on:click|stopPropagation
+													>
+														<button
+															type="button"
+															class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																!issuePropertyId ? 'bg-neutral-50' : ''
+															}`}
+															on:click={() => handlePropertySelect(null)}
+														>
+															<span>No property</span>
+															{#if !issuePropertyId}
+																<span class="text-xs text-neutral-400">Selected</span>
+															{/if}
+														</button>
+														<div class="my-1 h-px bg-neutral-100"></div>
+														{#each properties as property}
+															<button
+																type="button"
+																class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																	issuePropertyId === property.id ? 'bg-neutral-50' : ''
+																}`}
+																on:click={() => handlePropertySelect(property.id)}
+															>
+																<span class="truncate">{property.name}</span>
+																{#if issuePropertyId === property.id}
+																	<span class="text-xs text-neutral-400">Selected</span>
+																{/if}
+															</button>
+														{/each}
+													</div>
+												{/if}
+											</div>
+											<div class="tooltip-target relative">
+												<button
+													type="button"
+													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+														canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+													}`}
+													disabled={!canEditIssue}
+													aria-disabled={!canEditIssue}
+													on:click|stopPropagation={() => {
+														if (!canEditIssue) return;
+														unitOpen = !unitOpen;
+														propertyOpen = false;
+														statusOpen = false;
+														assigneeOpen = false;
+														urgentOpen = false;
+														urgentHelpOpen = false;
+													}}
+												>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="14"
+														height="14"
+														fill="currentColor"
+														class="text-neutral-400"
+														viewBox="0 0 16 16"
+													>
+														<path
+															d="M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5"
+														/>
+													</svg>
+													<span class="truncate text-neutral-700">{unitName}</span>
+												</button>
+												{#if !rightSidebarMenuOpen}
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													>
+														Change unit
+													</div>
+												{/if}
+												{#if unitOpen && canEditIssue}
+													<div
+														class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+														on:click|stopPropagation
+													>
+														<button
+															type="button"
+															class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																!issueUnitId ? 'bg-neutral-50' : ''
+															}`}
+															on:click={() => handleUnitSelect(null)}
+														>
+															<span>No unit</span>
+															{#if !issueUnitId}
+																<span class="text-xs text-neutral-400">Selected</span>
+															{/if}
+														</button>
+														<div class="my-1 h-px bg-neutral-100"></div>
+														{#if availableUnits.length}
+															{#each availableUnits as unit}
+																<button
+																	type="button"
+																	class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																		issueUnitId === unit.id ? 'bg-neutral-50' : ''
+																	}`}
+																	on:click={() => handleUnitSelect(unit.id)}
+																>
+																	<span class="truncate">{unit.name}</span>
+																	{#if issueUnitId === unit.id}
+																		<span class="text-xs text-neutral-400">Selected</span>
+																	{/if}
+																</button>
+															{/each}
+														{:else}
+															<div class="px-3 py-2 text-neutral-400">No units available.</div>
+														{/if}
+													</div>
+												{/if}
+											</div>
+										</div>
+										<div class="grid grid-cols-2 gap-2">
+											<div class="tooltip-target relative">
+												<button
+													type="button"
+													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+														canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+													}`}
+													disabled={!canEditIssue}
+													aria-disabled={!canEditIssue}
+													on:click|stopPropagation={() => {
+														if (!canEditIssue) return;
+														statusOpen = !statusOpen;
+														propertyOpen = false;
+														unitOpen = false;
+														assigneeOpen = false;
+														urgentOpen = false;
+														urgentHelpOpen = false;
+													}}
+												>
+													<span
+														class={`h-4 w-4 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
+													></span>
+													<span>{statusMeta.label}</span>
+												</button>
+												{#if !rightSidebarMenuOpen}
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													>
+														Change status
+													</div>
+												{/if}
+												{#if statusOpen && canEditIssue}
+													<div
+														class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+														on:click|stopPropagation
+													>
+														{#each statusCycle as status}
+															<button
+																type="button"
+																class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																	statusKey === status ? 'bg-neutral-50' : ''
+																}`}
+																on:click={() => {
+																	statusOpen = false;
+																	handleStatusChange(status);
+																}}
+															>
+																<span
+																	class={`h-4 w-4 rounded-full border-[1.5px] ${
+																		(statusConfig[status] ?? statusConfig.todo).statusClass
+																	}`}
+																></span>
+																<span>{(statusConfig[status] ?? statusConfig.todo).label}</span>
+															</button>
+														{/each}
+													</div>
+												{/if}
+											</div>
+											<div class="tooltip-target relative">
+												<button
+													type="button"
+													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+														canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+													}`}
+													disabled={!canEditIssue}
+													aria-disabled={!canEditIssue}
+													on:click|stopPropagation={() => {
+														if (!canEditIssue) return;
+														assigneeOpen = !assigneeOpen;
+														propertyOpen = false;
+														unitOpen = false;
+														statusOpen = false;
+														urgentOpen = false;
+														urgentHelpOpen = false;
+													}}
+												>
+													{#if assignee}
+														<div
+															class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(assignee).color}`}
+															aria-label={getAssigneeAvatar(assignee).name}
+														>
+															{getAssigneeAvatar(assignee).initial}
+														</div>
+													{:else}
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															width="16"
+															height="16"
+															fill="currentColor"
+															class="text-neutral-400"
+															viewBox="0 0 16 16"
+														>
+															<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+															<path
+																fill-rule="evenodd"
+																d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+															/>
+														</svg>
+													{/if}
+													<span class="truncate text-neutral-700">{assigneeName}</span>
+												</button>
+												{#if !rightSidebarMenuOpen}
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													>
+														Change assignee
+													</div>
+												{/if}
+												{#if assigneeOpen && canEditIssue}
+													<div
+														class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+														on:click|stopPropagation
+													>
+														<button
+															type="button"
+															class="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50"
+															on:click={() => handleAssigneeSelect(null)}
+														>
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="16"
+																height="16"
+																fill="currentColor"
+																class="text-neutral-400"
+																viewBox="0 0 16 16"
+															>
+																<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+																<path
+																	fill-rule="evenodd"
+																	d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+																/>
+															</svg>
+															<span class="font-medium text-neutral-500"> Unassigned </span>
+														</button>
+														<div class="my-1 h-px bg-neutral-100"></div>
+														{#if membersLoading}
+															<div class="px-3 py-2 text-neutral-400">Loading members...</div>
+														{:else if assignableMembers.length}
+															{#each assignableMembers as member}
+																<button
+																	type="button"
+																	class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																		assignee?.id === member.user_id ? 'bg-neutral-50' : ''
+																	}`}
+																	on:click={() => handleAssigneeSelect(member)}
+																>
+																	<div
+																		class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getMemberAvatar(member).color}`}
+																		aria-label={getMemberAvatar(member).name}
+																	>
+																		{getMemberAvatar(member).initial}
+																	</div>
+																	<span class="truncate">
+																		{member.users?.name ??
+																			member.name ??
+																			member.users?.id ??
+																			member.user_id ??
+																			'Unknown member'}
+																	</span>
+																	<span
+																		class="ml-auto rounded-full bg-stone-100 px-2 py-0.5 font-medium text-neutral-600"
+																	>
+																		{roleLabels[member.role] ?? member.role}
+																	</span>
+																</button>
+															{/each}
+														{:else if membersReady}
+															<div class="px-3 py-2 text-neutral-400">No members found.</div>
+														{:else}
+															<div class="px-3 py-2 text-neutral-400">Unable to load members.</div>
+														{/if}
+													</div>
+												{/if}
+											</div>
+										</div>
+										<div class="flex items-center justify-between gap-2">
+											<div class="tooltip-target group relative w-1/2">
+												<div
+													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+														canEditIssue && !isSubissue ? 'hover:bg-neutral-200' : 'opacity-60'
+													}`}
+												>
+													<button
+														type="button"
+														class={`flex min-w-0 flex-1 items-center gap-2 text-left ${
+															canEditIssue && !isSubissue ? '' : 'cursor-not-allowed'
+														}`}
+														disabled={!canEditIssue || isSubissue}
+														aria-disabled={!canEditIssue || isSubissue}
+														on:click|stopPropagation={() => {
+															if (!canEditIssue || isSubissue) return;
+															urgentOpen = !urgentOpen;
+															urgentHelpOpen = false;
+															statusOpen = false;
+															assigneeOpen = false;
+															propertyOpen = false;
+															unitOpen = false;
+														}}
+													>
+														{#if displayUrgent}
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="16"
+																height="16"
+																fill="currentColor"
+																class="text-rose-600"
+																viewBox="0 0 16 16"
+															>
+																<path
+																	d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+																/>
+															</svg>
+															<span>Urgent</span>
+														{:else}
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="16"
+																height="16"
+																fill="currentColor"
+																class="text-neutral-400"
+																viewBox="0 0 16 16"
+															>
+																<path
+																	d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+																/>
+															</svg>
+															<span>Not urgent</span>
+														{/if}
+													</button>
+													<div class="relative ml-auto">
+														<button
+															type="button"
+															class="inline-flex h-5 w-5 items-center justify-center rounded-full text-neutral-400 transition hover:text-neutral-600"
+															aria-label="Urgent issue help"
+															aria-expanded={urgentHelpOpen}
+															on:click|stopPropagation={() => {
+																urgentOpen = false;
+																urgentHelpOpen = !urgentHelpOpen;
+																propertyOpen = false;
+																unitOpen = false;
+																statusOpen = false;
+																assigneeOpen = false;
+															}}
+															on:blur={() => (urgentHelpOpen = false)}
+														>
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="16"
+																height="16"
+																fill="currentColor"
+																class="bi bi-question-circle"
+																viewBox="0 0 16 16"
+															>
+																<path
+																	d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"
+																/>
+																<path
+																	d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286m1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94"
+																/>
+															</svg>
+														</button>
+														{#if urgentHelpOpen}
+															<div
+																class="absolute top-full right-0 z-30 mt-2 min-w-[260px] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs leading-snug text-neutral-700 shadow-sm"
+															>
+																Bedrock immediately assigns a vendor for urgent issues.
+															</div>
+														{/if}
+													</div>
+												</div>
+												{#if !rightSidebarMenuOpen}
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													>
+														{isSubissue ? 'Change urgency in the root issue' : 'Change urgency'}
+													</div>
+												{/if}
+												{#if urgentOpen && canEditIssue && !isSubissue}
+													<div
+														class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+														on:click|stopPropagation
+													>
+														<button
+															type="button"
+															class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																displayUrgent ? 'bg-neutral-50' : ''
+															}`}
+															on:click={() => handleUrgentChange(true)}
+														>
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="16"
+																height="16"
+																fill="currentColor"
+																class="text-rose-600"
+																viewBox="0 0 16 16"
+															>
+																<path
+																	d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm6 4c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995A.905.905 0 0 1 8 4m.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+																/>
+															</svg>
+															<span>Urgent</span>
+														</button>
+														<button
+															type="button"
+															class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																!displayUrgent ? 'bg-neutral-50' : ''
+															}`}
+															on:click={() => handleUrgentChange(false)}
+														>
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="16"
+																height="16"
+																fill="currentColor"
+																class="text-neutral-400"
+																viewBox="0 0 16 16"
+															>
+																<path
+																	d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm2.5 7.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1"
+																/>
+															</svg>
+															<span>Not urgent</span>
+														</button>
+													</div>
+												{/if}
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
 						</div>
 					</div>
-				</div>
 
-				<div class="mt-4 border-t border-neutral-100 pt-4 sm:mt-8 sm:pt-6">
-					<div class="flex items-center justify-between">
-						<h2 class="text-base font-semibold text-neutral-800">Tasks</h2>
-						<div class="text-sm text-neutral-400">Unsubscribe</div>
-					</div>
-					{#if !hasTasks}
-						<div class="mt-4 text-sm text-neutral-500">No tasks yet.</div>
-					{:else}
-						<div class="mt-4 space-y-4 text-sm">
-							{#if (draftsByIssue[issueId]?.length ?? 0) > 0}
-								{#if (messagesByIssue[issueId]?.length ?? 0) > 0 || (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
-									<div class="space-y-3">
-										{#if getThreadSubject(issueId)}
-											<div class="flex items-center gap-2">
-												<div class="flex items-center justify-center">
-													{#if (messagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
-														<svg
-															class="h-7 w-7"
-															viewBox="0 0 1024 1024"
-															fill="none"
-															xmlns="http://www.w3.org/2000/svg"
-														>
-															<circle cx="512" cy="512" r="512" fill="#007bc7" />
-															<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
+					<div class="mt-4 border-t border-neutral-100 pt-4 sm:mt-8 sm:pt-6">
+						<div class="flex items-center justify-between">
+							<h2 class="text-base font-semibold text-neutral-800">Tasks</h2>
+							<div class="text-sm text-neutral-400">Unsubscribe</div>
+						</div>
+						{#if !hasTasks}
+							<div class="mt-4 text-sm text-neutral-500">No tasks yet.</div>
+						{:else}
+							<div class="mt-4 space-y-4 text-sm">
+								{#if (draftsByIssue[issueId]?.length ?? 0) > 0}
+									{#if (messagesByIssue[issueId]?.length ?? 0) > 0 || (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
+										<div class="space-y-3">
+											{#if getThreadSubject(issueId)}
+												<div class="flex items-center gap-2">
+													<div class="flex items-center justify-center">
+														{#if (messagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
+															<svg
+																class="h-7 w-7"
+																viewBox="0 0 1024 1024"
+																fill="none"
+																xmlns="http://www.w3.org/2000/svg"
+															>
+																<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
+																	<path
+																		d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																		fill="white"
+																	/>
+																</g>
+															</svg>
+														{:else if (messagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
+															<svg
+																class="h-7 w-7"
+																viewBox="0 0 1024 1024"
+																fill="none"
+																xmlns="http://www.w3.org/2000/svg"
+															>
+																<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
+																	<path
+																		d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																		fill="white"
+																	/>
+																</g>
+															</svg>
+														{:else}
+															<svg
+																class="h-[26px] w-[26px]"
+																viewBox="0 0 32 32"
+																fill="none"
+																xmlns="http://www.w3.org/2000/svg"
+															>
 																<path
-																	d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																	d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
 																	fill="white"
 																/>
-															</g>
-														</svg>
-													{:else if (messagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
-														<svg
-															class="h-7 w-7"
-															viewBox="0 0 1024 1024"
-															fill="none"
-															xmlns="http://www.w3.org/2000/svg"
-														>
-															<circle cx="512" cy="512" r="512" fill="#007bc7" />
-															<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
 																<path
-																	d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-																	fill="white"
+																	d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+																	fill="#EA4335"
 																/>
-															</g>
-														</svg>
+																<path
+																	d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+																	fill="#FBBC05"
+																/>
+																<path
+																	d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+																	fill="#34A853"
+																/>
+																<path
+																	d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+																	fill="#C5221F"
+																/>
+																<path
+																	d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+																	fill="#C5221F"
+																/>
+																<path
+																	d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+																	fill="#C5221F"
+																/>
+																<path
+																	d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+																	fill="#4285F4"
+																/>
+															</svg>
+														{/if}
+													</div>
+													<h3 class="text-base font-semibold text-neutral-900">
+														{getThreadSubject(issueId)}
+													</h3>
+												</div>
+											{:else if (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
+												<div class="flex items-center gap-2">
+													{#if !(replyDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
+														<div class="flex items-center justify-center">
+															<svg
+																class="h-6 w-6 text-neutral-500"
+																viewBox="0 0 16 16"
+																fill="currentColor"
+															>
+																<path
+																	d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
+																/>
+															</svg>
+														</div>
+														<h3 class="text-base font-semibold text-neutral-900">Draft reply</h3>
 													{:else}
+														<h3 class="text-base font-semibold text-neutral-900">Drafted reply</h3>
+													{/if}
+												</div>
+											{/if}
+											<div class="space-y-3">
+												{#each collectMessagesForIssue(messagesByIssue, issueId) as message}
+													<EmailMessageWithDraft
+														message={{
+															...message,
+															timestampLabel: formatTimestamp(message.timestamp)
+														}}
+														draft={null}
+													/>
+												{/each}
+												{#each replyDraftsByIssue[issueId] ?? [] as draft}
+													{#if draft.channel === 'appfolio'}
+														<AppfolioDraftMessage
+															message={{
+																id: draft.message_id,
+																subject: draft.subject,
+																message: '',
+																sender: 'outbound',
+																direction: 'outbound',
+																timestampLabel: formatTimestamp(draft.updated_at)
+															}}
+															{draft}
+															approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+															{vendors}
+															recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+															on:sent={(e) => handleDraftSent(e.detail)}
+															on:assigneeUpdated={(e) => handleAppfolioAssigneeUpdate(e.detail)}
+														/>
+													{:else}
+														<EmailMessageWithDraft
+															message={{
+																id: draft.message_id,
+																subject: draft.subject,
+																message: '',
+																sender: 'outbound',
+																direction: 'outbound',
+																timestampLabel: formatTimestamp(draft.updated_at)
+															}}
+															{draft}
+															{vendors}
+															recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+															on:sent={(e) => handleDraftSent(e.detail)}
+														/>
+													{/if}
+												{/each}
+											</div>
+										</div>
+									{/if}
+
+									{#if (newDraftsByIssue[issueId]?.length ?? 0) > 0}
+										<div class="space-y-3">
+											<div class="flex items-center gap-2">
+												{#if !(newDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
+													<div class="flex items-center justify-center">
 														<svg
 															class="h-[26px] w-[26px]"
 															viewBox="0 0 32 32"
@@ -2846,7 +2988,7 @@
 														>
 															<path
 																d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
-																fill="white"
+																fill="none"
 															/>
 															<path
 																d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
@@ -2877,257 +3019,268 @@
 																fill="#4285F4"
 															/>
 														</svg>
-													{/if}
-												</div>
-												<h3 class="text-base font-semibold text-neutral-900">
-													{getThreadSubject(issueId)}
-												</h3>
-											</div>
-										{:else if (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
-											<div class="flex items-center gap-2">
-												{#if !(replyDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
-													<div class="flex items-center justify-center">
-														<svg
-															class="h-6 w-6 text-neutral-500"
-															viewBox="0 0 16 16"
-															fill="currentColor"
-														>
-															<path
-																d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
-															/>
-														</svg>
 													</div>
-													<h3 class="text-base font-semibold text-neutral-900">Draft reply</h3>
+													<h3 class="text-base font-semibold text-neutral-900">Email drafted</h3>
 												{:else}
-													<h3 class="text-base font-semibold text-neutral-900">Drafted reply</h3>
-												{/if}
-											</div>
-										{/if}
-										<div class="space-y-3">
-											{#each collectMessagesForIssue(messagesByIssue, issueId) as message}
-												<EmailMessageWithDraft
-													message={{
-														...message,
-														timestampLabel: formatTimestamp(message.timestamp)
-													}}
-													draft={null}
-												/>
-											{/each}
-											{#each replyDraftsByIssue[issueId] ?? [] as draft}
-												{#if draft.channel === 'appfolio'}
-													<AppfolioDraftMessage
-														message={{
-															id: draft.message_id,
-															subject: draft.subject,
-															message: '',
-															sender: 'outbound',
-															direction: 'outbound',
-															timestampLabel: formatTimestamp(draft.updated_at)
-														}}
-														{draft}
-														approvedBy={getAppfolioApprovedBy(draft.issue_id)}
-														{vendors}
-														recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
-														on:sent={(e) => handleDraftSent(e.detail)}
-														on:assigneeUpdated={(e) => handleAppfolioAssigneeUpdate(e.detail)}
-													/>
-												{:else}
-													<EmailMessageWithDraft
-														message={{
-															id: draft.message_id,
-															subject: draft.subject,
-															message: '',
-															sender: 'outbound',
-															direction: 'outbound',
-															timestampLabel: formatTimestamp(draft.updated_at)
-														}}
-														{draft}
-														{vendors}
-														recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
-														on:sent={(e) => handleDraftSent(e.detail)}
-													/>
-												{/if}
-											{/each}
-										</div>
-									</div>
-								{/if}
-
-								{#if (newDraftsByIssue[issueId]?.length ?? 0) > 0}
-									<div class="space-y-3">
-										<div class="flex items-center gap-2">
-											{#if !(newDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
-												<div class="flex items-center justify-center">
 													<svg
-														class="h-[26px] w-[26px]"
-														viewBox="0 0 32 32"
+														class="h-7 w-7"
+														viewBox="0 0 1024 1024"
 														fill="none"
 														xmlns="http://www.w3.org/2000/svg"
 													>
-														<path
-															d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
-															fill="none"
+														<circle cx="512" cy="512" r="512" fill="#007bc7" />
+														<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
+															<path
+																d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																fill="white"
+															/>
+														</g>
+													</svg>
+													<h3 class="text-base font-semibold text-neutral-900">
+														{(newDraftsByIssue[issueId] ?? []).some((d) => d.recipient_email)
+															? 'Assign Vendor'
+															: 'Drafted reply'}
+													</h3>
+												{/if}
+											</div>
+											<div class="space-y-3">
+												{#each newDraftsByIssue[issueId] ?? [] as draft}
+													{#if draft.channel === 'appfolio'}
+														<AppfolioDraftMessage
+															message={{
+																id: draft.message_id,
+																subject: draft.subject,
+																message: '',
+																sender: 'outbound',
+																direction: 'outbound',
+																timestampLabel: formatTimestamp(draft.updated_at)
+															}}
+															{draft}
+															approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+															{vendors}
+															recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+															on:sent={(e) => handleDraftSent(e.detail)}
+															on:assigneeUpdated={(e) => handleAppfolioAssigneeUpdate(e.detail)}
 														/>
-														<path
-															d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
-															fill="#EA4335"
+													{:else}
+														<EmailMessageWithDraft
+															message={{
+																id: draft.message_id,
+																subject: draft.subject,
+																message: '',
+																sender: 'outbound',
+																direction: 'outbound',
+																timestampLabel: formatTimestamp(draft.updated_at)
+															}}
+															{draft}
+															{vendors}
+															recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
+															on:sent={(e) => handleDraftSent(e.detail)}
 														/>
+													{/if}
+												{/each}
+											</div>
+										</div>
+									{/if}
+								{/if}
+
+								{#each subIssues as subIssue}
+									{#if (draftsByIssue[subIssue.id]?.length ?? 0) > 0}
+										<div>
+											<button
+												type="button"
+												class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
+												on:click={() => toggleTasks(subIssue.id)}
+											>
+												<div
+													class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
+												>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="12"
+														height="12"
+														fill="currentColor"
+														class="chevron-icon transition-transform duration-150 ease-in-out"
+														class:rotate-[-90deg]={!(tasksOpen[subIssue.id] ?? true)}
+														viewBox="0 0 16 16"
+													>
 														<path
-															d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
-															fill="#FBBC05"
-														/>
-														<path
-															d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
-															fill="#34A853"
-														/>
-														<path
-															d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
-															fill="#C5221F"
-														/>
-														<path
-															d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
-															fill="#C5221F"
-														/>
-														<path
-															d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
-															fill="#C5221F"
-														/>
-														<path
-															d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
-															fill="#4285F4"
+															d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
 														/>
 													</svg>
+													<span>{subIssue.name}</span>
 												</div>
-												<h3 class="text-base font-semibold text-neutral-900">Email drafted</h3>
-											{:else}
-												<svg
-													class="h-7 w-7"
-													viewBox="0 0 1024 1024"
-													fill="none"
-													xmlns="http://www.w3.org/2000/svg"
-												>
-													<circle cx="512" cy="512" r="512" fill="#007bc7" />
-													<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
-														<path
-															d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-															fill="white"
-														/>
-													</g>
-												</svg>
-												<h3 class="text-base font-semibold text-neutral-900">
-													{(newDraftsByIssue[issueId] ?? []).some((d) => d.recipient_email)
-														? 'Assign Vendor'
-														: 'Drafted reply'}
-												</h3>
-											{/if}
-										</div>
-										<div class="space-y-3">
-											{#each newDraftsByIssue[issueId] ?? [] as draft}
-												{#if draft.channel === 'appfolio'}
-													<AppfolioDraftMessage
-														message={{
-															id: draft.message_id,
-															subject: draft.subject,
-															message: '',
-															sender: 'outbound',
-															direction: 'outbound',
-															timestampLabel: formatTimestamp(draft.updated_at)
-														}}
-														{draft}
-														approvedBy={getAppfolioApprovedBy(draft.issue_id)}
-														{vendors}
-														recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
-														on:sent={(e) => handleDraftSent(e.detail)}
-														on:assigneeUpdated={(e) => handleAppfolioAssigneeUpdate(e.detail)}
-													/>
-												{:else}
-													<EmailMessageWithDraft
-														message={{
-															id: draft.message_id,
-															subject: draft.subject,
-															message: '',
-															sender: 'outbound',
-															direction: 'outbound',
-															timestampLabel: formatTimestamp(draft.updated_at)
-														}}
-														{draft}
-														{vendors}
-														recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
-														on:sent={(e) => handleDraftSent(e.detail)}
-													/>
-												{/if}
-											{/each}
-										</div>
-									</div>
-								{/if}
-							{/if}
-
-							{#each subIssues as subIssue}
-								{#if (draftsByIssue[subIssue.id]?.length ?? 0) > 0}
-									<div>
-										<button
-											type="button"
-											class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
-											on:click={() => toggleTasks(subIssue.id)}
-										>
-											<div
-												class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
-											>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="12"
-													height="12"
-													fill="currentColor"
-													class="chevron-icon transition-transform duration-150 ease-in-out"
-													class:rotate-[-90deg]={!(tasksOpen[subIssue.id] ?? true)}
-													viewBox="0 0 16 16"
-												>
-													<path
-														d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-													/>
-												</svg>
-												<span>{subIssue.name}</span>
-											</div>
-											<div
-												class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-											>
-												{(tasksOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
-											</div>
-											<span class="text-neutral-300">
-												{draftsByIssue[subIssue.id]?.length ?? 0}
-											</span>
-										</button>
-										<div
-											class="grid transition-[grid-template-rows] duration-200 ease-in-out"
-											style:grid-template-rows={(tasksOpen[subIssue.id] ?? true) ? '1fr' : '0fr'}
-										>
-											<div class="overflow-hidden">
 												<div
-													class="space-y-3 py-2 transition-opacity duration-200"
-													class:opacity-0={!(tasksOpen[subIssue.id] ?? true)}
+													class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
 												>
-													{#if (messagesByIssue[subIssue.id]?.length ?? 0) > 0 || (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
-														<div class="space-y-3">
-															{#if getThreadSubject(subIssue.id)}
-																<div class="flex items-center gap-2">
-																	<div class="flex items-center justify-center">
-																		{#if (messagesByIssue[subIssue.id] ?? []).some((m) => m.channel === 'appfolio')}
-																			<svg
-																				class="h-7 w-7"
-																				viewBox="0 0 1024 1024"
-																				fill="none"
-																				xmlns="http://www.w3.org/2000/svg"
-																			>
-																				<circle cx="512" cy="512" r="512" fill="#007bc7" />
-																				<g
-																					transform="translate(512,512) scale(1.25) translate(-512,-512)"
+													{(tasksOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
+												</div>
+												<span class="text-neutral-300">
+													{draftsByIssue[subIssue.id]?.length ?? 0}
+												</span>
+											</button>
+											<div
+												class="grid transition-[grid-template-rows] duration-200 ease-in-out"
+												style:grid-template-rows={(tasksOpen[subIssue.id] ?? true) ? '1fr' : '0fr'}
+											>
+												<div class="overflow-hidden">
+													<div
+														class="space-y-3 py-2 transition-opacity duration-200"
+														class:opacity-0={!(tasksOpen[subIssue.id] ?? true)}
+													>
+														{#if (messagesByIssue[subIssue.id]?.length ?? 0) > 0 || (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
+															<div class="space-y-3">
+																{#if getThreadSubject(subIssue.id)}
+																	<div class="flex items-center gap-2">
+																		<div class="flex items-center justify-center">
+																			{#if (messagesByIssue[subIssue.id] ?? []).some((m) => m.channel === 'appfolio')}
+																				<svg
+																					class="h-7 w-7"
+																					viewBox="0 0 1024 1024"
+																					fill="none"
+																					xmlns="http://www.w3.org/2000/svg"
+																				>
+																					<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																					<g
+																						transform="translate(512,512) scale(1.25) translate(-512,-512)"
+																					>
+																						<path
+																							d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																							fill="white"
+																						/>
+																					</g>
+																				</svg>
+																			{:else}
+																				<svg
+																					class="h-[26px] w-[26px]"
+																					viewBox="0 0 32 32"
+																					fill="none"
+																					xmlns="http://www.w3.org/2000/svg"
 																				>
 																					<path
-																						d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																						d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
 																						fill="white"
 																					/>
-																				</g>
-																			</svg>
+																					<path
+																						d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+																						fill="#EA4335"
+																					/>
+																					<path
+																						d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+																						fill="#FBBC05"
+																					/>
+																					<path
+																						d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+																						fill="#34A853"
+																					/>
+																					<path
+																						d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+																						fill="#C5221F"
+																					/>
+																					<path
+																						d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+																						fill="#C5221F"
+																					/>
+																					<path
+																						d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+																						fill="#C5221F"
+																					/>
+																					<path
+																						d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+																						fill="#4285F4"
+																					/>
+																				</svg>
+																			{/if}
+																		</div>
+																		<h3 class="text-base font-semibold text-neutral-900">
+																			{getThreadSubject(subIssue.id)}
+																		</h3>
+																	</div>
+																{:else if (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
+																	<div class="flex items-center gap-2">
+																		{#if !(replyDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
+																			<div class="flex items-center justify-center">
+																				<svg
+																					width="18"
+																					height="18"
+																					viewBox="0 0 16 16"
+																					fill="currentColor"
+																					class="text-neutral-500"
+																				>
+																					<path
+																						d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
+																					/>
+																				</svg>
+																			</div>
+																			<h3 class="text-base font-semibold text-neutral-900">
+																				Draft reply
+																			</h3>
 																		{:else}
+																			<h3 class="text-base font-semibold text-neutral-900">
+																				Drafted reply
+																			</h3>
+																		{/if}
+																	</div>
+																{/if}
+																<div class="space-y-3">
+																	{#each collectMessagesForIssue(messagesByIssue, subIssue.id) as message}
+																		<EmailMessageWithDraft
+																			message={{
+																				...message,
+																				timestampLabel: formatTimestamp(message.timestamp)
+																			}}
+																			draft={null}
+																		/>
+																	{/each}
+																	{#each replyDraftsByIssue[subIssue.id] ?? [] as draft}
+																		{#if draft.channel === 'appfolio'}
+																			<AppfolioDraftMessage
+																				message={{
+																					id: draft.message_id,
+																					subject: draft.subject,
+																					message: '',
+																					sender: 'outbound',
+																					direction: 'outbound',
+																					timestampLabel: formatTimestamp(draft.updated_at)
+																				}}
+																				{draft}
+																				approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+																				{vendors}
+																				recommendedVendors={recommendedVendorsByIssueId[
+																					draft.issue_id
+																				] ?? []}
+																				on:sent={(e) => handleDraftSent(e.detail)}
+																				on:assigneeUpdated={(e) =>
+																					handleAppfolioAssigneeUpdate(e.detail)}
+																			/>
+																		{:else}
+																			<EmailMessageWithDraft
+																				message={{
+																					id: draft.message_id,
+																					subject: draft.subject,
+																					message: '',
+																					sender: 'outbound',
+																					direction: 'outbound',
+																					timestampLabel: formatTimestamp(draft.updated_at)
+																				}}
+																				{draft}
+																				{vendors}
+																				recommendedVendors={recommendedVendorsByIssueId[
+																					draft.issue_id
+																				] ?? []}
+																				on:sent={(e) => handleDraftSent(e.detail)}
+																			/>
+																		{/if}
+																	{/each}
+																</div>
+															</div>
+														{/if}
+
+														{#if (newDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
+															<div class="space-y-3">
+																<div class="flex items-center gap-2">
+																	{#if !(newDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
+																		<div class="flex items-center justify-center">
 																			<svg
 																				class="h-[26px] w-[26px]"
 																				viewBox="0 0 32 32"
@@ -3167,490 +3320,80 @@
 																					fill="#4285F4"
 																				/>
 																			</svg>
-																		{/if}
-																	</div>
-																	<h3 class="text-base font-semibold text-neutral-900">
-																		{getThreadSubject(subIssue.id)}
-																	</h3>
-																</div>
-															{:else if (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
-																<div class="flex items-center gap-2">
-																	{#if !(replyDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
-																		<div class="flex items-center justify-center">
-																			<svg
-																				width="18"
-																				height="18"
-																				viewBox="0 0 16 16"
-																				fill="currentColor"
-																				class="text-neutral-500"
-																			>
-																				<path
-																					d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
-																				/>
-																			</svg>
 																		</div>
 																		<h3 class="text-base font-semibold text-neutral-900">
-																			Draft reply
+																			Draft email
 																		</h3>
 																	{:else}
-																		<h3 class="text-base font-semibold text-neutral-900">
-																			Drafted reply
-																		</h3>
-																	{/if}
-																</div>
-															{/if}
-															<div class="space-y-3">
-																{#each collectMessagesForIssue(messagesByIssue, subIssue.id) as message}
-																	<EmailMessageWithDraft
-																		message={{
-																			...message,
-																			timestampLabel: formatTimestamp(message.timestamp)
-																		}}
-																		draft={null}
-																	/>
-																{/each}
-																{#each replyDraftsByIssue[subIssue.id] ?? [] as draft}
-																	{#if draft.channel === 'appfolio'}
-																		<AppfolioDraftMessage
-																			message={{
-																				id: draft.message_id,
-																				subject: draft.subject,
-																				message: '',
-																				sender: 'outbound',
-																				direction: 'outbound',
-																				timestampLabel: formatTimestamp(draft.updated_at)
-																			}}
-																			{draft}
-																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
-																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[
-																				draft.issue_id
-																			] ?? []}
-																			on:sent={(e) => handleDraftSent(e.detail)}
-																			on:assigneeUpdated={(e) =>
-																				handleAppfolioAssigneeUpdate(e.detail)}
-																		/>
-																	{:else}
-																		<EmailMessageWithDraft
-																			message={{
-																				id: draft.message_id,
-																				subject: draft.subject,
-																				message: '',
-																				sender: 'outbound',
-																				direction: 'outbound',
-																				timestampLabel: formatTimestamp(draft.updated_at)
-																			}}
-																			{draft}
-																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[
-																				draft.issue_id
-																			] ?? []}
-																			on:sent={(e) => handleDraftSent(e.detail)}
-																		/>
-																	{/if}
-																{/each}
-															</div>
-														</div>
-													{/if}
-
-													{#if (newDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
-														<div class="space-y-3">
-															<div class="flex items-center gap-2">
-																{#if !(newDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
-																	<div class="flex items-center justify-center">
 																		<svg
-																			class="h-[26px] w-[26px]"
-																			viewBox="0 0 32 32"
+																			class="h-7 w-7"
+																			viewBox="0 0 1024 1024"
 																			fill="none"
 																			xmlns="http://www.w3.org/2000/svg"
 																		>
-																			<path
-																				d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
-																				fill="white"
-																			/>
-																			<path
-																				d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
-																				fill="#EA4335"
-																			/>
-																			<path
-																				d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
-																				fill="#FBBC05"
-																			/>
-																			<path
-																				d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
-																				fill="#34A853"
-																			/>
-																			<path
-																				d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
-																				fill="#C5221F"
-																			/>
-																			<path
-																				d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
-																				fill="#C5221F"
-																			/>
-																			<path
-																				d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
-																				fill="#C5221F"
-																			/>
-																			<path
-																				d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
-																				fill="#4285F4"
-																			/>
-																		</svg>
-																	</div>
-																	<h3 class="text-base font-semibold text-neutral-900">
-																		Draft email
-																	</h3>
-																{:else}
-																	<svg
-																		class="h-7 w-7"
-																		viewBox="0 0 1024 1024"
-																		fill="none"
-																		xmlns="http://www.w3.org/2000/svg"
-																	>
-																		<circle cx="512" cy="512" r="512" fill="#007bc7" />
-																		<g
-																			transform="translate(512,512) scale(1.25) translate(-512,-512)"
-																		>
-																			<path
-																				d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-																				fill="white"
-																			/>
-																		</g>
-																	</svg>
-																	<h3 class="text-base font-semibold text-neutral-900">
-																		{(newDraftsByIssue[subIssue.id] ?? []).some(
-																			(d) => d.recipient_email
-																		)
-																			? 'Assign Vendor'
-																			: 'Drafted reply'}
-																	</h3>
-																{/if}
-															</div>
-															<div class="space-y-3">
-																{#each newDraftsByIssue[subIssue.id] ?? [] as draft}
-																	{#if draft.channel === 'appfolio'}
-																		<AppfolioDraftMessage
-																			message={{
-																				id: draft.message_id,
-																				subject: draft.subject,
-																				message: '',
-																				sender: 'outbound',
-																				direction: 'outbound',
-																				timestampLabel: formatTimestamp(draft.updated_at)
-																			}}
-																			{draft}
-																			approvedBy={getAppfolioApprovedBy(draft.issue_id)}
-																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[
-																				draft.issue_id
-																			] ?? []}
-																			on:sent={(e) => handleDraftSent(e.detail)}
-																			on:assigneeUpdated={(e) =>
-																				handleAppfolioAssigneeUpdate(e.detail)}
-																		/>
-																	{:else}
-																		<EmailMessageWithDraft
-																			message={{
-																				id: draft.message_id,
-																				subject: draft.subject,
-																				message: '',
-																				sender: 'outbound',
-																				direction: 'outbound',
-																				timestampLabel: formatTimestamp(draft.updated_at)
-																			}}
-																			{draft}
-																			{vendors}
-																			recommendedVendors={recommendedVendorsByIssueId[
-																				draft.issue_id
-																			] ?? []}
-																			on:sent={(e) => handleDraftSent(e.detail)}
-																		/>
-																	{/if}
-																{/each}
-															</div>
-														</div>
-													{/if}
-												</div>
-											</div>
-										</div>
-									</div>
-								{/if}
-							{/each}
-						</div>
-					{/if}
-
-					<div class="mt-6 border-t border-neutral-100 pt-4 sm:pt-6">
-						<div class="flex items-center justify-between">
-							<h2 class="text-base font-semibold text-neutral-800">Activity</h2>
-							<div class="text-sm text-neutral-400">Unsubscribe</div>
-						</div>
-						{#if !hasActivity}
-							<div class="mt-4 text-sm text-neutral-500">No activity yet.</div>
-						{:else}
-							<div class="mt-4 space-y-4 text-sm">
-								{#each (logsByIssue[issueId] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
-									{#if log.type === 'comment'}
-										<div class="flex items-center gap-3 px-1 py-2">
-											<div class="relative h-8 w-8 shrink-0">
-												<div
-													class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
-													aria-label={getCommentAuthor(log).name}
-												>
-													{getCommentAuthor(log).initial}
-												</div>
-												<div
-													class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
-												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														viewBox="0 0 16 16"
-														fill="currentColor"
-														class="h-1.5 w-1.5"
-													>
-														<path
-															d="M2 0a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"
-														/>
-													</svg>
-												</div>
-											</div>
-											<div class="flex-1">
-												<div class="rounded-md border-0 bg-white p-0 shadow-none">
-													<div class="flex min-w-0 items-start justify-between gap-4">
-														<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
-														<span class="shrink-0 text-xs text-neutral-400">
-															{formatTimestamp(log.created_at)}
-														</span>
-													</div>
-												</div>
-											</div>
-										</div>
-									{:else}
-										<div class="flex items-center gap-3 px-1 py-2">
-											<div class="relative h-8 w-8 shrink-0">
-												<div
-													class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
-													aria-label={getActivityActor(log).name}
-												>
-													{getActivityActor(log).initial}
-												</div>
-												<div
-													class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
-												>
-													{#if log.type === 'assignee_change'}
-														<svg
-															xmlns="http://www.w3.org/2000/svg"
-															viewBox="0 0 16 16"
-															fill="currentColor"
-															class="h-2 w-2"
-														>
-															<path
-																d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
-															/>
-														</svg>
-													{:else}
-														<span
-															class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(log)}`}
-														></span>
-													{/if}
-												</div>
-											</div>
-											<div class="flex-1">
-												<div class="rounded-md border-0 bg-white p-0 shadow-none">
-													<div class="flex min-w-0 items-start justify-between gap-4">
-														<p class="flex-1 text-sm text-neutral-700">
-															{#if log.type === 'issue_created'}
-																{#if log.data?.from || log.data?.from_email}
-																	{formatTenantName(log.data.from) ?? log.data.from_email} created the
-																	issue
-																{:else}
-																	Issue created
-																{/if}
-															{:else if log.type === 'status_change'}
-																{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
-																	log
-																)}
-															{:else if log.type === 'assignee_change'}
-																{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
-																	log
-																)}
-															{:else if log.type === 'appfolio_approved'}
-																Approved by {log?.data?.approved_by ?? getActivityActor(log).name}
-															{/if}
-														</p>
-														<span class="shrink-0 text-xs text-neutral-400">
-															{#if log.type === 'issue_created'}
-																{new Date(log.created_at).toLocaleDateString('en-US', {
-																	month: 'short',
-																	day: 'numeric',
-																	year: 'numeric',
-																	timeZone: 'UTC'
-																})}
-															{:else}
-																{formatTimestamp(log.created_at)}
-															{/if}
-														</span>
-													</div>
-												</div>
-											</div>
-										</div>
-									{/if}
-								{/each}
-
-								{#each subIssues as subIssue}
-									{#if (logsByIssue[subIssue.id]?.length ?? 0) > 0}
-										<div>
-											<button
-												type="button"
-												class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
-												on:click={() => toggleActivity(subIssue.id)}
-											>
-												<div
-													class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
-												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														width="12"
-														height="12"
-														fill="currentColor"
-														class="chevron-icon transition-transform duration-150 ease-in-out"
-														class:rotate-[-90deg]={!(activityOpen[subIssue.id] ?? true)}
-														viewBox="0 0 16 16"
-													>
-														<path
-															d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
-														/>
-													</svg>
-													<span>{subIssue.name}</span>
-												</div>
-												<div
-													class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-												>
-													{(activityOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
-												</div>
-												<span class="text-neutral-300">
-													{logsByIssue[subIssue.id]?.length ?? 0}
-												</span>
-											</button>
-											<div
-												class="grid transition-[grid-template-rows] duration-200 ease-in-out"
-												style:grid-template-rows={(activityOpen[subIssue.id] ?? true)
-													? '1fr'
-													: '0fr'}
-											>
-												<div class="overflow-hidden">
-													<div
-														class="space-y-3 py-2 transition-opacity duration-200"
-														class:opacity-0={!(activityOpen[subIssue.id] ?? true)}
-													>
-														{#each (logsByIssue[subIssue.id] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
-															{#if log.type === 'comment'}
-																<div class="flex items-center gap-3 px-1 py-2">
-																	<div class="relative h-8 w-8 shrink-0">
-																		<div
-																			class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
-																			aria-label={getCommentAuthor(log).name}
-																		>
-																			{getCommentAuthor(log).initial}
-																		</div>
-																		<div
-																			class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
-																		>
-																			<svg
-																				xmlns="http://www.w3.org/2000/svg"
-																				viewBox="0 0 16 16"
-																				fill="currentColor"
-																				class="h-1.5 w-1.5"
+																			<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																			<g
+																				transform="translate(512,512) scale(1.25) translate(-512,-512)"
 																			>
 																				<path
-																					d="M2 0a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"
+																					d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																					fill="white"
 																				/>
-																			</svg>
-																		</div>
-																	</div>
-																	<div class="flex-1">
-																		<div class="rounded-md border-0 bg-white p-0 shadow-none">
-																			<div class="flex min-w-0 items-start justify-between gap-4">
-																				<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
-																				<span class="shrink-0 text-xs text-neutral-400">
-																					{formatTimestamp(log.created_at)}
-																				</span>
-																			</div>
-																		</div>
-																	</div>
+																			</g>
+																		</svg>
+																		<h3 class="text-base font-semibold text-neutral-900">
+																			{(newDraftsByIssue[subIssue.id] ?? []).some(
+																				(d) => d.recipient_email
+																			)
+																				? 'Assign Vendor'
+																				: 'Drafted reply'}
+																		</h3>
+																	{/if}
 																</div>
-															{:else}
-																<div class="flex items-center gap-3 px-1 py-2">
-																	<div class="relative h-8 w-8 shrink-0">
-																		<div
-																			class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
-																			aria-label={getActivityActor(log).name}
-																		>
-																			{getActivityActor(log).initial}
-																		</div>
-																		<div
-																			class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
-																		>
-																			{#if log.type === 'assignee_change'}
-																				<svg
-																					xmlns="http://www.w3.org/2000/svg"
-																					viewBox="0 0 16 16"
-																					fill="currentColor"
-																					class="h-2 w-2"
-																				>
-																					<path
-																						d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
-																					/>
-																				</svg>
-																			{:else}
-																				<span
-																					class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(log)}`}
-																				></span>
-																			{/if}
-																		</div>
-																	</div>
-																	<div class="flex-1">
-																		<div class="rounded-md border-0 bg-white p-0 shadow-none">
-																			<div class="flex min-w-0 items-start justify-between gap-4">
-																				<p class="flex-1 text-sm text-neutral-700">
-																					{#if log.type === 'issue_created'}
-																						{#if log.data?.from || log.data?.from_email}
-																							{formatTenantName(log.data.from) ??
-																								log.data.from_email} created the issue
-																						{:else}
-																							Issue created
-																						{/if}
-																					{:else if log.type === 'status_change'}
-																						{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
-																							log
-																						)}
-																					{:else if log.type === 'assignee_change'}
-																						{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
-																							log
-																						)}
-																					{:else if log.type === 'appfolio_approved'}
-																						Approved by {log?.data?.approved_by ??
-																							getActivityActor(log).name}
-																					{/if}
-																				</p>
-																				<span class="shrink-0 text-xs text-neutral-400">
-																					{#if log.type === 'issue_created'}
-																						{new Date(log.created_at).toLocaleDateString('en-US', {
-																							month: 'short',
-																							day: 'numeric',
-																							year: 'numeric',
-																							timeZone: 'UTC'
-																						})}
-																					{:else}
-																						{formatTimestamp(log.created_at)}
-																					{/if}
-																				</span>
-																			</div>
-																		</div>
-																	</div>
+																<div class="space-y-3">
+																	{#each newDraftsByIssue[subIssue.id] ?? [] as draft}
+																		{#if draft.channel === 'appfolio'}
+																			<AppfolioDraftMessage
+																				message={{
+																					id: draft.message_id,
+																					subject: draft.subject,
+																					message: '',
+																					sender: 'outbound',
+																					direction: 'outbound',
+																					timestampLabel: formatTimestamp(draft.updated_at)
+																				}}
+																				{draft}
+																				approvedBy={getAppfolioApprovedBy(draft.issue_id)}
+																				{vendors}
+																				recommendedVendors={recommendedVendorsByIssueId[
+																					draft.issue_id
+																				] ?? []}
+																				on:sent={(e) => handleDraftSent(e.detail)}
+																				on:assigneeUpdated={(e) =>
+																					handleAppfolioAssigneeUpdate(e.detail)}
+																			/>
+																		{:else}
+																			<EmailMessageWithDraft
+																				message={{
+																					id: draft.message_id,
+																					subject: draft.subject,
+																					message: '',
+																					sender: 'outbound',
+																					direction: 'outbound',
+																					timestampLabel: formatTimestamp(draft.updated_at)
+																				}}
+																				{draft}
+																				{vendors}
+																				recommendedVendors={recommendedVendorsByIssueId[
+																					draft.issue_id
+																				] ?? []}
+																				on:sent={(e) => handleDraftSent(e.detail)}
+																			/>
+																		{/if}
+																	{/each}
 																</div>
-															{/if}
-														{/each}
+															</div>
+														{/if}
 													</div>
 												</div>
 											</div>
@@ -3659,42 +3402,397 @@
 								{/each}
 							</div>
 						{/if}
-					</div>
-					<div class="mt-6">
-						<div
-							class="rounded-xl border border-neutral-100 bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
-						>
-							<textarea
-								class="w-full resize-none border-0 bg-transparent p-0 text-sm text-neutral-700 outline-none placeholder:text-neutral-400 focus:shadow-none focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
-								placeholder="Leave a comment..."
-								rows="1"
-								bind:value={commentBody}
-								bind:this={commentTextarea}
-								on:input={resizeCommentTextarea}
-							></textarea>
-							<div class="mt-1 flex items-center justify-end">
-								<button
-									type="button"
-									class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-800 focus-visible:outline-none disabled:opacity-50"
-									aria-label="Send comment"
-									disabled={!commentBody.trim() || !issueId}
-									on:click={handleCommentSend}
-								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										width="18"
-										height="18"
-										viewBox="0 0 16 16"
-										fill="currentColor"
+
+						<div class="mt-6 border-t border-neutral-100 pt-4 sm:pt-6">
+							<div class="flex items-center justify-between">
+								<h2 class="text-base font-semibold text-neutral-800">Activity</h2>
+								<div class="text-sm text-neutral-400">Unsubscribe</div>
+							</div>
+							{#if !hasActivity}
+								<div class="mt-4 text-sm text-neutral-500">No activity yet.</div>
+							{:else}
+								<div class="mt-4 space-y-4 text-sm">
+									{#if (approvedAppfolioDraftsByIssue[issueId]?.length ?? 0) > 0}
+										<div class="space-y-3">
+											<div class="flex items-center gap-2">
+												<svg
+													class="h-7 w-7"
+													viewBox="0 0 1024 1024"
+													fill="none"
+													xmlns="http://www.w3.org/2000/svg"
+												>
+													<circle cx="512" cy="512" r="512" fill="#007bc7" />
+													<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
+														<path
+															d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+															fill="white"
+														/>
+													</g>
+												</svg>
+												<h3 class="text-base font-semibold text-neutral-900">Approved message</h3>
+											</div>
+											<div class="space-y-3">
+												{#each approvedAppfolioDraftsByIssue[issueId] ?? [] as entry (entry.log?.id)}
+													<AppfolioDraftMessage
+														draft={entry.draft}
+														approvedBy={entry.log?.data?.approved_by ??
+															getActivityActor(entry.log).name}
+														{vendors}
+														recommendedVendors={recommendedVendorsByIssueId[issueId] ?? []}
+														readonly={true}
+													/>
+												{/each}
+											</div>
+										</div>
+									{/if}
+									{#each (logsByIssue[issueId] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+										{#if log.type === 'comment'}
+											<div class="flex items-center gap-3 px-1 py-2">
+												<div class="relative h-8 w-8 shrink-0">
+													<div
+														class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
+														aria-label={getCommentAuthor(log).name}
+													>
+														{getCommentAuthor(log).initial}
+													</div>
+													<div
+														class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
+													>
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															viewBox="0 0 16 16"
+															fill="currentColor"
+															class="h-1.5 w-1.5"
+														>
+															<path
+																d="M2 0a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"
+															/>
+														</svg>
+													</div>
+												</div>
+												<div class="flex-1">
+													<div class="rounded-md border-0 bg-white p-0 shadow-none">
+														<div class="flex min-w-0 items-start justify-between gap-4">
+															<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
+															<span class="shrink-0 text-xs text-neutral-400">
+																{formatTimestamp(log.created_at)}
+															</span>
+														</div>
+													</div>
+												</div>
+											</div>
+										{:else}
+											<div class="flex items-center gap-3 px-1 py-2">
+												<div class="relative h-8 w-8 shrink-0">
+													<div
+														class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
+														aria-label={getActivityActor(log).name}
+													>
+														{getActivityActor(log).initial}
+													</div>
+													<div
+														class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
+													>
+														{#if log.type === 'assignee_change'}
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																viewBox="0 0 16 16"
+																fill="currentColor"
+																class="h-2 w-2"
+															>
+																<path
+																	d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
+																/>
+															</svg>
+														{:else}
+															<span
+																class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(log)}`}
+															></span>
+														{/if}
+													</div>
+												</div>
+												<div class="flex-1">
+													<div class="rounded-md border-0 bg-white p-0 shadow-none">
+														<div class="flex min-w-0 items-start justify-between gap-4">
+															<p class="flex-1 text-sm text-neutral-700">
+																{#if log.type === 'issue_created'}
+																	{#if log.data?.from || log.data?.from_email}
+																		{formatTenantName(log.data.from) ?? log.data.from_email} created the
+																		issue
+																	{:else}
+																		Issue created
+																	{/if}
+																{:else if log.type === 'status_change'}
+																	{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
+																		log
+																	)}
+																{:else if log.type === 'assignee_change'}
+																	{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
+																		log
+																	)}
+																{:else if log.type === 'appfolio_approved'}
+																	Approved by {log?.data?.approved_by ?? getActivityActor(log).name}
+																{/if}
+															</p>
+															<span class="shrink-0 text-xs text-neutral-400">
+																{#if log.type === 'issue_created'}
+																	{new Date(log.created_at).toLocaleDateString('en-US', {
+																		month: 'short',
+																		day: 'numeric',
+																		year: 'numeric',
+																		timeZone: 'UTC'
+																	})}
+																{:else}
+																	{formatTimestamp(log.created_at)}
+																{/if}
+															</span>
+														</div>
+													</div>
+												</div>
+											</div>
+										{/if}
+									{/each}
+
+									{#each subIssues as subIssue}
+										{#if (logsByIssue[subIssue.id]?.length ?? 0) > 0}
+											<div>
+												<button
+													type="button"
+													class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
+													on:click={() => toggleActivity(subIssue.id)}
+												>
+													<div
+														class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
+													>
+														<svg
+															xmlns="http://www.w3.org/2000/svg"
+															width="12"
+															height="12"
+															fill="currentColor"
+															class="chevron-icon transition-transform duration-150 ease-in-out"
+															class:rotate-[-90deg]={!(activityOpen[subIssue.id] ?? true)}
+															viewBox="0 0 16 16"
+														>
+															<path
+																d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+															/>
+														</svg>
+														<span>{subIssue.name}</span>
+													</div>
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													>
+														{(activityOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
+													</div>
+													<span class="text-neutral-300">
+														{logsByIssue[subIssue.id]?.length ?? 0}
+													</span>
+												</button>
+												<div
+													class="grid transition-[grid-template-rows] duration-200 ease-in-out"
+													style:grid-template-rows={(activityOpen[subIssue.id] ?? true)
+														? '1fr'
+														: '0fr'}
+												>
+													<div class="overflow-hidden">
+														<div
+															class="space-y-3 py-2 transition-opacity duration-200"
+															class:opacity-0={!(activityOpen[subIssue.id] ?? true)}
+														>
+															{#if (approvedAppfolioDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
+																<div class="space-y-3">
+																	<div class="flex items-center gap-2">
+																		<svg
+																			class="h-7 w-7"
+																			viewBox="0 0 1024 1024"
+																			fill="none"
+																			xmlns="http://www.w3.org/2000/svg"
+																		>
+																			<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																			<g
+																				transform="translate(512,512) scale(1.25) translate(-512,-512)"
+																			>
+																				<path
+																					d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																					fill="white"
+																				/>
+																			</g>
+																		</svg>
+																		<h3 class="text-base font-semibold text-neutral-900">
+																			Approved message
+																		</h3>
+																	</div>
+																	<div class="space-y-3">
+																		{#each approvedAppfolioDraftsByIssue[subIssue.id] ?? [] as entry (entry.log?.id)}
+																			<AppfolioDraftMessage
+																				draft={entry.draft}
+																				approvedBy={entry.log?.data?.approved_by ??
+																					getActivityActor(entry.log).name}
+																				{vendors}
+																				recommendedVendors={recommendedVendorsByIssueId[
+																					subIssue.id
+																				] ?? []}
+																				readonly={true}
+																			/>
+																		{/each}
+																	</div>
+																</div>
+															{/if}
+															{#each (logsByIssue[subIssue.id] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+																{#if log.type === 'comment'}
+																	<div class="flex items-center gap-3 px-1 py-2">
+																		<div class="relative h-8 w-8 shrink-0">
+																			<div
+																				class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
+																				aria-label={getCommentAuthor(log).name}
+																			>
+																				{getCommentAuthor(log).initial}
+																			</div>
+																			<div
+																				class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
+																			>
+																				<svg
+																					xmlns="http://www.w3.org/2000/svg"
+																					viewBox="0 0 16 16"
+																					fill="currentColor"
+																					class="h-1.5 w-1.5"
+																				>
+																					<path
+																						d="M2 0a2 2 0 0 0-2 2v12.793a.5.5 0 0 0 .854.353l2.853-2.853A1 1 0 0 1 4.414 12H14a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"
+																					/>
+																				</svg>
+																			</div>
+																		</div>
+																		<div class="flex-1">
+																			<div class="rounded-md border-0 bg-white p-0 shadow-none">
+																				<div class="flex min-w-0 items-start justify-between gap-4">
+																					<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
+																					<span class="shrink-0 text-xs text-neutral-400">
+																						{formatTimestamp(log.created_at)}
+																					</span>
+																				</div>
+																			</div>
+																		</div>
+																	</div>
+																{:else}
+																	<div class="flex items-center gap-3 px-1 py-2">
+																		<div class="relative h-8 w-8 shrink-0">
+																			<div
+																				class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
+																				aria-label={getActivityActor(log).name}
+																			>
+																				{getActivityActor(log).initial}
+																			</div>
+																			<div
+																				class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
+																			>
+																				{#if log.type === 'assignee_change'}
+																					<svg
+																						xmlns="http://www.w3.org/2000/svg"
+																						viewBox="0 0 16 16"
+																						fill="currentColor"
+																						class="h-2 w-2"
+																					>
+																						<path
+																							d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
+																						/>
+																					</svg>
+																				{:else}
+																					<span
+																						class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(log)}`}
+																					></span>
+																				{/if}
+																			</div>
+																		</div>
+																		<div class="flex-1">
+																			<div class="rounded-md border-0 bg-white p-0 shadow-none">
+																				<div class="flex min-w-0 items-start justify-between gap-4">
+																					<p class="flex-1 text-sm text-neutral-700">
+																						{#if log.type === 'issue_created'}
+																							{#if log.data?.from || log.data?.from_email}
+																								{formatTenantName(log.data.from) ??
+																									log.data.from_email} created the issue
+																							{:else}
+																								Issue created
+																							{/if}
+																						{:else if log.type === 'status_change'}
+																							{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
+																								log
+																							)}
+																						{:else if log.type === 'assignee_change'}
+																							{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
+																								log
+																							)}
+																						{:else if log.type === 'appfolio_approved'}
+																							Approved by {log?.data?.approved_by ??
+																								getActivityActor(log).name}
+																						{/if}
+																					</p>
+																					<span class="shrink-0 text-xs text-neutral-400">
+																						{#if log.type === 'issue_created'}
+																							{new Date(log.created_at).toLocaleDateString(
+																								'en-US',
+																								{
+																									month: 'short',
+																									day: 'numeric',
+																									year: 'numeric',
+																									timeZone: 'UTC'
+																								}
+																							)}
+																						{:else}
+																							{formatTimestamp(log.created_at)}
+																						{/if}
+																					</span>
+																				</div>
+																			</div>
+																		</div>
+																	</div>
+																{/if}
+															{/each}
+														</div>
+													</div>
+												</div>
+											</div>
+										{/if}
+									{/each}
+								</div>
+							{/if}
+						</div>
+						<div class="mt-6">
+							<div
+								class="rounded-xl border border-neutral-100 bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+							>
+								<textarea
+									class="w-full resize-none border-0 bg-transparent p-0 text-sm text-neutral-700 outline-none placeholder:text-neutral-400 focus:shadow-none focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none"
+									placeholder="Leave a comment..."
+									rows="1"
+									bind:value={commentBody}
+									bind:this={commentTextarea}
+									on:input={resizeCommentTextarea}
+								></textarea>
+								<div class="mt-1 flex items-center justify-end">
+									<button
+										type="button"
+										class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-neutral-900 text-white transition hover:bg-neutral-800 focus-visible:outline-none disabled:opacity-50"
+										aria-label="Send comment"
+										disabled={!commentBody.trim() || !issueId}
+										on:click={handleCommentSend}
 									>
-										<path
-											d="M8 12a.5.5 0 0 0 .5-.5V4.707l2.147 2.147a.5.5 0 0 0 .707-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 1 0 .708.708L7.5 4.707V11.5A.5.5 0 0 0 8 12z"
-										/>
-									</svg>
-								</button>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="18"
+											height="18"
+											viewBox="0 0 16 16"
+											fill="currentColor"
+										>
+											<path
+												d="M8 12a.5.5 0 0 0 .5-.5V4.707l2.147 2.147a.5.5 0 0 0 .707-.708l-3-3a.5.5 0 0 0-.708 0l-3 3a.5.5 0 1 0 .708.708L7.5 4.707V11.5A.5.5 0 0 0 8 12z"
+											/>
+										</svg>
+									</button>
+								</div>
 							</div>
 						</div>
-					</div>
 					</div>
 				</div>
 			</div>
