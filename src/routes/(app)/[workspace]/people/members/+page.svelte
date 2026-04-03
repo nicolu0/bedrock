@@ -17,7 +17,35 @@
 		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
 			? $peopleCache.data
 			: null;
-	$: members = Array.isArray(people) ? people.filter((person) => person.role === 'member') : [];
+	$: members = Array.isArray(people)
+		? people.filter((person) => ['member', 'admin', 'bedrock'].includes(person.role))
+		: [];
+
+	const groupRowsByRole = (rows) => {
+		const groups = new Map();
+		for (const row of rows ?? []) {
+			const name = formatRole(row?.role ?? 'member');
+			if (!groups.has(name)) groups.set(name, []);
+			groups.get(name).push(row);
+		}
+		return [...groups.entries()]
+			.map(([name, items]) => ({ name, items }))
+			.sort((a, b) => a.name.localeCompare(b.name));
+	};
+
+	let collapsedRoleGroups = {};
+	const getRoleGroupKey = (roleName) => `${roleName ?? 'Member'}`;
+	const isRoleGroupCollapsed = (roleName) =>
+		Boolean(collapsedRoleGroups[getRoleGroupKey(roleName)]);
+	const toggleRoleGroup = (roleName) => {
+		const key = getRoleGroupKey(roleName);
+		collapsedRoleGroups = {
+			...collapsedRoleGroups,
+			[key]: !collapsedRoleGroups[key]
+		};
+	};
+
+	$: roleGroups = groupRowsByRole(members);
 
 	const formatRole = (role) => {
 		if (!role) return 'Member';
