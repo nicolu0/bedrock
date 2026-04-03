@@ -40,6 +40,7 @@
 	}
 
 	let isMobileViewport = false;
+	let handleViewport;
 
 	onMount(() => {
 		syncAppfolioSettings();
@@ -51,7 +52,10 @@
 				syncAppfolioSettings();
 			}
 		};
+		handleViewport = () => refreshOpenFieldMenus();
 		window.addEventListener('storage', handleStorage);
+		window.addEventListener('resize', handleViewport);
+		window.addEventListener('scroll', handleViewport, true);
 		return () => window.removeEventListener('storage', handleStorage);
 	});
 
@@ -898,6 +902,81 @@
 	let urgentHelpOpen = false;
 	$: rightSidebarMenuOpen =
 		statusOpen || assigneeOpen || propertyOpen || unitOpen || urgentOpen || urgentHelpOpen;
+	$: fieldsDesktopAlignClass =
+		$rightPanel?.open && $rightPanel?.type === 'chat'
+			? 'right-0 left-auto origin-top-right'
+			: 'left-0 right-auto origin-top-left';
+
+	let propertyAnchorDesktop;
+	let unitAnchorDesktop;
+	let statusAnchorDesktop;
+	let assigneeAnchorDesktop;
+	let urgentAnchorDesktop;
+	let propertyAnchorMobile;
+	let unitAnchorMobile;
+	let statusAnchorMobile;
+	let assigneeAnchorMobile;
+	let urgentAnchorMobile;
+
+	let propertyMenuStyle = '';
+	let unitMenuStyle = '';
+	let statusMenuStyle = '';
+	let assigneeMenuStyle = '';
+	let urgentMenuStyle = '';
+
+	const FIELD_MENU_PADDING = 8;
+	const FIELD_MENU_GAP = 8;
+	const FIELD_MENU_WIDTH_WIDE = 224;
+	const FIELD_MENU_WIDTH_NARROW = 192;
+
+	const getFieldAnchor = (desktopAnchor, mobileAnchor) =>
+		isMobileViewport ? mobileAnchor : desktopAnchor;
+
+	const buildFieldMenuStyle = (anchor, menuWidth) => {
+		if (!browser || !anchor) return '';
+		const rect = anchor.getBoundingClientRect();
+		const viewportWidth = window.innerWidth;
+		let left = rect.left;
+		if (left + menuWidth > viewportWidth - FIELD_MENU_PADDING) {
+			left = Math.max(FIELD_MENU_PADDING, rect.right - menuWidth);
+		}
+		left = Math.max(FIELD_MENU_PADDING, left);
+		const top = rect.bottom + FIELD_MENU_GAP;
+		return `left: ${left}px; top: ${top}px;`;
+	};
+
+	const refreshOpenFieldMenus = () => {
+		if (propertyOpen) {
+			propertyMenuStyle = buildFieldMenuStyle(
+				getFieldAnchor(propertyAnchorDesktop, propertyAnchorMobile),
+				FIELD_MENU_WIDTH_WIDE
+			);
+		}
+		if (unitOpen) {
+			unitMenuStyle = buildFieldMenuStyle(
+				getFieldAnchor(unitAnchorDesktop, unitAnchorMobile),
+				FIELD_MENU_WIDTH_WIDE
+			);
+		}
+		if (statusOpen) {
+			statusMenuStyle = buildFieldMenuStyle(
+				getFieldAnchor(statusAnchorDesktop, statusAnchorMobile),
+				FIELD_MENU_WIDTH_NARROW
+			);
+		}
+		if (assigneeOpen) {
+			assigneeMenuStyle = buildFieldMenuStyle(
+				getFieldAnchor(assigneeAnchorDesktop, assigneeAnchorMobile),
+				FIELD_MENU_WIDTH_WIDE
+			);
+		}
+		if (urgentOpen) {
+			urgentMenuStyle = buildFieldMenuStyle(
+				getFieldAnchor(urgentAnchorDesktop, urgentAnchorMobile),
+				FIELD_MENU_WIDTH_NARROW
+			);
+		}
+	};
 	let showUrgencyPolicyPrompt = false;
 	let urgencyPolicyValue = 'not_urgent';
 	let urgencyPolicyIssue = '';
@@ -1487,6 +1566,10 @@
 		channelMap.clear();
 		if (_issueChannel) supabase.removeChannel(_issueChannel);
 		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
+		if (browser && handleViewport) {
+			window.removeEventListener('resize', handleViewport);
+			window.removeEventListener('scroll', handleViewport, true);
+		}
 		pageReady.set(true);
 	});
 
@@ -1636,11 +1719,11 @@
 				</div>
 			</div>
 
-			<div
-				class="flex-1 overflow-y-auto px-4 pt-4 pb-20 transition-opacity duration-200 sm:px-10 sm:pt-8"
-				class:opacity-0={!$pageReady}
-			>
-				<div class="mt-2 sm:flex sm:gap-6">
+			<div class="flex-1 min-h-0 overflow-visible" class:opacity-0={!$pageReady}>
+				<div
+					class="h-full overflow-y-auto px-4 pt-4 pb-20 transition-opacity duration-200 sm:px-10 sm:pt-8"
+				>
+					<div class="mt-2 sm:flex sm:gap-6">
 					<div
 						class={`min-w-0 ${$rightPanel?.open && $rightPanel?.type === 'chat' ? 'sm:w-1/2' : 'sm:w-2/3'}`}
 					>
@@ -1660,6 +1743,7 @@
 										<div class="tooltip-target relative">
 											<button
 												type="button"
+												bind:this={propertyAnchorMobile}
 												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
 													canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
 												}`}
@@ -1673,6 +1757,7 @@
 													assigneeOpen = false;
 													urgentOpen = false;
 													urgentHelpOpen = false;
+													if (propertyOpen) refreshOpenFieldMenus();
 												}}
 											>
 												<svg
@@ -1697,10 +1782,11 @@
 												</div>
 											{/if}
 											{#if propertyOpen && canEditIssue}
-												<div
-													class="absolute right-auto left-0 z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-													on:click|stopPropagation
-												>
+											<div
+												class="fixed z-[100] w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+												style={propertyMenuStyle}
+												on:click|stopPropagation
+											>
 													<button
 														type="button"
 														class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
@@ -1734,6 +1820,7 @@
 										<div class="tooltip-target relative">
 											<button
 												type="button"
+												bind:this={unitAnchorMobile}
 												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
 													canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
 												}`}
@@ -1747,6 +1834,7 @@
 													assigneeOpen = false;
 													urgentOpen = false;
 													urgentHelpOpen = false;
+													if (unitOpen) refreshOpenFieldMenus();
 												}}
 											>
 												<svg
@@ -1771,10 +1859,11 @@
 												</div>
 											{/if}
 											{#if unitOpen && canEditIssue}
-												<div
-													class="absolute right-auto left-0 z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-													on:click|stopPropagation
-												>
+											<div
+												class="fixed z-[100] w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+												style={unitMenuStyle}
+												on:click|stopPropagation
+											>
 													<button
 														type="button"
 														class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
@@ -1812,23 +1901,25 @@
 									</div>
 									<div class="grid grid-cols-2 gap-2">
 										<div class="tooltip-target relative">
-											<button
-												type="button"
-												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-													canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
-												}`}
+										<button
+											type="button"
+											bind:this={statusAnchorMobile}
+											class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+												canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+											}`}
 												disabled={!canEditIssue}
 												aria-disabled={!canEditIssue}
-												on:click|stopPropagation={() => {
-													if (!canEditIssue) return;
-													statusOpen = !statusOpen;
-													propertyOpen = false;
-													unitOpen = false;
-													assigneeOpen = false;
-													urgentOpen = false;
-													urgentHelpOpen = false;
-												}}
-											>
+											on:click|stopPropagation={() => {
+												if (!canEditIssue) return;
+												statusOpen = !statusOpen;
+												propertyOpen = false;
+												unitOpen = false;
+												assigneeOpen = false;
+												urgentOpen = false;
+												urgentHelpOpen = false;
+												if (statusOpen) refreshOpenFieldMenus();
+											}}
+										>
 												<span
 													class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
 												></span>
@@ -1842,10 +1933,11 @@
 												</div>
 											{/if}
 											{#if statusOpen && canEditIssue}
-												<div
-													class="absolute right-auto left-0 z-10 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-													on:click|stopPropagation
-												>
+										<div
+											class="fixed z-[100] w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+											style={statusMenuStyle}
+											on:click|stopPropagation
+										>
 													{#each statusCycle as status}
 														<button
 															type="button"
@@ -1869,23 +1961,25 @@
 											{/if}
 										</div>
 										<div class="tooltip-target relative">
-											<button
-												type="button"
-												class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-													canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
-												}`}
+										<button
+											type="button"
+											bind:this={assigneeAnchorMobile}
+											class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+												canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+											}`}
 												disabled={!canEditIssue}
 												aria-disabled={!canEditIssue}
-												on:click|stopPropagation={() => {
-													if (!canEditIssue) return;
-													assigneeOpen = !assigneeOpen;
-													propertyOpen = false;
-													unitOpen = false;
-													statusOpen = false;
-													urgentOpen = false;
-													urgentHelpOpen = false;
-												}}
-											>
+											on:click|stopPropagation={() => {
+												if (!canEditIssue) return;
+												assigneeOpen = !assigneeOpen;
+												propertyOpen = false;
+												unitOpen = false;
+												statusOpen = false;
+												urgentOpen = false;
+												urgentHelpOpen = false;
+												if (assigneeOpen) refreshOpenFieldMenus();
+											}}
+										>
 												{#if assignee}
 													<div
 														class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(assignee).color}`}
@@ -1919,10 +2013,11 @@
 												</div>
 											{/if}
 											{#if assigneeOpen && canEditIssue}
-												<div
-													class="absolute right-auto left-0 z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-													on:click|stopPropagation
-												>
+										<div
+											class="fixed z-[100] w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+											style={assigneeMenuStyle}
+											on:click|stopPropagation
+										>
 													<button
 														type="button"
 														class="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50"
@@ -1988,6 +2083,7 @@
 									<div class="tooltip-target group relative">
 										<button
 											type="button"
+											bind:this={urgentAnchorMobile}
 											class={`flex w-1/2 items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
 												canEditIssue && !isSubissue
 													? 'hover:bg-neutral-200'
@@ -2003,6 +2099,7 @@
 												assigneeOpen = false;
 												propertyOpen = false;
 												unitOpen = false;
+												if (urgentOpen) refreshOpenFieldMenus();
 											}}
 										>
 											{#if displayUrgent}
@@ -2043,10 +2140,11 @@
 											</div>
 										{/if}
 										{#if urgentOpen && canEditIssue && !isSubissue}
-											<div
-												class="absolute right-auto left-0 z-10 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-												on:click|stopPropagation
-											>
+										<div
+											class="fixed z-[100] w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+											style={urgentMenuStyle}
+											on:click|stopPropagation
+										>
 												<button
 													type="button"
 													class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
@@ -2247,10 +2345,10 @@
 												</div>
 											{/if}
 											{#if propertyOpen && canEditIssue}
-												<div
-													class="absolute right-auto left-0 z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-													on:click|stopPropagation
-												>
+											<div
+												class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+												on:click|stopPropagation
+											>
 													<button
 														type="button"
 														class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
@@ -2321,10 +2419,10 @@
 												</div>
 											{/if}
 											{#if unitOpen && canEditIssue}
-												<div
-													class="absolute right-auto left-0 z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-													on:click|stopPropagation
-												>
+											<div
+												class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+												on:click|stopPropagation
+											>
 													<button
 														type="button"
 														class={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
@@ -2392,10 +2490,10 @@
 												</div>
 											{/if}
 											{#if statusOpen && canEditIssue}
-												<div
-													class="absolute right-auto left-0 z-10 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-													on:click|stopPropagation
-												>
+											<div
+												class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+												on:click|stopPropagation
+											>
 													{#each statusCycle as status}
 														<button
 															type="button"
@@ -2469,10 +2567,10 @@
 												</div>
 											{/if}
 											{#if assigneeOpen && canEditIssue}
-												<div
-													class="absolute right-auto left-0 z-10 mt-2 w-56 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-													on:click|stopPropagation
-												>
+											<div
+												class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+												on:click|stopPropagation
+											>
 													<button
 														type="button"
 														class="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50"
@@ -2638,10 +2736,10 @@
 												</div>
 											{/if}
 											{#if urgentOpen && canEditIssue && !isSubissue}
-												<div
-													class="absolute right-auto left-0 z-10 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
-													on:click|stopPropagation
-												>
+											<div
+												class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+												on:click|stopPropagation
+											>
 													<button
 														type="button"
 														class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
@@ -3596,6 +3694,7 @@
 								</button>
 							</div>
 						</div>
+					</div>
 					</div>
 				</div>
 			</div>

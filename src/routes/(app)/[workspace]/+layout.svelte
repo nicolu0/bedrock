@@ -935,10 +935,10 @@
 					</div>
 				</div>
 			</aside>
-			<section class="flex-1 overflow-hidden">
+			<section class="flex-1 overflow-visible">
 				<div class="flex h-full min-w-0">
 					<div
-						class={`flex min-h-0 flex-none flex-col overflow-hidden transition-[width] duration-[280ms] ease-out ${
+						class={`relative z-50 flex min-h-0 flex-none flex-col overflow-visible transition-[width] duration-[280ms] ease-out ${
 							$rightPanel.open
 								? $rightPanel.type === 'issue'
 									? 'w-1/2 border-r border-neutral-200'
@@ -952,7 +952,7 @@
 					</div>
 					{#if $rightPanel.open && !(isMobileViewport && $rightPanel.type === 'chat')}
 						<div
-							class={`flex-none overflow-y-auto ${
+							class={`relative z-0 flex-none overflow-y-auto ${
 								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-5/12'
 							}`}
 							in:fly={{ x: 400, duration: 280, easing: cubicOut }}
