@@ -986,6 +986,55 @@ const buildSubissueDescriptionFallback = ({
 	return `${trimmedName} created.`;
 };
 
+const formatVendorDraftAddress = (propertyName: string | null, unitName: string | null) => {
+	const property = propertyName?.trim() ?? '';
+	const unit = unitName?.trim() ?? '';
+	if (property && unit) return `${property}, unit ${unit}`;
+	if (property) return property;
+	if (unit) return `unit ${unit}`;
+	return 'the property';
+};
+
+const buildVendorDraftTemplate = ({
+	vendorName,
+	issueTitle,
+	address,
+	tenantName,
+	tenantPhone,
+	tenantEmail,
+	userName
+}: {
+	vendorName: string | null;
+	issueTitle: string;
+	address: string;
+	tenantName: string | null;
+	tenantPhone: string | null;
+	tenantEmail: string | null;
+	userName: string | null;
+}) => {
+	const safeIssueTitle = issueTitle?.trim() || 'Work Order';
+	const safeUserName = userName?.trim() || 'Bedrock';
+	const bodyLines: string[] = [];
+	if (vendorName?.trim()) {
+		bodyLines.push(`Hi, ${vendorName.trim()}`, '');
+	}
+	bodyLines.push(
+		`Please confirm that you can take this work order: ${safeIssueTitle} @ ${address}.`,
+		'Please schedule with tenant.',
+		'',
+		`Name: ${tenantName ?? ''}`,
+		`Phone: ${tenantPhone ?? ''}`,
+		`Email: ${tenantEmail ?? ''}`,
+		'',
+		'Thanks,',
+		safeUserName
+	);
+	return {
+		subject: `Work Order: ${safeIssueTitle}`,
+		body: bodyLines.join('\n')
+	};
+};
+
 const normalizeOneLine = (value: string, maxLength = 180) => {
 	const cleaned = (value ?? '').replace(/\s+/g, ' ').trim();
 	if (!cleaned) return '';
@@ -1347,6 +1396,7 @@ const runIssueAgent = async ({
 	urgencyDecision,
 	tenantName,
 	tenantEmail,
+	tenantPhone,
 	userName,
 	defaultSenderEmail,
 	replyMessageId,
@@ -1375,6 +1425,7 @@ const runIssueAgent = async ({
 	urgencyDecision: boolean | null;
 	tenantName: string | null;
 	tenantEmail: string | null;
+	tenantPhone: string | null;
 	userName: string | null;
 	defaultSenderEmail: string | null;
 	replyMessageId: string | null;
@@ -1415,32 +1466,30 @@ ${autoPolicyMatch.template}`
 		: '';
 	const autoApprovedIssueIds = new Set<string>();
 	const system = `You are Bedrock, an assistant for property management.
-Your job is to link this email thread to the most specific issue (prefer a subissue when appropriate). If no match exists, create a new issue and then create one subissue for the next step.
+Your job is to link this email thread to the most specific issue (prefer a subissue when appropriate). If no match exists, create a new issue and then create two subissues: one triage and one schedule.
 
 Process (required):
 1) Review the provided open_issues list.
 2) If root_issue_id is provided, do not create a new issue. Use it as the root issue id.
 3) If no existing_issue_id is provided and no clear match exists, call create_issue with a concise title. This is required before creating subissues.
 4) If existing_issue_id is provided, prefer reusing the most recent triage subissue from open_issues that matches the issue. Only create a new triage subissue if no suitable triage subissue exists.
-5) If the tenant indicates troubleshooting failed or the issue cannot be resolved by the tenant, create a Schedule subissue for a vendor (even if you reused the triage subissue) and shift the workflow to scheduling. This is a stopping point: do not continue triage back-and-forth.
-6) If the email is from a tenant, follow staged triage unless an urgency policy overrides it:
+5) Always ensure a Schedule subissue exists for the parent issue. Prefer reusing the most recent Schedule subissue when present; otherwise create it.
+6) If the tenant indicates troubleshooting failed or the issue cannot be resolved by the tenant, shift the workflow to scheduling. Ensure the schedule subissue exists and draft the vendor request. This is a stopping point: do not continue triage back-and-forth.
+7) If the email is from a tenant, follow staged triage unless an urgency policy overrides it:
    - Stage 1: Identify if the tenant can resolve the issue themselves with basic steps.
    - Stage 2: Determine if a vendor is needed.
    - Stage 3: Determine if it is an emergency.
    Use the full conversation thread for context and ask clarifying questions to confirm urgency.
    Choose triage when the tenant might resolve it or more info is needed; choose schedule only for clear emergencies (e.g., pests, gas smell, no power, no water, flooding, safety risks) or when workspace_policy explicitly requires immediate scheduling.
    Example: a clogged toilet is typically triage (suggest using a plunger and ask if there is overflow/flooding). If there is flooding or safety risk, treat as emergency and schedule.
-7) If workspace_policy marks the issue as urgent, schedule immediately in the first pass: create the root issue (if needed), then create a triage subissue and a schedule subissue in the same run.
+8) If workspace_policy marks the issue as urgent, schedule immediately in the first pass: create the root issue (if needed), then create a triage subissue and a schedule subissue in the same run.
    - The triage subissue reply must tell the tenant that a vendor is being scheduled.
    - The schedule subissue must include a vendor request draft.
    - Do not wait for triage results in this case.
-8) If you created a triage subissue, create an email draft reply to the tenant using draft_reply (required).
-9) When you determine the tenant cannot resolve the issue and you create a Schedule subissue, you should create two drafts in the same run:
-   - Tenant reply: acknowledge, confirm availability/entry permission, and keep the tenant informed. Use latest_message_id for message_id.
-    - Vendor request: pick a vendor from the vendors list (prefer trade match) and draft a vendor email. Omit message_id unless a vendor thread exists. If no suitable vendor or no vendor email exists, draft with recipient_email null and note that no matching vendor was found.
-   This is a stopping point for triage: do not keep asking tenant troubleshooting questions in the same run.
-9) Linking: Always link the tenant thread to the triage subissue (or existing triage subissue). Do NOT link the tenant thread to the Schedule subissue; that subissue is for the vendor thread.
-10) Finally, call link_thread_to_issue once with the triage subissue id. This is required.
+9) If you created a triage subissue, create an email draft reply to the tenant using draft_reply (required).
+10) Always create a vendor request draft for the Schedule subissue in the same run. Pick a vendor from the vendors list (prefer trade match). Omit message_id unless a vendor thread exists. If no vendor email exists, set recipient_email to null and still draft using the template.
+11) Linking: Always link the tenant thread to the triage subissue (or existing triage subissue). Do NOT link the tenant thread to the Schedule subissue; that subissue is for the vendor thread.
+12) Finally, call link_thread_to_issue once with the triage subissue id. This is required.
 
 Non-tenant routing:
 - If tenant_name is null and workspace_units are provided, infer the most likely unit_id from the email subject/body.
@@ -1466,11 +1515,11 @@ Rules:
 - Subissue parent rules: Triage and Schedule subissues must use root_issue_id as parent. Never use thread_issue_id as the parent for Schedule.
 - Subissue description: required. One line only, super concise, human readable summary of why this subissue exists (use the reasoning as a base). Make it specific to the subissue stage (triage vs schedule) and the reason for that stage (tenant-fixable, policy requirement, etc.). Avoid quoting the email body. Avoid list/CSV formatting; write a sentence.
 - Reasoning: keep as a short, human-readable sentence that can be reused for the subissue description.
-- Use the workspace_policy to decide triage vs schedule vendor. If the policy instructs drafting emails to cleaners or vendors, do that and skip draft_reply unless the policy explicitly says to reply.
+- Use the workspace_policy to decide urgency and triage messaging. The schedule subissue is always required. If the policy instructs drafting emails to cleaners or vendors, do that and skip draft_reply unless the policy explicitly says to reply.
 - Drafts: Always write from the property manager POV (the user). Never write from the tenant POV.
  - Drafts: For tenant replies, address the tenant by first name only (e.g., "Hi John," not "Hi John Smith,"). Extract the first name from tenant_name. Never infer a name from the email address.
  - Drafts: For tenant replies, keep it short and direct. Acknowledge the issue, state the immediate next action, and ask only essential follow-up questions.
- - Drafts: For tenant replies, do not ask about availability, timing windows, or scheduling details.
+- Drafts: For tenant replies, do not ask about availability, timing windows, or scheduling details.
 - Drafts: For tenant replies, do not repeat the issue details back to the tenant. Use a generic acknowledgment like "Thanks for reporting this issue." then state the next action.
 - Drafts: For tenant replies, ask only one specific follow-up question (may include 2-3 subparts if needed).
  - Drafts: For tenant replies, keep the structure consistent across messages: short acknowledgment, next action, single follow-up question, then signature.
@@ -1490,7 +1539,19 @@ Rules:
 - Drafts: Never use default_sender_email in the email body.
  - Drafts: When referencing location in vendor emails, use property_name and unit_name (e.g., "at {property_name}, unit {unit_name}"). Never include a raw UUID in the email body.
 - Drafts: When triaging, draft a short, friendly reply acknowledging the issue and asking one clarifying question about emergency indicators if relevant.
- - Drafts: Vendor requests should be short and direct. Include only the issue, location (property_name + unit_name), and tenant contact information if available.
+- Drafts: Vendor requests must use this template. Use a greeting only when a vendor is selected; omit the greeting otherwise.
+- Drafts: Vendor request template (capitalize exactly, keep line breaks):
+   Hi, {Vendor Name}
+
+   Please confirm that you can take this work order: {Issue Title} @ {Address}.
+   Please schedule with tenant.
+
+   Name: {Tenant Name}
+   Phone: {Tenant Phone}
+   Email: {Tenant Email}
+
+   Thanks,
+   {User Name}
 - Drafts: Use draft_reply for replies and draft_email for new outbound emails.
 - Drafts: For Schedule subissues, the draft recipient must be a vendor email or null; never send to sender_email.
 - Drafts: sender_email should not be provided by the agent. The system will use default_sender_email.
@@ -1517,9 +1578,9 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 - Step 1 — MANDATORY FIRST ACTION: Call update_issue before any other tool call. No exceptions.
   - title: 2-5 words, Title Case, maximum 30 characters (e.g., "Leaky Kitchen Faucet", "Broken AC Unit", "Clogged Drain", "Ant Infestation", "Broken Washer"). No location, no unit names, no tenant names. Never copy the work order text. Write a complete, grammatically natural phrase.
   - description: one concise sentence summarising who reported it and what the problem is. Never copy the work order text verbatim.
-- Step 2: Create a triage subissue (and a schedule subissue if a vendor is clearly needed).
+- Step 2: Create a triage subissue and a schedule subissue for every work order.
 - Step 3: Call draft_appfolio using the triage subissue id as issue_id. Draft a short message to the tenant acknowledging the work order and any next steps. Do NOT set recipient_email on this call — it is a tenant acknowledgement, not a vendor message.
-- Step 3b (only if you created a schedule subissue in Step 2): Call draft_appfolio again, this time using the schedule subissue id as issue_id. Pick the best vendor from the vendors list (prefer trade match). Set recipient_email to that vendor's email. Draft a brief work order request to the vendor describing the issue. This creates the vendor assignment draft that the property manager will review and approve.
+- Step 3b: Call draft_appfolio again, this time using the schedule subissue id as issue_id. Pick the best vendor from the vendors list (prefer trade match). Set recipient_email to that vendor's email when available; otherwise set recipient_email to null. Draft the vendor request using the required template. This creates the vendor assignment draft that the property manager will review and approve.
 - Step 4: Call done().
 `.trim()
 		: ''
@@ -1718,6 +1779,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 					: null,
 				tenant_name: tenantName,
 				tenant_email: tenantEmail,
+				tenant_phone: tenantPhone,
 				user_name: userName,
 				default_sender_email: defaultSenderEmail,
 				eligible_assignees: Array.from(eligibleAssignees),
@@ -1736,6 +1798,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 	let lastSubissueId: string | null = null;
 	let lastSubissueTitle: string | null = null;
 	let lastTriageSubissueId: string | null = null;
+	let lastScheduleSubissueId: string | null = null;
 	let draftedIssueId: string | null = null;
 	let threadLinked = false;
 	let resolvedUnitId: string | null = unitId;
@@ -1743,6 +1806,133 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 	let primaryIssueId: string | null = rootIssueId ?? threadIssueId ?? null;
 	const issueNameCache = new Map<string, string>();
 	const urgencyHint = urgencyDecision === true ? true : urgencyDecision === false ? false : null;
+
+	const resolveRootIssueId = async (issueId: string | null) => {
+		if (!issueId) return null;
+		const { data } = await supabase
+			.from('issues')
+			.select('id, parent_id')
+			.eq('id', issueId)
+			.maybeSingle();
+		if (!data?.id) return issueId;
+		return data.parent_id ?? data.id;
+	};
+
+	const ensureRequiredSubissuesAndVendorDraft = async () => {
+		const candidateIssueId =
+			primaryIssueId ?? linkedIssueId ?? createdIssueId ?? rootIssueId ?? lastSubissueId;
+		const rootId = await resolveRootIssueId(candidateIssueId);
+		if (!rootId) return { triageId: null, scheduleId: null };
+
+		const { data: rootIssue } = await supabase
+			.from('issues')
+			.select('id, name')
+			.eq('id', rootId)
+			.maybeSingle();
+		const issueTitle = rootIssue?.name?.trim() || 'Issue';
+
+		const { data: subissues } = await supabase
+			.from('issues')
+			.select('id, name, created_at')
+			.eq('parent_id', rootId)
+			.order('created_at', { ascending: false });
+		const triageExisting = (subissues ?? []).find((row) =>
+			/^triage\s+/i.test(String(row?.name ?? ''))
+		);
+		const scheduleExisting = (subissues ?? []).find((row) =>
+			/^schedule\s+/i.test(String(row?.name ?? ''))
+		);
+
+		let triageId = triageExisting?.id ?? null;
+		let scheduleId = scheduleExisting?.id ?? null;
+
+		if (!triageId) {
+			const triageTitle = clampTitle(`Triage ${issueTitle}`);
+			const reasoning = 'Initial triage step for this issue.';
+			const description = normalizeOneLine(ensureSentence(reasoning));
+			triageId = await createSubissue({
+				parentIssueId: rootId,
+				name: triageTitle,
+				unitId: resolvedUnitId,
+				workspaceId,
+				status: 'todo',
+				reasoning,
+				assigneeId: defaultAssigneeId,
+				description,
+				urgent: urgencyHint ?? undefined
+			});
+		}
+
+		if (!scheduleId) {
+			const scheduleTitle = clampTitle(`Schedule Vendor for ${issueTitle}`);
+			const reasoning = 'Vendor scheduling prepared for this issue.';
+			const description = normalizeOneLine(ensureSentence(reasoning));
+			scheduleId = await createSubissue({
+				parentIssueId: rootId,
+				name: scheduleTitle,
+				unitId: resolvedUnitId,
+				workspaceId,
+				status: 'todo',
+				reasoning,
+				assigneeId: defaultAssigneeId,
+				description,
+				urgent: urgencyHint ?? undefined
+			});
+		}
+
+		if (scheduleId) {
+			const address = formatVendorDraftAddress(propertyName, unitName);
+			const chosenVendor = vendors.find((vendor) => Boolean(vendor?.email)) ?? vendors[0] ?? null;
+			const vendorName = chosenVendor?.name ?? null;
+			const recipientEmail = chosenVendor?.email ?? null;
+			const draft = buildVendorDraftTemplate({
+				vendorName,
+				issueTitle,
+				address,
+				tenantName,
+				tenantPhone,
+				tenantEmail,
+				userName
+			});
+			if (source === 'appfolio') {
+				await upsertEmailDraft({
+					issueId: scheduleId,
+					messageId: null,
+					senderEmail: '',
+					recipientEmail,
+					recipientEmails: recipientEmail ? [recipientEmail] : null,
+					subject: draft.subject,
+					body: draft.body,
+					userId,
+					workspaceId,
+					channel: 'appfolio'
+				});
+			} else if (defaultSenderEmail) {
+				await upsertEmailDraft({
+					issueId: scheduleId,
+					messageId: null,
+					senderEmail: normalizeEmail(defaultSenderEmail),
+					recipientEmail,
+					recipientEmails: recipientEmail ? [recipientEmail] : null,
+					subject: draft.subject,
+					body: draft.body,
+					userId,
+					workspaceId,
+					channel: 'email'
+				});
+			}
+
+			const recommended = rankVendors(vendors, chosenVendor ?? undefined);
+			if (recommended.length > 0) {
+				await supabase
+					.from('issues')
+					.update({ recommended_vendors: recommended })
+					.eq('id', scheduleId);
+			}
+		}
+
+		return { triageId, scheduleId };
+	};
 
 	for (let i = 0; i < 10; i += 1) {
 		if (!startedEventSent) {
@@ -1986,6 +2176,7 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 							? clampTitle(stripTenantNameFromTitle(args.title.trim(), tenantName))
 							: '';
 					const isTriageSubissue = /^triage\s+/i.test(title);
+					const isScheduleSubissue = /^schedule\s+/i.test(title);
 					const statusValue = typeof args.status === 'string' ? args.status : 'todo';
 					const status = ['todo', 'in_progress', 'done'].includes(statusValue)
 						? statusValue
@@ -2030,6 +2221,9 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 					lastSubissueTitle = title;
 					if (isTriageSubissue) {
 						lastTriageSubissueId = subissueId;
+					}
+					if (isScheduleSubissue) {
+						lastScheduleSubissueId = subissueId;
 					}
 					issuedAction = true;
 					result = { subissue_id: subissueId };
@@ -2412,6 +2606,15 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 				}
 
 				if (name === 'done') {
+					const ensured = await ensureRequiredSubissuesAndVendorDraft();
+					if (ensured.triageId) {
+						lastTriageSubissueId = ensured.triageId;
+						lastSubissueId = ensured.triageId;
+					}
+					if (ensured.scheduleId) {
+						lastScheduleSubissueId = ensured.scheduleId;
+						lastSubissueId = lastSubissueId ?? ensured.scheduleId;
+					}
 					const doneIssueId =
 						primaryIssueId ??
 						linkedIssueId ??
@@ -2679,7 +2882,7 @@ const processMessage = async ({
 
 	const { data: tenant } = await supabase
 		.from('tenants')
-		.select('id, unit_id, email, name')
+		.select('id, unit_id, email, name, phone')
 		.ilike('email', senderEmail)
 		.maybeSingle();
 	if (!tenant?.id || !tenant.unit_id) {
@@ -2957,6 +3160,7 @@ const processMessage = async ({
 			urgencyDecision,
 			tenantName: normalizeTenantName(tenant.name ?? null),
 			tenantEmail: tenant.email ?? null,
+			tenantPhone: tenant.phone ?? null,
 			userName,
 			defaultSenderEmail: connection.email ?? null,
 			replyMessageId: inboundMessageId,
@@ -3368,6 +3572,7 @@ const handleAppfolioWorkOrder = async ({
 			urgencyDecision: null,
 			tenantName,
 			tenantEmail,
+			tenantPhone: null,
 			userName: userProfile?.name ?? 'Bedrock',
 			defaultSenderEmail: null,
 			replyMessageId: null,

@@ -676,13 +676,6 @@
 			<h1 class="text-sm font-normal text-neutral-700">My issues</h1>
 		</div>
 		<div class="flex items-center gap-2">
-			<button
-				type="button"
-				class="rounded-md px-2 py-1 text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
-				on:click={openNewIssueModal}
-			>
-				+ New issue
-			</button>
 			<div class="hidden sm:flex">
 				<SidebarButton onClick={toggleChatPanel} />
 			</div>
@@ -898,32 +891,9 @@
 							{#each section.propertyGroups as group}
 								<button
 									type="button"
-									class="tooltip-target group relative flex w-full items-center gap-3 px-6.5 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900"
+									class="group flex w-full items-center gap-3 px-6.5 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900"
 									on:click={() => togglePropertyGroup(section.id, group.name)}
 								>
-									<svg
-										xmlns="http://www.w3.org/2000/svg"
-										width="12"
-										height="12"
-										fill="currentColor"
-										class={`transition ${
-											collapsedPropertyGroups[getPropertyGroupKey(section.id, group.name)]
-												? '-rotate-90'
-												: 'rotate-0'
-										}`}
-										viewBox="0 0 16 16"
-									>
-										<path
-											d="M1.5 5.5a.5.5 0 0 1 .707 0L8 11.293l5.793-5.793a.5.5 0 1 1 .707.707l-6.147 6.147a.5.5 0 0 1-.707 0L1.5 6.207a.5.5 0 0 1 0-.707"
-										/>
-									</svg>
-									<span
-										class="delayed-tooltip absolute top-full left-6 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
-									>
-										{collapsedPropertyGroups[getPropertyGroupKey(section.id, group.name)]
-											? 'Expand'
-											: 'Collapse'}
-									</span>
 									<span class="font-normal text-inherit">{group.name}</span>
 									<div
 										class="flex-1 border-t border-neutral-200 transition group-hover:border-neutral-800"

@@ -21,9 +21,8 @@
 	$: currentPath = $page.url.pathname;
 	$: if (browser && workspaceSlug && role && !canViewPeople) goto(basePath);
 	const tabs = [
-		{ id: 'all', label: 'All people', href: '' },
-		{ id: 'members', label: 'Members', href: 'members' },
 		{ id: 'vendors', label: 'Vendors', href: 'vendors' },
+		{ id: 'members', label: 'Members', href: 'members' },
 		{ id: 'owners', label: 'Owners', href: 'owners' }
 	];
 
@@ -81,9 +80,9 @@
 			<div class="flex items-center gap-2">
 				{#each tabs as tab}
 					<a
-						href={`${basePath}/people${tab.href ? `/${tab.href}` : ''}`}
+						href={`${basePath}/people/${tab.href}`}
 						class={`rounded-md border border-neutral-200 px-2 py-1 text-xs transition ${
-							(currentPath === `${basePath}/people` && tab.id === 'all') ||
+							(currentPath === `${basePath}/people` && tab.id === 'vendors') ||
 							currentPath === `${basePath}/people/${tab.href}`
 								? 'bg-neutral-200/50 text-neutral-900'
 								: 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'

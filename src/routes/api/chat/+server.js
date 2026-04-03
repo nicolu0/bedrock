@@ -83,6 +83,47 @@ export const POST = async ({ request, locals }) => {
 		...payload,
 		user_id: locals.user.id
 	};
+	const resolvedWorkspace = await resolveWorkspace(
+		payload?.workspace_id ?? null,
+		payload?.workspace_slug ?? payload?.workspaceSlug ?? null
+	);
+	if (resolvedWorkspace?.id) {
+		body.workspace_id = resolvedWorkspace.id;
+		body.workspace_slug =
+			resolvedWorkspace.slug ?? payload?.workspace_slug ?? payload?.workspaceSlug;
+	}
+	if (!body.thread_id) {
+		let threadQuery = supabaseAdmin
+			.from('chat_threads')
+			.select('id')
+			.eq('user_id', locals.user.id)
+			.eq('is_default', true);
+		if (resolvedWorkspace?.id) {
+			threadQuery = threadQuery.eq('workspace_id', resolvedWorkspace.id);
+		} else {
+			threadQuery = threadQuery.is('workspace_id', null);
+		}
+		const { data: existingThread } = await threadQuery.maybeSingle();
+		if (existingThread?.id) {
+			body.thread_id = existingThread.id;
+		} else {
+			const { data: createdThread, error: createError } = await supabaseAdmin
+				.from('chat_threads')
+				.insert({
+					user_id: locals.user.id,
+					workspace_id: resolvedWorkspace?.id ?? null,
+					is_default: true
+				})
+				.select('id')
+				.single();
+			if (createError) {
+				return json({ error: createError.message }, { status: 500 });
+			}
+			if (createdThread?.id) {
+				body.thread_id = createdThread.id;
+			}
+		}
+	}
 
 	const wantsStream = request.headers.get('accept')?.includes('text/event-stream');
 	const response = await fetch(`${PUBLIC_SUPABASE_URL}/functions/v1/chat`, {

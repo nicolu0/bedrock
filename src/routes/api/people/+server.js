@@ -36,7 +36,7 @@ export const GET = async ({ locals, url }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
-	const [{ data: people }, { data: vendorRows }] = await Promise.all([
+	const [{ data: people }, vendorResponse] = await Promise.all([
 		supabaseAdmin
 			.from('people')
 			.select('id, name, email, role, trade, notes, pending, created_at, user_id')
@@ -44,10 +44,22 @@ export const GET = async ({ locals, url }) => {
 			.order('name', { ascending: true }),
 		supabaseAdmin
 			.from('vendors')
-			.select('id, name, email, trade, note, phone, created_at')
+			.select('id, name, email, trade, note, phone, created_at, preference_index')
 			.eq('workspace_id', workspace.id)
+			.order('trade', { ascending: true })
+			.order('preference_index', { ascending: true })
 			.order('name', { ascending: true })
 	]);
+	let vendorRows = vendorResponse.data;
+	if (vendorResponse.error?.message?.includes('preference_index')) {
+		const fallback = await supabaseAdmin
+			.from('vendors')
+			.select('id, name, email, trade, note, phone, created_at')
+			.eq('workspace_id', workspace.id)
+			.order('trade', { ascending: true })
+			.order('name', { ascending: true });
+		vendorRows = fallback.data;
+	}
 
 	const mergedVendors = (vendorRows ?? []).map((v) => ({
 		id: v.id,
@@ -58,13 +70,12 @@ export const GET = async ({ locals, url }) => {
 		notes: v.note,
 		pending: false,
 		created_at: v.created_at,
-		user_id: null
+		user_id: null,
+		preference_index: v.preference_index
 	}));
 
 	return json(
-		[...(people ?? []), ...mergedVendors].sort((a, b) =>
-			(a.name ?? '').localeCompare(b.name ?? '')
-		)
+		[...(people ?? []), ...mergedVendors].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
 	);
 };
 
@@ -86,20 +97,49 @@ export const POST = async ({ locals, request, url }) => {
 	}
 
 	if (role === 'vendor') {
-		const { data: vendorData, error: vendorError } = await supabaseAdmin
+		let vendorMaxQuery = supabaseAdmin
+			.from('vendors')
+			.select('preference_index')
+			.eq('workspace_id', workspace.id);
+		if (trade) {
+			vendorMaxQuery = vendorMaxQuery.eq('trade', trade);
+		} else {
+			vendorMaxQuery = vendorMaxQuery.is('trade', null);
+		}
+		const { data: vendorMax } = await vendorMaxQuery
+			.order('preference_index', { ascending: false })
+			.limit(1)
+			.maybeSingle();
+		const nextPreferenceIndex = (vendorMax?.preference_index ?? 0) + 1;
+		let vendorResponse = await supabaseAdmin
 			.from('vendors')
 			.insert({
 				workspace_id: workspace.id,
 				name,
 				email,
 				trade,
-				note: notes
+				note: notes,
+				preference_index: nextPreferenceIndex
 			})
-			.select('id, name, email, trade, note, created_at')
+			.select('id, name, email, trade, note, created_at, preference_index')
 			.single();
-		if (vendorError) {
-			return json({ error: vendorError.message }, { status: 500 });
+		if (vendorResponse.error?.message?.includes('preference_index')) {
+			vendorResponse = await supabaseAdmin
+				.from('vendors')
+				.insert({
+					workspace_id: workspace.id,
+					name,
+					email,
+					trade,
+					note: notes
+				})
+				.select('id, name, email, trade, note, created_at')
+				.single();
 		}
+		if (vendorResponse.error) {
+			return json({ error: vendorResponse.error.message }, { status: 500 });
+		}
+		const vendorData = vendorResponse.data;
 		return json({
 			id: vendorData.id,
 			name: vendorData.name,
@@ -109,7 +149,8 @@ export const POST = async ({ locals, request, url }) => {
 			notes: vendorData.note,
 			pending: false,
 			created_at: vendorData.created_at,
-			user_id: null
+			user_id: null,
+			preference_index: vendorData.preference_index
 		});
 	}
 
@@ -206,7 +247,7 @@ export const PATCH = async ({ locals, request }) => {
 	}
 
 	const body = await request.json();
-	const { id, workspace: workspaceSlug, name, email, role, trade, notes } = body;
+	const { id, workspace: workspaceSlug, name, email, role, trade, notes, preference_index } = body;
 
 	const workspace = await resolveWorkspace(workspaceSlug, locals.user.id);
 	if (!workspace?.id) {
@@ -218,16 +259,30 @@ export const PATCH = async ({ locals, request }) => {
 	}
 
 	if (role === 'vendor') {
-		const { data: vendorData, error: vendorError } = await supabaseAdmin
+		const vendorPayload = { name, email, trade, note: notes };
+		if (Number.isFinite(preference_index)) {
+			vendorPayload.preference_index = preference_index;
+		}
+		let vendorResponse = await supabaseAdmin
 			.from('vendors')
-			.update({ name, email, trade, note: notes })
+			.update(vendorPayload)
 			.eq('id', id)
 			.eq('workspace_id', workspace.id)
-			.select('id, name, email, trade, note, created_at')
+			.select('id, name, email, trade, note, created_at, preference_index')
 			.single();
-		if (vendorError) {
-			return json({ error: vendorError.message }, { status: 500 });
+		if (vendorResponse.error?.message?.includes('preference_index')) {
+			vendorResponse = await supabaseAdmin
+				.from('vendors')
+				.update({ name, email, trade, note: notes })
+				.eq('id', id)
+				.eq('workspace_id', workspace.id)
+				.select('id, name, email, trade, note, created_at')
+				.single();
 		}
+		if (vendorResponse.error) {
+			return json({ error: vendorResponse.error.message }, { status: 500 });
+		}
+		const vendorData = vendorResponse.data;
 		return json({
 			id: vendorData.id,
 			name: vendorData.name,
@@ -237,7 +292,8 @@ export const PATCH = async ({ locals, request }) => {
 			notes: vendorData.note,
 			pending: false,
 			created_at: vendorData.created_at,
-			user_id: null
+			user_id: null,
+			preference_index: vendorData.preference_index
 		});
 	}
 
