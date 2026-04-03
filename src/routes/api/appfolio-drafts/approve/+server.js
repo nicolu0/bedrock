@@ -24,6 +24,8 @@ export const POST = async ({ locals, request }) => {
 
 	const body = await request.json().catch(() => null);
 	const issueId = body?.issue_id;
+	const draftId = body?.draft_id ?? null;
+	const messageId = body?.message_id ?? null;
 	if (!issueId) return json({ error: 'Invalid payload' }, { status: 400 });
 
 	const { data: issue } = await supabaseAdmin
@@ -61,6 +63,21 @@ export const POST = async ({ locals, request }) => {
 		.eq('workspace_id', issue.workspace_id)
 		.eq('role', 'bedrock')
 		.not('user_id', 'is', null);
+
+	const draftQuery = supabaseAdmin
+		.from('drafts')
+		.select(
+			'id, issue_id, message_id, subject, body, sender_email, recipient_email, recipient_emails, channel'
+		);
+	const { data: approvedDraft } = draftId
+		? await draftQuery.eq('id', draftId).maybeSingle()
+		: messageId
+			? await draftQuery.eq('message_id', messageId).eq('channel', 'appfolio').maybeSingle()
+			: await draftQuery
+					.eq('issue_id', issue.id)
+					.is('message_id', null)
+					.eq('channel', 'appfolio')
+					.maybeSingle();
 
 	const candidates = (bedrockPeople ?? []).filter((row) => row?.user_id);
 	if (!candidates.length) {
@@ -108,10 +125,85 @@ export const POST = async ({ locals, request }) => {
 			approved_by: approvedBy,
 			approved_by_id: locals.user.id,
 			assignee_id: assigneeId,
-			assignee_name: assigneeName
+			assignee_name: assigneeName,
+			draft: {
+				id: approvedDraft?.id ?? draftId,
+				message_id: approvedDraft?.message_id ?? messageId ?? null,
+				subject: approvedDraft?.subject ?? null,
+				body: approvedDraft?.body ?? null,
+				recipient_email: approvedDraft?.recipient_email ?? null,
+				recipient_emails: approvedDraft?.recipient_emails ?? null,
+				channel: approvedDraft?.channel ?? 'appfolio'
+			}
 		},
 		created_by: locals.user.id
 	});
+
+	const issueName = (issue?.name ?? '').toString();
+	const isTriage = /^triage\s+/i.test(issueName);
+	const isSchedule = /^schedule\s+/i.test(issueName);
+	const followupBody = isSchedule
+		? 'Just checking in to see if you scheduled with the tenant.'
+		: isTriage
+			? 'Just checking in if the vendor got in contact with you to schedule.'
+			: null;
+
+	if (followupBody) {
+		const followupSubject = approvedDraft?.subject ?? issue.name ?? 'Follow up on scheduling';
+		const followupPayload = {
+			issue_id: issue.id,
+			message_id: approvedDraft?.message_id ?? messageId ?? null,
+			sender_email: approvedDraft?.sender_email ?? '',
+			recipient_email: approvedDraft?.recipient_email ?? null,
+			recipient_emails: approvedDraft?.recipient_emails ?? null,
+			subject: followupSubject,
+			body: followupBody,
+			original_body: followupBody,
+			draft_diff: null,
+			channel: 'appfolio',
+			updated_at: new Date().toISOString()
+		};
+
+		if (approvedDraft?.id) {
+			await supabaseAdmin.from('drafts').update(followupPayload).eq('id', approvedDraft.id);
+		} else if (followupPayload.message_id) {
+			const { data: existingByMessage } = await supabaseAdmin
+				.from('drafts')
+				.select('id')
+				.eq('message_id', followupPayload.message_id)
+				.eq('channel', 'appfolio')
+				.maybeSingle();
+			if (existingByMessage?.id) {
+				await supabaseAdmin.from('drafts').update(followupPayload).eq('id', existingByMessage.id);
+			} else {
+				await supabaseAdmin.from('drafts').insert(followupPayload);
+			}
+		} else {
+			const { data: existingByIssue } = await supabaseAdmin
+				.from('drafts')
+				.select('id')
+				.eq('issue_id', issue.id)
+				.is('message_id', null)
+				.eq('channel', 'appfolio')
+				.maybeSingle();
+			if (existingByIssue?.id) {
+				await supabaseAdmin.from('drafts').update(followupPayload).eq('id', existingByIssue.id);
+			} else {
+				await supabaseAdmin.from('drafts').insert(followupPayload);
+			}
+		}
+	}
+
+	await supabaseAdmin
+		.from('issues')
+		.update({ status: 'in_progress', updated_at: new Date().toISOString() })
+		.eq('id', issue.id);
+	if (issue.parent_id) {
+		await supabaseAdmin
+			.from('issues')
+			.update({ status: 'in_progress', updated_at: new Date().toISOString() })
+			.eq('id', issue.parent_id);
+	}
 
 	// Notify all bedrock users that a draft was approved and needs action
 	// (reuses bedrockPeople already fetched above)
