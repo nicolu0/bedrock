@@ -163,17 +163,18 @@ serve(async (req) => {
 		}
 	}
 
-	// Look up Bedrock property
+	// The email subject contains the property NUMBER (e.g., "292"), not the internal
+	// appfolio_property_id (e.g., "202"). Look up by appfolio_property_number.
 	const { data: property } = await supabase
 		.from('properties')
-		.select('id, appfolio_property_id')
+		.select('id, appfolio_property_id, appfolio_property_number')
 		.eq('workspace_id', workspaceId)
-		.eq('appfolio_property_id', appfolioPropertyId)
+		.eq('appfolio_property_number', appfolioPropertyId)
 		.maybeSingle();
 
 	if (!property) {
-		console.error(`appfolio-email-trigger: no Bedrock property for appfolio_property_id=${appfolioPropertyId}`);
-		return Response.json({ ok: false, error: `Unknown property ${appfolioPropertyId}` }, { status: 404 });
+		console.error(`appfolio-email-trigger: no Bedrock property for property_number=${appfolioPropertyId}`);
+		return Response.json({ ok: false, error: `Unknown property number ${appfolioPropertyId}` }, { status: 404 });
 	}
 
 	// Look up unit mappings
@@ -185,12 +186,13 @@ serve(async (req) => {
 		(unitRows ?? []).map((u) => [u.appfolio_unit_id, { id: u.id, property_id: u.property_id }])
 	);
 
-	// Fetch work orders for this ONE property from AppFolio
-	const today = new Date().toISOString().slice(0, 10);
+	// Fetch work orders for this ONE property from AppFolio.
+	// The work_order API uses the property NUMBER (from the email subject), not the internal ID.
 	const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+	const propNumber = property.appfolio_property_number ?? appfolioPropertyId;
 	const woRows = await appfolioFetch('work_order', {
 		property_visibility: 'active',
-		property: { property_id: String(appfolioPropertyId) },
+		property: { property_id: propNumber },
 		work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
 		status_date: '0',
 		status_date_range_from: oneWeekAgo,
@@ -202,9 +204,13 @@ serve(async (req) => {
 		]
 	});
 
-	// Find the specific work order matching the service request number
+	// Find the specific work order matching the service request number.
+	// The email subject may include a suffix like "7561-1" but the API returns "7561",
+	// so we match on the base number (strip everything after the first dash).
+	const baseNumber = serviceRequestNumber.split('-')[0];
 	const row = (woRows as any[]).find(
 		r => String(r.service_request_number) === serviceRequestNumber
+			|| String(r.service_request_number) === baseNumber
 	);
 
 	if (!row) {

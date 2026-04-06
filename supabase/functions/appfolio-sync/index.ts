@@ -224,7 +224,10 @@ async function syncProperties(workspaceId: string, allowedIds: number[] | null =
 			city: row.property_city ?? null,
 			state: row.property_state ?? null,
 			postal_code: row.property_zip ?? null,
-			appfolio_property_id: String(propId)
+			appfolio_property_id: String(propId),
+			// property_name from AppFolio is the property NUMBER shown in the UI (e.g., "292").
+			// The work_order API uses this number as its property filter, NOT the internal property_id.
+			appfolio_property_number: row.property_name ? String(row.property_name) : null
 		};
 
 		if (existing) {
@@ -541,11 +544,16 @@ async function syncWorkOrders(
 	// Batch-fetch all Bedrock property + unit mappings upfront
 	const { data: propRows } = await supabase
 		.from('properties')
-		.select('id, appfolio_property_id')
+		.select('id, appfolio_property_id, appfolio_property_number')
 		.eq('workspace_id', workspaceId)
 		.in('appfolio_property_id', appfolioPropertyIds.map(String));
+	// propMap: internal appfolio_property_id → bedrock UUID
 	const propMap = new Map<string, string>(
 		(propRows ?? []).map((p) => [p.appfolio_property_id, p.id])
+	);
+	// propNumberMap: internal appfolio_property_id → property number (used by work_order API)
+	const propNumberMap = new Map<string, string>(
+		(propRows ?? []).filter((p) => p.appfolio_property_number).map((p) => [p.appfolio_property_id, p.appfolio_property_number])
 	);
 
 	const { data: unitRows } = await supabase
@@ -596,7 +604,7 @@ async function syncWorkOrders(
 
 	// Incremental sync window: use last successful checkpoint minus 5-min overlap,
 	// or fall back to pilot start date on first run.
-	const PILOT_START_DATE = '2026-03-30';
+	const PILOT_START_DATE = '2026-03-20';
 	const OVERLAP_BUFFER_MS = 5 * 60 * 1000;
 	let syncFromDate: string;
 	if (lastSyncAt) {
@@ -611,15 +619,27 @@ async function syncWorkOrders(
 	const seenVendorIds = new Set<string>();
 	let allPropertiesSucceeded = true;
 
-	// work_order endpoint takes exactly ONE property filter at a time
+	// work_order endpoint takes exactly ONE property filter at a time.
+	// IMPORTANT: The work_order API uses the property NUMBER (e.g., "292") as its filter,
+	// NOT the internal property_id (e.g., "202") from property_directory.
 	for (const appfolioPropId of appfolioPropertyIds) {
-		let rows: unknown[];
+		// Look up the property number for the work_order API
+		const propNumber = propNumberMap.get(String(appfolioPropId));
+		if (!propNumber) {
+			console.warn(`syncWorkOrders: no appfolio_property_number for appfolio_property_id=${appfolioPropId} — skipping`);
+			continue;
+		}
+
+		let allRows: unknown[];
 		try {
-			rows = await throttledAppfolioFetch('work_order', {
+			allRows = await throttledAppfolioFetch('work_order', {
 				property_visibility: 'active',
-				property: { property_id: String(appfolioPropId) },
+				property: { property_id: propNumber },
 				work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
-				status_date: '0',               // filter by Created On
+				// API-level date filter to reduce data volume (not fully reliable,
+				// but prevents fetching years of history). Client-side filter below
+				// is the source of truth.
+				status_date: '0',
 				status_date_range_from: syncFromDate,
 				columns: [
 					'work_order_id', 'service_request_number', 'property_id', 'unit_id',
@@ -629,12 +649,22 @@ async function syncWorkOrders(
 				]
 			});
 		} catch (err) {
-			console.error(`syncWorkOrders fetch failed for property_id=${appfolioPropId}:`, err);
-			allPropertiesSucceeded = false;
+			// 500 errors typically mean this is a non-property entity (payroll account, HOA, etc.)
+			// that AppFolio lists in property_directory but can't have work orders.
+			// Treat as a skip, not a failure that blocks checkpoint advancement.
+			const is500 = String(err).includes('500');
+			if (is500) {
+				console.warn(`syncWorkOrders: skipping non-property entity ${propNumber} (id=${appfolioPropId}): 500 error`);
+			} else {
+				console.error(`syncWorkOrders fetch failed for property ${propNumber} (id=${appfolioPropId}):`, err);
+				allPropertiesSucceeded = false;
+			}
 			continue;
 		}
 
-		metrics.work_orders_fetched += (rows as any[]).length;
+		// Client-side date filter — only process work orders created on or after syncFromDate
+		const rows = (allRows as any[]).filter(r => r.created_at && r.created_at >= syncFromDate);
+		metrics.work_orders_fetched += rows.length;
 
 		const bedrockPropertyId = propMap.get(String(appfolioPropId)) ?? null;
 		if (!bedrockPropertyId) {
@@ -889,8 +919,8 @@ const CHANGE_PRIORITY: Record<string, number> = {
 };
 
 async function processDispatchQueue(workspaceId: string): Promise<void> {
-	// Fetch unprocessed events, skipping anything older than 1 hour to prevent infinite retry
-	const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+	// Fetch unprocessed events, skipping anything older than 24 hours
+	const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 	const { data: pending } = await supabase
 		.from('agent_dispatch_queue')
 		.select('*')
@@ -898,7 +928,7 @@ async function processDispatchQueue(workspaceId: string): Promise<void> {
 		.is('processed_at', null)
 		.gt('created_at', cutoff)
 		.order('created_at', { ascending: true })
-		.limit(50);
+		.limit(8); // Cap per run — 8 dispatches × 6s = 48s, fits in 60s timeout
 
 	if (!pending?.length) return;
 
@@ -911,46 +941,49 @@ async function processDispatchQueue(workspaceId: string): Promise<void> {
 		}
 	}
 
-	// Process each coalesced event
+	// Claim all 'new' events first (sequential — needs DB round-trip), then dispatch all in parallel.
+	const toDispatch: Array<{ event: typeof pending[0]; runId?: string }> = [];
 	for (const event of coalesced.values()) {
 		metrics.dispatches_attempted++;
-		try {
-			if (event.change_type === 'new') {
-				const runId = crypto.randomUUID();
-				const { data: claimed } = await supabase.rpc('claim_issue_for_agent', {
-					p_issue_id: event.issue_id,
-					p_run_id: runId,
-					p_stale_minutes: 15
-				});
-				if (!claimed) {
-					console.log(`dispatch: skip ${event.issue_id} — already claimed or processing`);
-					continue;
-				}
-				console.log(`dispatch: claimed issue ${event.issue_id} run=${runId}`);
-				await dispatchToAgent({
-					source: 'appfolio',
-					issueId: event.issue_id,
-					workspaceId: event.workspace_id,
-					change_type: event.change_type,
-					row: event.row_data,
-					run_id: runId
-				});
-			} else {
-				await dispatchToAgent({
-					source: 'appfolio',
-					issueId: event.issue_id,
-					workspaceId: event.workspace_id,
-					change_type: event.change_type,
-					row: event.row_data
-				});
+		if (event.change_type === 'new') {
+			const runId = crypto.randomUUID();
+			const { data: claimed } = await supabase.rpc('claim_issue_for_agent', {
+				p_issue_id: event.issue_id,
+				p_run_id: runId,
+				p_stale_minutes: 15
+			});
+			if (!claimed) {
+				console.log(`dispatch: skip ${event.issue_id} — already claimed or processing`);
+				continue;
 			}
+			console.log(`dispatch: claimed issue ${event.issue_id} run=${runId}`);
+			toDispatch.push({ event, runId });
+		} else {
+			toDispatch.push({ event });
+		}
+	}
+
+	// Dispatch one at a time with 6s gaps to stay under OpenAI's 500k TPM limit
+	// (~40k tokens per agent call × 10 calls/min = 400k TPM, safely under 500k).
+	// In normal operation (email trigger), only 1 issue is dispatched so this loop
+	// only matters for backfills.
+	for (let i = 0; i < toDispatch.length; i++) {
+		const { event, runId } = toDispatch[i];
+		dispatchToAgent({
+			source: 'appfolio',
+			issueId: event.issue_id,
+			workspaceId: event.workspace_id,
+			change_type: event.change_type,
+			row: event.row_data,
+			...(runId ? { run_id: runId } : {})
+		}).then(() => {
 			metrics.dispatches_succeeded++;
-		} catch (err) {
-			await supabase
-				.from('agent_dispatch_queue')
-				.update({ error: String(err) })
-				.eq('id', event.id);
+		}).catch(err => {
 			console.error(`dispatch error for issue ${event.issue_id}:`, err);
+		});
+		console.log(`dispatch: fired ${i + 1}/${toDispatch.length} — issue ${event.issue_id}`);
+		if (i < toDispatch.length - 1) {
+			await new Promise(r => setTimeout(r, 6000));
 		}
 	}
 
@@ -1027,6 +1060,59 @@ serve(async (req) => {
 					job_description: (r.job_description ?? '').slice(0, 60)
 				}))
 			});
+		} catch (err) {
+			return Response.json({ ok: false, error: String(err) }, { status: 500 });
+		}
+	}
+
+	// ?debug=2 — test work_order fetch WITH date filter. Use &prop=292 to test a specific property.
+	if (url.searchParams.get('debug') === '2') {
+		try {
+			const testDate = url.searchParams.get('from') ?? '2026-03-30';
+			const specificProp = url.searchParams.get('prop');
+			let testProps: any[];
+
+			if (specificProp) {
+				testProps = [{ property_id: Number(specificProp), property_name: specificProp }];
+			} else {
+				const propRows = await appfolioFetch('property_directory', {
+					property_visibility: 'active',
+					columns: ['property_id', 'property_name']
+				});
+				testProps = (propRows as any[]).slice(0, 3);
+			}
+			const results: any[] = [];
+
+			for (const prop of testProps) {
+				// With date filter (status_date: '0' = supposedly "Created On")
+				// Fetch WITHOUT date filter to get raw data
+				const allWo = await throttledAppfolioFetch('work_order', {
+					property_visibility: 'active',
+					property: { property_id: String(prop.property_id) },
+					work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
+					columns: [
+						'work_order_id', 'service_request_number', 'created_at',
+						'status', 'priority', 'job_description',
+						'estimate_req_on', 'scheduled_start', 'completed_on'
+					]
+				});
+				// Show the 5 NEWEST by work_order_id (highest IDs = most recent)
+				const sorted = (allWo as any[]).sort((a, b) => (b.work_order_id ?? 0) - (a.work_order_id ?? 0));
+				results.push({
+					property_id: prop.property_id,
+					name: prop.property_name,
+					total_wo: allWo.length,
+					newest_5: sorted.slice(0, 5).map(r => ({
+						work_order_id: r.work_order_id,
+						service_request_number: r.service_request_number,
+						created_at: r.created_at,
+						status: r.status,
+						priority: r.priority,
+						job_description: (r.job_description ?? '').slice(0, 60)
+					}))
+				});
+			}
+			return Response.json({ ok: true, test_date: testDate, results });
 		} catch (err) {
 			return Response.json({ ok: false, error: String(err) }, { status: 500 });
 		}
