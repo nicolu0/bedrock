@@ -1,0 +1,39 @@
+{
+  "version": "5",
+  "remote": {
+    "https://deno.land/std@0.224.0/async/delay.ts": "f90dd685b97c2f142b8069082993e437b1602b8e2561134827eeb7c12b95c499",
+    "https://deno.land/std@0.224.0/http/server.ts": "f9313804bf6467a1704f45f76cb6cd0a3396a3b31c316035e6a4c2035d1ea514",
+    "https://esm.sh/@supabase/supabase-js@2.49.1": "947c71e163ca8bb5b538eccb5ee86fbc8da6bcb916a861586db5fad1af4701bb"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@eslint/compat@^2.0.1",
+        "npm:@eslint/js@^9.39.2",
+        "npm:@supabase/ssr@0.8",
+        "npm:@supabase/supabase-js@^2.93.3",
+        "npm:@sveltejs/adapter-vercel@^6.3.1",
+        "npm:@sveltejs/kit@^2.50.1",
+        "npm:@sveltejs/vite-plugin-svelte@^6.2.4",
+        "npm:@tailwindcss/forms@~0.5.11",
+        "npm:@tailwindcss/typography@~0.5.19",
+        "npm:@tailwindcss/vite@^4.1.18",
+        "npm:@types/node@22",
+        "npm:eslint-config-prettier@^10.1.8",
+        "npm:eslint-plugin-svelte@^3.14.0",
+        "npm:eslint@^9.39.2",
+        "npm:globals@^17.1.0",
+        "npm:libphonenumber-js@^1.12.40",
+        "npm:prettier-plugin-svelte@^3.4.1",
+        "npm:prettier-plugin-tailwindcss@~0.7.2",
+        "npm:prettier@^3.8.1",
+        "npm:svelte-check@^4.3.5",
+        "npm:svelte@^5.48.2",
+        "npm:tailwindcss@^4.1.18",
+        "npm:typescript-eslint@^8.53.1",
+        "npm:typescript@^5.9.3",
+        "npm:vite@^7.3.1"
+      ]
+    }
+  }
+}
