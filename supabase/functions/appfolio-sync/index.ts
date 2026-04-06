@@ -20,6 +20,19 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 	auth: { persistSession: false, autoRefreshToken: false }
 });
 
+// ── Metrics ──────────────────────────────────────────────────────────────────
+
+const metrics = {
+	api_calls: 0,
+	rate_limits_hit: 0,
+	properties_processed: 0,
+	work_orders_fetched: 0,
+	events_queued: 0,
+	dispatches_attempted: 0,
+	dispatches_succeeded: 0,
+	checkpoint_advanced: false,
+};
+
 // ── AppFolio API Helpers ──────────────────────────────────────────────────────
 
 function appfolioUrl(reportName: string): string {
@@ -42,16 +55,21 @@ async function appfolioFetch(
 
 	while (url) {
 		let res: Response | null = null;
-		for (let attempt = 1; attempt <= 4; attempt++) {
+		// 2 retries max with capped wait — the function runs every minute so fail fast
+		// and let the next cron run pick up where we left off.
+		for (let attempt = 1; attempt <= 2; attempt++) {
 			res = await fetch(url, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: isFirst ? JSON.stringify(body) : JSON.stringify({})
 			});
 			if (res.status !== 429) break;
-			const retryAfter = Number(res.headers.get('retry-after') ?? (attempt * 5));
-			console.warn(`AppFolio ${urlOrReport} rate limited, retrying in ${retryAfter}s (attempt ${attempt}/4)`);
-			await new Promise(r => setTimeout(r, retryAfter * 1000));
+			metrics.rate_limits_hit++;
+			const rawRetryAfter = Number(res.headers.get('retry-after') ?? (attempt * 3));
+			const retryAfter = Math.min(rawRetryAfter, 8); // cap at 8s to avoid timeout
+			const jitter = Math.floor(Math.random() * 1000);
+			console.warn(`AppFolio ${urlOrReport} rate limited, retrying in ${retryAfter}s +${jitter}ms jitter (attempt ${attempt}/2)`);
+			await new Promise(r => setTimeout(r, retryAfter * 1000 + jitter));
 		}
 
 		if (!res || !res.ok) {
@@ -75,8 +93,27 @@ async function appfolioFetch(
 	return rows;
 }
 
-function sleep(ms: number) {
-	return new Promise((r) => setTimeout(r, ms));
+// ── Centralized Throttle ─────────────────────────────────────────────────────
+
+// AppFolio rate limit: 7 requests per 15 seconds → 1 request every ~2.14s
+const MIN_DELAY_MS = 2200;
+// At 2.2s per request, ~25 properties fit within the 60s function timeout
+const PROPERTIES_PER_RUN = 25;
+let lastRequestTime = 0;
+
+async function throttledAppfolioFetch(
+	urlOrReport: string,
+	body: Record<string, unknown> = {},
+	isPageUrl = false
+): Promise<unknown[]> {
+	const now = Date.now();
+	const elapsed = now - lastRequestTime;
+	if (elapsed < MIN_DELAY_MS) {
+		await new Promise(r => setTimeout(r, MIN_DELAY_MS - elapsed));
+	}
+	lastRequestTime = Date.now();
+	metrics.api_calls++;
+	return appfolioFetch(urlOrReport, body, isPageUrl);
 }
 
 // ── Address Abbreviation ──────────────────────────────────────────────────────
@@ -142,7 +179,7 @@ async function syncProperties(workspaceId: string, allowedIds: number[] | null =
 	if (allowedIds?.length) {
 		body.properties = { properties_ids: allowedIds.map(String) };
 	}
-	const rawRows = await appfolioFetch('property_directory', body);
+	const rawRows = await throttledAppfolioFetch('property_directory', body);
 	// Filter in code as a safety net — the AppFolio API filter is not always respected
 	const rows = allowedIds?.length
 		? (rawRows as any[]).filter((r) => allowedIds.includes(Number(r.property_id)))
@@ -187,7 +224,10 @@ async function syncProperties(workspaceId: string, allowedIds: number[] | null =
 			city: row.property_city ?? null,
 			state: row.property_state ?? null,
 			postal_code: row.property_zip ?? null,
-			appfolio_property_id: String(propId)
+			appfolio_property_id: String(propId),
+			// property_name from AppFolio is the property NUMBER shown in the UI (e.g., "292").
+			// The work_order API uses this number as its property filter, NOT the internal property_id.
+			appfolio_property_number: row.property_name ? String(row.property_name) : null
 		};
 
 		if (existing) {
@@ -209,14 +249,13 @@ async function syncProperties(workspaceId: string, allowedIds: number[] | null =
 		}
 	}
 
+	metrics.properties_processed += appfolioIds.length;
 	return appfolioIds;
 }
 
 async function syncUnits(workspaceId: string, appfolioPropertyIds: number[]): Promise<void> {
-	await sleep(500);
-
 	// unit_directory filters properties_ids as array of strings
-	const rows = await appfolioFetch('unit_directory', {
+	const rows = await throttledAppfolioFetch('unit_directory', {
 		unit_visibility: 'active',
 		properties: { properties_ids: appfolioPropertyIds.map(String) },
 		columns: ['unit_id', 'property_id', 'unit_name', 'unit_address',
@@ -296,12 +335,10 @@ async function syncUnits(workspaceId: string, appfolioPropertyIds: number[]): Pr
 }
 
 async function syncTenants(workspaceId: string, appfolioPropertyIds: number[]): Promise<void> {
-	await sleep(500);
-
 	// Fetch ALL active tenants (all occupant types) for current/notice leases.
 	// Unique constraint: (unit_id, email, name) NULLS NOT DISTINCT — covers tenants
 	// with email, without email, or with neither.
-	const rows = await appfolioFetch('tenant_directory', {
+	const rows = await throttledAppfolioFetch('tenant_directory', {
 		tenant_visibility: 'active',
 		tenant_statuses: ['0', '4'], // Current and Notice
 		property_visibility: 'active',
@@ -418,44 +455,18 @@ async function syncTenants(workspaceId: string, appfolioPropertyIds: number[]): 
 	}
 }
 
-async function syncVendors(workspaceId: string, appfolioPropertyIds: number[]): Promise<void> {
-	await sleep(500);
-
-	// Collect vendor IDs from work orders in the last 2 years across all tracked properties.
-	// Only vendors who have actually performed work at these properties get synced.
-	const activeVendorIds = new Set<string>();
-	const twoYearsAgo = new Date();
-	twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-	const VENDOR_LOOKBACK_DATE = twoYearsAgo.toISOString().slice(0, 10); // 'YYYY-MM-DD'
-
-	for (const appfolioPropId of appfolioPropertyIds) {
-		try {
-			const woRows = await appfolioFetch('work_order', {
-				property_visibility: 'active',
-				property: { property_id: String(appfolioPropId) },
-				work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
-				status_date: '0',
-				status_date_range_from: VENDOR_LOOKBACK_DATE,
-				columns: ['vendor_id']
-			});
-			for (const row of woRows as any[]) {
-				if (row.vendor_id != null) activeVendorIds.add(String(row.vendor_id));
-			}
-		} catch (err) {
-			console.warn(`syncVendors: work_order fetch failed for property ${appfolioPropId}:`, err);
-		}
-	}
+async function syncVendors(workspaceId: string, seenVendorIds: string[]): Promise<void> {
+	// Vendor IDs are accumulated from work orders during the fast-path sync.
+	// We only need to call vendor_directory once, filtered to those IDs.
+	const activeVendorIds = new Set(seenVendorIds);
 
 	if (activeVendorIds.size === 0) {
-		console.log('syncVendors: no vendors found on recent work orders — skipping');
+		console.log('syncVendors: no accumulated vendor IDs — skipping');
 		return;
 	}
 
-	// Brief pause before vendor_directory call to avoid back-to-back rate limiting
-	await sleep(2000);
-
-	// Fetch all active vendors from AppFolio and filter to those in our work order set
-	const rows = await appfolioFetch('vendor_directory', {
+	// Fetch all active vendors from AppFolio and filter to those seen on work orders
+	const rows = await throttledAppfolioFetch('vendor_directory', {
 		vendor_visibility: 'active',
 		columns: ['vendor_id', 'company_name', 'name', 'vendor_trades', 'email', 'phone_numbers', 'street', 'city', 'state', 'zip']
 	});
@@ -486,20 +497,63 @@ async function syncVendors(workspaceId: string, appfolioPropertyIds: number[]): 
 		}
 	}
 
-	console.log(`syncVendors: synced ${filtered.length} vendors (${activeVendorIds.size} found on work orders)`);
+	// Clear the accumulator now that vendor sync is complete
+	await supabase
+		.from('workspaces')
+		.update({ appfolio_seen_vendor_ids: [] })
+		.eq('id', workspaceId);
+
+	console.log(`syncVendors: synced ${filtered.length} vendors (${activeVendorIds.size} IDs accumulated from work orders)`);
 }
 
-async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]): Promise<void> {
-	await sleep(500);
+// ── Enqueue Helper ────────────────────────────────────────────────────────────
 
+async function enqueueAgentEvent(
+	workspaceId: string,
+	issueId: string,
+	changeType: string,
+	row: any
+): Promise<void> {
+	// Plain insert — the partial unique index (issue_id, change_type) WHERE processed_at IS NULL
+	// rejects duplicates with a 23505 error, which we treat as a no-op (event already queued).
+	const { error } = await supabase.from('agent_dispatch_queue').insert({
+		workspace_id: workspaceId,
+		issue_id: issueId,
+		change_type: changeType,
+		row_data: row
+	});
+	if (error) {
+		if (error.code === '23505') {
+			// Already queued — expected, skip silently
+			return;
+		}
+		console.error(`enqueueAgentEvent error for issue=${issueId} type=${changeType}:`, error.message);
+	} else {
+		metrics.events_queued++;
+	}
+}
+
+// ── Work Order Sync (Fast Path) ──────────────────────────────────────────────
+
+async function syncWorkOrders(
+	workspaceId: string,
+	appfolioPropertyIds: number[],
+	lastSyncAt: string | null,
+	isFullCycle = false
+): Promise<void> {
 	// Batch-fetch all Bedrock property + unit mappings upfront
 	const { data: propRows } = await supabase
 		.from('properties')
-		.select('id, appfolio_property_id')
+		.select('id, appfolio_property_id, appfolio_property_number')
 		.eq('workspace_id', workspaceId)
 		.in('appfolio_property_id', appfolioPropertyIds.map(String));
+	// propMap: internal appfolio_property_id → bedrock UUID
 	const propMap = new Map<string, string>(
 		(propRows ?? []).map((p) => [p.appfolio_property_id, p.id])
+	);
+	// propNumberMap: internal appfolio_property_id → property number (used by work_order API)
+	const propNumberMap = new Map<string, string>(
+		(propRows ?? []).filter((p) => p.appfolio_property_number).map((p) => [p.appfolio_property_id, p.appfolio_property_number])
 	);
 
 	const { data: unitRows } = await supabase
@@ -527,8 +581,6 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 	const snapshotById = new Map<string, any>(
 		(existingIssueRows ?? []).map((r) => [r.id, r])
 	);
-	// Accumulated change events; fired to the agent in one batch after the property loop.
-	const changeQueue: Array<{ issueId: string; workspaceId: string; change_type: string; row: any }> = [];
 
 	// Batch-fetch existing issue_created logs with their data so we can:
 	//   a) skip issues that already have a complete log (has 'from' field)
@@ -550,44 +602,69 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 		}
 	}
 
-	// work_order endpoint takes exactly ONE property filter at a time
-	for (const appfolioPropId of appfolioPropertyIds) {
-		// Only pull work orders created on or after March 10, 2026 (pilot start date)
-		const PILOT_START_DATE = '2026-03-20';
+	// Incremental sync window: use last successful checkpoint minus 5-min overlap,
+	// or fall back to pilot start date on first run.
+	const PILOT_START_DATE = '2026-03-20';
+	const OVERLAP_BUFFER_MS = 5 * 60 * 1000;
+	let syncFromDate: string;
+	if (lastSyncAt) {
+		syncFromDate = new Date(new Date(lastSyncAt).getTime() - OVERLAP_BUFFER_MS)
+			.toISOString().slice(0, 10);
+	} else {
+		syncFromDate = PILOT_START_DATE;
+	}
+	console.log(`syncWorkOrders: window from ${syncFromDate} (checkpoint: ${lastSyncAt ?? 'none'})`);
 
-		let rows: unknown[];
-		const fetchBody = {
-			property_visibility: 'active',
-			property: { property_id: String(appfolioPropId) },
-			work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
-			status_date: '0',               // filter by Created On
-			status_date_range_from: PILOT_START_DATE,
-			columns: [
-				'work_order_id', 'service_request_number', 'property_id', 'unit_id',
-				'status', 'priority', 'job_description', 'service_request_description',
-				'vendor_id', 'vendor', 'status_notes', 'created_at', 'work_order_type',
-				'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
-			]
-		};
-		let fetchError: unknown = null;
-		rows = [];
-		for (let attempt = 1; attempt <= 3; attempt++) {
-			try {
-				rows = await appfolioFetch('work_order', fetchBody);
-				fetchError = null;
-				break;
-			} catch (err) {
-				fetchError = err;
-				if (attempt < 3) {
-					console.warn(`syncWorkOrders fetch attempt ${attempt}/3 failed for property_id=${appfolioPropId}, retrying in ${attempt * 2}s:`, err);
-					await sleep(attempt * 2000);
-				}
-			}
-		}
-		if (fetchError) {
-			console.error(`syncWorkOrders fetch failed after 3 attempts for property_id=${appfolioPropId}:`, fetchError);
+	// Accumulate vendor IDs from work orders for the slow-path vendor sync
+	const seenVendorIds = new Set<string>();
+	let allPropertiesSucceeded = true;
+
+	// work_order endpoint takes exactly ONE property filter at a time.
+	// IMPORTANT: The work_order API uses the property NUMBER (e.g., "292") as its filter,
+	// NOT the internal property_id (e.g., "202") from property_directory.
+	for (const appfolioPropId of appfolioPropertyIds) {
+		// Look up the property number for the work_order API
+		const propNumber = propNumberMap.get(String(appfolioPropId));
+		if (!propNumber) {
+			console.warn(`syncWorkOrders: no appfolio_property_number for appfolio_property_id=${appfolioPropId} — skipping`);
 			continue;
 		}
+
+		let allRows: unknown[];
+		try {
+			allRows = await throttledAppfolioFetch('work_order', {
+				property_visibility: 'active',
+				property: { property_id: propNumber },
+				work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
+				// API-level date filter to reduce data volume (not fully reliable,
+				// but prevents fetching years of history). Client-side filter below
+				// is the source of truth.
+				status_date: '0',
+				status_date_range_from: syncFromDate,
+				columns: [
+					'work_order_id', 'service_request_number', 'property_id', 'unit_id',
+					'status', 'priority', 'job_description', 'service_request_description',
+					'vendor_id', 'vendor', 'status_notes', 'created_at', 'work_order_type',
+					'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
+				]
+			});
+		} catch (err) {
+			// 500 errors typically mean this is a non-property entity (payroll account, HOA, etc.)
+			// that AppFolio lists in property_directory but can't have work orders.
+			// Treat as a skip, not a failure that blocks checkpoint advancement.
+			const is500 = String(err).includes('500');
+			if (is500) {
+				console.warn(`syncWorkOrders: skipping non-property entity ${propNumber} (id=${appfolioPropId}): 500 error`);
+			} else {
+				console.error(`syncWorkOrders fetch failed for property ${propNumber} (id=${appfolioPropId}):`, err);
+				allPropertiesSucceeded = false;
+			}
+			continue;
+		}
+
+		// Client-side date filter — only process work orders created on or after syncFromDate
+		const rows = (allRows as any[]).filter(r => r.created_at && r.created_at >= syncFromDate);
+		metrics.work_orders_fetched += rows.length;
 
 		const bedrockPropertyId = propMap.get(String(appfolioPropId)) ?? null;
 		if (!bedrockPropertyId) {
@@ -598,6 +675,9 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 		for (const row of rows as any[]) {
 			const woId = row.work_order_id;
 			if (woId == null) continue;
+
+			// Accumulate vendor IDs for slow-path vendor sync
+			if (row.vendor_id != null) seenVendorIds.add(String(row.vendor_id));
 
 			let unitId: string | null = null;
 			let propertyId: string | null = bedrockPropertyId;
@@ -677,13 +757,13 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 					}
 				}
 
-					if (isNew) {
-						changeQueue.push({ issueId, workspaceId, change_type: 'new', row });
-						// Notification is created by the agent after processing, using the cleaned title/description.
-					}
-				if (statusChanged)  changeQueue.push({ issueId, workspaceId, change_type: 'status_changed', row });
-				if (vendorAssigned) changeQueue.push({ issueId, workspaceId, change_type: 'vendor_assigned', row });
-				if (notesChanged)   changeQueue.push({ issueId, workspaceId, change_type: 'notes_changed', row });
+				// Enqueue change events durably to the agent_dispatch_queue table
+				if (isNew) {
+					await enqueueAgentEvent(workspaceId, issueId, 'new', row);
+				}
+				if (statusChanged) await enqueueAgentEvent(workspaceId, issueId, 'status_changed', row);
+				if (vendorAssigned) await enqueueAgentEvent(workspaceId, issueId, 'vendor_assigned', row);
+				if (notesChanged) await enqueueAgentEvent(workspaceId, issueId, 'notes_changed', row);
 			}
 
 			// Build tenant data from work order fields
@@ -740,89 +820,179 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 			.not('vendor_assigned_at', 'is', null)
 			.lt('vendor_assigned_at', followupCutoff);
 		for (const issue of followupDue ?? []) {
-			changeQueue.push({ issueId: issue.id, workspaceId, change_type: 'vendor_followup', row: null });
+			await enqueueAgentEvent(workspaceId, issue.id, 'vendor_followup', null);
 		}
 	}
 
-	// Re-queue issues where the agent never ran (fire-and-forget failure on a prior sync).
-	// Only re-queue issues older than 2 minutes so we don't double-fire in-flight agent calls.
-	// Edge function hard timeout is 60s (free) / 150s (pro), so 2min gives ample safety buffer.
-	const staleThreshold = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+	// Re-queue issues that are pending, failed, or stuck in processing (stale >15 min).
+	// The atomic claim RPC prevents duplicate agent runs even if multiple syncs overlap.
 	if (existingIssueIds.length > 0) {
+		const { data: retryIssues } = await supabase
+			.from('issues')
+			.select('id')
+			.eq('workspace_id', workspaceId)
+			.eq('source', 'appfolio')
+			.in('agent_status', ['pending', 'failed'])
+			.in('id', existingIssueIds);
+
+		const staleThreshold = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 		const { data: staleIssues } = await supabase
 			.from('issues')
 			.select('id')
 			.eq('workspace_id', workspaceId)
 			.eq('source', 'appfolio')
-			.is('agent_processed_at', null)
-			.lt('created_at', staleThreshold)
+			.eq('agent_status', 'processing')
+			.lt('agent_started_at', staleThreshold)
 			.in('id', existingIssueIds);
-		for (const issue of staleIssues ?? []) {
-			if (!changeQueue.some(e => e.issueId === issue.id && e.change_type === 'new')) {
-				changeQueue.push({ issueId: issue.id, workspaceId, change_type: 'new', row: null });
-			}
+
+		for (const issue of [...(retryIssues ?? []), ...(staleIssues ?? [])]) {
+			await enqueueAgentEvent(workspaceId, issue.id, 'new', null);
 		}
-		if (staleIssues?.length) {
-			console.log(`syncWorkOrders: re-queuing ${staleIssues.length} stale unprocessed issues`);
+		const retryCount = (retryIssues?.length ?? 0) + (staleIssues?.length ?? 0);
+		if (retryCount > 0) {
+			console.log(`syncWorkOrders: re-queuing ${retryCount} unprocessed issues (${staleIssues?.length ?? 0} stale)`);
 		}
 	}
 
-	// Dispatch agent events for all detected changes.
-	// Non-blocking — sync returns immediately; each dispatch awaits its own response internally.
-	// On failure (network error OR non-2xx HTTP): retries once immediately before giving up.
-	// The stale re-queue (2 min) acts as the final safety net for persistent failures.
-	type ChangeEvent = (typeof changeQueue)[number];
-	const dispatchAgentWithRetry = (event: ChangeEvent) => {
-		const body = JSON.stringify({ source: 'appfolio', ...event });
-		const doFetch = async (attempt: number): Promise<void> => {
-			try {
-				const res = await fetch(`${SUPABASE_URL}/functions/v1/agent`, {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						apikey: ANON_JWT,
-						Authorization: `Bearer ${ANON_JWT}`,
-						'x-internal-agent-key': INTERNAL_AGENT_KEY
-					},
-					body
-				});
-				if (!res.ok) {
-					const text = await res.text().catch(() => '');
-					console.error(
-						`appfolio-sync: agent HTTP ${res.status} for issue ${event.issueId} (attempt ${attempt})`,
-						text.slice(0, 200)
-					);
-					if (attempt < 2) return doFetch(attempt + 1);
-				}
-			} catch (err) {
-				console.error(
-					`appfolio-sync: agent fetch failed for issue ${event.issueId} (attempt ${attempt}):`,
-					err
-				);
-				if (attempt < 2) return doFetch(attempt + 1);
-			}
-		};
-		doFetch(1).catch((err) => console.error('dispatchAgentWithRetry unhandled:', err));
-	};
-	// Coalesce by issueId — keep highest-priority event per issue to avoid
-	// duplicate agent runs when multiple fields changed in the same sync.
-	const CHANGE_PRIORITY: Record<string, number> = {
-		new: 5,
-		vendor_assigned: 4,
-		status_changed: 3,
-		notes_changed: 2,
-		vendor_followup: 1
-	};
-	const coalesced = new Map<string, ChangeEvent>();
-	for (const event of changeQueue) {
-		const existing = coalesced.get(event.issueId);
+	// Merge accumulated vendor IDs into workspace for slow-path vendor sync
+	if (seenVendorIds.size > 0) {
+		const { data: ws } = await supabase
+			.from('workspaces')
+			.select('appfolio_seen_vendor_ids')
+			.eq('id', workspaceId)
+			.single();
+		const existing = new Set(ws?.appfolio_seen_vendor_ids ?? []);
+		for (const vid of seenVendorIds) existing.add(vid);
+		await supabase
+			.from('workspaces')
+			.update({ appfolio_seen_vendor_ids: [...existing] })
+			.eq('id', workspaceId);
+	}
+
+	// Advance checkpoint only when we've completed a full cycle through all properties
+	// AND all properties in this batch succeeded. This ensures every property has been
+	// synced at least once before we narrow the time window.
+	if (isFullCycle && allPropertiesSucceeded) {
+		await supabase
+			.from('workspaces')
+			.update({ last_work_order_sync_at: new Date().toISOString() })
+			.eq('id', workspaceId);
+		metrics.checkpoint_advanced = true;
+		console.log('syncWorkOrders: full cycle complete — checkpoint advanced');
+	} else if (!allPropertiesSucceeded) {
+		console.warn('syncWorkOrders: some properties failed — checkpoint NOT advanced');
+	}
+}
+
+// ── Agent Dispatch (Durable Queue) ───────────────────────────────────────────
+
+async function dispatchToAgent(event: {
+	source: string;
+	issueId: string;
+	workspaceId: string;
+	change_type: string;
+	row: any;
+	run_id?: string;
+}): Promise<void> {
+	const res = await fetch(`${SUPABASE_URL}/functions/v1/agent`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			apikey: ANON_JWT,
+			Authorization: `Bearer ${ANON_JWT}`,
+			'x-internal-agent-key': INTERNAL_AGENT_KEY
+		},
+		body: JSON.stringify(event)
+	});
+	if (!res.ok) {
+		const text = await res.text().catch(() => '');
+		throw new Error(`agent HTTP ${res.status}: ${text.slice(0, 200)}`);
+	}
+}
+
+const CHANGE_PRIORITY: Record<string, number> = {
+	new: 5,
+	vendor_assigned: 4,
+	status_changed: 3,
+	notes_changed: 2,
+	vendor_followup: 1
+};
+
+async function processDispatchQueue(workspaceId: string): Promise<void> {
+	// Fetch unprocessed events, skipping anything older than 24 hours
+	const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+	const { data: pending } = await supabase
+		.from('agent_dispatch_queue')
+		.select('*')
+		.eq('workspace_id', workspaceId)
+		.is('processed_at', null)
+		.gt('created_at', cutoff)
+		.order('created_at', { ascending: true })
+		.limit(8); // Cap per run — 8 dispatches × 6s = 48s, fits in 60s timeout
+
+	if (!pending?.length) return;
+
+	// Coalesce: keep highest-priority event per issue_id
+	const coalesced = new Map<string, typeof pending[0]>();
+	for (const event of pending) {
+		const existing = coalesced.get(event.issue_id);
 		if (!existing || (CHANGE_PRIORITY[event.change_type] ?? 0) > (CHANGE_PRIORITY[existing.change_type] ?? 0)) {
-			coalesced.set(event.issueId, event);
+			coalesced.set(event.issue_id, event);
 		}
 	}
+
+	// Claim all 'new' events first (sequential — needs DB round-trip), then dispatch all in parallel.
+	const toDispatch: Array<{ event: typeof pending[0]; runId?: string }> = [];
 	for (const event of coalesced.values()) {
-		dispatchAgentWithRetry(event);
+		metrics.dispatches_attempted++;
+		if (event.change_type === 'new') {
+			const runId = crypto.randomUUID();
+			const { data: claimed } = await supabase.rpc('claim_issue_for_agent', {
+				p_issue_id: event.issue_id,
+				p_run_id: runId,
+				p_stale_minutes: 15
+			});
+			if (!claimed) {
+				console.log(`dispatch: skip ${event.issue_id} — already claimed or processing`);
+				continue;
+			}
+			console.log(`dispatch: claimed issue ${event.issue_id} run=${runId}`);
+			toDispatch.push({ event, runId });
+		} else {
+			toDispatch.push({ event });
+		}
 	}
+
+	// Dispatch one at a time with 6s gaps to stay under OpenAI's 500k TPM limit
+	// (~40k tokens per agent call × 10 calls/min = 400k TPM, safely under 500k).
+	// In normal operation (email trigger), only 1 issue is dispatched so this loop
+	// only matters for backfills.
+	for (let i = 0; i < toDispatch.length; i++) {
+		const { event, runId } = toDispatch[i];
+		dispatchToAgent({
+			source: 'appfolio',
+			issueId: event.issue_id,
+			workspaceId: event.workspace_id,
+			change_type: event.change_type,
+			row: event.row_data,
+			...(runId ? { run_id: runId } : {})
+		}).then(() => {
+			metrics.dispatches_succeeded++;
+		}).catch(err => {
+			console.error(`dispatch error for issue ${event.issue_id}:`, err);
+		});
+		console.log(`dispatch: fired ${i + 1}/${toDispatch.length} — issue ${event.issue_id}`);
+		if (i < toDispatch.length - 1) {
+			await new Promise(r => setTimeout(r, 6000));
+		}
+	}
+
+	// Mark ALL fetched events as processed (including lower-priority coalesced-away ones)
+	const allIds = pending.map(e => e.id);
+	await supabase
+		.from('agent_dispatch_queue')
+		.update({ processed_at: new Date().toISOString() })
+		.in('id', allIds);
 }
 
 // ── Main Handler ──────────────────────────────────────────────────────────────
@@ -895,6 +1065,59 @@ serve(async (req) => {
 		}
 	}
 
+	// ?debug=2 — test work_order fetch WITH date filter. Use &prop=292 to test a specific property.
+	if (url.searchParams.get('debug') === '2') {
+		try {
+			const testDate = url.searchParams.get('from') ?? '2026-03-30';
+			const specificProp = url.searchParams.get('prop');
+			let testProps: any[];
+
+			if (specificProp) {
+				testProps = [{ property_id: Number(specificProp), property_name: specificProp }];
+			} else {
+				const propRows = await appfolioFetch('property_directory', {
+					property_visibility: 'active',
+					columns: ['property_id', 'property_name']
+				});
+				testProps = (propRows as any[]).slice(0, 3);
+			}
+			const results: any[] = [];
+
+			for (const prop of testProps) {
+				// With date filter (status_date: '0' = supposedly "Created On")
+				// Fetch WITHOUT date filter to get raw data
+				const allWo = await throttledAppfolioFetch('work_order', {
+					property_visibility: 'active',
+					property: { property_id: String(prop.property_id) },
+					work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
+					columns: [
+						'work_order_id', 'service_request_number', 'created_at',
+						'status', 'priority', 'job_description',
+						'estimate_req_on', 'scheduled_start', 'completed_on'
+					]
+				});
+				// Show the 5 NEWEST by work_order_id (highest IDs = most recent)
+				const sorted = (allWo as any[]).sort((a, b) => (b.work_order_id ?? 0) - (a.work_order_id ?? 0));
+				results.push({
+					property_id: prop.property_id,
+					name: prop.property_name,
+					total_wo: allWo.length,
+					newest_5: sorted.slice(0, 5).map(r => ({
+						work_order_id: r.work_order_id,
+						service_request_number: r.service_request_number,
+						created_at: r.created_at,
+						status: r.status,
+						priority: r.priority,
+						job_description: (r.job_description ?? '').slice(0, 60)
+					}))
+				});
+			}
+			return Response.json({ ok: true, test_date: testDate, results });
+		} catch (err) {
+			return Response.json({ ok: false, error: String(err) }, { status: 500 });
+		}
+	}
+
 	// ?discover=1 — return all AppFolio property IDs and names (no DB writes)
 	if (url.searchParams.get('discover') === '1') {
 		try {
@@ -912,10 +1135,15 @@ serve(async (req) => {
 		}
 	}
 
-	// Full sync — find all AppFolio-enabled workspaces and sync each one
+	// ── Sync modes ───────────────────────────────────────────────────────────
+	// Default (no mode param): fast path — work orders + agent dispatch (every minute)
+	// ?mode=metadata: slow path — properties, units, tenants, vendors (every 6 hours)
+
+	const mode = url.searchParams.get('mode');
+
 	const { data: workspaces, error: wsError } = await supabase
 		.from('workspaces')
-		.select('id, appfolio_property_ids')
+		.select('id, appfolio_property_ids, last_work_order_sync_at, last_metadata_sync_at, appfolio_seen_vendor_ids, sync_property_cursor')
 		.eq('appfolio_enabled', true);
 
 	if (wsError) {
@@ -929,26 +1157,89 @@ serve(async (req) => {
 	const results: Record<string, unknown> = {};
 
 	for (const ws of workspaces) {
-		try {
-			// If appfolio_property_ids is set, only sync those specific properties.
-			// Otherwise fall back to syncing all active properties (not recommended).
-			const allowedIds: number[] | null = ws.appfolio_property_ids?.length
-				? ws.appfolio_property_ids.map(Number)
-				: null;
+		// If appfolio_property_ids is set, only sync those specific properties.
+		// Otherwise fall back to syncing all active properties.
+		const allowedIds: number[] | null = ws.appfolio_property_ids?.length
+			? ws.appfolio_property_ids.map(Number)
+			: null;
 
-			const appfolioPropertyIds = await syncProperties(ws.id, allowedIds);
-			if (appfolioPropertyIds.length > 0) {
-				await syncUnits(ws.id, appfolioPropertyIds);
-				await syncTenants(ws.id, appfolioPropertyIds);
-				await syncVendors(ws.id, appfolioPropertyIds);
-			await syncWorkOrders(ws.id, appfolioPropertyIds);
+		if (!allowedIds || allowedIds.length === 0) {
+			console.warn(`Workspace ${ws.id}: no appfolio_property_ids configured — syncing all active properties`);
+		}
+
+		try {
+			if (mode === 'metadata') {
+				// SLOW PATH: properties, units, tenants, vendors
+				const appfolioPropertyIds = await syncProperties(ws.id, allowedIds);
+				if (appfolioPropertyIds.length > 0) {
+					await syncUnits(ws.id, appfolioPropertyIds);
+					await syncTenants(ws.id, appfolioPropertyIds);
+					await syncVendors(ws.id, ws.appfolio_seen_vendor_ids ?? []);
+				}
+				await supabase
+					.from('workspaces')
+					.update({ last_metadata_sync_at: new Date().toISOString() })
+					.eq('id', ws.id);
+
+				// Clean up old processed dispatch queue events
+				await supabase
+					.from('agent_dispatch_queue')
+					.delete()
+					.eq('workspace_id', ws.id)
+					.not('processed_at', 'is', null)
+					.lt('processed_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+
+				results[ws.id] = { ok: true, properties: appfolioPropertyIds.length };
+			} else {
+				// FAST PATH: work orders + agent dispatch
+				// Process properties in batches using a round-robin cursor to stay within
+				// the function timeout. With 68 properties and 300ms throttle, processing
+				// all at once would take ~20s for spacing alone plus request time.
+				let allPropertyIds: number[];
+				if (allowedIds) {
+					allPropertyIds = allowedIds;
+				} else {
+					const { data: props } = await supabase
+						.from('properties')
+						.select('appfolio_property_id')
+						.eq('workspace_id', ws.id)
+						.not('appfolio_property_id', 'is', null);
+					allPropertyIds = (props ?? []).map(p => Number(p.appfolio_property_id));
+				}
+
+				if (allPropertyIds.length > 0) {
+					// Sort deterministically so cursor position is stable across runs
+					allPropertyIds.sort((a, b) => a - b);
+
+					const cursor = ws.sync_property_cursor ?? 0;
+					const batch = allPropertyIds.slice(cursor, cursor + PROPERTIES_PER_RUN);
+					const nextCursor = cursor + PROPERTIES_PER_RUN >= allPropertyIds.length ? 0 : cursor + PROPERTIES_PER_RUN;
+					const isFullCycle = nextCursor === 0 && batch.length > 0;
+
+					console.log(`fast-path: properties ${cursor}..${cursor + batch.length - 1} of ${allPropertyIds.length} (batch=${batch.length}, next_cursor=${nextCursor})`);
+
+					await syncWorkOrders(ws.id, batch, ws.last_work_order_sync_at, isFullCycle);
+
+					// Advance cursor
+					await supabase
+						.from('workspaces')
+						.update({ sync_property_cursor: nextCursor })
+						.eq('id', ws.id);
+
+					await processDispatchQueue(ws.id);
+
+					results[ws.id] = { ok: true, batch: batch.length, total_properties: allPropertyIds.length, cursor: nextCursor };
+				} else {
+					console.warn(`Workspace ${ws.id}: no properties to sync work orders for`);
+					results[ws.id] = { ok: true, batch: 0, total_properties: 0 };
+				}
 			}
-			results[ws.id] = { ok: true, properties: appfolioPropertyIds.length };
 		} catch (err) {
-			console.error(`Sync failed for workspace ${ws.id}:`, err);
+			console.error(`Sync (${mode ?? 'fast'}) failed for workspace ${ws.id}:`, err);
 			results[ws.id] = { ok: false, error: String(err) };
 		}
 	}
 
-	return Response.json({ ok: true, results });
+	console.log(`appfolio-sync [${mode ?? 'fast'}] metrics:`, JSON.stringify(metrics));
+	return Response.json({ ok: true, mode: mode ?? 'fast', metrics, results });
 });

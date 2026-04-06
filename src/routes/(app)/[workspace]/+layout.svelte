@@ -705,7 +705,7 @@
 					class="flex h-full min-h-0 flex-col transition-opacity duration-150"
 					class:opacity-0={!pageVisible}
 				>
-					<div class="flex flex-1 flex-col space-y-6 px-2 pt-4">
+					<div class="flex flex-1 flex-col space-y-6 overflow-y-auto px-2 pt-4">
 						<div class="flex min-w-0 items-center justify-between gap-2 px-2 text-neutral-700">
 							<div class="flex min-w-0 flex-1 items-center gap-2">
 								<div

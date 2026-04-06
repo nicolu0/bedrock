@@ -1050,6 +1050,12 @@ const ensureSentence = (value: string) => {
 
 const isStatusListDescription = (value: string) => /^(todo|in_progress|done)[,;:]/i.test(value);
 
+const detectSubissueKind = (name: string): string | null => {
+	if (/^triage\s+/i.test(name)) return 'triage';
+	if (/^schedule\s+/i.test(name)) return 'schedule';
+	return null;
+};
+
 const createSubissue = async ({
 	parentIssueId,
 	name,
@@ -1071,11 +1077,13 @@ const createSubissue = async ({
 	description?: string | null;
 	urgent?: boolean | null;
 }) => {
+	const kind = detectSubissueKind(name);
 	const { data, error } = await supabase
 		.from('issues')
 		.insert({
 			parent_id: parentIssueId,
 			name,
+			subissue_kind: kind,
 			unit_id: unitId ?? null,
 			workspace_id: workspaceId,
 			status,
@@ -1086,6 +1094,19 @@ const createSubissue = async ({
 		})
 		.select('id')
 		.single();
+	// Handle unique constraint violation — reuse existing subissue
+	if (error?.code === '23505' && kind) {
+		const { data: existing } = await supabase
+			.from('issues')
+			.select('id')
+			.eq('parent_id', parentIssueId)
+			.eq('subissue_kind', kind)
+			.maybeSingle();
+		if (existing?.id) {
+			console.log(`createSubissue: reusing existing ${kind} subissue ${existing.id} for parent ${parentIssueId}`);
+			return existing.id as string;
+		}
+	}
 	if (error || !data?.id) {
 		throw new Error(error?.message ?? 'Subissue insert failed');
 	}
@@ -2689,10 +2710,14 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 	// This makes the issue visible client-side. Set here (not in update_issue) so the
 	// issue only appears after title, subissues, and drafts are all done.
 	if (source === 'appfolio' && rootIssueId) {
+		const now = new Date().toISOString();
 		await supabase
 			.from('issues')
 			.update({
-				agent_processed_at: new Date().toISOString(),
+				agent_status: 'done',
+				agent_completed_at: now,
+				agent_processed_at: now,
+				agent_error: null,
 				assignee_id: defaultAssigneeId ?? null
 			})
 			.eq('id', rootIssueId);
@@ -2779,6 +2804,62 @@ const processMessage = async ({
 	const messageHeaders = message.payload?.headers ?? [];
 	const { subject: messageSubject, from: messageFrom } = extractHeaders(messageHeaders);
 	const senderEmail = normalizeEmail(extractEmail(messageFrom));
+
+	// ── AppFolio email detection ──────────────────────────────────────────────
+	// Route AppFolio work order notification emails to the dedicated trigger function
+	// instead of processing them as tenant emails.
+	if (senderEmail === 'donotreply@appfolio.com') {
+		const wsId = connection.workspace_id ?? (await getWorkspaceIdForUser(connection.user_id));
+		if (wsId) {
+			const { data: ws } = await supabase
+				.from('workspaces')
+				.select('appfolio_email_tracking')
+				.eq('id', wsId)
+				.single();
+			if (ws?.appfolio_email_tracking) {
+				const plain = findBodyPart(message.payload, 'text/plain');
+				const html = plain ? null : findBodyPart(message.payload, 'text/html');
+				const rawBody = plain ? decodeBase64Url(plain) : html ? decodeBase64Url(html) : '';
+				const emailBody = normalizeQuotedPrintable(rawBody);
+
+				// Parse subject: "WO #7561-1 - Water Heater - 292 - 292-8"
+				const subjectParts = (messageSubject ?? '').split(' - ');
+				const woMatch = (subjectParts[0] ?? '').match(/WO\s*#([\w-]+)/i);
+				const serviceRequestNumber = woMatch?.[1] ?? null;
+				const appfolioPropertyId = subjectParts.length >= 3 ? subjectParts[subjectParts.length - 2].trim() : null;
+
+				if (serviceRequestNumber && appfolioPropertyId) {
+					const INTERNAL_AGENT_KEY = Deno.env.get('INTERNAL_AGENT_KEY') ?? '';
+					fetch(`${supabaseUrl}/functions/v1/appfolio-email-trigger`, {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+							apikey: supabaseServiceKey,
+							Authorization: `Bearer ${supabaseServiceKey}`,
+							'x-internal-agent-key': INTERNAL_AGENT_KEY
+						},
+						body: JSON.stringify({
+							workspaceId: wsId,
+							serviceRequestNumber,
+							appfolioPropertyId,
+							subject: messageSubject,
+							body: emailBody,
+							gmailMessageId: message.id
+						})
+					}).catch(err => console.error('appfolio-email-trigger dispatch failed:', err));
+				} else {
+					console.warn('agent: AppFolio email detected but could not parse subject:', messageSubject);
+				}
+				await insertIngestionLog({
+					userId: connection.user_id,
+					source: 'gmail-push',
+					detail: JSON.stringify({ phase: 'routed-to-appfolio-trigger', subject: messageSubject })
+				});
+				return;
+			}
+		}
+	}
+
 	if (pmEmail && senderEmail === pmEmail) {
 		await insertIngestionLog({
 			userId: connection.user_id,
@@ -3612,7 +3693,7 @@ serve(async (req) => {
 
 		// AppFolio change events arrive directly (no job queue) from appfolio-sync.
 		if (!jobId && directSource === 'appfolio') {
-			const { issueId, workspaceId: wsId, change_type, row } = body ?? {};
+			const { issueId, workspaceId: wsId, change_type, row, run_id } = body ?? {};
 			if (!issueId || !wsId || !change_type) {
 				return new Response('Missing issueId, workspaceId, or change_type', { status: 400 });
 			}
@@ -3626,6 +3707,15 @@ serve(async (req) => {
 				return Response.json({ ok: true });
 			} catch (err) {
 				console.error('handleAppfolioWorkOrder error:', err);
+				// Mark the issue as failed so sync can retry on next run
+				try {
+					await supabase.from('issues').update({
+						agent_status: 'failed',
+						agent_error: err instanceof Error ? err.message : String(err)
+					}).eq('id', issueId);
+				} catch {
+					// ignore status update failure
+				}
 				return Response.json({ ok: false, error: String(err) }, { status: 500 });
 			}
 		}

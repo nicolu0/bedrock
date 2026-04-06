@@ -136,6 +136,12 @@ const createIssue = async ({ name, unitId, workspaceId, assigneeId, description 
 	return data.id;
 };
 
+const detectSubissueKind = (name) => {
+	if (/^triage\s+/i.test(name)) return 'triage';
+	if (/^schedule\s+/i.test(name)) return 'schedule';
+	return null;
+};
+
 const createSubissue = async ({
 	parentIssueId,
 	name,
@@ -146,11 +152,13 @@ const createSubissue = async ({
 	assigneeId,
 	description
 }) => {
+	const kind = detectSubissueKind(name);
 	const { data, error } = await supabaseAdmin
 		.from('issues')
 		.insert({
 			parent_id: parentIssueId,
 			name,
+			subissue_kind: kind,
 			unit_id: unitId ?? null,
 			workspace_id: workspaceId,
 			status,
@@ -160,6 +168,15 @@ const createSubissue = async ({
 		})
 		.select('id')
 		.single();
+	if (error?.code === '23505' && kind) {
+		const { data: existing } = await supabaseAdmin
+			.from('issues')
+			.select('id')
+			.eq('parent_id', parentIssueId)
+			.eq('subissue_kind', kind)
+			.maybeSingle();
+		if (existing?.id) return existing.id;
+	}
 	if (error || !data?.id) {
 		throw new Error(error?.message ?? 'Subissue insert failed');
 	}
@@ -1413,11 +1430,13 @@ const createSubissueForGmail = async ({
 	assigneeId,
 	description
 }) => {
+	const kind = detectSubissueKind(name);
 	const { data, error } = await supabaseAdmin
 		.from('issues')
 		.insert({
 			parent_id: parentIssueId,
 			name,
+			subissue_kind: kind,
 			unit_id: unitId ?? null,
 			workspace_id: workspaceId,
 			status,
@@ -1427,6 +1446,15 @@ const createSubissueForGmail = async ({
 		})
 		.select('id')
 		.single();
+	if (error?.code === '23505' && kind) {
+		const { data: existing } = await supabaseAdmin
+			.from('issues')
+			.select('id')
+			.eq('parent_id', parentIssueId)
+			.eq('subissue_kind', kind)
+			.maybeSingle();
+		if (existing?.id) return existing.id;
+	}
 	if (error || !data?.id) {
 		throw new Error(error?.message ?? 'Subissue insert failed');
 	}
