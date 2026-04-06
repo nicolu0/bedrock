@@ -152,13 +152,7 @@ export const POST = async ({ locals, request }) => {
 	if (followupBody) {
 		const originalMessageId = approvedDraft?.message_id ?? messageId ?? null;
 		if (approvedDraft?.id) {
-			await supabaseAdmin
-				.from('drafts')
-				.update({
-					message_id: `approved-${approvedDraft.id}`,
-					updated_at: new Date().toISOString()
-				})
-				.eq('id', approvedDraft.id);
+			await supabaseAdmin.from('drafts').delete().eq('id', approvedDraft.id);
 		}
 		const followupSubject = approvedDraft?.subject ?? issue.name ?? 'Follow up on scheduling';
 		const followupPayload = {
@@ -174,13 +168,16 @@ export const POST = async ({ locals, request }) => {
 			channel: 'appfolio',
 			updated_at: new Date().toISOString()
 		};
-		const { data: createdFollowup } = await supabaseAdmin
+		const { data: createdFollowup, error: followupError } = await supabaseAdmin
 			.from('drafts')
 			.insert(followupPayload)
 			.select(
 				'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, original_body, draft_diff, updated_at, channel'
 			)
 			.single();
+		if (followupError) {
+			return json({ error: followupError.message }, { status: 400 });
+		}
 		if (createdFollowup?.id) {
 			followupDraft = createdFollowup;
 		}

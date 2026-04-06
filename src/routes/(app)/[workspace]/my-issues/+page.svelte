@@ -297,17 +297,13 @@
 		return normalized;
 	};
 
-	const getCreatedAgeLabel = (createdValue, lastActivityValue) => {
-		if (!createdValue) return null;
-		const createdAt = new Date(createdValue).getTime();
-		if (!Number.isFinite(createdAt)) return null;
-		if (lastActivityValue) {
-			const lastActivityAt = new Date(lastActivityValue).getTime();
-			if (Number.isFinite(lastActivityAt) && lastActivityAt > createdAt) return null;
-		}
-		const diffDays = Math.floor((Date.now() - createdAt) / (24 * 60 * 60 * 1000));
+	const getUpdatedAgeLabel = (updatedValue) => {
+		if (!updatedValue) return null;
+		const updatedAt = new Date(updatedValue).getTime();
+		if (!Number.isFinite(updatedAt)) return null;
+		const diffDays = Math.floor((Date.now() - updatedAt) / (24 * 60 * 60 * 1000));
 		if (diffDays < 2) return null;
-		return `Created ${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+		return `Updated ${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
 	};
 
 	const getSectionGradientStyle = (statusClass) => {
@@ -1214,7 +1210,7 @@
 														{/if}
 													</div>
 													<div class="flex items-center gap-2">
-														{#if getCreatedAgeLabel(item.created_at ?? item.createdAt, item.latestActivityAt ?? item.updated_at ?? item.updatedAt)}
+														{#if getUpdatedAgeLabel(item.latestActivityAt ?? item.updated_at ?? item.updatedAt)}
 															<div class="flex items-center gap-1 text-xs text-red-300">
 																<svg
 																	xmlns="http://www.w3.org/2000/svg"
@@ -1233,8 +1229,7 @@
 																	/>
 																</svg>
 																<span>
-																	{getCreatedAgeLabel(
-																		item.created_at ?? item.createdAt,
+																	{getUpdatedAgeLabel(
 																		item.latestActivityAt ?? item.updated_at ?? item.updatedAt
 																	)}
 																</span>

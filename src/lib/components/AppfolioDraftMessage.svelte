@@ -408,34 +408,7 @@
 		if (!draft?.issue_id) return;
 		if (isApproving) return;
 		isApproving = true;
-		const normalizedIssueName = (issueName ?? '').toString();
-		const isTriage = /^triage\s+/i.test(normalizedIssueName);
-		const isSchedule = /^schedule\s+/i.test(normalizedIssueName);
-		const followupBody = isSchedule
-			? 'Just checking in to see if you scheduled with the tenant.'
-			: isTriage
-				? 'Just checking in if the vendor got in contact with you to schedule.'
-				: null;
-		if (followupBody) {
-			dispatch('draftApproved', {
-				approvedDraft: draft,
-				followupDraft: {
-					id: `optimistic-${draft.id ?? draft.message_id ?? Date.now()}`,
-					issue_id: draft.issue_id,
-					message_id: draft.message_id ?? null,
-					sender_email: draft.sender_email ?? '',
-					recipient_email: draft.recipient_email ?? null,
-					recipient_emails: draft.recipient_emails ?? null,
-					subject: draft.subject ?? null,
-					body: followupBody,
-					original_body: followupBody,
-					draft_diff: null,
-					channel: 'appfolio',
-					updated_at: new Date().toISOString(),
-					_optimistic: true
-				}
-			});
-		}
+		dispatch('approvalStarted', { issueId: draft.issue_id });
 		try {
 			const response = await fetch('/api/appfolio-drafts/approve', {
 				method: 'POST',
@@ -464,9 +437,7 @@
 				assigneeId: payload?.assignee_id ?? null,
 				assigneeName
 			});
-			showToast(
-				assigneeName ? `Approved and assigned to ${assigneeName}.` : 'Approved and assigned.'
-			);
+			showToast('Draft approved.');
 		} catch (err) {
 			console.error('[AppfolioDraft] approve error:', err);
 			showToast(`Approval failed: ${err?.message ?? 'unknown error'}`);

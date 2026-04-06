@@ -85,11 +85,19 @@
 	const sortSubIssues = (items) => {
 		if (!items?.length) return [];
 		return [...items].sort((a, b) => {
+			const nameA = (a?.name ?? '').toString();
+			const nameB = (b?.name ?? '').toString();
+			const priority = (name) => {
+				if (/^triage\s+/i.test(name)) return 0;
+				if (/^schedule\s+/i.test(name)) return 1;
+				return 2;
+			};
+			const priA = priority(nameA);
+			const priB = priority(nameB);
+			if (priA !== priB) return priA - priB;
 			const numA = a?.issueNumber ?? Number.MAX_SAFE_INTEGER;
 			const numB = b?.issueNumber ?? Number.MAX_SAFE_INTEGER;
 			if (numA !== numB) return numA - numB;
-			const nameA = (a?.name ?? '').toString();
-			const nameB = (b?.name ?? '').toString();
 			return nameA.localeCompare(nameB);
 		});
 	};
@@ -240,7 +248,7 @@
 		}
 	}
 
-	$: subIssues = _resolvedSubIssues;
+	$: subIssues = sortSubIssues(_resolvedSubIssues);
 	$: messagesByIssue = _resolvedActivity?.messagesByIssue ?? {};
 	$: emailDraftsByMessageId = _resolvedActivity?.emailDraftsByMessageId ?? {};
 	$: draftIssueIds = _resolvedActivity?.draftIssueIds ?? [];
@@ -435,6 +443,9 @@
 	// ── Activity derived ─────────────────────────────────────────────────────────
 
 	let suppressedDraftKeys = new Set();
+	let approvedMessageOpen = {};
+	let tasksLoadingByIssue = {};
+	let tasksLoadingStartedAt = {};
 
 	const suppressDraftKey = (key) => {
 		if (!key) return;
@@ -446,6 +457,31 @@
 		const next = new Set(suppressedDraftKeys);
 		next.delete(key);
 		suppressedDraftKeys = next;
+	};
+
+	const toggleApprovedMessage = (id) => {
+		if (!id) return;
+		approvedMessageOpen = {
+			...approvedMessageOpen,
+			[id]: !(approvedMessageOpen?.[id] ?? false)
+		};
+	};
+
+	const setTasksLoading = (id, isLoading, minDurationMs = 0, onComplete = null) => {
+		if (!id) return;
+		if (isLoading) {
+			tasksLoadingStartedAt = { ...tasksLoadingStartedAt, [id]: Date.now() };
+			tasksLoadingByIssue = { ...tasksLoadingByIssue, [id]: true };
+			return;
+		}
+		const startedAt = tasksLoadingStartedAt?.[id] ?? 0;
+		const elapsed = startedAt ? Date.now() - startedAt : minDurationMs;
+		const remaining = Math.max(minDurationMs - elapsed, 0);
+		setTimeout(() => {
+			tasksLoadingByIssue = { ...tasksLoadingByIssue, [id]: false };
+			tasksLoadingStartedAt = { ...tasksLoadingStartedAt, [id]: 0 };
+			if (typeof onComplete === 'function') onComplete();
+		}, remaining);
 	};
 
 	$: draftsByIssue = Object.values(emailDraftsByMessageId ?? {}).reduce((acc, draft) => {
@@ -548,6 +584,9 @@
 	const getApprovedByForDraft = (draft) =>
 		approvedAppfolioDraftMap?.[draft?.id]?.log?.data?.approved_by ?? null;
 
+	const getApprovedNameForIssue = (id) =>
+		(approvedAppfolioDraftsByIssue?.[id]?.[0]?.log?.data?.approved_by ?? '').trim();
+
 	// ── Local mutation helpers ───────────────────────────────────────────────────
 
 	function applyActivityLogDelta(log) {
@@ -580,13 +619,50 @@
 		messagesByIssue = { ...messagesByIssue, [msg.issue_id]: list.filter((m) => m.id !== msg.id) };
 	}
 
+	function removeOptimisticDraftsFor(nextDraft) {
+		if (!nextDraft || nextDraft?._optimistic) return null;
+		const entries = Object.entries(emailDraftsByMessageId ?? {});
+		for (const [, draft] of entries) {
+			if (!draft?._optimistic) continue;
+			if (draft.issue_id !== nextDraft.issue_id) continue;
+			if (nextDraft.message_id) {
+				if (draft.message_id === nextDraft.message_id) {
+					const clientKey = draft._client_key ?? null;
+					removeDraftFromCache(draft);
+					return clientKey;
+				}
+				continue;
+			}
+			const nextBody = String(nextDraft.body ?? '').trim();
+			const draftBody = String(draft.body ?? '').trim();
+			if (nextBody && nextBody === draftBody) {
+				const clientKey = draft._client_key ?? null;
+				removeDraftFromCache(draft);
+				return clientKey;
+			}
+		}
+		return null;
+	}
+
 	function applyDraftDelta(draft) {
 		if (!draft) return;
 		const key = draft.message_id ?? draft.id;
 		if (!key) return;
+		const clientKey = removeOptimisticDraftsFor(draft);
+		const existing = emailDraftsByMessageId?.[key] ?? null;
+		if (clientKey && !draft._client_key) {
+			draft = { ...draft, _client_key: clientKey };
+		} else if (existing?._client_key && !draft._client_key) {
+			draft = { ...draft, _client_key: existing._client_key };
+		}
 		emailDraftsByMessageId = { ...emailDraftsByMessageId, [key]: draft };
 		if (draft.issue_id && !draftIssueIds.includes(draft.issue_id)) {
 			draftIssueIds = [...draftIssueIds, draft.issue_id];
+		}
+		if (draft.issue_id && draft.channel === 'appfolio' && isFollowupDraft(draft)) {
+			setTasksLoading(draft.issue_id, false, 1000, () => {
+				tasksOpen = { ...tasksOpen, [draft.issue_id]: true };
+			});
 		}
 	}
 
@@ -635,7 +711,13 @@
 		if (!detail) return;
 		const approvedDraft = detail?.approvedDraft ?? null;
 		const followupDraft = detail?.followupDraft ?? null;
-		if (approvedDraft) removeDraftFromCache(approvedDraft);
+		if (approvedDraft?.id) {
+			removeDraftFromCache(approvedDraft);
+		}
+		if (approvedDraft?.issue_id) {
+			setTasksLoading(approvedDraft.issue_id, true);
+			tasksOpen = { ...tasksOpen, [approvedDraft.issue_id]: false };
+		}
 		if (followupDraft) {
 			if (!followupDraft._optimistic && approvedDraft?.message_id) {
 				const entries = Object.entries(emailDraftsByMessageId ?? {});
@@ -651,6 +733,13 @@
 			}
 			applyDraftDelta(followupDraft);
 		}
+	};
+
+	const handleAppfolioApprovalStarted = (detail) => {
+		const issueId = detail?.issueId ?? null;
+		if (!issueId) return;
+		setTasksLoading(issueId, true);
+		tasksOpen = { ...tasksOpen, [issueId]: false };
 	};
 
 	const handleAppfolioAssigneeUpdate = (detail) => {
@@ -2999,7 +3088,7 @@
 														draft={null}
 													/>
 												{/each}
-												{#each replyDraftsByIssue[issueId] ?? [] as draft (draft.id ?? draft.message_id)}
+												{#each replyDraftsByIssue[issueId] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
 													{#if draft.channel === 'appfolio'}
 														<AppfolioDraftMessage
 															message={{
@@ -3015,6 +3104,7 @@
 															{vendors}
 															recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 															issueName={issue?.name ?? ''}
+															on:approvalStarted={(e) => handleAppfolioApprovalStarted(e.detail)}
 															on:sent={(e) => handleDraftSent(e.detail)}
 															on:draftApproved={(e) => handleAppfolioDraftApproved(e.detail)}
 															on:assigneeUpdated={(e) => handleAppfolioAssigneeUpdate(e.detail)}
@@ -3127,7 +3217,7 @@
 												{/if}
 											</div>
 											<div class="space-y-3">
-												{#each newDraftsByIssue[issueId] ?? [] as draft (draft.id ?? draft.message_id)}
+												{#each newDraftsByIssue[issueId] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
 													{#if draft.channel === 'appfolio'}
 														<AppfolioDraftMessage
 															message={{
@@ -3143,6 +3233,7 @@
 															{vendors}
 															recommendedVendors={recommendedVendorsByIssueId[draft.issue_id] ?? []}
 															issueName={issue?.name ?? ''}
+															on:approvalStarted={(e) => handleAppfolioApprovalStarted(e.detail)}
 															on:sent={(e) => handleDraftSent(e.detail)}
 															on:draftApproved={(e) => handleAppfolioDraftApproved(e.detail)}
 															on:assigneeUpdated={(e) => handleAppfolioAssigneeUpdate(e.detail)}
@@ -3170,229 +3261,84 @@
 								{/if}
 
 								{#each subIssues as subIssue}
-									{#if (draftsByIssue[subIssue.id]?.length ?? 0) > 0}
-										<div>
-											<button
-												type="button"
-												class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
-												on:click={() => toggleTasks(subIssue.id)}
+									<div>
+										<button
+											type="button"
+											class="tooltip-target relative ml-0.5 flex w-full cursor-pointer items-center justify-between text-xs font-medium tracking-wide text-neutral-500 hover:text-neutral-700"
+											on:click={() => toggleTasks(subIssue.id)}
+										>
+											<div
+												class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
 											>
-												<div
-													class="flex items-center gap-2 rounded-md px-0 py-1.5 transition select-none hover:text-neutral-700"
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="12"
+													height="12"
+													fill="currentColor"
+													class="chevron-icon transition-transform duration-150 ease-in-out"
+													class:rotate-[-90deg]={!(tasksOpen[subIssue.id] ?? true)}
+													viewBox="0 0 16 16"
 												>
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														width="12"
-														height="12"
-														fill="currentColor"
-														class="chevron-icon transition-transform duration-150 ease-in-out"
-														class:rotate-[-90deg]={!(tasksOpen[subIssue.id] ?? true)}
-														viewBox="0 0 16 16"
-													>
-														<path
-															d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+													<path
+														d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+													/>
+												</svg>
+												<span>{subIssue.name}</span>
+											</div>
+											<div
+												class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+											>
+												{(tasksOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
+											</div>
+											<span class="flex h-3 w-3 items-center justify-center text-neutral-300">
+												{#if tasksLoadingByIssue[subIssue.id]}
+													<svg class="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+														<circle
+															cx="12"
+															cy="12"
+															r="9"
+															stroke="currentColor"
+															stroke-width="2"
+															stroke-linecap="round"
+															stroke-dasharray="42"
+															stroke-dashoffset="12"
 														/>
 													</svg>
-													<span>{subIssue.name}</span>
-												</div>
+												{/if}
+											</span>
+										</button>
+										<div
+											class="grid transition-[grid-template-rows] duration-200 ease-in-out"
+											style:grid-template-rows={(tasksOpen[subIssue.id] ?? true) ? '1fr' : '0fr'}
+										>
+											<div class="overflow-hidden">
 												<div
-													class="delayed-tooltip absolute top-full left-0 z-10 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													class="space-y-3 py-2 transition-opacity duration-200"
+													class:opacity-0={!(tasksOpen[subIssue.id] ?? true)}
 												>
-													{(tasksOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
-												</div>
-												<span class="text-neutral-300">
-													{draftsByIssue[subIssue.id]?.length ?? 0}
-												</span>
-											</button>
-											<div
-												class="grid transition-[grid-template-rows] duration-200 ease-in-out"
-												style:grid-template-rows={(tasksOpen[subIssue.id] ?? true) ? '1fr' : '0fr'}
-											>
-												<div class="overflow-hidden">
-													<div
-														class="space-y-3 py-2 transition-opacity duration-200"
-														class:opacity-0={!(tasksOpen[subIssue.id] ?? true)}
-													>
-														{#if (messagesByIssue[subIssue.id]?.length ?? 0) > 0 || (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
-															<div class="space-y-3">
-																{#if getThreadSubject(subIssue.id)}
-																	<div class="flex items-center gap-2">
-																		<div class="flex items-center justify-center">
-																			{#if (messagesByIssue[subIssue.id] ?? []).some((m) => m.channel === 'appfolio')}
-																				<svg
-																					class="h-7 w-7"
-																					viewBox="0 0 1024 1024"
-																					fill="none"
-																					xmlns="http://www.w3.org/2000/svg"
-																				>
-																					<circle cx="512" cy="512" r="512" fill="#007bc7" />
-																					<g
-																						transform="translate(512,512) scale(1.25) translate(-512,-512)"
-																					>
-																						<path
-																							d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-																							fill="white"
-																						/>
-																					</g>
-																				</svg>
-																			{:else}
-																				<svg
-																					class="h-[26px] w-[26px]"
-																					viewBox="0 0 32 32"
-																					fill="none"
-																					xmlns="http://www.w3.org/2000/svg"
+													{#if (messagesByIssue[subIssue.id]?.length ?? 0) > 0 || (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
+														<div class="space-y-3">
+															{#if getThreadSubject(subIssue.id)}
+																<div class="flex items-center gap-2">
+																	<div class="flex items-center justify-center">
+																		{#if (messagesByIssue[subIssue.id] ?? []).some((m) => m.channel === 'appfolio')}
+																			<svg
+																				class="h-7 w-7"
+																				viewBox="0 0 1024 1024"
+																				fill="none"
+																				xmlns="http://www.w3.org/2000/svg"
+																			>
+																				<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																				<g
+																					transform="translate(512,512) scale(1.25) translate(-512,-512)"
 																				>
 																					<path
-																						d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
+																						d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
 																						fill="white"
 																					/>
-																					<path
-																						d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
-																						fill="#EA4335"
-																					/>
-																					<path
-																						d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
-																						fill="#FBBC05"
-																					/>
-																					<path
-																						d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
-																						fill="#34A853"
-																					/>
-																					<path
-																						d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
-																						fill="#C5221F"
-																					/>
-																					<path
-																						d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
-																						fill="#C5221F"
-																					/>
-																					<path
-																						d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
-																						fill="#C5221F"
-																					/>
-																					<path
-																						d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
-																						fill="#4285F4"
-																					/>
-																				</svg>
-																			{/if}
-																		</div>
-																		<h3 class="text-base font-semibold text-neutral-900">
-																			{getThreadSubject(subIssue.id)}
-																		</h3>
-																	</div>
-																{:else if (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
-																	<div class="flex items-center gap-2">
-																		{#if hasFollowupDraft(replyDraftsByIssue[subIssue.id])}
-																			<h3 class="text-base font-semibold text-neutral-900">
-																				{getFollowupLabelForIssue(subIssue.id)}
-																			</h3>
-																		{:else if !(replyDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
-																			<div class="flex items-center justify-center">
-																				<svg
-																					width="18"
-																					height="18"
-																					viewBox="0 0 16 16"
-																					fill="currentColor"
-																					class="text-neutral-500"
-																				>
-																					<path
-																						d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
-																					/>
-																				</svg>
-																			</div>
-																			<h3 class="text-base font-semibold text-neutral-900">
-																				Draft reply
-																			</h3>
+																				</g>
+																			</svg>
 																		{:else}
-																			<h3 class="text-base font-semibold text-neutral-900">
-																				Drafted reply
-																			</h3>
-																		{/if}
-																	</div>
-																{/if}
-																<div class="space-y-3">
-																	{#each collectMessagesForIssue(messagesByIssue, subIssue.id) as message}
-																		<EmailMessageWithDraft
-																			message={{
-																				...message,
-																				timestampLabel: formatTimestamp(message.timestamp)
-																			}}
-																			draft={null}
-																		/>
-																	{/each}
-																	{#each replyDraftsByIssue[subIssue.id] ?? [] as draft (draft.id ?? draft.message_id)}
-																		{#if draft.channel === 'appfolio'}
-																			<AppfolioDraftMessage
-																				message={{
-																					id: draft.message_id,
-																					subject: draft.subject,
-																					message: '',
-																					sender: 'outbound',
-																					direction: 'outbound',
-																					timestampLabel: formatTimestamp(draft.updated_at)
-																				}}
-																				{draft}
-																				approvedBy={getApprovedByForDraft(draft)}
-																				{vendors}
-																				recommendedVendors={recommendedVendorsByIssueId[
-																					draft.issue_id
-																				] ?? []}
-																				issueName={subIssue?.name ?? ''}
-																				on:sent={(e) => handleDraftSent(e.detail)}
-																				on:draftApproved={(e) =>
-																					handleAppfolioDraftApproved(e.detail)}
-																				on:assigneeUpdated={(e) =>
-																					handleAppfolioAssigneeUpdate(e.detail)}
-																			/>
-																		{:else}
-																			<EmailMessageWithDraft
-																				message={{
-																					id: draft.message_id,
-																					subject: draft.subject,
-																					message: '',
-																					sender: 'outbound',
-																					direction: 'outbound',
-																					timestampLabel: formatTimestamp(draft.updated_at)
-																				}}
-																				{draft}
-																				{vendors}
-																				recommendedVendors={recommendedVendorsByIssueId[
-																					draft.issue_id
-																				] ?? []}
-																				on:sent={(e) => handleDraftSent(e.detail)}
-																			/>
-																		{/if}
-																	{/each}
-																</div>
-															</div>
-														{/if}
-
-														{#if (newDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
-															<div class="space-y-3">
-																<div class="flex items-center gap-2">
-																	{#if hasFollowupDraft(newDraftsByIssue[subIssue.id])}
-																		<svg
-																			class="h-7 w-7"
-																			viewBox="0 0 1024 1024"
-																			fill="none"
-																			xmlns="http://www.w3.org/2000/svg"
-																		>
-																			<circle cx="512" cy="512" r="512" fill="#007bc7" />
-																			<g
-																				transform="translate(512,512) scale(1.25) translate(-512,-512)"
-																			>
-																				<path
-																					d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-																					fill="white"
-																				/>
-																			</g>
-																		</svg>
-																		<h3 class="text-base font-semibold text-neutral-900">
-																			{getFollowupLabelForIssue(subIssue.id)}
-																		</h3>
-																	{:else if !(newDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
-																		<div class="flex items-center justify-center">
 																			<svg
 																				class="h-[26px] w-[26px]"
 																				viewBox="0 0 32 32"
@@ -3432,88 +3378,248 @@
 																					fill="#4285F4"
 																				/>
 																			</svg>
-																		</div>
+																		{/if}
+																	</div>
+																	<h3 class="text-base font-semibold text-neutral-900">
+																		{getThreadSubject(subIssue.id)}
+																	</h3>
+																</div>
+															{:else if (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
+																<div class="flex items-center gap-2">
+																	{#if hasFollowupDraft(replyDraftsByIssue[subIssue.id])}
 																		<h3 class="text-base font-semibold text-neutral-900">
-																			Draft email
+																			{getFollowupLabelForIssue(subIssue.id)}
 																		</h3>
-																	{:else}
-																		<svg
-																			class="h-7 w-7"
-																			viewBox="0 0 1024 1024"
-																			fill="none"
-																			xmlns="http://www.w3.org/2000/svg"
-																		>
-																			<circle cx="512" cy="512" r="512" fill="#007bc7" />
-																			<g
-																				transform="translate(512,512) scale(1.25) translate(-512,-512)"
+																	{:else if !(replyDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
+																		<div class="flex items-center justify-center">
+																			<svg
+																				width="18"
+																				height="18"
+																				viewBox="0 0 16 16"
+																				fill="currentColor"
+																				class="text-neutral-500"
 																			>
 																				<path
-																					d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-																					fill="white"
+																					d="M8 3a5 5 0 1 0 4.546 2.916.5.5 0 0 0-.908-.418A4 4 0 1 1 8 4.5V6a.5.5 0 0 0 .854.354l2-2a.5.5 0 0 0 0-.708l-2-2A.5.5 0 0 0 8 2v1z"
 																				/>
-																			</g>
-																		</svg>
+																			</svg>
+																		</div>
 																		<h3 class="text-base font-semibold text-neutral-900">
-																			{(newDraftsByIssue[subIssue.id] ?? []).some(
-																				(d) => d.recipient_email
-																			)
-																				? 'Assign Vendor'
-																				: 'Drafted reply'}
+																			Draft reply
+																		</h3>
+																	{:else}
+																		<h3 class="text-base font-semibold text-neutral-900">
+																			Drafted reply
 																		</h3>
 																	{/if}
 																</div>
-																<div class="space-y-3">
-																	{#each newDraftsByIssue[subIssue.id] ?? [] as draft (draft.id ?? draft.message_id)}
-																		{#if draft.channel === 'appfolio'}
-																			<AppfolioDraftMessage
-																				message={{
-																					id: draft.message_id,
-																					subject: draft.subject,
-																					message: '',
-																					sender: 'outbound',
-																					direction: 'outbound',
-																					timestampLabel: formatTimestamp(draft.updated_at)
-																				}}
-																				{draft}
-																				approvedBy={getApprovedByForDraft(draft)}
-																				{vendors}
-																				recommendedVendors={recommendedVendorsByIssueId[
-																					draft.issue_id
-																				] ?? []}
-																				issueName={subIssue?.name ?? ''}
-																				on:sent={(e) => handleDraftSent(e.detail)}
-																				on:draftApproved={(e) =>
-																					handleAppfolioDraftApproved(e.detail)}
-																				on:assigneeUpdated={(e) =>
-																					handleAppfolioAssigneeUpdate(e.detail)}
-																			/>
-																		{:else}
-																			<EmailMessageWithDraft
-																				message={{
-																					id: draft.message_id,
-																					subject: draft.subject,
-																					message: '',
-																					sender: 'outbound',
-																					direction: 'outbound',
-																					timestampLabel: formatTimestamp(draft.updated_at)
-																				}}
-																				{draft}
-																				{vendors}
-																				recommendedVendors={recommendedVendorsByIssueId[
-																					draft.issue_id
-																				] ?? []}
-																				on:sent={(e) => handleDraftSent(e.detail)}
-																			/>
-																		{/if}
-																	{/each}
-																</div>
+															{/if}
+															<div class="space-y-3">
+																{#each collectMessagesForIssue(messagesByIssue, subIssue.id) as message}
+																	<EmailMessageWithDraft
+																		message={{
+																			...message,
+																			timestampLabel: formatTimestamp(message.timestamp)
+																		}}
+																		draft={null}
+																	/>
+																{/each}
+																{#each replyDraftsByIssue[subIssue.id] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
+																	{#if draft.channel === 'appfolio'}
+																		<AppfolioDraftMessage
+																			message={{
+																				id: draft.message_id,
+																				subject: draft.subject,
+																				message: '',
+																				sender: 'outbound',
+																				direction: 'outbound',
+																				timestampLabel: formatTimestamp(draft.updated_at)
+																			}}
+																			{draft}
+																			approvedBy={getApprovedByForDraft(draft)}
+																			{vendors}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
+																			issueName={subIssue?.name ?? ''}
+																			on:approvalStarted={(e) =>
+																				handleAppfolioApprovalStarted(e.detail)}
+																			on:sent={(e) => handleDraftSent(e.detail)}
+																			on:draftApproved={(e) =>
+																				handleAppfolioDraftApproved(e.detail)}
+																			on:assigneeUpdated={(e) =>
+																				handleAppfolioAssigneeUpdate(e.detail)}
+																		/>
+																	{:else}
+																		<EmailMessageWithDraft
+																			message={{
+																				id: draft.message_id,
+																				subject: draft.subject,
+																				message: '',
+																				sender: 'outbound',
+																				direction: 'outbound',
+																				timestampLabel: formatTimestamp(draft.updated_at)
+																			}}
+																			{draft}
+																			{vendors}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
+																			on:sent={(e) => handleDraftSent(e.detail)}
+																		/>
+																	{/if}
+																{/each}
 															</div>
-														{/if}
-													</div>
+														</div>
+													{/if}
+
+													{#if (newDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
+														<div class="space-y-3">
+															<div class="flex items-center gap-2">
+																{#if hasFollowupDraft(newDraftsByIssue[subIssue.id])}
+																	<svg
+																		class="h-7 w-7"
+																		viewBox="0 0 1024 1024"
+																		fill="none"
+																		xmlns="http://www.w3.org/2000/svg"
+																	>
+																		<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																		<g
+																			transform="translate(512,512) scale(1.25) translate(-512,-512)"
+																		>
+																			<path
+																				d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																				fill="white"
+																			/>
+																		</g>
+																	</svg>
+																	<h3 class="text-base font-semibold text-neutral-900">
+																		{getFollowupLabelForIssue(subIssue.id)}
+																	</h3>
+																{:else if !(newDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
+																	<div class="flex items-center justify-center">
+																		<svg
+																			class="h-[26px] w-[26px]"
+																			viewBox="0 0 32 32"
+																			fill="none"
+																			xmlns="http://www.w3.org/2000/svg"
+																		>
+																			<path
+																				d="M2 11.9556C2 8.47078 2 6.7284 2.67818 5.39739C3.27473 4.22661 4.22661 3.27473 5.39739 2.67818C6.7284 2 8.47078 2 11.9556 2H20.0444C23.5292 2 25.2716 2 26.6026 2.67818C27.7734 3.27473 28.7253 4.22661 29.3218 5.39739C30 6.7284 30 8.47078 30 11.9556V20.0444C30 23.5292 30 25.2716 29.3218 26.6026C28.7253 27.7734 27.7734 28.7253 26.6026 29.3218C25.2716 30 23.5292 30 20.0444 30H11.9556C8.47078 30 6.7284 30 5.39739 29.3218C4.22661 28.7253 3.27473 27.7734 2.67818 26.6026C2 25.2716 2 23.5292 2 20.0444V11.9556Z"
+																				fill="white"
+																			/>
+																			<path
+																				d="M22.0515 8.52295L16.0644 13.1954L9.94043 8.52295V8.52421L9.94783 8.53053V15.0732L15.9954 19.8466L22.0515 15.2575V8.52295Z"
+																				fill="#EA4335"
+																			/>
+																			<path
+																				d="M23.6231 7.38639L22.0508 8.52292V15.2575L26.9983 11.459V9.17074C26.9983 9.17074 26.3978 5.90258 23.6231 7.38639Z"
+																				fill="#FBBC05"
+																			/>
+																			<path
+																				d="M22.0508 15.2575V23.9924H25.8428C25.8428 23.9924 26.9219 23.8813 26.9995 22.6513V11.459L22.0508 15.2575Z"
+																				fill="#34A853"
+																			/>
+																			<path
+																				d="M9.94811 24.0001V15.0732L9.94043 15.0669L9.94811 24.0001Z"
+																				fill="#C5221F"
+																			/>
+																			<path
+																				d="M9.94014 8.52404L8.37646 7.39382C5.60179 5.91001 5 9.17692 5 9.17692V11.4651L9.94014 15.0667V8.52404Z"
+																				fill="#C5221F"
+																			/>
+																			<path
+																				d="M9.94043 8.52441V15.0671L9.94811 15.0734V8.53073L9.94043 8.52441Z"
+																				fill="#C5221F"
+																			/>
+																			<path
+																				d="M5 11.4668V22.6591C5.07646 23.8904 6.15673 24.0003 6.15673 24.0003H9.94877L9.94014 15.0671L5 11.4668Z"
+																				fill="#4285F4"
+																			/>
+																		</svg>
+																	</div>
+																	<h3 class="text-base font-semibold text-neutral-900">
+																		Draft email
+																	</h3>
+																{:else}
+																	<svg
+																		class="h-7 w-7"
+																		viewBox="0 0 1024 1024"
+																		fill="none"
+																		xmlns="http://www.w3.org/2000/svg"
+																	>
+																		<circle cx="512" cy="512" r="512" fill="#007bc7" />
+																		<g
+																			transform="translate(512,512) scale(1.25) translate(-512,-512)"
+																		>
+																			<path
+																				d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																				fill="white"
+																			/>
+																		</g>
+																	</svg>
+																	<h3 class="text-base font-semibold text-neutral-900">
+																		{(newDraftsByIssue[subIssue.id] ?? []).some(
+																			(d) => d.recipient_email
+																		)
+																			? 'Assign Vendor'
+																			: 'Drafted reply'}
+																	</h3>
+																{/if}
+															</div>
+															<div class="space-y-3">
+																{#each newDraftsByIssue[subIssue.id] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
+																	{#if draft.channel === 'appfolio'}
+																		<AppfolioDraftMessage
+																			message={{
+																				id: draft.message_id,
+																				subject: draft.subject,
+																				message: '',
+																				sender: 'outbound',
+																				direction: 'outbound',
+																				timestampLabel: formatTimestamp(draft.updated_at)
+																			}}
+																			{draft}
+																			approvedBy={getApprovedByForDraft(draft)}
+																			{vendors}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
+																			issueName={subIssue?.name ?? ''}
+																			on:approvalStarted={(e) =>
+																				handleAppfolioApprovalStarted(e.detail)}
+																			on:sent={(e) => handleDraftSent(e.detail)}
+																			on:draftApproved={(e) =>
+																				handleAppfolioDraftApproved(e.detail)}
+																			on:assigneeUpdated={(e) =>
+																				handleAppfolioAssigneeUpdate(e.detail)}
+																		/>
+																	{:else}
+																		<EmailMessageWithDraft
+																			message={{
+																				id: draft.message_id,
+																				subject: draft.subject,
+																				message: '',
+																				sender: 'outbound',
+																				direction: 'outbound',
+																				timestampLabel: formatTimestamp(draft.updated_at)
+																			}}
+																			{draft}
+																			{vendors}
+																			recommendedVendors={recommendedVendorsByIssueId[
+																				draft.issue_id
+																			] ?? []}
+																			on:sent={(e) => handleDraftSent(e.detail)}
+																		/>
+																	{/if}
+																{/each}
+															</div>
+														</div>
+													{/if}
 												</div>
 											</div>
 										</div>
-									{/if}
+									</div>
 								{/each}
 							</div>
 						{/if}
@@ -3529,35 +3635,51 @@
 								<div class="mt-4 space-y-4 text-sm">
 									{#if (approvedAppfolioDraftsByIssue[issueId]?.length ?? 0) > 0}
 										<div class="space-y-3">
-											<div class="flex items-center gap-2">
-												<svg
-													class="h-7 w-7"
-													viewBox="0 0 1024 1024"
-													fill="none"
-													xmlns="http://www.w3.org/2000/svg"
+											<div class="flex items-center justify-between gap-3 px-1 py-2">
+												<div class="flex items-center gap-3">
+													<div
+														class="flex h-8 w-8 items-center justify-center rounded-full bg-[#007bc7]"
+													>
+														<svg
+															class="h-6 w-6"
+															viewBox="0 0 1024 1024"
+															fill="none"
+															xmlns="http://www.w3.org/2000/svg"
+														>
+															<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
+																<path
+																	d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																	fill="white"
+																/>
+															</g>
+														</svg>
+													</div>
+													<span class="text-sm text-neutral-700">
+														Message approved by {getApprovedNameForIssue(issueId) || 'Unknown'}
+													</span>
+												</div>
+												<button
+													type="button"
+													class="text-xs text-neutral-400 transition hover:text-neutral-500"
+													on:click={() => toggleApprovedMessage('root')}
 												>
-													<circle cx="512" cy="512" r="512" fill="#007bc7" />
-													<g transform="translate(512,512) scale(1.25) translate(-512,-512)">
-														<path
-															d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-															fill="white"
+													{(approvedMessageOpen?.root ?? false) ? 'Hide message' : 'View message'}
+												</button>
+											</div>
+											{#if approvedMessageOpen?.root ?? false}
+												<div class="space-y-3">
+													{#each approvedAppfolioDraftsByIssue[issueId] ?? [] as entry (entry.log?.id)}
+														<AppfolioDraftMessage
+															draft={entry.draft}
+															approvedBy={entry.log?.data?.approved_by ??
+																getActivityActor(entry.log).name}
+															{vendors}
+															recommendedVendors={recommendedVendorsByIssueId[issueId] ?? []}
+															readonly={true}
 														/>
-													</g>
-												</svg>
-												<h3 class="text-base font-semibold text-neutral-900">Approved message</h3>
-											</div>
-											<div class="space-y-3">
-												{#each approvedAppfolioDraftsByIssue[issueId] ?? [] as entry (entry.log?.id)}
-													<AppfolioDraftMessage
-														draft={entry.draft}
-														approvedBy={entry.log?.data?.approved_by ??
-															getActivityActor(entry.log).name}
-														{vendors}
-														recommendedVendors={recommendedVendorsByIssueId[issueId] ?? []}
-														readonly={true}
-													/>
-												{/each}
-											</div>
+													{/each}
+												</div>
+											{/if}
 										</div>
 									{/if}
 									{#each (logsByIssue[issueId] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
@@ -3716,27 +3838,44 @@
 														>
 															{#if (approvedAppfolioDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 																<div class="space-y-3">
-																	<div class="flex items-center gap-2">
-																		<svg
-																			class="h-7 w-7"
-																			viewBox="0 0 1024 1024"
-																			fill="none"
-																			xmlns="http://www.w3.org/2000/svg"
-																		>
-																			<circle cx="512" cy="512" r="512" fill="#007bc7" />
-																			<g
-																				transform="translate(512,512) scale(1.25) translate(-512,-512)"
+																	<div class="flex items-center justify-between gap-3 px-1 py-2">
+																		<div class="flex items-center gap-3">
+																			<div
+																				class="flex h-8 w-8 items-center justify-center rounded-full bg-[#007bc7]"
 																			>
-																				<path
-																					d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-																					fill="white"
-																				/>
-																			</g>
-																		</svg>
-																		<h3 class="text-base font-semibold text-neutral-900">
-																			Approved message
-																		</h3>
+																				<svg
+																					class="h-6 w-6"
+																					viewBox="0 0 1024 1024"
+																					fill="none"
+																					xmlns="http://www.w3.org/2000/svg"
+																				>
+																					<g
+																						transform="translate(512,512) scale(1.25) translate(-512,-512)"
+																					>
+																						<path
+																							d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zM654.12 480.77c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
+																							fill="white"
+																						/>
+																					</g>
+																				</svg>
+																			</div>
+																			<span class="text-sm text-neutral-700">
+																				Message approved by {getApprovedNameForIssue(subIssue.id) ||
+																					'Unknown'}
+																			</span>
+																		</div>
+																		<button
+																			type="button"
+																			class="text-xs text-neutral-400 transition hover:text-neutral-500"
+																			on:click={() => toggleApprovedMessage(`sub-${subIssue.id}`)}
+																		>
+																			{(approvedMessageOpen?.[`sub-${subIssue.id}`] ?? false)
+																				? 'Hide message'
+																				: 'View message'}
+																		</button>
 																	</div>
+																</div>
+																{#if approvedMessageOpen?.[`sub-${subIssue.id}`] ?? false}
 																	<div class="space-y-3">
 																		{#each approvedAppfolioDraftsByIssue[subIssue.id] ?? [] as entry (entry.log?.id)}
 																			<AppfolioDraftMessage
@@ -3751,7 +3890,7 @@
 																			/>
 																		{/each}
 																	</div>
-																</div>
+																{/if}
 															{/if}
 															{#each (logsByIssue[subIssue.id] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
 																{#if log.type === 'comment'}
