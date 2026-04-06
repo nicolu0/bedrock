@@ -49,7 +49,7 @@ export const loadIssuesData = async (
 		let query = supabaseAdmin
 			.from('issues')
 			.select(
-				'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, source, agent_processed_at, updated_at'
+				'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, source, agent_processed_at, created_at, updated_at'
 			)
 			.eq('workspace_id', workspaceId)
 			.order('updated_at', { ascending: false });
@@ -84,7 +84,7 @@ export const loadIssuesData = async (
 			let fallbackQuery = supabaseAdmin
 				.from('issues')
 				.select(
-					'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, source, agent_processed_at, updated_at'
+					'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, source, agent_processed_at, created_at, updated_at'
 				)
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
@@ -185,6 +185,7 @@ export const loadIssuesData = async (
 			status,
 			parentId: issue.parent_id ?? null,
 			parent_id: issue.parent_id ?? null,
+			created_at: issue.created_at ?? null,
 			updated_at: issue.updated_at ?? null,
 			latestActivityAt
 		};
@@ -235,6 +236,7 @@ export const loadIssuesData = async (
 				assignees: subIssue.assignees,
 				assigneeId: subIssue.assigneeId ?? subIssue.assignee_id ?? null,
 				assignee_id: subIssue.assignee_id ?? subIssue.assigneeId ?? null,
+				created_at: subIssue.created_at ?? null,
 				updated_at: subIssue.updated_at ?? null,
 				latestActivityAt: subIssue.latestActivityAt ?? null
 			}));
@@ -253,6 +255,7 @@ export const loadIssuesData = async (
 			issueNumber: issue.issueNumber,
 			readableId: issue.readableId,
 			subIssues,
+			created_at: issue.created_at ?? null,
 			updated_at: issue.updated_at ?? null,
 			latestActivityAt: issue.latestActivityAt ?? null
 		});
@@ -285,6 +288,7 @@ export const loadIssuesData = async (
 			parentTitle: parent.title,
 			isSubIssue: true,
 			subIssues: [],
+			created_at: issue.created_at ?? null,
 			updated_at: issue.updated_at ?? null,
 			latestActivityAt: issue.latestActivityAt ?? null
 		});

@@ -24,6 +24,8 @@ export const POST = async ({ locals, request }) => {
 
 	const body = await request.json().catch(() => null);
 	const issueId = body?.issue_id;
+	const draftId = body?.draft_id ?? null;
+	const messageId = body?.message_id ?? null;
 	if (!issueId) return json({ error: 'Invalid payload' }, { status: 400 });
 
 	const { data: issue } = await supabaseAdmin
@@ -61,6 +63,21 @@ export const POST = async ({ locals, request }) => {
 		.eq('workspace_id', issue.workspace_id)
 		.eq('role', 'bedrock')
 		.not('user_id', 'is', null);
+
+	const draftQuery = supabaseAdmin
+		.from('drafts')
+		.select(
+			'id, issue_id, message_id, subject, body, sender_email, recipient_email, recipient_emails, channel'
+		);
+	const { data: approvedDraft } = draftId
+		? await draftQuery.eq('id', draftId).maybeSingle()
+		: messageId
+			? await draftQuery.eq('message_id', messageId).eq('channel', 'appfolio').maybeSingle()
+			: await draftQuery
+					.eq('issue_id', issue.id)
+					.is('message_id', null)
+					.eq('channel', 'appfolio')
+					.maybeSingle();
 
 	const candidates = (bedrockPeople ?? []).filter((row) => row?.user_id);
 	if (!candidates.length) {
@@ -108,10 +125,74 @@ export const POST = async ({ locals, request }) => {
 			approved_by: approvedBy,
 			approved_by_id: locals.user.id,
 			assignee_id: assigneeId,
-			assignee_name: assigneeName
+			assignee_name: assigneeName,
+			draft: {
+				id: approvedDraft?.id ?? draftId,
+				message_id: approvedDraft?.message_id ?? messageId ?? null,
+				subject: approvedDraft?.subject ?? null,
+				body: approvedDraft?.body ?? null,
+				recipient_email: approvedDraft?.recipient_email ?? null,
+				recipient_emails: approvedDraft?.recipient_emails ?? null,
+				channel: approvedDraft?.channel ?? 'appfolio'
+			}
 		},
 		created_by: locals.user.id
 	});
+
+	const issueName = (issue?.name ?? '').toString();
+	const isTriage = /^triage\s+/i.test(issueName);
+	const isSchedule = /^schedule\s+/i.test(issueName);
+	const followupBody = isSchedule
+		? 'Just checking in to see if you scheduled with the tenant.'
+		: isTriage
+			? 'Just checking in if the vendor got in contact with you to schedule.'
+			: null;
+	let followupDraft = null;
+
+	if (followupBody) {
+		const originalMessageId = approvedDraft?.message_id ?? messageId ?? null;
+		if (approvedDraft?.id) {
+			await supabaseAdmin.from('drafts').delete().eq('id', approvedDraft.id);
+		}
+		const followupSubject = approvedDraft?.subject ?? issue.name ?? 'Follow up on scheduling';
+		const followupPayload = {
+			issue_id: issue.id,
+			message_id: originalMessageId,
+			sender_email: approvedDraft?.sender_email ?? '',
+			recipient_email: approvedDraft?.recipient_email ?? null,
+			recipient_emails: approvedDraft?.recipient_emails ?? null,
+			subject: followupSubject,
+			body: followupBody,
+			original_body: followupBody,
+			draft_diff: null,
+			channel: 'appfolio',
+			updated_at: new Date().toISOString()
+		};
+		const { data: createdFollowup, error: followupError } = await supabaseAdmin
+			.from('drafts')
+			.insert(followupPayload)
+			.select(
+				'id, issue_id, message_id, sender_email, recipient_email, recipient_emails, subject, body, original_body, draft_diff, updated_at, channel'
+			)
+			.single();
+		if (followupError) {
+			return json({ error: followupError.message }, { status: 400 });
+		}
+		if (createdFollowup?.id) {
+			followupDraft = createdFollowup;
+		}
+	}
+
+	await supabaseAdmin
+		.from('issues')
+		.update({ status: 'in_progress', updated_at: new Date().toISOString() })
+		.eq('id', issue.id);
+	if (issue.parent_id) {
+		await supabaseAdmin
+			.from('issues')
+			.update({ status: 'in_progress', updated_at: new Date().toISOString() })
+			.eq('id', issue.parent_id);
+	}
 
 	// Notify all bedrock users that a draft was approved and needs action
 	// (reuses bedrockPeople already fetched above)
@@ -135,6 +216,7 @@ export const POST = async ({ locals, request }) => {
 		assignee_id: assigneeId,
 		assignee_name: assigneeName,
 		issue_id: issue.id,
-		parent_issue_id: issue.parent_id ?? null
+		parent_issue_id: issue.parent_id ?? null,
+		followup_draft: followupDraft ?? null
 	});
 };

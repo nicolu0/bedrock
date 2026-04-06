@@ -145,15 +145,39 @@
 			<div class="border-t border-neutral-200"></div>
 			<div>
 				{#each roleGroups as group}
+					{@const isCollapsed = isRoleGroupCollapsed(group.name)}
 					<button
 						type="button"
-						class="group flex w-full items-center gap-3 px-6.5 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900"
+						class="tooltip-target group relative flex w-full items-center gap-3 px-6.5 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900"
 						on:click={() => toggleRoleGroup(group.name)}
+						aria-expanded={!isCollapsed}
 					>
 						<span class="font-normal text-inherit">{group.name}</span>
 						<div
 							class="flex-1 border-t border-neutral-200 transition group-hover:border-neutral-800"
 						></div>
+						<span
+							class="relative ml-1 flex items-center text-neutral-400 transition group-hover:text-neutral-700"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="12"
+								height="12"
+								fill="currentColor"
+								class="chevron-icon transition-transform duration-150 ease-in-out"
+								class:rotate-[-90deg]={isCollapsed}
+								viewBox="0 0 16 16"
+							>
+								<path
+									d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708"
+								/>
+							</svg>
+							<span
+								class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+							>
+								{isCollapsed ? 'Expand role group' : 'Collapse role group'}
+							</span>
+						</span>
 					</button>
 					{#if !isRoleGroupCollapsed(group.name)}
 						<div class="mb-2">

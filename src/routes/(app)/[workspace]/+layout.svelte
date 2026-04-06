@@ -695,11 +695,11 @@
 	<div class="h-screen bg-white text-neutral-900">
 		<div class="flex h-screen flex-row">
 			<div
-				class={`fixed inset-0 z-20 bg-neutral-900/40 transition-opacity duration-200 ease-out lg:hidden ${sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+				class={`fixed inset-0 z-40 bg-neutral-900/40 transition-opacity duration-200 ease-out lg:hidden ${sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
 				on:click={() => (sidebarOpen = false)}
 			></div>
 			<aside
-				class={`fixed inset-y-0 left-0 z-30 h-screen overflow-hidden border-r border-neutral-200 bg-neutral-50/95 shadow-xl transition-[transform,width] duration-100 ease-out lg:static lg:z-auto lg:shadow-none ${sidebarOpen ? 'w-72 translate-x-0 lg:w-1/6 lg:translate-x-0' : 'w-72 -translate-x-full lg:w-0 lg:translate-x-0 lg:border-r-0'}`}
+				class={`fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-neutral-200 bg-neutral-50/95 shadow-xl transition-[transform,width] duration-100 ease-out lg:static lg:z-auto lg:shadow-none ${sidebarOpen ? 'w-72 translate-x-0 lg:w-1/6 lg:translate-x-0' : 'w-72 -translate-x-full lg:w-0 lg:translate-x-0 lg:border-r-0'}`}
 			>
 				<div
 					class="flex h-full min-h-0 flex-col transition-opacity duration-150"
@@ -935,14 +935,14 @@
 					</div>
 				</div>
 			</aside>
-			<section class="flex-1 overflow-hidden">
+			<section class="flex-1 overflow-visible">
 				<div class="flex h-full min-w-0">
 					<div
-						class={`flex min-h-0 flex-none flex-col overflow-hidden transition-[width] duration-[280ms] ease-out ${
+						class={`relative z-10 flex min-h-0 flex-none flex-col overflow-visible transition-[width] duration-[280ms] ease-out lg:z-50 ${
 							$rightPanel.open
 								? $rightPanel.type === 'issue'
 									? 'w-1/2 border-r border-neutral-200'
-									: 'w-7/12 border-r border-neutral-200'
+									: 'w-2/3 border-r border-neutral-200'
 								: 'w-full'
 						}`}
 					>
@@ -952,8 +952,8 @@
 					</div>
 					{#if $rightPanel.open && !(isMobileViewport && $rightPanel.type === 'chat')}
 						<div
-							class={`flex-none overflow-y-auto ${
-								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-5/12'
+							class={`relative z-0 flex-none overflow-y-auto ${
+								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-1/3'
 							}`}
 							in:fly={{ x: 400, duration: 280, easing: cubicOut }}
 							out:fly={{ x: 400, duration: 220, easing: cubicOut }}

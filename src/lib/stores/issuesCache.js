@@ -110,6 +110,8 @@ export const buildSectionsFromIssues = (issues = [], issueReadsById = null) => {
 				assignees: subIssue.assignees ?? 0,
 				assigneeId: subIssue.assigneeId ?? subIssue.assignee_id ?? null,
 				assignee_id: subIssue.assignee_id ?? subIssue.assigneeId ?? null,
+				created_at: subIssue.created_at ?? subIssue.createdAt ?? null,
+				updated_at: subIssue.updated_at ?? subIssue.updatedAt ?? null,
 				hasUnseenUpdates: computeIssueHasUnseenUpdates(subIssue, issueReadsById)
 			}));
 		bucket.items.push({
@@ -124,6 +126,8 @@ export const buildSectionsFromIssues = (issues = [], issueReadsById = null) => {
 			unit: issue.unit,
 			issueNumber: issue.issueNumber ?? issue.issue_number ?? null,
 			readableId: issue.readableId ?? issue.readable_id ?? null,
+			created_at: issue.created_at ?? issue.createdAt ?? null,
+			updated_at: issue.updated_at ?? issue.updatedAt ?? null,
 			hasUnseenUpdates: computeIssueHasUnseenUpdates(issue, issueReadsById),
 			subIssues
 		});
@@ -154,6 +158,8 @@ export const buildSectionsFromIssues = (issues = [], issueReadsById = null) => {
 			readableId: issue.readableId ?? issue.readable_id ?? null,
 			parentTitle: parent.title ?? parent.name,
 			isSubIssue: true,
+			created_at: issue.created_at ?? issue.createdAt ?? null,
+			updated_at: issue.updated_at ?? issue.updatedAt ?? null,
 			hasUnseenUpdates: computeIssueHasUnseenUpdates(issue, issueReadsById),
 			subIssues: []
 		});
