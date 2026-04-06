@@ -553,7 +553,7 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 	// work_order endpoint takes exactly ONE property filter at a time
 	for (const appfolioPropId of appfolioPropertyIds) {
 		// Only pull work orders created on or after March 10, 2026 (pilot start date)
-		const PILOT_START_DATE = '2026-03-20';
+		const PILOT_START_DATE = '2026-03-30';
 
 		let rows: unknown[];
 		const fetchBody = {
@@ -744,35 +744,44 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 		}
 	}
 
-	// Re-queue issues where the agent never ran (fire-and-forget failure on a prior sync).
-	// Only re-queue issues older than 2 minutes so we don't double-fire in-flight agent calls.
-	// Edge function hard timeout is 60s (free) / 150s (pro), so 2min gives ample safety buffer.
-	const staleThreshold = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+	// Re-queue issues that are pending, failed, or stuck in processing (stale >15 min).
+	// The atomic claim RPC prevents duplicate agent runs even if multiple syncs overlap.
 	if (existingIssueIds.length > 0) {
+		const { data: retryIssues } = await supabase
+			.from('issues')
+			.select('id')
+			.eq('workspace_id', workspaceId)
+			.eq('source', 'appfolio')
+			.in('agent_status', ['pending', 'failed'])
+			.in('id', existingIssueIds);
+
+		const staleThreshold = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 		const { data: staleIssues } = await supabase
 			.from('issues')
 			.select('id')
 			.eq('workspace_id', workspaceId)
 			.eq('source', 'appfolio')
-			.is('agent_processed_at', null)
-			.lt('created_at', staleThreshold)
+			.eq('agent_status', 'processing')
+			.lt('agent_started_at', staleThreshold)
 			.in('id', existingIssueIds);
-		for (const issue of staleIssues ?? []) {
+
+		for (const issue of [...(retryIssues ?? []), ...(staleIssues ?? [])]) {
 			if (!changeQueue.some(e => e.issueId === issue.id && e.change_type === 'new')) {
 				changeQueue.push({ issueId: issue.id, workspaceId, change_type: 'new', row: null });
 			}
 		}
-		if (staleIssues?.length) {
-			console.log(`syncWorkOrders: re-queuing ${staleIssues.length} stale unprocessed issues`);
+		const retryCount = (retryIssues?.length ?? 0) + (staleIssues?.length ?? 0);
+		if (retryCount > 0) {
+			console.log(`syncWorkOrders: re-queuing ${retryCount} unprocessed issues (${staleIssues?.length ?? 0} stale)`);
 		}
 	}
 
 	// Dispatch agent events for all detected changes.
-	// Non-blocking — sync returns immediately; each dispatch awaits its own response internally.
-	// On failure (network error OR non-2xx HTTP): retries once immediately before giving up.
-	// The stale re-queue (2 min) acts as the final safety net for persistent failures.
-	type ChangeEvent = (typeof changeQueue)[number];
-	const dispatchAgentWithRetry = (event: ChangeEvent) => {
+	// For 'new' events: atomically claim the issue before dispatching to prevent duplicate runs.
+	// For other change types (status_changed, vendor_assigned, etc.): dispatch directly.
+	type ChangeEvent = (typeof changeQueue)[number] & { run_id?: string };
+
+	const dispatchAgent = (event: ChangeEvent) => {
 		const body = JSON.stringify({ source: 'appfolio', ...event });
 		const doFetch = async (attempt: number): Promise<void> => {
 			try {
@@ -802,8 +811,28 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 				if (attempt < 2) return doFetch(attempt + 1);
 			}
 		};
-		doFetch(1).catch((err) => console.error('dispatchAgentWithRetry unhandled:', err));
+		doFetch(1).catch((err) => console.error('dispatchAgent unhandled:', err));
 	};
+
+	const claimAndDispatch = async (event: ChangeEvent) => {
+		if (event.change_type === 'new') {
+			const runId = crypto.randomUUID();
+			const { data: claimed } = await supabase.rpc('claim_issue_for_agent', {
+				p_issue_id: event.issueId,
+				p_run_id: runId,
+				p_stale_minutes: 15
+			});
+			if (!claimed) {
+				console.log(`appfolio-sync: skip issue ${event.issueId} — already claimed or processing`);
+				return;
+			}
+			console.log(`appfolio-sync: claimed issue ${event.issueId} run=${runId}`);
+			dispatchAgent({ ...event, run_id: runId });
+		} else {
+			dispatchAgent(event);
+		}
+	};
+
 	// Coalesce by issueId — keep highest-priority event per issue to avoid
 	// duplicate agent runs when multiple fields changed in the same sync.
 	const CHANGE_PRIORITY: Record<string, number> = {
@@ -821,7 +850,7 @@ async function syncWorkOrders(workspaceId: string, appfolioPropertyIds: number[]
 		}
 	}
 	for (const event of coalesced.values()) {
-		dispatchAgentWithRetry(event);
+		claimAndDispatch(event);
 	}
 }
 

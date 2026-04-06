@@ -1050,6 +1050,12 @@ const ensureSentence = (value: string) => {
 
 const isStatusListDescription = (value: string) => /^(todo|in_progress|done)[,;:]/i.test(value);
 
+const detectSubissueKind = (name: string): string | null => {
+	if (/^triage\s+/i.test(name)) return 'triage';
+	if (/^schedule\s+/i.test(name)) return 'schedule';
+	return null;
+};
+
 const createSubissue = async ({
 	parentIssueId,
 	name,
@@ -1071,11 +1077,13 @@ const createSubissue = async ({
 	description?: string | null;
 	urgent?: boolean | null;
 }) => {
+	const kind = detectSubissueKind(name);
 	const { data, error } = await supabase
 		.from('issues')
 		.insert({
 			parent_id: parentIssueId,
 			name,
+			subissue_kind: kind,
 			unit_id: unitId ?? null,
 			workspace_id: workspaceId,
 			status,
@@ -1086,6 +1094,19 @@ const createSubissue = async ({
 		})
 		.select('id')
 		.single();
+	// Handle unique constraint violation — reuse existing subissue
+	if (error?.code === '23505' && kind) {
+		const { data: existing } = await supabase
+			.from('issues')
+			.select('id')
+			.eq('parent_id', parentIssueId)
+			.eq('subissue_kind', kind)
+			.maybeSingle();
+		if (existing?.id) {
+			console.log(`createSubissue: reusing existing ${kind} subissue ${existing.id} for parent ${parentIssueId}`);
+			return existing.id as string;
+		}
+	}
 	if (error || !data?.id) {
 		throw new Error(error?.message ?? 'Subissue insert failed');
 	}
@@ -2689,10 +2710,14 @@ IMPORTANT: The current issue title and description are the VERBATIM raw work ord
 	// This makes the issue visible client-side. Set here (not in update_issue) so the
 	// issue only appears after title, subissues, and drafts are all done.
 	if (source === 'appfolio' && rootIssueId) {
+		const now = new Date().toISOString();
 		await supabase
 			.from('issues')
 			.update({
-				agent_processed_at: new Date().toISOString(),
+				agent_status: 'done',
+				agent_completed_at: now,
+				agent_processed_at: now,
+				agent_error: null,
 				assignee_id: defaultAssigneeId ?? null
 			})
 			.eq('id', rootIssueId);
@@ -3612,7 +3637,7 @@ serve(async (req) => {
 
 		// AppFolio change events arrive directly (no job queue) from appfolio-sync.
 		if (!jobId && directSource === 'appfolio') {
-			const { issueId, workspaceId: wsId, change_type, row } = body ?? {};
+			const { issueId, workspaceId: wsId, change_type, row, run_id } = body ?? {};
 			if (!issueId || !wsId || !change_type) {
 				return new Response('Missing issueId, workspaceId, or change_type', { status: 400 });
 			}
@@ -3626,6 +3651,15 @@ serve(async (req) => {
 				return Response.json({ ok: true });
 			} catch (err) {
 				console.error('handleAppfolioWorkOrder error:', err);
+				// Mark the issue as failed so sync can retry on next run
+				try {
+					await supabase.from('issues').update({
+						agent_status: 'failed',
+						agent_error: err instanceof Error ? err.message : String(err)
+					}).eq('id', issueId);
+				} catch {
+					// ignore status update failure
+				}
 				return Response.json({ ok: false, error: String(err) }, { status: 500 });
 			}
 		}
