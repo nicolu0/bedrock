@@ -2808,56 +2808,64 @@ const processMessage = async ({
 	// ── AppFolio email detection ──────────────────────────────────────────────
 	// Route AppFolio work order notification emails to the dedicated trigger function
 	// instead of processing them as tenant emails.
+	// Workspace is resolved by property ownership (not Gmail connection) so that
+	// emails received on any linked account land in the correct workspace.
 	if (senderEmail === 'donotreply@appfolio.com') {
-		const wsId = connection.workspace_id ?? (await getWorkspaceIdForUser(connection.user_id));
-		if (wsId) {
-			const { data: ws } = await supabase
-				.from('workspaces')
-				.select('appfolio_email_tracking')
-				.eq('id', wsId)
-				.single();
-			if (ws?.appfolio_email_tracking) {
+		// Parse subject first to determine the property number
+		const subjectParts = (messageSubject ?? '').split(' - ');
+		const woMatch = (subjectParts[0] ?? '').match(/WO\s*#([\w-]+)/i);
+		const serviceRequestNumber = woMatch?.[1] ?? null;
+		const appfolioPropertyId = subjectParts.length >= 3 ? subjectParts[subjectParts.length - 2].trim() : null;
+
+		if (serviceRequestNumber && appfolioPropertyId) {
+			// Find the workspace that owns this property and has email tracking enabled
+			const { data: propWs } = await supabase
+				.from('properties')
+				.select('workspace_id, workspaces!inner(appfolio_email_tracking)')
+				.eq('appfolio_property_number', appfolioPropertyId)
+				.eq('workspaces.appfolio_email_tracking', true)
+				.maybeSingle();
+
+			if (propWs) {
+				const wsId = propWs.workspace_id;
 				const plain = findBodyPart(message.payload, 'text/plain');
 				const html = plain ? null : findBodyPart(message.payload, 'text/html');
 				const rawBody = plain ? decodeBase64Url(plain) : html ? decodeBase64Url(html) : '';
 				const emailBody = normalizeQuotedPrintable(rawBody);
 
-				// Parse subject: "WO #7561-1 - Water Heater - 292 - 292-8"
-				const subjectParts = (messageSubject ?? '').split(' - ');
-				const woMatch = (subjectParts[0] ?? '').match(/WO\s*#([\w-]+)/i);
-				const serviceRequestNumber = woMatch?.[1] ?? null;
-				const appfolioPropertyId = subjectParts.length >= 3 ? subjectParts[subjectParts.length - 2].trim() : null;
-
-				if (serviceRequestNumber && appfolioPropertyId) {
-					const INTERNAL_AGENT_KEY = Deno.env.get('INTERNAL_AGENT_KEY') ?? '';
-					fetch(`${supabaseUrl}/functions/v1/appfolio-email-trigger`, {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json',
-							apikey: supabaseServiceKey,
-							Authorization: `Bearer ${supabaseServiceKey}`,
-							'x-internal-agent-key': INTERNAL_AGENT_KEY
-						},
-						body: JSON.stringify({
-							workspaceId: wsId,
-							serviceRequestNumber,
-							appfolioPropertyId,
-							subject: messageSubject,
-							body: emailBody,
-							gmailMessageId: message.id
-						})
-					}).catch(err => console.error('appfolio-email-trigger dispatch failed:', err));
-				} else {
-					console.warn('agent: AppFolio email detected but could not parse subject:', messageSubject);
-				}
+				const INTERNAL_AGENT_KEY = Deno.env.get('INTERNAL_AGENT_KEY') ?? '';
+				fetch(`${supabaseUrl}/functions/v1/appfolio-email-trigger`, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						apikey: supabaseServiceKey,
+						Authorization: `Bearer ${supabaseServiceKey}`,
+						'x-internal-agent-key': INTERNAL_AGENT_KEY
+					},
+					body: JSON.stringify({
+						workspaceId: wsId,
+						serviceRequestNumber,
+						appfolioPropertyId,
+						subject: messageSubject,
+						body: emailBody,
+						gmailMessageId: message.id
+					})
+				}).catch(err => console.error('appfolio-email-trigger dispatch failed:', err));
 				await insertIngestionLog({
 					userId: connection.user_id,
 					source: 'gmail-push',
-					detail: JSON.stringify({ phase: 'routed-to-appfolio-trigger', subject: messageSubject })
+					detail: JSON.stringify({ phase: 'routed-to-appfolio-trigger', subject: messageSubject, workspaceId: wsId })
 				});
 				return;
+			} else {
+				console.warn('agent: AppFolio email — no workspace with email tracking for property:', appfolioPropertyId);
 			}
+		} else {
+			console.warn('agent: AppFolio email detected but could not parse subject:', messageSubject);
 		}
+		// Always ignore donotreply@appfolio.com — non-WO emails (e.g. payment
+		// confirmations, lease notices) should not enter the tenant email pipeline.
+		return;
 	}
 
 	if (pmEmail && senderEmail === pmEmail) {
