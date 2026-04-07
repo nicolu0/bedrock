@@ -21,6 +21,7 @@
 		closePanel,
 		toggleChatPanel
 	} from '$lib/stores/rightPanel.js';
+	import { encodePathSegment } from '$lib/utils/url.js';
 	import { supabase } from '$lib/supabaseClient.js';
 	import AgentToasts from '$lib/components/AgentToasts.svelte';
 	import ChatPanel from '$lib/components/ChatPanel.svelte';
@@ -165,7 +166,7 @@
 		const readableId = getIssueReadableId(issue);
 		if (!readableId) return null;
 		const slug = slugify(getIssueTitle(issue));
-		return `${basePath}/issue/${readableId}/${slug}`;
+		return `${basePath}/issue/${encodePathSegment(readableId)}/${slug}`;
 	};
 	const getPropertySlug = (property) => slugify(property?.name ?? 'property');
 	const getUnitHref = (unit, property) => {

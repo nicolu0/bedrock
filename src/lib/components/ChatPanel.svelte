@@ -11,6 +11,7 @@
 	import ChatPropertyRow from '$lib/components/ChatPropertyRow.svelte';
 	import { issuesCache } from '$lib/stores/issuesCache';
 	import { propertiesCache } from '$lib/stores/propertiesCache';
+	import { encodePathSegment } from '$lib/utils/url.js';
 	import {
 		chatMessages,
 		chatStreaming,
@@ -66,7 +67,7 @@
 		const readableId = getIssueReadableId(issue);
 		if (!readableId) return null;
 		const slug = slugify(issue?.title ?? issue?.name ?? 'issue');
-		return `/${$page.params.workspace}/issue/${readableId}/${slug}`;
+		return `/${$page.params.workspace}/issue/${encodePathSegment(readableId)}/${slug}`;
 	};
 	const getUserGreeting = () => {
 		const name =

@@ -2,6 +2,7 @@
 	// @ts-nocheck
 	import { page } from '$app/stores';
 	import { peopleMembersCache } from '$lib/stores/peopleMembersCache';
+	import { encodePathSegment } from '$lib/utils/url.js';
 
 	export let issue;
 
@@ -68,9 +69,9 @@
 		: {};
 	$: assigneeBadge = getAssigneeBadge(issue?.assigneeId ?? issue?.assignee_id, membersByUserId);
 	$: issueHref = issue?.readableId
-		? `/${$page.params.workspace}/issue/${issue.readableId}/${slugify(issue.title ?? issue.name ?? '')}`
+		? `/${$page.params.workspace}/issue/${encodePathSegment(issue.readableId)}/${slugify(issue.title ?? issue.name ?? '')}`
 		: issue?.id
-			? `/${$page.params.workspace}/issue/${issue.id}/${slugify(issue.title ?? issue.name ?? '')}`
+			? `/${$page.params.workspace}/issue/${encodePathSegment(issue.id)}/${slugify(issue.title ?? issue.name ?? '')}`
 			: '#';
 </script>
 

@@ -3,6 +3,7 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
+	import { encodePathSegment } from '$lib/utils/url.js';
 	import {
 		issuesCache,
 		primeIssuesCache,
@@ -67,7 +68,7 @@
 		const slug = slugify(item.title);
 		const readableId = item.readableId;
 		if (!readableId) return undefined;
-		return `${basePath}/issue/${readableId}/${slug}?from=property-issues`;
+		return `${basePath}/issue/${encodePathSegment(readableId)}/${slug}?from=property-issues`;
 	};
 
 	const getSectionGradientStyle = (statusClass) => {

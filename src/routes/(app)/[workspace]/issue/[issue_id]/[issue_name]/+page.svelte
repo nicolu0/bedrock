@@ -12,6 +12,7 @@
 	import { pageReady } from '$lib/stores/pageReady';
 	import { rightPanel } from '$lib/stores/rightPanel.js';
 	import { supabase } from '$lib/supabaseClient.js';
+	import { encodePathSegment } from '$lib/utils/url.js';
 	import {
 		getIssueDetailById,
 		getIssueDetailByReadableId,
@@ -1510,7 +1511,7 @@
 		const slug = slugify(item.title);
 		const readableId = item.readableId;
 		if (!readableId) return undefined;
-		return `/${$page.params.workspace}/issue/${readableId}/${slug}`;
+		return `/${$page.params.workspace}/issue/${encodePathSegment(readableId)}/${slug}`;
 	};
 
 	const getSubIssueHref = (subIssue) => {
@@ -1518,11 +1519,11 @@
 		const readableId = subIssue.readableId;
 		if (!readableId) return undefined;
 		const slug = slugify(subIssue.name);
-		const fromId = issueReadableId ?? issueKey;
-		const fromSlug = issueNameSlug;
+		const fromId = encodeURIComponent(issueReadableId ?? issueKey);
+		const fromSlug = encodeURIComponent(issueNameSlug);
 		const fromTitle = encodeURIComponent(issueName);
 		const toTitle = encodeURIComponent(subIssue.name ?? '');
-		return `/${$page.params.workspace}/issue/${readableId}/${slug}?fromIssueId=${fromId}&fromIssueSlug=${fromSlug}&fromIssueTitle=${fromTitle}&toIssueTitle=${toTitle}`;
+		return `/${$page.params.workspace}/issue/${encodePathSegment(readableId)}/${slug}?fromIssueId=${fromId}&fromIssueSlug=${fromSlug}&fromIssueTitle=${fromTitle}&toIssueTitle=${toTitle}`;
 	};
 
 	const copyIssueLink = async () => {
@@ -1757,7 +1758,7 @@
 		(issue?.readableId === $page.params.issue_id ? issueName : null) || toIssueTitle || '';
 
 	$: backHref = fromIssueId
-		? `/${$page.params.workspace}/issue/${fromIssueId}/${fromIssueSlug}?toIssueTitle=${encodeURIComponent(fromIssueTitle ?? '')}`
+		? `/${$page.params.workspace}/issue/${encodePathSegment(fromIssueId)}/${encodePathSegment(fromIssueSlug ?? 'issue')}?toIssueTitle=${encodeURIComponent(fromIssueTitle ?? '')}`
 		: fromParam === 'inbox'
 			? `/${$page.params.workspace}/inbox`
 			: `/${$page.params.workspace}/my-issues`;
