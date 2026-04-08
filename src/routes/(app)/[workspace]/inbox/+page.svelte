@@ -9,7 +9,11 @@
 		primeNotificationsCache
 	} from '$lib/stores/notificationsCache';
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
-	import { openChatPanel, openIssuePanel, toggleChatPanel } from '$lib/stores/rightPanel.js';
+	import {
+		openChatPanelIfPreferred,
+		openIssuePanel,
+		toggleChatPanel
+	} from '$lib/stores/rightPanel.js';
 	import { onMount, onDestroy } from 'svelte';
 
 	export let data;
@@ -102,13 +106,13 @@
 		if (next) handleClick(next);
 		else {
 			selectedNotification = null;
-			openChatPanel();
+			openChatPanelIfPreferred();
 		}
 	}
 
 	const handlePanelClose = () => {
 		selectedNotification = null;
-		openChatPanel();
+		openChatPanelIfPreferred();
 	};
 
 	let _resolvedVendors = [];
@@ -191,7 +195,7 @@
 	on:keydown={(e) => {
 		if (e.key === 'Escape' && selectedNotification) {
 			selectedNotification = null;
-			openChatPanel();
+			openChatPanelIfPreferred();
 		}
 	}}
 />

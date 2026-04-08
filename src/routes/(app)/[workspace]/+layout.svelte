@@ -18,7 +18,10 @@
 	import {
 		rightPanel,
 		openChatPanel,
+		openChatPanelIfPreferred,
+		getChatPanelPreferredOpen,
 		closePanel,
+		closePanelPersistingChatPreference,
 		toggleChatPanel
 	} from '$lib/stores/rightPanel.js';
 	import { encodePathSegment } from '$lib/utils/url.js';
@@ -205,7 +208,7 @@
 				!panelState?.open &&
 				panelState?.type === 'chat'
 			) {
-				openChatPanel();
+				openChatPanelIfPreferred();
 			}
 		};
 		updateMobileViewport();
@@ -214,7 +217,7 @@
 			chatRevealTimer = setTimeout(() => {
 				const panelState = get(rightPanel);
 				if (!panelState?.open && panelState?.type === 'chat') {
-					openChatPanel();
+					openChatPanelIfPreferred();
 				}
 			}, 260);
 		}
@@ -473,7 +476,9 @@
 	}
 
 	$: if (!isInboxRoute && $rightPanel?.type === 'issue' && !isMobileViewport) {
-		openChatPanel();
+		// Issue panel is only meant for inbox; elsewhere either show chat (if preferred) or close.
+		if (getChatPanelPreferredOpen()) openChatPanel();
+		else closePanel();
 	}
 	$: if (isMobileViewport && $rightPanel?.open && $rightPanel?.type === 'chat') {
 		closePanel();
@@ -975,7 +980,7 @@
 									on:resolved={() => $rightPanel.onResolved?.()}
 								/>
 							{:else}
-								<ChatPanel on:close={() => closePanel()} />
+								<ChatPanel on:close={() => closePanelPersistingChatPreference()} />
 							{/if}
 						</div>
 					{/if}
