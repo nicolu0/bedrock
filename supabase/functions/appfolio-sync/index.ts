@@ -153,6 +153,13 @@ function mapWorkOrderStatus(status: string): string {
 
 // AppFolio returns tenant names as "Last, First" (or "Last, First Middle").
 // Normalize to "First Last" so names display naturally in the UI.
+function normalizePhone(raw: string | null): string | null {
+	if (!raw) return null;
+	let digits = raw.replace(/\D/g, '');
+	if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+	return digits.length === 10 ? digits : null;
+}
+
 function normalizeTenantName(name: string | null | undefined): string | null {
 	if (!name) return null;
 	const trimmed = name.trim();
@@ -413,7 +420,7 @@ async function syncTenants(workspaceId: string, appfolioPropertyIds: number[]): 
 		// emails/phone_numbers may be comma-separated; take the first value. Normalize email to lowercase.
 		const rawEmail = row.emails ? String(row.emails).split(',')[0].trim() || null : null;
 		const email = rawEmail ? rawEmail.toLowerCase() : null;
-		const phone = row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : null;
+		const phone = normalizePhone(row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : null);
 
 		const key = `${bedrockUnitId}::${email ?? ''}::${name ?? ''}`;
 		seenKeys.add(key);
@@ -484,7 +491,7 @@ async function syncVendors(workspaceId: string, seenVendorIds: string[]): Promis
 				name: row.company_name || row.name || String(vendorId),
 				trade: row.vendor_trades ?? null,
 				email: row.email ? String(row.email).split(',')[0].trim() || null : null,
-				phone: row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : null,
+				phone: normalizePhone(row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : null),
 				street: row.street ?? null,
 				city: row.city ?? null,
 				state: row.state ?? null,
@@ -769,7 +776,7 @@ async function syncWorkOrders(
 			// Build tenant data from work order fields
 			const tenantName = normalizeTenantName((row.primary_tenant as string) || null);
 			const tenantEmail = (row.primary_tenant_email as string) || null;
-			const tenantPhone = (row.primary_tenant_phone_number as string) || null;
+			const tenantPhone = normalizePhone((row.primary_tenant_phone_number as string) || null);
 			const logData = {
 				source: 'appfolio',
 				appfolio_id: String(woId),

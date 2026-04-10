@@ -995,6 +995,11 @@ const formatVendorDraftAddress = (propertyName: string | null, unitName: string 
 	return 'the property';
 };
 
+function formatPhoneDisplay(digits: string): string {
+	if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+	return digits;
+}
+
 const buildVendorDraftTemplate = ({
 	vendorName,
 	issueTitle,
@@ -1023,7 +1028,7 @@ const buildVendorDraftTemplate = ({
 		'Please schedule with tenant.',
 		'',
 		`Name: ${tenantName ?? ''}`,
-		`Phone: ${tenantPhone ?? ''}`,
+		`Phone: ${tenantPhone ? formatPhoneDisplay(tenantPhone) : ''}`,
 		`Email: ${tenantEmail ?? ''}`,
 		'',
 		'Thanks,',

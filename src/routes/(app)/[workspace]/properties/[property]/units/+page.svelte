@@ -56,7 +56,7 @@
 		editUnitName = unit?.name ?? '';
 		editUnitTenantName = unit?.tenant?.name ?? '';
 		editUnitTenantEmail = unit?.tenant?.email ?? '';
-		editUnitTenantPhone = unit?.tenant?.phone ?? '';
+		editUnitTenantPhone = unit?.tenant?.phone ? new AsYouType('US').input(unit.tenant.phone) : '';
 		editUnitTenantId = unit?.tenant?.id ?? '';
 		updateUnitError = '';
 	};

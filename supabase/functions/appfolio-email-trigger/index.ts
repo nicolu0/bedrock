@@ -65,6 +65,13 @@ function mapWorkOrderStatus(status: string): string {
 	return 'todo';
 }
 
+function normalizePhone(raw: string | null): string | null {
+	if (!raw) return null;
+	let digits = raw.replace(/\D/g, '');
+	if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+	return digits.length === 10 ? digits : null;
+}
+
 function normalizeTenantName(name: string | null | undefined): string | null {
 	if (!name) return null;
 	const trimmed = name.trim();
@@ -302,7 +309,7 @@ serve(async (req) => {
 		(row.primary_tenant as string) || emailParsed.residentName || null
 	);
 	const tenantEmail = (row.primary_tenant_email as string) || emailParsed.residentEmail || null;
-	const tenantPhone = (row.primary_tenant_phone_number as string) || emailParsed.residentPhone || null;
+	const tenantPhone = normalizePhone((row.primary_tenant_phone_number as string) || emailParsed.residentPhone || null);
 
 	// Insert activity log for issue_created
 	const logData: Record<string, any> = {

@@ -3,6 +3,18 @@ import { fail, redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { ensureWorkspace, getWorkspaceForUser } from '$lib/server/workspaces';
 
+const normalizePhone = (raw) => {
+	if (!raw) return null;
+	let digits = raw.replace(/\D/g, '');
+	if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+	return digits.length === 10 ? digits : null;
+};
+
+const formatPhoneDisplay = (digits) => {
+	if (digits && digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+	return digits || '';
+};
+
 const getGmailUser = async (supabase, user) => {
 	if (!user) {
 		return { connected: false, name: 'Connect Gmail', email: null };
@@ -755,7 +767,7 @@ export const actions = {
 			.from('vendors')
 			.update({
 				email: typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null,
-				phone: typeof phone === 'string' && phone.trim() ? phone.trim() : null,
+				phone: normalizePhone(typeof phone === 'string' && phone.trim() ? phone.trim() : null),
 				trade: typeof trade === 'string' && trade.trim() ? trade.trim() : null
 			})
 			.eq('id', vendorId)
@@ -783,7 +795,7 @@ export const actions = {
 			.from('vendors')
 			.update({
 				email: typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : null,
-				phone: typeof phone === 'string' && phone.trim() ? phone.trim() : null,
+				phone: normalizePhone(typeof phone === 'string' && phone.trim() ? phone.trim() : null),
 				trade: typeof trade === 'string' && trade.trim() ? trade.trim() : null,
 				note: typeof note === 'string' ? note : null
 			})
@@ -1271,7 +1283,7 @@ export const actions = {
 		const buildingName = buildingRow?.name ?? 'Unknown building';
 		const unitName = unitRow?.name ?? 'Unknown unit';
 		const tenantName = tenantRow?.name ?? 'Tenant';
-		const tenantContact = [tenantRow?.email, tenantRow?.phone].filter(Boolean).join(' · ');
+		const tenantContact = [tenantRow?.email, tenantRow?.phone ? formatPhoneDisplay(tenantRow.phone) : null].filter(Boolean).join(' · ');
 		const tenantLine = tenantContact ? `${tenantName} (${tenantContact})` : tenantName;
 		const fallbackBody = [
 			`Hi ${vendorRow.name || 'there'},`,
