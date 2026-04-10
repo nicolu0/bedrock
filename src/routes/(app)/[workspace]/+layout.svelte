@@ -1041,14 +1041,14 @@
 					</div>
 				</div>
 			</aside>
-			<section class="flex-1 overflow-visible">
-				<div class="flex h-full min-w-0">
+			<section class="min-w-0 flex-1 overflow-visible">
+				<div class="flex h-full w-full min-w-0">
 					<div
-						class={`relative z-10 flex min-h-0 min-w-0 flex-none flex-col overflow-visible transition-[width] duration-[280ms] ease-out lg:z-50 lg:flex-1 ${
+						class={`relative z-10 flex min-h-0 min-w-0 flex-none flex-col overflow-visible transition-[width] duration-[280ms] ease-out lg:z-50 ${
 							$rightPanel.open
 								? $rightPanel.type === 'issue'
-									? 'w-1/2 border-r border-neutral-200 lg:w-auto'
-									: 'w-2/3 border-r border-neutral-200 lg:w-auto'
+									? 'w-1/2 border-r border-neutral-200'
+									: 'w-2/3 border-r border-neutral-200'
 								: 'w-full'
 						}`}
 					>
@@ -1059,7 +1059,7 @@
 					{#if $rightPanel.open && !(isMobileViewport && $rightPanel.type === 'chat')}
 						<div
 							class={`relative z-0 min-w-0 flex-none overflow-x-hidden overflow-y-auto ${
-								$rightPanel.type === 'issue' ? 'w-1/2 lg:w-[28rem]' : 'w-1/3 lg:w-[28rem]'
+								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-1/3'
 							}`}
 							in:fly={{ x: 400, duration: 280, easing: cubicOut }}
 							out:fly={{ x: 400, duration: 220, easing: cubicOut }}
