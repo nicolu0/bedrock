@@ -4,6 +4,7 @@
 	import { goto, preloadData } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onDestroy, onMount } from 'svelte';
+	import { fade, scale } from 'svelte/transition';
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import AppfolioDraftMessage from '$lib/components/AppfolioDraftMessage.svelte';
@@ -327,6 +328,9 @@
 	$: unitName = issueUnitId
 		? (unitsById[issueUnitId]?.name ?? issue?.unit ?? 'Unknown unit')
 		: 'No unit';
+	$: tenantInfo = issueUnitId ? (unitsById[issueUnitId]?.tenant ?? null) : null;
+	$: tenantName = tenantInfo?.name ?? 'No tenant';
+	let tenantModalOpen = false;
 
 	$: if (issue) pageReady.set(true);
 
@@ -2630,60 +2634,24 @@
 											</div>
 										</div>
 										<div class="grid grid-cols-2 gap-2">
-											<div class="tooltip-target relative">
+											<div class="tooltip-target group relative">
 												<button
 													type="button"
-													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
-														canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
-													}`}
-													disabled={!canEditIssue}
-													aria-disabled={!canEditIssue}
+													class="flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition hover:bg-neutral-200"
 													on:click|stopPropagation={() => {
-														if (!canEditIssue) return;
-														statusOpen = !statusOpen;
-														propertyOpen = false;
-														unitOpen = false;
-														assigneeOpen = false;
-														urgentOpen = false;
-														urgentHelpOpen = false;
+														if (tenantInfo) tenantModalOpen = true;
 													}}
 												>
-													<span
-														class={`h-4 w-4 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
-													></span>
-													<span>{statusMeta.label}</span>
+													<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
+														<path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0m4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4m-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10s-3.516.68-4.168 1.332c-.678.678-.83 1.418-.832 1.664z"/>
+													</svg>
+													<span class="truncate">{tenantName}</span>
 												</button>
 												{#if !rightSidebarMenuOpen}
 													<div
 														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
 													>
-														Change status
-													</div>
-												{/if}
-												{#if statusOpen && canEditIssue}
-													<div
-														class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
-														on:click|stopPropagation
-													>
-														{#each statusCycle as status}
-															<button
-																type="button"
-																class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
-																	statusKey === status ? 'bg-neutral-50' : ''
-																}`}
-																on:click={() => {
-																	statusOpen = false;
-																	handleStatusChange(status);
-																}}
-															>
-																<span
-																	class={`h-4 w-4 rounded-full border-[1.5px] ${
-																		(statusConfig[status] ?? statusConfig.todo).statusClass
-																	}`}
-																></span>
-																<span>{(statusConfig[status] ?? statusConfig.todo).label}</span>
-															</button>
-														{/each}
+														{tenantInfo ? 'View tenant info' : 'No tenant'}
 													</div>
 												{/if}
 											</div>
@@ -2804,8 +2772,65 @@
 												{/if}
 											</div>
 										</div>
-										<div class="flex items-center justify-between gap-2">
-											<div class="tooltip-target group relative w-1/2">
+										<div class="grid grid-cols-2 gap-2">
+											<div class="tooltip-target relative">
+												<button
+													type="button"
+													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
+														canEditIssue ? 'hover:bg-neutral-200' : 'cursor-default opacity-60'
+													}`}
+													disabled={!canEditIssue}
+													aria-disabled={!canEditIssue}
+													on:click|stopPropagation={() => {
+														if (!canEditIssue) return;
+														statusOpen = !statusOpen;
+														propertyOpen = false;
+														unitOpen = false;
+														assigneeOpen = false;
+														urgentOpen = false;
+														urgentHelpOpen = false;
+													}}
+												>
+													<span
+														class={`h-4 w-4 rounded-full border-[1.5px] ${statusMeta.statusClass}`}
+													></span>
+													<span>{statusMeta.label}</span>
+												</button>
+												{#if !rightSidebarMenuOpen}
+													<div
+														class="delayed-tooltip absolute top-full left-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+													>
+														Change status
+													</div>
+												{/if}
+												{#if statusOpen && canEditIssue}
+													<div
+														class={`absolute ${fieldsDesktopAlignClass} z-10 mt-2 w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg`}
+														on:click|stopPropagation
+													>
+														{#each statusCycle as status}
+															<button
+																type="button"
+																class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																	statusKey === status ? 'bg-neutral-50' : ''
+																}`}
+																on:click={() => {
+																	statusOpen = false;
+																	handleStatusChange(status);
+																}}
+															>
+																<span
+																	class={`h-4 w-4 rounded-full border-[1.5px] ${
+																		(statusConfig[status] ?? statusConfig.todo).statusClass
+																	}`}
+																></span>
+																<span>{(statusConfig[status] ?? statusConfig.todo).label}</span>
+															</button>
+														{/each}
+													</div>
+												{/if}
+											</div>
+											<div class="tooltip-target group relative">
 												<div
 													class={`flex w-full items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition ${
 														canEditIssue && !isSubissue ? 'hover:bg-neutral-200' : 'opacity-60'
@@ -4660,6 +4685,68 @@
 				{#each { length: 3 } as _}
 					<div class="skeleton h-4 w-full rounded"></div>
 				{/each}
+			</div>
+		</div>
+	</div>
+{/if}
+
+{#if tenantModalOpen && tenantInfo}
+	<div
+		class="fixed inset-0 z-40 bg-neutral-900/20"
+		transition:fade={{ duration: 120 }}
+		on:click={() => (tenantModalOpen = false)}
+		role="presentation"
+	></div>
+	<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-4">
+		<div
+			class="pointer-events-auto w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl"
+			transition:scale={{ duration: 140, start: 0.9 }}
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="tenant-modal-title"
+		>
+			<div class="flex items-center justify-between">
+				<div id="tenant-modal-title" class="text-lg font-medium text-neutral-800">Tenant</div>
+				<button
+					class="-mr-1 rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+					on:click={() => (tenantModalOpen = false)}
+					type="button"
+					aria-label="Close"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+						<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"/>
+					</svg>
+				</button>
+			</div>
+			<div class="mt-5 flex flex-col gap-3 text-sm">
+				<div class="flex items-center gap-3">
+					<div class="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500">
+						<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+							<path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0m4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4m-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10s-3.516.68-4.168 1.332c-.678.678-.83 1.418-.832 1.664z"/>
+						</svg>
+					</div>
+					<div>
+						<div class="font-medium text-neutral-900">{tenantInfo.name}</div>
+						<div class="text-xs text-neutral-500">{unitName}</div>
+					</div>
+				</div>
+				<div class="h-px bg-neutral-100"></div>
+				{#if tenantInfo.email}
+					<div class="flex items-center gap-2 text-neutral-600">
+						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
+							<path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z"/>
+						</svg>
+						<span>{tenantInfo.email}</span>
+					</div>
+				{/if}
+				{#if tenantInfo.phone}
+					<div class="flex items-center gap-2 text-neutral-600">
+						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
+							<path fill-rule="evenodd" d="M1.885.511a1.745 1.745 0 0 1 2.61.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.68.68 0 0 0 .178.643l2.457 2.457a.68.68 0 0 0 .644.178l2.189-.547a1.75 1.75 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.6 18.6 0 0 1-7.01-4.42 18.6 18.6 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877z"/>
+						</svg>
+						<span>{tenantInfo.phone}</span>
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>
