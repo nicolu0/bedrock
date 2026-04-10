@@ -311,6 +311,34 @@ serve(async (req) => {
 	const tenantEmail = (row.primary_tenant_email as string) || emailParsed.residentEmail || null;
 	const tenantPhone = normalizePhone((row.primary_tenant_phone_number as string) || emailParsed.residentPhone || null);
 
+	// Resolve tenant_id — match by unit_id + email (preferred), fallback to unit_id + name
+	if (unitId && (tenantEmail || tenantName)) {
+		let tenantMatch: any = null;
+		if (tenantEmail) {
+			const { data } = await supabase
+				.from('tenants')
+				.select('id')
+				.eq('unit_id', unitId)
+				.ilike('email', tenantEmail)
+				.limit(1)
+				.maybeSingle();
+			tenantMatch = data;
+		}
+		if (!tenantMatch && tenantName) {
+			const { data } = await supabase
+				.from('tenants')
+				.select('id')
+				.eq('unit_id', unitId)
+				.eq('name', tenantName)
+				.limit(1)
+				.maybeSingle();
+			tenantMatch = data;
+		}
+		if (tenantMatch) {
+			await supabase.from('issues').update({ tenant_id: tenantMatch.id }).eq('id', issueId);
+		}
+	}
+
 	// Insert activity log for issue_created
 	const logData: Record<string, any> = {
 		source: 'appfolio',
