@@ -123,6 +123,62 @@
 	let showSearchModal = false;
 	let searchInput;
 	let searchQuery = '';
+	let recentIssues = [];
+	let recentIssueResults = [];
+	let displayedResults = [];
+	let showSearchResultsPanel = false;
+	let issueByReadableId = new Map();
+	let _recentIssuesWorkspace = null;
+	let _lastRecordedRecentIssuePath = null;
+	const RECENT_ISSUES_LIMIT = 8;
+	const getRecentIssuesStorageKey = (slug) => `recentIssues:${slug}`;
+	const loadRecentIssues = (slug) => {
+		if (!browser || !slug) return [];
+		try {
+			const raw = localStorage.getItem(getRecentIssuesStorageKey(slug));
+			if (!raw) return [];
+			const parsed = JSON.parse(raw);
+			if (!Array.isArray(parsed)) return [];
+			// Back-compat: allow older string-only lists.
+			return parsed
+				.map((entry) => (typeof entry === 'string' ? { readableId: entry, visitedAt: 0 } : entry))
+				.filter((entry) => entry?.readableId)
+				.sort((a, b) => (b?.visitedAt ?? 0) - (a?.visitedAt ?? 0))
+				.slice(0, RECENT_ISSUES_LIMIT);
+		} catch {
+			return [];
+		}
+	};
+	const saveRecentIssues = (slug, list) => {
+		if (!browser || !slug) return;
+		try {
+			localStorage.setItem(getRecentIssuesStorageKey(slug), JSON.stringify(list));
+		} catch {
+			// Ignore storage quota / privacy mode.
+		}
+	};
+	const upsertRecentIssue = (readableId) => {
+		if (!browser || !workspaceSlug || !readableId) return;
+		const now = Date.now();
+		const next = [
+			{ readableId, visitedAt: now },
+			...recentIssues.filter((entry) => entry?.readableId && entry.readableId !== readableId)
+		].slice(0, RECENT_ISSUES_LIMIT);
+		recentIssues = next;
+		saveRecentIssues(workspaceSlug, next);
+	};
+	const getIssueReadableIdFromPathname = (pathname) => {
+		const parts = (pathname ?? '').split('/').filter(Boolean);
+		const idx = parts.indexOf('issue');
+		if (idx === -1) return null;
+		const raw = parts[idx + 1] ?? null;
+		if (!raw) return null;
+		try {
+			return decodeURIComponent(raw);
+		} catch {
+			return raw;
+		}
+	};
 	const isEditableTarget = (target) => {
 		if (!target) return false;
 		if (target.isContentEditable) return true;
@@ -296,11 +352,25 @@
 
 	$: normalizedSearchQuery = searchQuery.trim().toLowerCase();
 	$: if (!showSearchModal && searchQuery) searchQuery = '';
+	$: if (browser && workspaceSlug && _recentIssuesWorkspace !== workspaceSlug) {
+		_recentIssuesWorkspace = workspaceSlug;
+		_lastRecordedRecentIssuePath = null;
+		recentIssues = loadRecentIssues(workspaceSlug);
+	}
 	$: issuesList = $issuesCache.data?.issues ?? [];
 	$: issueSections = $issuesCache.data?.sections ?? [];
 	$: sectionIssues = issueSections.flatMap((section) => section?.items ?? []);
 	$: sectionSubIssues = sectionIssues.flatMap((item) => item?.subIssues ?? []);
 	$: combinedIssues = [...issuesList, ...sectionIssues, ...sectionSubIssues];
+	$: issueByReadableId = (() => {
+		const map = new Map();
+		for (const issue of combinedIssues) {
+			const readableId = getIssueReadableId(issue);
+			if (!readableId || map.has(readableId)) continue;
+			map.set(readableId, issue);
+		}
+		return map;
+	})();
 	$: propertiesList = Array.isArray(_resolvedProperties) ? _resolvedProperties : [];
 	$: unitsList = Array.isArray(_resolvedUnits) ? _resolvedUnits : [];
 	$: peopleList =
@@ -380,6 +450,36 @@
 		results.push(...issueMatches, ...propertyMatches, ...unitMatches, ...peopleMatches);
 		return results.slice(0, 12);
 	})();
+	$: recentIssueResults = (() => {
+		if (!browser || !recentIssues.length) return [];
+		const results = [];
+		for (const entry of recentIssues) {
+			const readableId = entry?.readableId;
+			if (!readableId) continue;
+			const issue = issueByReadableId.get(readableId) ?? null;
+			const issueLike = issue ?? { readable_id: readableId, title: readableId };
+			const href = getIssueHref(issueLike);
+			if (!href) continue;
+			results.push({
+				id: readableId,
+				type: 'issue',
+				title: getIssueTitle(issueLike),
+				right: readableId,
+				status: issue?.status,
+				href
+			});
+		}
+		return results;
+	})();
+	$: showSearchResultsPanel = Boolean(normalizedSearchQuery) || recentIssueResults.length > 0;
+	$: displayedResults = normalizedSearchQuery ? searchResults : recentIssueResults;
+	$: if (browser && workspaceSlug) {
+		const readableId = getIssueReadableIdFromPathname(currentPath);
+		if (readableId && currentPath && currentPath !== _lastRecordedRecentIssuePath) {
+			_lastRecordedRecentIssuePath = currentPath;
+			upsertRecentIssue(readableId);
+		}
+	}
 	$: pageVisible = appMounted && $pageReady;
 	$: workspaceSlug = $page.params.workspace;
 	$: _inboxNotifications =
@@ -705,7 +805,7 @@
 				on:click={() => (sidebarOpen = false)}
 			></div>
 			<aside
-				class={`fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-neutral-200 bg-neutral-50/95 shadow-xl transition-[transform,width] duration-100 ease-out lg:static lg:z-auto lg:shadow-none ${sidebarOpen ? 'w-72 translate-x-0 lg:w-1/6 lg:translate-x-0' : 'w-72 -translate-x-full lg:w-0 lg:translate-x-0 lg:border-r-0'}`}
+				class={`fixed inset-y-0 left-0 z-50 h-screen overflow-hidden border-r border-neutral-200 bg-neutral-50/95 shadow-xl transition-[transform,width] duration-100 ease-out lg:static lg:z-auto lg:flex-none lg:shadow-none ${sidebarOpen ? 'w-72 translate-x-0 lg:w-60 lg:translate-x-0' : 'w-72 -translate-x-full lg:w-0 lg:translate-x-0 lg:border-r-0'}`}
 			>
 				<div
 					class="flex h-full min-h-0 flex-col transition-opacity duration-150"
@@ -944,11 +1044,11 @@
 			<section class="flex-1 overflow-visible">
 				<div class="flex h-full min-w-0">
 					<div
-						class={`relative z-10 flex min-h-0 flex-none flex-col overflow-visible transition-[width] duration-[280ms] ease-out lg:z-50 ${
+						class={`relative z-10 flex min-h-0 min-w-0 flex-none flex-col overflow-visible transition-[width] duration-[280ms] ease-out lg:z-50 lg:flex-1 ${
 							$rightPanel.open
 								? $rightPanel.type === 'issue'
-									? 'w-1/2 border-r border-neutral-200'
-									: 'w-2/3 border-r border-neutral-200'
+									? 'w-1/2 border-r border-neutral-200 lg:w-auto'
+									: 'w-2/3 border-r border-neutral-200 lg:w-auto'
 								: 'w-full'
 						}`}
 					>
@@ -958,8 +1058,8 @@
 					</div>
 					{#if $rightPanel.open && !(isMobileViewport && $rightPanel.type === 'chat')}
 						<div
-							class={`relative z-0 flex-none overflow-y-auto ${
-								$rightPanel.type === 'issue' ? 'w-1/2' : 'w-1/3'
+							class={`relative z-0 min-w-0 flex-none overflow-x-hidden overflow-y-auto ${
+								$rightPanel.type === 'issue' ? 'w-1/2 lg:w-[28rem]' : 'w-1/3 lg:w-[28rem]'
 							}`}
 							in:fly={{ x: 400, duration: 280, easing: cubicOut }}
 							out:fly={{ x: 400, duration: 220, easing: cubicOut }}
@@ -988,13 +1088,13 @@
 			</section>
 			{#if showSearchModal}
 				<div
-					class="fixed inset-0 z-40 bg-neutral-900/30"
+					class="fixed inset-0 z-[200] bg-neutral-900/30"
 					transition:fade={{ duration: 120 }}
 					on:click={closeSearchModal}
 					role="presentation"
 				></div>
 				<div
-					class="pointer-events-none fixed inset-0 z-50 flex items-start justify-center px-3 pt-24 sm:pt-28"
+					class="pointer-events-none fixed inset-0 z-[210] flex items-start justify-center px-3 pt-24 sm:pt-28"
 				>
 					<div
 						class="pointer-events-auto w-full max-w-xl rounded-xl border border-neutral-200 bg-white shadow-xl"
@@ -1003,79 +1103,89 @@
 						aria-modal="true"
 						aria-labelledby="search-modal-title"
 					>
-						<div class="px-2 py-4">
-							<div class="flex w-full items-center">
-								<input
-									bind:this={searchInput}
-									bind:value={searchQuery}
-									class="w-full border-0 bg-transparent py-0 text-sm text-neutral-700 outline-none placeholder:text-neutral-400 focus:ring-0 focus:outline-none"
-									placeholder="Ask Bedrock or search workspace"
-									type="text"
-									inputmode="search"
-								/>
+						<div class="py-4">
+							<div class="px-4">
+								<div class="flex w-full items-center">
+									<input
+										bind:this={searchInput}
+										bind:value={searchQuery}
+										class="w-full border-0 bg-transparent py-0 text-sm text-neutral-700 outline-none placeholder:text-neutral-400 focus:ring-0 focus:outline-none"
+										placeholder="Ask Bedrock or search workspace"
+										type="text"
+										inputmode="search"
+									/>
+								</div>
 							</div>
-							{#if normalizedSearchQuery}
-								<div class="mt-4 pt-3">
-									{#if searchResults.length}
-										<div class="space-y-1">
-											{#each searchResults as result}
-												<button
-													type="button"
-													on:click={() => openSearchResult(result)}
-													class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm text-neutral-800 hover:bg-neutral-50"
-												>
-													<div class="flex min-w-0 items-center gap-2">
-														{#if result.type === 'issue'}
-															<span
-																class={`h-2.5 w-2.5 shrink-0 rounded-full ${issueStatusDotClass(result.status)}`}
-															></span>
-														{:else if result.type === 'person'}
-															<svg
-																xmlns="http://www.w3.org/2000/svg"
-																width="14"
-																height="14"
-																fill="currentColor"
-																class="shrink-0 text-neutral-400"
-																viewBox="0 0 16 16"
-															>
-																<path
-																	d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
-																/>
-															</svg>
-														{:else if result.type === 'property'}
-															<svg
-																xmlns="http://www.w3.org/2000/svg"
-																width="14"
-																height="14"
-																fill="currentColor"
-																class="shrink-0 text-neutral-400"
-																viewBox="0 0 16 16"
-															>
-																<path
-																	d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
-																/>
-															</svg>
-														{:else}
-															<span class="h-2.5 w-2.5 shrink-0 rounded-sm bg-neutral-300"></span>
-														{/if}
-														<div class="min-w-0">
-															<div class="flex items-center gap-2">
-																<span class="truncate">{result.title}</span>
-																{#if result.type === 'person' && result.role}
-																	<span class="text-xs text-neutral-400">{result.role}</span>
-																{/if}
+
+							{#if showSearchResultsPanel}
+								<div class="mt-4 border-t border-neutral-100 pt-3">
+									<div class="px-4">
+										{#if !normalizedSearchQuery}
+											<div class="px-2 pb-1 text-[11px] font-medium text-neutral-400">
+												Recent issues
+											</div>
+										{/if}
+										{#if displayedResults.length}
+											<div class="space-y-1">
+												{#each displayedResults as result}
+													<button
+														type="button"
+														on:click={() => openSearchResult(result)}
+														class="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm text-neutral-800 hover:bg-neutral-50"
+													>
+														<div class="flex min-w-0 items-center gap-2">
+															{#if result.type === 'issue'}
+																<span
+																	class={`h-2.5 w-2.5 shrink-0 rounded-full ${issueStatusDotClass(result.status)}`}
+																></span>
+															{:else if result.type === 'person'}
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="14"
+																	height="14"
+																	fill="currentColor"
+																	class="shrink-0 text-neutral-400"
+																	viewBox="0 0 16 16"
+																>
+																	<path
+																		d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
+																	/>
+																</svg>
+															{:else if result.type === 'property'}
+																<svg
+																	xmlns="http://www.w3.org/2000/svg"
+																	width="14"
+																	height="14"
+																	fill="currentColor"
+																	class="shrink-0 text-neutral-400"
+																	viewBox="0 0 16 16"
+																>
+																	<path
+																		d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
+																	/>
+																</svg>
+															{:else}
+																<span class="h-2.5 w-2.5 shrink-0 rounded-sm bg-neutral-300"></span>
+															{/if}
+															<div class="min-w-0">
+																<div class="flex items-center gap-2">
+																	<span class="truncate">{result.title}</span>
+																	{#if result.type === 'person' && result.role}
+																		<span class="text-xs text-neutral-400">{result.role}</span>
+																	{/if}
+																</div>
 															</div>
 														</div>
-													</div>
-													{#if result.type !== 'person' && result.right}
-														<span class="text-xs text-neutral-400">{result.right}</span>
-													{/if}
-												</button>
-											{/each}
-										</div>
-									{:else}
-										<div class="px-2 py-2 text-sm text-neutral-400">No results found.</div>
-									{/if}
+														{#if result.type !== 'person' && result.right}
+															<span class="text-xs text-neutral-400">{result.right}</span>
+														{/if}
+													</button>
+												{/each}
+											</div>
+										{:else if normalizedSearchQuery}
+											<div class="px-2 py-2 text-sm text-neutral-400">No results found.</div>
+										{/if}
+									</div>
 								</div>
 							{/if}
 						</div>

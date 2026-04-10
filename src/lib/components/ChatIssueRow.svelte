@@ -140,7 +140,7 @@
 				</span>
 			</div>
 			<div class="relative flex min-w-0 flex-1 items-center gap-2">
-				<span class="text-base whitespace-nowrap text-neutral-800">
+				<span class="min-w-0 flex-1 truncate text-base text-neutral-800">
 					{issue?.title ?? issue?.name ?? 'Issue'}
 				</span>
 			</div>
