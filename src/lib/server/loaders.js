@@ -389,7 +389,7 @@ export const loadActivityData = async (workspaceId, issueIds = null) => {
 	const baseMessagesQuery = () =>
 		supabaseAdmin
 			.from('messages')
-			.select('id, issue_id, thread_id, message, sender, subject, timestamp, direction, channel')
+			.select('id, issue_id, thread_id, message, sender, subject, timestamp, direction, channel, metadata')
 			.eq('workspace_id', workspaceId)
 			.gte('timestamp', cutoff)
 			.order('timestamp', { ascending: true });

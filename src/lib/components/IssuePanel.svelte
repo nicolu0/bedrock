@@ -245,12 +245,14 @@
 	);
 
 	const formatMessageSender = (msg) => {
-		if (msg?.direction === 'outbound') return 'You';
+		if (msg?.direction === 'outbound') {
+			return msg?.metadata?.sender_name || 'You';
+		}
 		const sender = msg?.sender;
 		if (sender === 'tenant') return 'Tenant';
 		if (sender === 'vendor') return 'Vendor';
 		if (sender === 'agent') return 'Bedrock';
-		if (sender === 'manager') return 'Manager';
+		if (sender === 'manager') return msg?.metadata?.sender_name || 'Manager';
 		return 'Unknown';
 	};
 

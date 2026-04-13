@@ -6,23 +6,27 @@
 	let expanded = false;
 
 	const formatSenderLabel = (msg) => {
-		if (msg?.direction === 'outbound') return 'You';
+		if (msg?.direction === 'outbound') {
+			return msg?.metadata?.sender_name || 'You';
+		}
 		const sender = msg?.sender;
 		if (sender === 'tenant') return 'Tenant';
 		if (sender === 'vendor') return 'Vendor';
 		if (sender === 'agent') return 'Bedrock';
-		if (sender === 'manager') return 'Manager';
-		if (sender === 'unknown') return msg?.subject ? 'Unknown' : 'Unknown';
+		if (sender === 'manager') return msg?.metadata?.sender_name || 'Manager';
+		if (sender === 'unknown') return msg?.metadata?.sender_name || 'Unknown';
 		return sender ?? 'Unknown';
 	};
 
 	const getSenderInitial = (msg) => {
+		const name = msg?.metadata?.sender_name;
+		if (msg?.direction === 'outbound' && name) return name.charAt(0).toUpperCase();
 		if (msg?.direction === 'outbound') return 'Y';
 		const sender = msg?.sender;
 		if (sender === 'tenant') return 'T';
 		if (sender === 'vendor') return 'V';
 		if (sender === 'agent') return 'B';
-		if (sender === 'manager') return 'M';
+		if (sender === 'manager') return name ? name.charAt(0).toUpperCase() : 'M';
 		return '?';
 	};
 

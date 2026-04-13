@@ -2816,11 +2816,22 @@ const processMessage = async ({
 	// Workspace is resolved by property ownership (not Gmail connection) so that
 	// emails received on any linked account land in the correct workspace.
 	if (senderEmail === 'donotreply@appfolio.com') {
-		// Parse subject first to determine the property number
+		// Parse subject to extract WO number and property number.
+		// Format varies: "WO #7575-1 - Rain Gutters - 206" (single family, no unit)
+		//                "WO #7522-1 - Water Heater - 292 - 292-18" (standard)
+		//                "WO #7570-1 - Landscaping - Trees - 292 - 292-12" (multi-part description)
+		// Property number is always the first purely numeric segment after the WO prefix.
 		const subjectParts = (messageSubject ?? '').split(' - ');
 		const woMatch = (subjectParts[0] ?? '').match(/WO\s*#([\w-]+)/i);
 		const serviceRequestNumber = woMatch?.[1] ?? null;
-		const appfolioPropertyId = subjectParts.length >= 3 ? subjectParts[subjectParts.length - 2].trim() : null;
+		let appfolioPropertyId: string | null = null;
+		for (let i = 1; i < subjectParts.length; i++) {
+			const part = subjectParts[i].trim();
+			if (/^\d+$/.test(part)) {
+				appfolioPropertyId = part;
+				break;
+			}
+		}
 
 		if (serviceRequestNumber && appfolioPropertyId) {
 			// Find the workspace that owns this property and has email tracking enabled
@@ -2839,7 +2850,7 @@ const processMessage = async ({
 				const emailBody = normalizeQuotedPrintable(rawBody);
 
 				const INTERNAL_AGENT_KEY = Deno.env.get('INTERNAL_AGENT_KEY') ?? '';
-				fetch(`${supabaseUrl}/functions/v1/appfolio-email-trigger`, {
+				await fetch(`${supabaseUrl}/functions/v1/appfolio-email-trigger`, {
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json',
