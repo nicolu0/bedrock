@@ -26,6 +26,10 @@
 	const handlePrimary = () => {
 		onPrimary?.();
 	};
+
+	$: showSecondary = Boolean(secondaryLabel);
+	$: showPrimary = Boolean(primaryLabel);
+	$: showActions = showSecondary || showPrimary;
 </script>
 
 {#if show}
@@ -109,53 +113,63 @@
 					<div class="mt-2 text-xs text-rose-600">{errorMessage}</div>
 				{/if}
 			</div>
-			<div class="hidden items-center justify-end gap-2 px-5 py-4 md:flex">
-				<button
-					type="button"
-					class="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 transition hover:border-neutral-300"
-					on:click={handleSecondary}
-					disabled={secondaryDisabled}
-				>
-					{secondaryLabel}
-				</button>
-				<button
-					type="button"
-					class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white transition hover:bg-neutral-800 disabled:opacity-60"
-					on:click={handlePrimary}
-					disabled={primaryDisabled}
-				>
-					{#if isLoading}
-						Saving...
-					{:else}
-						{primaryLabel}
+			{#if showActions}
+				<div class="hidden items-center justify-end gap-2 px-5 py-4 md:flex">
+					{#if showSecondary}
+						<button
+							type="button"
+							class="rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 transition hover:border-neutral-300"
+							on:click={handleSecondary}
+							disabled={secondaryDisabled}
+						>
+							{secondaryLabel}
+						</button>
 					{/if}
-				</button>
-			</div>
-			<div
-				class="fixed right-4 bottom-4 flex items-center gap-2 md:hidden"
-				style="bottom: calc(1rem + env(safe-area-inset-bottom)); right: calc(1rem + env(safe-area-inset-right));"
-			>
-				<button
-					type="button"
-					class="rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-semibold text-neutral-700 shadow-md transition hover:border-neutral-300"
-					on:click={handleSecondary}
-					disabled={secondaryDisabled}
-				>
-					{secondaryLabel}
-				</button>
-				<button
-					type="button"
-					class="rounded-full bg-neutral-900 px-4 py-2 text-xs font-semibold text-white shadow-md transition hover:bg-neutral-800 disabled:opacity-60"
-					on:click={handlePrimary}
-					disabled={primaryDisabled}
-				>
-					{#if isLoading}
-						Saving...
-					{:else}
-						{primaryLabel}
+					{#if showPrimary}
+						<button
+							type="button"
+							class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white transition hover:bg-neutral-800 disabled:opacity-60"
+							on:click={handlePrimary}
+							disabled={primaryDisabled}
+						>
+							{#if isLoading}
+								Saving...
+							{:else}
+								{primaryLabel}
+							{/if}
+						</button>
 					{/if}
-				</button>
-			</div>
+				</div>
+				<div
+					class="fixed right-4 bottom-4 flex items-center gap-2 md:hidden"
+					style="bottom: calc(1rem + env(safe-area-inset-bottom)); right: calc(1rem + env(safe-area-inset-right));"
+				>
+					{#if showSecondary}
+						<button
+							type="button"
+							class="rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-semibold text-neutral-700 shadow-md transition hover:border-neutral-300"
+							on:click={handleSecondary}
+							disabled={secondaryDisabled}
+						>
+							{secondaryLabel}
+						</button>
+					{/if}
+					{#if showPrimary}
+						<button
+							type="button"
+							class="rounded-full bg-neutral-900 px-4 py-2 text-xs font-semibold text-white shadow-md transition hover:bg-neutral-800 disabled:opacity-60"
+							on:click={handlePrimary}
+							disabled={primaryDisabled}
+						>
+							{#if isLoading}
+								Saving...
+							{:else}
+								{primaryLabel}
+							{/if}
+						</button>
+					{/if}
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}

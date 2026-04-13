@@ -3676,6 +3676,7 @@
 																getActivityActor(entry.log).name}
 															{vendors}
 															recommendedVendors={recommendedVendorsByIssueId[issueId] ?? []}
+															issueName={getIssueNameForId(entry?.draft?.issue_id ?? issueId)}
 															readonly={true}
 														/>
 													{/each}
@@ -3887,6 +3888,9 @@
 																				recommendedVendors={recommendedVendorsByIssueId[
 																					subIssue.id
 																				] ?? []}
+																				issueName={getIssueNameForId(
+																					entry?.draft?.issue_id ?? subIssue.id
+																				)}
 																				readonly={true}
 																			/>
 																		{/each}

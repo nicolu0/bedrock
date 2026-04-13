@@ -2,6 +2,7 @@
 	// @ts-nocheck
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
+	import { invalidate } from '$app/navigation';
 	import {
 		gmailConnectionCache,
 		primeGmailConnectionCache
@@ -13,6 +14,14 @@
 
 	const APPFOLIO_KEY = 'appfolio_enabled';
 	let appfolioEnabled = false;
+	let policyLearningEnabled = false;
+	let policyLearningSaving = false;
+	let policyLearningError = '';
+
+	$: isAdmin = (data?.role ?? '').toLowerCase() === 'admin';
+	$: if (browser && !policyLearningSaving) {
+		policyLearningEnabled = Boolean(data?.workspace?.policy_learning_enabled);
+	}
 
 	const syncAppfolioEnabled = () => {
 		if (!browser) return;
@@ -22,6 +31,33 @@
 	const toggleAppfolio = () => {
 		appfolioEnabled = !appfolioEnabled;
 		window.localStorage.setItem(APPFOLIO_KEY, appfolioEnabled ? 'true' : 'false');
+	};
+
+	const togglePolicyLearning = async () => {
+		if (!isAdmin) return;
+		if (policyLearningSaving) return;
+		policyLearningError = '';
+		const prev = policyLearningEnabled;
+		const next = !prev;
+		policyLearningEnabled = next;
+		policyLearningSaving = true;
+		try {
+			const res = await fetch('/api/workspaces/policy-learning', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ workspace_id: data?.workspace?.id, enabled: next })
+			});
+			const payload = await res.json().catch(() => null);
+			if (!res.ok) {
+				throw new Error(payload?.error ?? `HTTP ${res.status}`);
+			}
+			await invalidate('app:workspace');
+		} catch (e) {
+			policyLearningEnabled = prev;
+			policyLearningError = e?.message ?? 'Unable to update setting.';
+		} finally {
+			policyLearningSaving = false;
+		}
 	};
 
 	$: if (browser && data.gmailConnection) {
@@ -168,6 +204,41 @@
 							}`}
 						></span>
 					</button>
+				</div>
+				<div class="mt-4 border-t border-neutral-100 pt-4">
+					<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+						<div>
+							<h3 class="text-sm font-semibold text-neutral-900">Policy learning</h3>
+							<p class="text-xs text-neutral-500">
+								Show the tone and automation prompts when sending/approving drafts. Applies to
+								everyone in this workspace.
+							</p>
+						</div>
+						<button
+							type="button"
+							disabled={!isAdmin || policyLearningSaving}
+							class={`inline-flex h-7 w-12 items-center rounded-full border transition disabled:opacity-50 ${
+								policyLearningEnabled
+									? 'border-emerald-500 bg-emerald-500'
+									: 'border-neutral-300 bg-neutral-200'
+							}`}
+							on:click={togglePolicyLearning}
+							aria-pressed={policyLearningEnabled}
+							aria-label="Toggle policy learning"
+						>
+							<span
+								class={`h-5 w-5 rounded-full bg-white shadow transition ${
+									policyLearningEnabled ? 'translate-x-6' : 'translate-x-1'
+								}`}
+							></span>
+						</button>
+					</div>
+					{#if !isAdmin}
+						<div class="mt-2 text-xs text-neutral-400">Only admins can change this.</div>
+					{/if}
+					{#if policyLearningError}
+						<div class="mt-2 text-xs text-red-500">{policyLearningError}</div>
+					{/if}
 				</div>
 			</div>
 		{/if}
