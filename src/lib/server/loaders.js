@@ -403,15 +403,20 @@ export const loadActivityData = async (workspaceId, issueIds = null) => {
 		.gte('updated_at', cutoff)
 		.order('updated_at', { ascending: false });
 
+	let threadInfoById = new Map();
+
 	if (Array.isArray(issueIds)) {
 		const { data: threads } = await supabaseAdmin
 			.from('threads')
-			.select('id, issue_id')
+			.select('id, issue_id, participant_type, name')
 			.eq('workspace_id', workspaceId)
 			.in('issue_id', issueIds);
 		const threadIds = (threads ?? []).map((thread) => thread.id).filter(Boolean);
 		threadIdToIssueId = new Map(
 			(threads ?? []).map((thread) => [thread.id, thread.issue_id]).filter(([, id]) => id)
+		);
+		threadInfoById = new Map(
+			(threads ?? []).map((t) => [t.id, { participant_type: t.participant_type, name: t.name }])
 		);
 
 		const [byIssueResult, byThreadResult, nextDraftsResult] = await Promise.all([
@@ -444,9 +449,14 @@ export const loadActivityData = async (workspaceId, issueIds = null) => {
 	const messagesByIssue = messages.reduce((acc, m) => {
 		const resolvedIssueId = m.issue_id ?? threadIdToIssueId.get(m.thread_id) ?? null;
 		if (!resolvedIssueId) return acc;
-		(acc[resolvedIssueId] ??= []).push(
-			resolvedIssueId === m.issue_id ? m : { ...m, issue_id: resolvedIssueId }
-		);
+		const threadInfo = m.thread_id ? threadInfoById.get(m.thread_id) : null;
+		const enriched = {
+			...m,
+			issue_id: resolvedIssueId,
+			_participant_type: m.metadata?.participant_type ?? threadInfo?.participant_type ?? null,
+			_participant_name: threadInfo?.name ?? null
+		};
+		(acc[resolvedIssueId] ??= []).push(enriched);
 		return acc;
 	}, {});
 	const normalizedDrafts = (draftsResult?.data ?? []).map((draft) =>

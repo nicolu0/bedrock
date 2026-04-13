@@ -7,26 +7,28 @@
 
 	const formatSenderLabel = (msg) => {
 		if (msg?.direction === 'outbound') {
-			return msg?.metadata?.sender_name || 'You';
+			return msg?.metadata?.sender_name || 'LAPM';
 		}
 		const sender = msg?.sender;
-		if (sender === 'tenant') return 'Tenant';
-		if (sender === 'vendor') return 'Vendor';
+		if (sender === 'tenant') return msg?._participant_name || msg?.metadata?.sender_name || 'Tenant';
+		if (sender === 'vendor') return msg?._participant_name || msg?.metadata?.sender_name || 'Vendor';
 		if (sender === 'agent') return 'Bedrock';
-		if (sender === 'manager') return msg?.metadata?.sender_name || 'Manager';
+		if (sender === 'manager') return msg?.metadata?.sender_name || 'LAPM';
 		if (sender === 'unknown') return msg?.metadata?.sender_name || 'Unknown';
 		return sender ?? 'Unknown';
 	};
 
 	const getSenderInitial = (msg) => {
-		const name = msg?.metadata?.sender_name;
-		if (msg?.direction === 'outbound' && name) return name.charAt(0).toUpperCase();
-		if (msg?.direction === 'outbound') return 'Y';
+		if (msg?.direction === 'outbound') {
+			const outName = msg?.metadata?.sender_name;
+			return outName ? outName.charAt(0).toUpperCase() : 'L';
+		}
+		const name = msg?._participant_name || msg?.metadata?.sender_name;
 		const sender = msg?.sender;
-		if (sender === 'tenant') return 'T';
-		if (sender === 'vendor') return 'V';
+		if (sender === 'tenant') return name ? name.charAt(0).toUpperCase() : 'T';
+		if (sender === 'vendor') return name ? name.charAt(0).toUpperCase() : 'V';
 		if (sender === 'agent') return 'B';
-		if (sender === 'manager') return name ? name.charAt(0).toUpperCase() : 'M';
+		if (sender === 'manager') return name ? name.charAt(0).toUpperCase() : 'L';
 		return '?';
 	};
 
@@ -56,6 +58,8 @@
 	$: isSms = message?.channel === 'sms' || message?.channel === 'appfolio_sms';
 	$: isEmail = !isSms;
 	$: directionIcon = message?.direction === 'outbound' ? '\u2192' : '\u2190';
+	$: participantType = message?._participant_type ?? message?.metadata?.participant_type ?? null;
+	$: roleTag = participantType === 'tenant' ? 'Tenant' : participantType === 'vendor' ? 'Vendor' : null;
 </script>
 
 <button
@@ -101,6 +105,9 @@
 		<div class="flex min-w-0 items-start justify-between gap-4">
 			<div class="min-w-0 flex-1">
 				<span class="text-sm font-medium text-neutral-900">{senderLabel}</span>
+				{#if roleTag && message?.direction !== 'outbound'}
+					<span class="ml-1 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500">{roleTag}</span>
+				{/if}
 				<span class="mx-1 text-xs text-neutral-400">{directionIcon}</span>
 				{#if message?.subject}
 					<span class="text-xs text-neutral-500">{message.subject}</span>

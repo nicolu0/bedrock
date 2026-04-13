@@ -531,9 +531,45 @@
 			.map((l) => ({ _kind: 'log', _ts: new Date(l.created_at).getTime(), ...l }));
 		const msgItems = (messages ?? [])
 			.map((m) => ({ _kind: 'message', _ts: new Date(m.timestamp).getTime(), ...m }));
-		const items =
-			filter === 'activity' ? logItems : filter === 'comms' ? msgItems : [...logItems, ...msgItems];
-		return items.sort((a, b) => a._ts - b._ts);
+
+		if (filter === 'activity') return logItems.sort((a, b) => a._ts - b._ts);
+
+		// Group SMS messages by participant type, keep emails inline
+		const smsMessages = msgItems.filter((m) => m.channel === 'appfolio_sms' || m.channel === 'sms');
+		const emailMessages = msgItems.filter((m) => m.channel !== 'appfolio_sms' && m.channel !== 'sms');
+
+		const tenantSms = smsMessages.filter((m) => m._participant_type === 'tenant').sort((a, b) => a._ts - b._ts);
+		const vendorSms = smsMessages.filter((m) => m._participant_type === 'vendor').sort((a, b) => a._ts - b._ts);
+
+		const result = [];
+		if (filter !== 'comms') {
+			result.push(...logItems);
+		}
+		result.push(...emailMessages);
+		if (tenantSms.length > 0) {
+			result.push({
+				_kind: 'sms_header',
+				_ts: tenantSms[0]._ts - 1,
+				id: 'sms_header_tenant',
+				label: 'Texts with Tenant',
+				participantType: 'tenant',
+				count: tenantSms.length
+			});
+			result.push(...tenantSms);
+		}
+		if (vendorSms.length > 0) {
+			result.push({
+				_kind: 'sms_header',
+				_ts: vendorSms[0]._ts - 1,
+				id: 'sms_header_vendor',
+				label: 'Texts with Vendor',
+				participantType: 'vendor',
+				count: vendorSms.length
+			});
+			result.push(...vendorSms);
+		}
+
+		return result.sort((a, b) => a._ts - b._ts);
 	};
 
 	$: timelineByIssue = Object.fromEntries(
@@ -3774,7 +3810,18 @@
 										</div>
 									{/if}
 									{#each timelineByIssue[issueId] ?? [] as item (item.id)}
-										{#if item._kind === 'message'}
+										{#if item._kind === 'sms_header'}
+											<div class="mt-4 mb-1 flex items-center gap-2 px-1">
+												<div class="flex items-center gap-1.5">
+													<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
+														<path d="M3 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2zm6 11a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/>
+													</svg>
+													<span class="text-xs font-medium text-neutral-500">{item.label}</span>
+												</div>
+												<div class="h-px flex-1 bg-neutral-100"></div>
+												<span class="text-[10px] text-neutral-400">{item.count}</span>
+											</div>
+										{:else if item._kind === 'message'}
 											<TimelineMessageItem message={item} {formatTimestamp} />
 										{:else if item.type === 'comment'}
 											<div class="flex items-center gap-3 px-1 py-2">
@@ -3986,7 +4033,18 @@
 																{/if}
 															{/if}
 															{#each timelineByIssue[subIssue.id] ?? [] as item (item.id)}
-																{#if item._kind === 'message'}
+																{#if item._kind === 'sms_header'}
+																	<div class="mt-4 mb-1 flex items-center gap-2 px-1">
+																		<div class="flex items-center gap-1.5">
+																			<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
+																				<path d="M3 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2zm6 11a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/>
+																			</svg>
+																			<span class="text-xs font-medium text-neutral-500">{item.label}</span>
+																		</div>
+																		<div class="h-px flex-1 bg-neutral-100"></div>
+																		<span class="text-[10px] text-neutral-400">{item.count}</span>
+																	</div>
+																{:else if item._kind === 'message'}
 																	<TimelineMessageItem message={item} {formatTimestamp} />
 																{:else if item.type === 'comment'}
 																	<div class="flex items-center gap-3 px-1 py-2">
