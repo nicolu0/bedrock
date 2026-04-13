@@ -8,6 +8,7 @@
 
 	import EmailMessageWithDraft from '$lib/components/EmailMessageWithDraft.svelte';
 	import AppfolioDraftMessage from '$lib/components/AppfolioDraftMessage.svelte';
+	import TimelineMessageItem from '$lib/components/TimelineMessageItem.svelte';
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
 	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 	import { pageReady } from '$lib/stores/pageReady';
@@ -514,8 +515,32 @@
 	]);
 
 	$: hasActivity =
-		subIssues.some((item) => (logsByIssue[item.id] ?? []).length > 0) ||
-		(logsByIssue[issueId]?.length ?? 0) > 0;
+		subIssues.some(
+			(item) =>
+				(logsByIssue[item.id] ?? []).length > 0 ||
+				(messagesByIssue[item.id] ?? []).length > 0
+		) ||
+		(logsByIssue[issueId]?.length ?? 0) > 0 ||
+		(messagesByIssue[issueId]?.length ?? 0) > 0;
+
+	let activityFilter = 'all';
+
+	const buildTimeline = (logs, messages, filter) => {
+		const logItems = (logs ?? [])
+			.filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound')
+			.map((l) => ({ _kind: 'log', _ts: new Date(l.created_at).getTime(), ...l }));
+		const msgItems = (messages ?? [])
+			.map((m) => ({ _kind: 'message', _ts: new Date(m.timestamp).getTime(), ...m }));
+		const items =
+			filter === 'activity' ? logItems : filter === 'comms' ? msgItems : [...logItems, ...msgItems];
+		return items.sort((a, b) => a._ts - b._ts);
+	};
+
+	$: timelineByIssue = Object.fromEntries(
+		[issueId, ...subIssues.map((s) => s.id)]
+			.filter(Boolean)
+			.map((id) => [id, buildTimeline(logsByIssue[id], messagesByIssue[id], activityFilter)])
+	);
 
 	$: replyDraftsByIssue = Object.values(draftsByIssue ?? {}).reduce((acc, drafts) => {
 		(drafts ?? []).forEach((draft) => {
@@ -3668,7 +3693,32 @@
 						<div class="mt-6 border-t border-neutral-100 pt-4 sm:pt-6">
 							<div class="flex items-center justify-between">
 								<h2 class="text-base font-semibold text-neutral-800">Activity</h2>
-								<div class="text-sm text-neutral-400">Unsubscribe</div>
+								<div class="flex items-center gap-3">
+									<div class="flex rounded-md border border-neutral-200 text-xs">
+										<button
+											type="button"
+											class="rounded-l-md px-2 py-1 transition"
+											class:bg-neutral-900={activityFilter === 'all'}
+											class:text-white={activityFilter === 'all'}
+											on:click={() => (activityFilter = 'all')}>All</button
+										>
+										<button
+											type="button"
+											class="border-l border-neutral-200 px-2 py-1 transition"
+											class:bg-neutral-900={activityFilter === 'activity'}
+											class:text-white={activityFilter === 'activity'}
+											on:click={() => (activityFilter = 'activity')}>Activity</button
+										>
+										<button
+											type="button"
+											class="rounded-r-md border-l border-neutral-200 px-2 py-1 transition"
+											class:bg-neutral-900={activityFilter === 'comms'}
+											class:text-white={activityFilter === 'comms'}
+											on:click={() => (activityFilter = 'comms')}>Comms</button
+										>
+									</div>
+									<div class="text-sm text-neutral-400">Unsubscribe</div>
+								</div>
 							</div>
 							{#if !hasActivity}
 								<div class="mt-4 text-sm text-neutral-500">No activity yet.</div>
@@ -3723,15 +3773,17 @@
 											{/if}
 										</div>
 									{/if}
-									{#each (logsByIssue[issueId] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
-										{#if log.type === 'comment'}
+									{#each timelineByIssue[issueId] ?? [] as item (item.id)}
+										{#if item._kind === 'message'}
+											<TimelineMessageItem message={item} {formatTimestamp} />
+										{:else if item.type === 'comment'}
 											<div class="flex items-center gap-3 px-1 py-2">
 												<div class="relative h-8 w-8 shrink-0">
 													<div
-														class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
-														aria-label={getCommentAuthor(log).name}
+														class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(item).color}`}
+														aria-label={getCommentAuthor(item).name}
 													>
-														{getCommentAuthor(log).initial}
+														{getCommentAuthor(item).initial}
 													</div>
 													<div
 														class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
@@ -3751,9 +3803,9 @@
 												<div class="flex-1">
 													<div class="rounded-md border-0 bg-white p-0 shadow-none">
 														<div class="flex min-w-0 items-start justify-between gap-4">
-															<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
+															<p class="flex-1 text-sm text-neutral-700">{item.body}</p>
 															<span class="shrink-0 text-xs text-neutral-400">
-																{formatTimestamp(log.created_at)}
+																{formatTimestamp(item.created_at)}
 															</span>
 														</div>
 													</div>
@@ -3763,15 +3815,15 @@
 											<div class="flex items-center gap-3 px-1 py-2">
 												<div class="relative h-8 w-8 shrink-0">
 													<div
-														class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
-														aria-label={getActivityActor(log).name}
+														class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(item).color}`}
+														aria-label={getActivityActor(item).name}
 													>
-														{getActivityActor(log).initial}
+														{getActivityActor(item).initial}
 													</div>
 													<div
 														class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
 													>
-														{#if log.type === 'assignee_change'}
+														{#if item.type === 'assignee_change'}
 															<svg
 																xmlns="http://www.w3.org/2000/svg"
 																viewBox="0 0 16 16"
@@ -3784,7 +3836,7 @@
 															</svg>
 														{:else}
 															<span
-																class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(log)}`}
+																class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(item)}`}
 															></span>
 														{/if}
 													</div>
@@ -3793,35 +3845,35 @@
 													<div class="rounded-md border-0 bg-white p-0 shadow-none">
 														<div class="flex min-w-0 items-start justify-between gap-4">
 															<p class="flex-1 text-sm text-neutral-700">
-																{#if log.type === 'issue_created'}
-																	{#if log.data?.from || log.data?.from_email}
-																		{formatTenantName(log.data.from) ?? log.data.from_email} created the
+																{#if item.type === 'issue_created'}
+																	{#if item.data?.from || item.data?.from_email}
+																		{formatTenantName(item.data.from) ?? item.data.from_email} created the
 																		issue
 																	{:else}
 																		Issue created
 																	{/if}
-																{:else if log.type === 'status_change'}
-																	{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
-																		log
+																{:else if item.type === 'status_change'}
+																	{getActivityActor(item).name} changed status to {getStatusLabelFromLog(
+																		item
 																	)}
-																{:else if log.type === 'assignee_change'}
-																	{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
-																		log
+																{:else if item.type === 'assignee_change'}
+																	{getActivityActor(item).name} assigned issue to {getAssigneeNameFromLog(
+																		item
 																	)}
-																{:else if log.type === 'appfolio_approved'}
-																	Approved by {log?.data?.approved_by ?? getActivityActor(log).name}
+																{:else if item.type === 'appfolio_approved'}
+																	Approved by {item?.data?.approved_by ?? getActivityActor(item).name}
 																{/if}
 															</p>
 															<span class="shrink-0 text-xs text-neutral-400">
-																{#if log.type === 'issue_created'}
-																	{new Date(log.created_at).toLocaleDateString('en-US', {
+																{#if item.type === 'issue_created'}
+																	{new Date(item.created_at).toLocaleDateString('en-US', {
 																		month: 'short',
 																		day: 'numeric',
 																		year: 'numeric',
 																		timeZone: 'UTC'
 																	})}
 																{:else}
-																	{formatTimestamp(log.created_at)}
+																	{formatTimestamp(item.created_at)}
 																{/if}
 															</span>
 														</div>
@@ -3832,7 +3884,7 @@
 									{/each}
 
 									{#each subIssues as subIssue}
-										{#if (logsByIssue[subIssue.id]?.length ?? 0) > 0}
+										{#if (timelineByIssue[subIssue.id]?.length ?? 0) > 0}
 											<div>
 												<button
 													type="button"
@@ -3863,7 +3915,7 @@
 														{(activityOpen[subIssue.id] ?? true) ? 'Collapse' : 'Expand'}
 													</div>
 													<span class="text-neutral-300">
-														{logsByIssue[subIssue.id]?.length ?? 0}
+														{timelineByIssue[subIssue.id]?.length ?? 0}
 													</span>
 												</button>
 												<div
@@ -3933,15 +3985,17 @@
 																	</div>
 																{/if}
 															{/if}
-															{#each (logsByIssue[subIssue.id] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
-																{#if log.type === 'comment'}
+															{#each timelineByIssue[subIssue.id] ?? [] as item (item.id)}
+																{#if item._kind === 'message'}
+																	<TimelineMessageItem message={item} {formatTimestamp} />
+																{:else if item.type === 'comment'}
 																	<div class="flex items-center gap-3 px-1 py-2">
 																		<div class="relative h-8 w-8 shrink-0">
 																			<div
-																				class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(log).color}`}
-																				aria-label={getCommentAuthor(log).name}
+																				class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getCommentAuthor(item).color}`}
+																				aria-label={getCommentAuthor(item).name}
 																			>
-																				{getCommentAuthor(log).initial}
+																				{getCommentAuthor(item).initial}
 																			</div>
 																			<div
 																				class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
@@ -3961,9 +4015,9 @@
 																		<div class="flex-1">
 																			<div class="rounded-md border-0 bg-white p-0 shadow-none">
 																				<div class="flex min-w-0 items-start justify-between gap-4">
-																					<p class="flex-1 text-sm text-neutral-700">{log.body}</p>
+																					<p class="flex-1 text-sm text-neutral-700">{item.body}</p>
 																					<span class="shrink-0 text-xs text-neutral-400">
-																						{formatTimestamp(log.created_at)}
+																						{formatTimestamp(item.created_at)}
 																					</span>
 																				</div>
 																			</div>
@@ -3973,15 +4027,15 @@
 																	<div class="flex items-center gap-3 px-1 py-2">
 																		<div class="relative h-8 w-8 shrink-0">
 																			<div
-																				class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(log).color}`}
-																				aria-label={getActivityActor(log).name}
+																				class={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-neutral-700 ${getActivityActor(item).color}`}
+																				aria-label={getActivityActor(item).name}
 																			>
-																				{getActivityActor(log).initial}
+																				{getActivityActor(item).initial}
 																			</div>
 																			<div
 																				class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-600 shadow-sm"
 																			>
-																				{#if log.type === 'assignee_change'}
+																				{#if item.type === 'assignee_change'}
 																					<svg
 																						xmlns="http://www.w3.org/2000/svg"
 																						viewBox="0 0 16 16"
@@ -3994,7 +4048,7 @@
 																					</svg>
 																				{:else}
 																					<span
-																						class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(log)}`}
+																						class={`h-2 w-2 rounded-full border ${getStatusRingClassFromLog(item)}`}
 																					></span>
 																				{/if}
 																			</div>
@@ -4003,29 +4057,29 @@
 																			<div class="rounded-md border-0 bg-white p-0 shadow-none">
 																				<div class="flex min-w-0 items-start justify-between gap-4">
 																					<p class="flex-1 text-sm text-neutral-700">
-																						{#if log.type === 'issue_created'}
-																							{#if log.data?.from || log.data?.from_email}
-																								{formatTenantName(log.data.from) ??
-																									log.data.from_email} created the issue
+																						{#if item.type === 'issue_created'}
+																							{#if item.data?.from || item.data?.from_email}
+																								{formatTenantName(item.data.from) ??
+																									item.data.from_email} created the issue
 																							{:else}
 																								Issue created
 																							{/if}
-																						{:else if log.type === 'status_change'}
-																							{getActivityActor(log).name} changed status to {getStatusLabelFromLog(
-																								log
+																						{:else if item.type === 'status_change'}
+																							{getActivityActor(item).name} changed status to {getStatusLabelFromLog(
+																								item
 																							)}
-																						{:else if log.type === 'assignee_change'}
-																							{getActivityActor(log).name} assigned issue to {getAssigneeNameFromLog(
-																								log
+																						{:else if item.type === 'assignee_change'}
+																							{getActivityActor(item).name} assigned issue to {getAssigneeNameFromLog(
+																								item
 																							)}
-																						{:else if log.type === 'appfolio_approved'}
-																							Approved by {log?.data?.approved_by ??
-																								getActivityActor(log).name}
+																						{:else if item.type === 'appfolio_approved'}
+																							Approved by {item?.data?.approved_by ??
+																								getActivityActor(item).name}
 																						{/if}
 																					</p>
 																					<span class="shrink-0 text-xs text-neutral-400">
-																						{#if log.type === 'issue_created'}
-																							{new Date(log.created_at).toLocaleDateString(
+																						{#if item.type === 'issue_created'}
+																							{new Date(item.created_at).toLocaleDateString(
 																								'en-US',
 																								{
 																									month: 'short',
@@ -4035,7 +4089,7 @@
 																								}
 																							)}
 																						{:else}
-																							{formatTimestamp(log.created_at)}
+																							{formatTimestamp(item.created_at)}
 																						{/if}
 																					</span>
 																				</div>

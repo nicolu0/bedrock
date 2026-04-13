@@ -229,6 +229,40 @@
 		(draftsByIssue[issueId]?.length ?? 0) > 0 ||
 		(logsByIssue[issueId]?.length ?? 0) > 0;
 
+	const buildTimeline = (logs, messages) => {
+		const logItems = (logs ?? [])
+			.filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound')
+			.map((l) => ({ _kind: 'log', _ts: new Date(l.created_at).getTime(), ...l }));
+		const msgItems = (messages ?? [])
+			.map((m) => ({ _kind: 'message', _ts: new Date(m.timestamp).getTime(), ...m }));
+		return [...logItems, ...msgItems].sort((a, b) => a._ts - b._ts);
+	};
+
+	$: timelineByIssue = Object.fromEntries(
+		[issueId, ...subIssues.map((s) => s.id)]
+			.filter(Boolean)
+			.map((id) => [id, buildTimeline(logsByIssue[id], messagesByIssue[id])])
+	);
+
+	const formatMessageSender = (msg) => {
+		if (msg?.direction === 'outbound') return 'You';
+		const sender = msg?.sender;
+		if (sender === 'tenant') return 'Tenant';
+		if (sender === 'vendor') return 'Vendor';
+		if (sender === 'agent') return 'Bedrock';
+		if (sender === 'manager') return 'Manager';
+		return 'Unknown';
+	};
+
+	const getMessagePreview = (msg) => {
+		const body = msg?.message ?? '';
+		if (body) {
+			const firstLine = body.split('\n').find((l) => l.trim()) ?? '';
+			return firstLine.length > 80 ? firstLine.slice(0, 80) + '...' : firstLine;
+		}
+		return msg?.subject || 'No content';
+	};
+
 	const slugify = (value) =>
 		(value ?? '')
 			.toString()
@@ -553,21 +587,21 @@
 						</div>
 					{/if}
 
-					{#each (logsByIssue[issueId] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+					{#each (timelineByIssue[issueId] ?? []).filter((item) => item._kind === 'log') as item (item.id)}
 						<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
 							<span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"></span>
 							<div>
-								{#if log.type === 'status_change'}
-									Status changed · {formatTimestamp(log.created_at)}
-								{:else if log.type === 'assignee_change'}
-									Assignee changed · {formatTimestamp(log.created_at)}
-								{:else if log.type === 'appfolio_approved'}
-									Approved by {log?.data?.approved_by ?? 'Unknown'} · {formatTimestamp(
-										log.created_at
+								{#if item.type === 'status_change'}
+									Status changed · {formatTimestamp(item.created_at)}
+								{:else if item.type === 'assignee_change'}
+									Assignee changed · {formatTimestamp(item.created_at)}
+								{:else if item.type === 'appfolio_approved'}
+									Approved by {item?.data?.approved_by ?? 'Unknown'} · {formatTimestamp(
+										item.created_at
 									)}
-								{:else if log.type === 'comment'}
-									<p class="text-neutral-700">{log.body}</p>
-									<span>{formatTimestamp(log.created_at)}</span>
+								{:else if item.type === 'comment'}
+									<p class="text-neutral-700">{item.body}</p>
+									<span>{formatTimestamp(item.created_at)}</span>
 								{/if}
 							</div>
 						</div>
@@ -715,22 +749,22 @@
 												{/each}
 											</div>
 
-											{#each (logsByIssue[subIssue.id] ?? []).filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound') as log}
+											{#each (timelineByIssue[subIssue.id] ?? []).filter((item) => item._kind === 'log') as item (item.id)}
 												<div class="flex items-start gap-3 py-2 text-xs text-neutral-500">
 													<span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300"
 													></span>
 													<div>
-														{#if log.type === 'status_change'}
-															Status changed · {formatTimestamp(log.created_at)}
-														{:else if log.type === 'assignee_change'}
-															Assignee changed · {formatTimestamp(log.created_at)}
-														{:else if log.type === 'appfolio_approved'}
-															Approved by {log?.data?.approved_by ?? 'Unknown'} · {formatTimestamp(
-																log.created_at
+														{#if item.type === 'status_change'}
+															Status changed · {formatTimestamp(item.created_at)}
+														{:else if item.type === 'assignee_change'}
+															Assignee changed · {formatTimestamp(item.created_at)}
+														{:else if item.type === 'appfolio_approved'}
+															Approved by {item?.data?.approved_by ?? 'Unknown'} · {formatTimestamp(
+																item.created_at
 															)}
-														{:else if log.type === 'comment'}
-															<p class="text-neutral-700">{log.body}</p>
-															<span>{formatTimestamp(log.created_at)}</span>
+														{:else if item.type === 'comment'}
+															<p class="text-neutral-700">{item.body}</p>
+															<span>{formatTimestamp(item.created_at)}</span>
 														{/if}
 													</div>
 												</div>
