@@ -320,6 +320,63 @@
 
 	let filterValueOptions = [];
 	let hoveredIssueId = null;
+	let selectedIssueIds = new Set();
+	let lastSelectedIssueKey = null;
+	const clearSelectedIssues = () => {
+		selectedIssueIds = new Set();
+		lastSelectedIssueKey = null;
+	};
+	const isRowSelected = (item, selectedIds) => {
+		const id = getRowIssueId(item);
+		if (!id) return false;
+		return Boolean(selectedIds?.has?.(String(id)));
+	};
+	const handleRowSelectClick = (event, item) => {
+		const id = getRowIssueId(item);
+		if (!id) return;
+		const key = String(id);
+
+		if (event?.shiftKey && lastSelectedIssueKey) {
+			const ordered = (filteredSections ?? [])
+				.flatMap((section) =>
+					(section?.propertyGroups ?? []).flatMap((group) => {
+						const collapsed = Boolean(
+							collapsedPropertyGroups[getPropertyGroupKey(section?.id, group?.name)]
+						);
+						if (collapsed) return [];
+						return (group?.items ?? [])
+							.map((row) => getRowIssueId(row))
+							.filter(Boolean)
+							.map((rowId) => String(rowId));
+					})
+				)
+				.filter(Boolean);
+			const a = ordered.indexOf(lastSelectedIssueKey);
+			const b = ordered.indexOf(key);
+			if (a !== -1 && b !== -1) {
+				const start = Math.min(a, b);
+				const end = Math.max(a, b);
+				const next = new Set(selectedIssueIds);
+				for (let i = start; i <= end; i += 1) next.add(ordered[i]);
+				selectedIssueIds = next;
+				lastSelectedIssueKey = key;
+				return;
+			}
+		}
+
+		toggleRowSelected(item);
+		lastSelectedIssueKey = key;
+	};
+	const toggleRowSelected = (item) => {
+		const id = getRowIssueId(item);
+		if (!id) return;
+		const key = String(id);
+		const next = new Set(selectedIssueIds);
+		const wasSelected = next.has(key);
+		if (wasSelected) next.delete(key);
+		else next.add(key);
+		selectedIssueIds = next;
+	};
 	$: {
 		if (filterCategory === 'assignee') {
 			const assigneeOptions = [...members]
@@ -498,18 +555,39 @@
 
 	const handleStatusSelect = async (item, nextStatus) => {
 		if (!canEditIssue) return;
-		const issueId = getRowIssueId(item);
-		if (!issueId) return;
-		const prevStatus = item?.status ?? 'todo';
+		const clickedIssueId = getRowIssueId(item);
+		if (!clickedIssueId) return;
+		const clickedKey = String(clickedIssueId);
+		const isBulk = Boolean(selectedIssueIds?.size && selectedIssueIds.has(clickedKey));
+		const targetKeys = isBulk ? [...selectedIssueIds] : [clickedKey];
+		const getStatusByKey = (key) => {
+			for (const section of expandedSections ?? []) {
+				for (const row of section?.rows ?? []) {
+					const rowId = getRowIssueId(row);
+					if (rowId && String(rowId) === String(key)) return row?.status ?? 'todo';
+				}
+			}
+			return 'todo';
+		};
 		statusMenuOpenId = null;
-		if (prevStatus === nextStatus) return;
-		updateIssueStatusInListCache(issueId, nextStatus);
+		const prevStatusByKey = {};
+		const keysToUpdate = [];
+		for (const key of targetKeys) {
+			const prev = getStatusByKey(key);
+			prevStatusByKey[key] = prev;
+			if (prev === nextStatus) continue;
+			keysToUpdate.push(key);
+			updateIssueStatusInListCache(key, nextStatus);
+		}
+		if (keysToUpdate.length === 0) return;
 		const { error } = await supabase
 			.from('issues')
 			.update({ status: nextStatus })
-			.eq('id', issueId);
+			.in('id', keysToUpdate);
 		if (error) {
-			updateIssueStatusInListCache(issueId, prevStatus);
+			for (const key of keysToUpdate) {
+				updateIssueStatusInListCache(key, prevStatusByKey[key] ?? 'todo');
+			}
 		}
 	};
 
@@ -668,9 +746,15 @@
 
 	const onKeydown = (event) => {
 		if (event.defaultPrevented) return;
-		if (event.key === 'Escape' && showNewIssueModal) {
-			closeNewIssueModal();
-			return;
+		if (event.key === 'Escape') {
+			if (showNewIssueModal) {
+				closeNewIssueModal();
+				return;
+			}
+			if (selectedIssueIds?.size) {
+				clearSelectedIssues();
+				return;
+			}
 		}
 		if (showNewIssueModal || showUrgencyPolicyPrompt) return;
 		const target = event.target;
@@ -919,7 +1003,8 @@
 		{#if _resolvedIssues === null}
 			<div class="space-y-2 divide-y divide-neutral-100">
 				{#each { length: 4 } as _}
-					<div class="flex items-center gap-3 px-6 py-2">
+					<div class="flex items-center gap-3 px-6.5 py-2">
+						<div class="h-6 w-6 flex-shrink-0"></div>
 						<div class="skeleton h-3 w-3 flex-shrink-0 rounded-full"></div>
 						<div class="skeleton h-4 w-2/5"></div>
 						<div class="skeleton ml-auto h-5 w-28 rounded-full"></div>
@@ -936,7 +1021,7 @@
 				{#each filteredSections as section, sectionIndex}
 					<div class={section.rows.length ? '' : 'hidden'}>
 						<div
-							class={`flex items-center justify-between border-neutral-200 bg-stone-50 px-6 py-2 text-sm text-neutral-600 ${
+							class={`flex items-center justify-between border-neutral-200 bg-stone-50 px-6.5 py-2 text-sm text-neutral-600 ${
 								sectionIndex === 0 ? 'border-b' : 'border-y'
 							}`}
 							style={getSectionGradientStyle(section.statusClass)}
@@ -951,14 +1036,14 @@
 						</div>
 						<div>
 							{#each section.propertyGroups as group}
-								{@const isCollapsed = isPropertyGroupCollapsed(section.id, group.name)}
+								{@const groupKey = getPropertyGroupKey(section.id, group.name)}
 								<button
 									type="button"
 									class="tooltip-target group relative flex w-full items-center gap-3 px-6.5 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900"
 									on:click={() => togglePropertyGroup(section.id, group.name)}
 									on:mouseenter={updateDividerTooltipPosition}
 									on:mousemove={updateDividerTooltipPosition}
-									aria-expanded={!isCollapsed}
+									aria-expanded={!collapsedPropertyGroups[groupKey]}
 								>
 									<span
 										class="relative flex items-center text-neutral-400 transition group-hover:text-neutral-700"
@@ -969,7 +1054,8 @@
 											height="12"
 											fill="currentColor"
 											class="chevron-icon transition-transform duration-150 ease-in-out"
-											class:rotate-[-90deg]={isCollapsed}
+											class:rotate-[-90deg]={collapsedPropertyGroups[groupKey]}
+											style="transform-box: fill-box; transform-origin: center;"
 											viewBox="0 0 16 16"
 										>
 											<path
@@ -993,8 +1079,12 @@
 									<div class="mb-2">
 										{#each group.items as item}
 											<a
-												class={`block w-full px-6 py-2 text-left transition ${
-													getRowIssueId(item) === hoveredIssueId ? 'bg-stone-50' : ''
+												class={`group block w-full px-6.5 py-2 text-left transition ${
+													isRowSelected(item, selectedIssueIds)
+														? 'bg-blue-50'
+														: getRowIssueId(item) === hoveredIssueId
+															? 'bg-stone-50'
+															: ''
 												}`}
 												href={getIssueHref(item)}
 												data-sveltekit-preload-data="hover"
@@ -1009,6 +1099,43 @@
 											>
 												<div class="flex items-center justify-between gap-4">
 													<div class="flex min-w-0 flex-1 items-center gap-2.5">
+														<div class="relative flex-shrink-0">
+															<button
+																type="button"
+																style="-webkit-tap-highlight-color: transparent;"
+																aria-label={isRowSelected(item, selectedIssueIds)
+																	? 'Deselect issue'
+																	: 'Select issue'}
+																aria-pressed={isRowSelected(item, selectedIssueIds)}
+																class="relative z-10 -m-1 flex items-center justify-center rounded-md p-1 outline-none focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none"
+																on:click|stopPropagation|preventDefault={(event) =>
+																	handleRowSelectClick(event, item)}
+															>
+																<span
+																	class={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border transition-opacity ${
+																		isRowSelected(item, selectedIssueIds)
+																			? 'border-blue-500 bg-blue-500 opacity-100'
+																			: 'border-neutral-300 bg-transparent opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+																	}`}
+																>
+																	{#if isRowSelected(item, selectedIssueIds)}
+																		<svg
+																			xmlns="http://www.w3.org/2000/svg"
+																			width="10"
+																			height="10"
+																			viewBox="0 0 16 16"
+																			fill="currentColor"
+																			class="text-white"
+																			aria-hidden="true"
+																		>
+																			<path
+																				d="M6.173 13.414 1.757 9l1.414-1.414 3.002 3.002 6.65-6.65L14.237 5z"
+																			/>
+																		</svg>
+																	{/if}
+																</span>
+															</button>
+														</div>
 														<div class="relative">
 															<button
 																type="button"
