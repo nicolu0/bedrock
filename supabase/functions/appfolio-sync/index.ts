@@ -55,9 +55,7 @@ async function appfolioFetch(
 
 	while (url) {
 		let res: Response | null = null;
-		// 2 retries max with capped wait — the function runs every minute so fail fast
-		// and let the next cron run pick up where we left off.
-		for (let attempt = 1; attempt <= 2; attempt++) {
+		for (let attempt = 1; attempt <= 4; attempt++) {
 			res = await fetch(url, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -68,7 +66,7 @@ async function appfolioFetch(
 			const rawRetryAfter = Number(res.headers.get('retry-after') ?? (attempt * 3));
 			const retryAfter = Math.min(rawRetryAfter, 8); // cap at 8s to avoid timeout
 			const jitter = Math.floor(Math.random() * 1000);
-			console.warn(`AppFolio ${urlOrReport} rate limited, retrying in ${retryAfter}s +${jitter}ms jitter (attempt ${attempt}/2)`);
+			console.warn(`AppFolio ${urlOrReport} rate limited, retrying in ${retryAfter}s +${jitter}ms jitter (attempt ${attempt}/4)`);
 			await new Promise(r => setTimeout(r, retryAfter * 1000 + jitter));
 		}
 
@@ -93,10 +91,9 @@ async function appfolioFetch(
 	return rows;
 }
 
-// ── Centralized Throttle ─────────────────────────────────────────────────────
-
-// AppFolio rate limit: 7 requests per 15 seconds → 1 request every ~2.14s
-const MIN_DELAY_MS = 2200;
+// Light throttle to avoid burning through the rate limit (7 req / 15s).
+// 800ms spacing lets us process ~68 properties in ~55s with room for retries.
+const MIN_DELAY_MS = 800;
 let lastRequestTime = 0;
 
 async function throttledAppfolioFetch(
@@ -1130,7 +1127,7 @@ serve(async (req) => {
 
 	const { data: workspaces, error: wsError } = await supabase
 		.from('workspaces')
-		.select('id, appfolio_property_ids, last_metadata_sync_at, appfolio_seen_vendor_ids, sync_property_cursor')
+		.select('id, appfolio_property_ids, last_metadata_sync_at, appfolio_seen_vendor_ids')
 		.eq('appfolio_enabled', true);
 
 	if (wsError) {
@@ -1179,9 +1176,6 @@ serve(async (req) => {
 				results[ws.id] = { ok: true, properties: appfolioPropertyIds.length };
 			} else {
 				// FAST PATH: work orders + agent dispatch
-				// Process properties in batches of 25 using a round-robin cursor
-				// to stay within the edge function timeout (~60s).
-				const BATCH_SIZE = 25;
 				let allPropertyIds: number[];
 				if (allowedIds) {
 					allPropertyIds = allowedIds;
@@ -1195,22 +1189,10 @@ serve(async (req) => {
 				}
 
 				if (allPropertyIds.length > 0) {
-					allPropertyIds.sort((a, b) => a - b);
-					const cursor = ws.sync_property_cursor ?? 0;
-					const batch = allPropertyIds.slice(cursor, cursor + BATCH_SIZE);
-					const nextCursor = cursor + BATCH_SIZE >= allPropertyIds.length ? 0 : cursor + BATCH_SIZE;
-
-					console.log(`fast-path: properties ${cursor}..${cursor + batch.length - 1} of ${allPropertyIds.length} (batch=${batch.length}, next_cursor=${nextCursor})`);
-
-					await syncWorkOrders(ws.id, batch);
-
-					await supabase
-						.from('workspaces')
-						.update({ sync_property_cursor: nextCursor })
-						.eq('id', ws.id);
-
+					console.log(`fast-path: syncing ${allPropertyIds.length} properties`);
+					await syncWorkOrders(ws.id, allPropertyIds);
 					await processDispatchQueue(ws.id);
-					results[ws.id] = { ok: true, batch: batch.length, total_properties: allPropertyIds.length, cursor: nextCursor };
+					results[ws.id] = { ok: true, total_properties: allPropertyIds.length };
 				} else {
 					console.warn(`Workspace ${ws.id}: no properties to sync work orders for`);
 					results[ws.id] = { ok: true, total_properties: 0 };
