@@ -97,8 +97,6 @@ async function appfolioFetch(
 
 // AppFolio rate limit: 7 requests per 15 seconds → 1 request every ~2.14s
 const MIN_DELAY_MS = 2200;
-// At 2.2s per request, ~25 properties fit within the 60s function timeout
-const PROPERTIES_PER_RUN = 25;
 let lastRequestTime = 0;
 
 async function throttledAppfolioFetch(
@@ -544,9 +542,7 @@ async function enqueueAgentEvent(
 
 async function syncWorkOrders(
 	workspaceId: string,
-	appfolioPropertyIds: number[],
-	lastSyncAt: string | null,
-	isFullCycle = false
+	appfolioPropertyIds: number[]
 ): Promise<void> {
 	// Batch-fetch all Bedrock property + unit mappings upfront
 	const { data: propRows } = await supabase
@@ -609,22 +605,15 @@ async function syncWorkOrders(
 		}
 	}
 
-	// Incremental sync window: use last successful checkpoint minus 5-min overlap,
-	// or fall back to pilot start date on first run.
-	const PILOT_START_DATE = '2026-03-20';
-	const OVERLAP_BUFFER_MS = 5 * 60 * 1000;
-	let syncFromDate: string;
-	if (lastSyncAt) {
-		syncFromDate = new Date(new Date(lastSyncAt).getTime() - OVERLAP_BUFFER_MS)
-			.toISOString().slice(0, 10);
-	} else {
-		syncFromDate = PILOT_START_DATE;
-	}
-	console.log(`syncWorkOrders: window from ${syncFromDate} (checkpoint: ${lastSyncAt ?? 'none'})`);
+	// Fetch window: whichever is more recent between the pilot start date
+	// and 60 days ago. Never fetch work orders before 2026-03-20.
+	const PILOT_START = '2026-03-20';
+	const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+	const syncFromDate = sixtyDaysAgo > PILOT_START ? sixtyDaysAgo : PILOT_START;
+	console.log(`syncWorkOrders: fetching work orders from ${syncFromDate}`);
 
 	// Accumulate vendor IDs from work orders for the slow-path vendor sync
 	const seenVendorIds = new Set<string>();
-	let allPropertiesSucceeded = true;
 
 	// work_order endpoint takes exactly ONE property filter at a time.
 	// IMPORTANT: The work_order API uses the property NUMBER (e.g., "292") as its filter,
@@ -664,13 +653,11 @@ async function syncWorkOrders(
 				console.warn(`syncWorkOrders: skipping non-property entity ${propNumber} (id=${appfolioPropId}): 500 error`);
 			} else {
 				console.error(`syncWorkOrders fetch failed for property ${propNumber} (id=${appfolioPropId}):`, err);
-				allPropertiesSucceeded = false;
 			}
 			continue;
 		}
 
-		// Client-side date filter — only process work orders created on or after syncFromDate
-		const rows = (allRows as any[]).filter(r => r.created_at && r.created_at >= syncFromDate);
+		const rows = allRows as any[];
 		metrics.work_orders_fetched += rows.length;
 
 		const bedrockPropertyId = propMap.get(String(appfolioPropId)) ?? null;
@@ -686,6 +673,48 @@ async function syncWorkOrders(
 			// Accumulate vendor IDs for slow-path vendor sync
 			if (row.vendor_id != null) seenVendorIds.add(String(row.vendor_id));
 
+			const rawUrgent = (row.priority ?? '').toLowerCase() === 'urgent';
+
+			// Check if this work order already exists in our DB
+			const existingIssueId = existingIssueMap.get(String(woId));
+
+			if (existingIssueId) {
+				// ── Existing issue: only update tracking columns if something changed ──
+				const prev = snapshotById.get(existingIssueId);
+				if (!prev) continue;
+
+				const statusChanged = (prev.appfolio_raw_status ?? '') !== String(row.status ?? '');
+				const vendorAssigned = !prev.appfolio_vendor_id && row.vendor_id != null;
+				const newNotes = (row.status_notes as string) || null;
+				const notesChanged = !!newNotes && newNotes !== (prev.appfolio_status_notes ?? '');
+				const urgentChanged = (prev.urgent ?? false) !== rawUrgent;
+
+				if (!statusChanged && !vendorAssigned && !notesChanged && !urgentChanged) continue;
+
+				const updateData: Record<string, any> = {
+					appfolio_raw_status: String(row.status ?? ''),
+					appfolio_status_notes: newNotes,
+					appfolio_vendor_id: row.vendor_id != null ? String(row.vendor_id) : null,
+					urgent: rawUrgent
+				};
+				if (vendorAssigned) {
+					updateData.vendor_assigned_at = new Date().toISOString();
+				}
+				const { error: trackingError } = await supabase
+					.from('issues')
+					.update(updateData)
+					.eq('id', existingIssueId);
+				if (trackingError) {
+					console.error(`syncWorkOrders tracking update error for work_order_id=${woId}:`, trackingError.message);
+				}
+
+				if (statusChanged) await enqueueAgentEvent(workspaceId, existingIssueId, 'status_changed', row);
+				if (vendorAssigned) await enqueueAgentEvent(workspaceId, existingIssueId, 'vendor_assigned', row);
+				if (notesChanged) await enqueueAgentEvent(workspaceId, existingIssueId, 'notes_changed', row);
+				continue;
+			}
+
+			// ── New issue: insert into DB ──
 			let unitId: string | null = null;
 			let propertyId: string | null = bedrockPropertyId;
 			if (row.unit_id != null) {
@@ -701,85 +730,41 @@ async function syncWorkOrders(
 				? description.slice(0, 120)
 				: `Work Order ${row.service_request_number ?? woId}`;
 
-			const rawUrgent = (row.priority ?? '').toLowerCase() === 'urgent';
-
-			// ignoreDuplicates: true — existing issues keep their agent-cleaned title/description.
-			// Tracking columns (status, vendor, notes, urgent) are updated separately below.
-			const { data: upserted, error } = await supabase.from('issues').upsert(
-				{
-					workspace_id: workspaceId,
-					source: 'appfolio',
-					appfolio_id: String(woId),
-					name,
-					description: description ?? null,
-					status: mapWorkOrderStatus(row.status ?? ''),
-					urgent: rawUrgent,
-					unit_id: unitId,
-					property_id: propertyId
-				},
-				{ onConflict: 'workspace_id,appfolio_id', ignoreDuplicates: true }
-			).select('id');
+			const { data: inserted, error } = await supabase.from('issues').insert({
+				workspace_id: workspaceId,
+				source: 'appfolio',
+				appfolio_id: String(woId),
+				name,
+				description: description ?? null,
+				status: mapWorkOrderStatus(row.status ?? ''),
+				urgent: rawUrgent,
+				unit_id: unitId,
+				property_id: propertyId,
+				appfolio_raw_status: String(row.status ?? ''),
+				appfolio_status_notes: (row.status_notes as string) || null,
+				appfolio_vendor_id: row.vendor_id != null ? String(row.vendor_id) : null,
+				vendor_assigned_at: row.vendor_id != null ? new Date().toISOString() : null
+			}).select('id').single();
 			if (error) {
-				console.error(`syncWorkOrders upsert error for work_order_id=${woId}:`, error.message);
+				// Unique constraint violation = already exists (race condition between runs)
+				if (error.code === '23505') continue;
+				console.error(`syncWorkOrders insert error for work_order_id=${woId}:`, error.message);
 				continue;
 			}
 
-			// Look up the issue UUID — prefer the pre-fetched map (works for existing
-			// rows even if upsert RETURNING returns empty), fall back to upsert result
-			// for genuinely new rows not in the map yet.
-			const issueId = existingIssueMap.get(String(woId)) ?? upserted?.[0]?.id ?? null;
-			if (issueId) existingIssueMap.set(String(woId), issueId); // cache for future iterations
+			const issueId = inserted?.id;
+			if (!issueId) continue;
+			existingIssueMap.set(String(woId), issueId);
 
-			// Change detection — compare current AppFolio data against our last snapshot.
-			// New issues (not in snapshot) always trigger 'new'; existing issues are diffed
-			// field-by-field so we only fire agent events for actual changes.
-			if (issueId) {
-				const prev = snapshotById.get(issueId);
-				const isNew = !prev;
-				const statusChanged = !!prev && (prev.appfolio_raw_status ?? '') !== String(row.status ?? '');
-				const vendorAssigned = !!prev && !prev.appfolio_vendor_id && row.vendor_id != null;
-				const newNotes = (row.status_notes as string) || null;
-				const notesChanged = !!prev && !!newNotes && newNotes !== (prev.appfolio_status_notes ?? '');
+			console.log(`syncWorkOrders: new issue ${issueId} for work_order_id=${woId}`);
+			await enqueueAgentEvent(workspaceId, issueId, 'new', row);
 
-				// Persist tracking columns only when something actually changed.
-				// Avoids writing to issues (Realtime-subscribed) on every sync unnecessarily.
-				const urgentChanged = !!prev && (prev.urgent ?? false) !== rawUrgent;
-				const shouldUpdateTracking = isNew || statusChanged || vendorAssigned || notesChanged || urgentChanged;
-				if (shouldUpdateTracking) {
-					const updateData: Record<string, any> = {
-						appfolio_raw_status: String(row.status ?? ''),
-						appfolio_status_notes: newNotes,
-						appfolio_vendor_id: row.vendor_id != null ? String(row.vendor_id) : null,
-						urgent: rawUrgent
-					};
-					if (vendorAssigned) {
-						updateData.vendor_assigned_at = new Date().toISOString();
-					}
-					const { error: trackingError } = await supabase
-						.from('issues')
-						.update(updateData)
-						.eq('id', issueId);
-					if (trackingError) {
-						console.error(`syncWorkOrders tracking update error for work_order_id=${woId}:`, trackingError.message);
-					}
-				}
-
-				// Enqueue change events durably to the agent_dispatch_queue table
-				if (isNew) {
-					await enqueueAgentEvent(workspaceId, issueId, 'new', row);
-				}
-				if (statusChanged) await enqueueAgentEvent(workspaceId, issueId, 'status_changed', row);
-				if (vendorAssigned) await enqueueAgentEvent(workspaceId, issueId, 'vendor_assigned', row);
-				if (notesChanged) await enqueueAgentEvent(workspaceId, issueId, 'notes_changed', row);
-			}
-
-			// Build tenant data from work order fields
+			// Resolve tenant
 			const tenantName = normalizeTenantName((row.primary_tenant as string) || null);
 			const tenantEmail = (row.primary_tenant_email as string) || null;
 			const tenantPhone = normalizePhone((row.primary_tenant_phone_number as string) || null);
 
-			// Resolve tenant_id — match by unit_id + email (preferred), fallback to unit_id + name
-			if (issueId && unitId && (tenantEmail || tenantName)) {
+			if (unitId && (tenantEmail || tenantName)) {
 				let tenantMatch: any = null;
 				if (tenantEmail) {
 					const { data } = await supabase
@@ -806,41 +791,22 @@ async function syncWorkOrders(
 				}
 			}
 
-			const logData = {
-				source: 'appfolio',
-				appfolio_id: String(woId),
-				from: tenantName,
-				from_email: tenantEmail,
-				from_phone: tenantPhone
-			};
-
-			if (issueId && !issueIdsWithLog.has(issueId)) {
-				// No log yet — insert
-				issueIdsWithLog.add(issueId);
-				const rawCreatedAt = row.created_at;
-				const createdAt = rawCreatedAt ? new Date(rawCreatedAt).toISOString() : new Date().toISOString();
-				const { error: logError } = await supabase.from('activity_logs').insert({
-					workspace_id: workspaceId,
-					issue_id: issueId,
-					type: 'issue_created',
-					created_at: createdAt,
-					data: logData
-				});
-				if (logError) {
-					console.error(`syncWorkOrders activity_log insert error for work_order_id=${woId}:`, logError.message);
+			// Activity log for new issue
+			const rawCreatedAt = row.created_at;
+			const createdAt = rawCreatedAt ? new Date(rawCreatedAt).toISOString() : new Date().toISOString();
+			await supabase.from('activity_logs').insert({
+				workspace_id: workspaceId,
+				issue_id: issueId,
+				type: 'issue_created',
+				created_at: createdAt,
+				data: {
+					source: 'appfolio',
+					appfolio_id: String(woId),
+					from: tenantName,
+					from_email: tenantEmail,
+					from_phone: tenantPhone
 				}
-			} else if (issueId && issueIdsNeedingFromUpdate.has(issueId) && tenantName) {
-				// Log exists but missing 'from' — backfill tenant info
-				const logId = issueIdsNeedingFromUpdate.get(issueId)!;
-				issueIdsNeedingFromUpdate.delete(issueId); // don't update again in same run
-				const { error: updateError } = await supabase
-					.from('activity_logs')
-					.update({ data: logData })
-					.eq('id', logId);
-				if (updateError) {
-					console.error(`syncWorkOrders activity_log backfill error for work_order_id=${woId}:`, updateError.message);
-				}
-			}
+			});
 		}
 	}
 
@@ -860,8 +826,7 @@ async function syncWorkOrders(
 		}
 	}
 
-	// Re-queue issues that are pending, failed, or stuck in processing (stale >15 min).
-	// The atomic claim RPC prevents duplicate agent runs even if multiple syncs overlap.
+	// Re-queue issues that are pending, failed, or stuck in processing (stale >15 min)
 	if (existingIssueIds.length > 0) {
 		const { data: retryIssues } = await supabase
 			.from('issues')
@@ -903,20 +868,6 @@ async function syncWorkOrders(
 			.from('workspaces')
 			.update({ appfolio_seen_vendor_ids: [...existing] })
 			.eq('id', workspaceId);
-	}
-
-	// Advance checkpoint only when we've completed a full cycle through all properties
-	// AND all properties in this batch succeeded. This ensures every property has been
-	// synced at least once before we narrow the time window.
-	if (isFullCycle && allPropertiesSucceeded) {
-		await supabase
-			.from('workspaces')
-			.update({ last_work_order_sync_at: new Date().toISOString() })
-			.eq('id', workspaceId);
-		metrics.checkpoint_advanced = true;
-		console.log('syncWorkOrders: full cycle complete — checkpoint advanced');
-	} else if (!allPropertiesSucceeded) {
-		console.warn('syncWorkOrders: some properties failed — checkpoint NOT advanced');
 	}
 }
 
@@ -1179,7 +1130,7 @@ serve(async (req) => {
 
 	const { data: workspaces, error: wsError } = await supabase
 		.from('workspaces')
-		.select('id, appfolio_property_ids, last_work_order_sync_at, last_metadata_sync_at, appfolio_seen_vendor_ids, sync_property_cursor')
+		.select('id, appfolio_property_ids, last_metadata_sync_at, appfolio_seen_vendor_ids, sync_property_cursor')
 		.eq('appfolio_enabled', true);
 
 	if (wsError) {
@@ -1228,9 +1179,9 @@ serve(async (req) => {
 				results[ws.id] = { ok: true, properties: appfolioPropertyIds.length };
 			} else {
 				// FAST PATH: work orders + agent dispatch
-				// Process properties in batches using a round-robin cursor to stay within
-				// the function timeout. With 68 properties and 300ms throttle, processing
-				// all at once would take ~20s for spacing alone plus request time.
+				// Process properties in batches of 25 using a round-robin cursor
+				// to stay within the edge function timeout (~60s).
+				const BATCH_SIZE = 25;
 				let allPropertyIds: number[];
 				if (allowedIds) {
 					allPropertyIds = allowedIds;
@@ -1244,30 +1195,25 @@ serve(async (req) => {
 				}
 
 				if (allPropertyIds.length > 0) {
-					// Sort deterministically so cursor position is stable across runs
 					allPropertyIds.sort((a, b) => a - b);
-
 					const cursor = ws.sync_property_cursor ?? 0;
-					const batch = allPropertyIds.slice(cursor, cursor + PROPERTIES_PER_RUN);
-					const nextCursor = cursor + PROPERTIES_PER_RUN >= allPropertyIds.length ? 0 : cursor + PROPERTIES_PER_RUN;
-					const isFullCycle = nextCursor === 0 && batch.length > 0;
+					const batch = allPropertyIds.slice(cursor, cursor + BATCH_SIZE);
+					const nextCursor = cursor + BATCH_SIZE >= allPropertyIds.length ? 0 : cursor + BATCH_SIZE;
 
 					console.log(`fast-path: properties ${cursor}..${cursor + batch.length - 1} of ${allPropertyIds.length} (batch=${batch.length}, next_cursor=${nextCursor})`);
 
-					await syncWorkOrders(ws.id, batch, ws.last_work_order_sync_at, isFullCycle);
+					await syncWorkOrders(ws.id, batch);
 
-					// Advance cursor
 					await supabase
 						.from('workspaces')
 						.update({ sync_property_cursor: nextCursor })
 						.eq('id', ws.id);
 
 					await processDispatchQueue(ws.id);
-
 					results[ws.id] = { ok: true, batch: batch.length, total_properties: allPropertyIds.length, cursor: nextCursor };
 				} else {
 					console.warn(`Workspace ${ws.id}: no properties to sync work orders for`);
-					results[ws.id] = { ok: true, batch: 0, total_properties: 0 };
+					results[ws.id] = { ok: true, total_properties: 0 };
 				}
 			}
 		} catch (err) {
