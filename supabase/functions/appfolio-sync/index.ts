@@ -638,6 +638,7 @@ async function syncWorkOrders(
 					'work_order_id', 'service_request_number', 'property_id', 'unit_id',
 					'status', 'priority', 'job_description', 'service_request_description',
 					'vendor_id', 'vendor', 'status_notes', 'created_at', 'work_order_type',
+					'requesting_tenant', 'submitted_by_tenant',
 					'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
 				]
 			});
@@ -756,36 +757,35 @@ async function syncWorkOrders(
 			console.log(`syncWorkOrders: new issue ${issueId} for work_order_id=${woId}`);
 			await enqueueAgentEvent(workspaceId, issueId, 'new', row);
 
-			// Resolve tenant
-			const tenantName = normalizeTenantName((row.primary_tenant as string) || null);
-			const tenantEmail = (row.primary_tenant_email as string) || null;
-			const tenantPhone = normalizePhone((row.primary_tenant_phone_number as string) || null);
+			// Resolve tenant — prefer requesting_tenant (who actually submitted the WO)
+			// over primary_tenant (first tenant on the lease, not necessarily the submitter)
+			const tenantName = normalizeTenantName(
+				(row.requesting_tenant as string) || (row.submitted_by_tenant as string) || (row.primary_tenant as string) || null
+			);
 
-			if (unitId && (tenantEmail || tenantName)) {
-				let tenantMatch: any = null;
-				if (tenantEmail) {
-					const { data } = await supabase
-						.from('tenants')
-						.select('id')
-						.eq('unit_id', unitId)
-						.ilike('email', tenantEmail)
-						.limit(1)
-						.maybeSingle();
-					tenantMatch = data;
-				}
-				if (!tenantMatch && tenantName) {
-					const { data } = await supabase
-						.from('tenants')
-						.select('id')
-						.eq('unit_id', unitId)
-						.eq('name', tenantName)
-						.limit(1)
-						.maybeSingle();
-					tenantMatch = data;
-				}
-				if (tenantMatch) {
-					await supabase.from('issues').update({ tenant_id: tenantMatch.id }).eq('id', issueId);
-				}
+			let tenantMatch: any = null;
+			let tenantEmail: string | null = null;
+			let tenantPhone: string | null = null;
+
+			if (unitId && tenantName) {
+				const { data } = await supabase
+					.from('tenants')
+					.select('id, email, phone')
+					.eq('unit_id', unitId)
+					.eq('name', tenantName)
+					.limit(1)
+					.maybeSingle();
+				tenantMatch = data;
+			}
+
+			if (tenantMatch) {
+				await supabase.from('issues').update({ tenant_id: tenantMatch.id }).eq('id', issueId);
+				tenantEmail = tenantMatch.email ?? null;
+				tenantPhone = tenantMatch.phone ?? null;
+			} else {
+				// Fallback to primary_tenant contact fields from AppFolio
+				tenantEmail = (row.primary_tenant_email as string) || null;
+				tenantPhone = normalizePhone((row.primary_tenant_phone_number as string) || null);
 			}
 
 			// Activity log for new issue

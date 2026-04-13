@@ -3645,10 +3645,14 @@ const handleAppfolioWorkOrder = async ({
 
 		// row may be null for stale re-queues — fall back to the activity_log recorded at issue
 		// creation which stores the exact tenant who submitted the work order (data.from / data.from_email).
-		let tenantName = normalizeTenantName(row?.primary_tenant ? String(row.primary_tenant) : null);
-		let tenantEmail: string | null = row?.primary_tenant_email
-			? String(row.primary_tenant_email)
-			: null;
+		// Prefer requesting_tenant (who actually submitted) over primary_tenant (first on lease).
+		let tenantName = normalizeTenantName(
+			row?.requesting_tenant ? String(row.requesting_tenant)
+			: row?.submitted_by_tenant ? String(row.submitted_by_tenant)
+			: row?.primary_tenant ? String(row.primary_tenant) : null
+		);
+		let tenantEmail: string | null = null;
+		let tenantPhone: string | null = null;
 		if (!tenantName) {
 			const { data: createdLog } = await supabase
 				.from('activity_logs')
@@ -3658,6 +3662,23 @@ const handleAppfolioWorkOrder = async ({
 				.maybeSingle();
 			if (createdLog?.data?.from) tenantName = normalizeTenantName(String(createdLog.data.from));
 			if (createdLog?.data?.from_email) tenantEmail = String(createdLog.data.from_email);
+		}
+		// Look up tenant contact info from DB by issue's tenant_id or by name match
+		if (issueRow.unit_id && tenantName) {
+			const { data: tenantRow } = await supabase
+				.from('tenants')
+				.select('email, phone')
+				.eq('unit_id', issueRow.unit_id)
+				.eq('name', tenantName)
+				.limit(1)
+				.maybeSingle();
+			if (tenantRow) {
+				tenantEmail = tenantRow.email ?? tenantEmail;
+				tenantPhone = tenantRow.phone ?? null;
+			}
+		}
+		if (!tenantEmail && row?.primary_tenant_email) {
+			tenantEmail = String(row.primary_tenant_email);
 		}
 		const description = issueRow.description ?? issueRow.name ?? '';
 		const autoPolicyMatch = findAutoPolicyMatch(autoPolicies, issueRow.name ?? description);
@@ -3677,7 +3698,7 @@ const handleAppfolioWorkOrder = async ({
 			urgencyDecision: null,
 			tenantName,
 			tenantEmail,
-			tenantPhone: null,
+			tenantPhone,
 			userName: userProfile?.name ?? 'Bedrock',
 			defaultSenderEmail: null,
 			replyMessageId: null,
