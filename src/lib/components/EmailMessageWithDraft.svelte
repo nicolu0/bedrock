@@ -1,6 +1,7 @@
 <script>
 	// @ts-nocheck
 	import { onDestroy, createEventDispatcher } from 'svelte';
+	import { page } from '$app/stores';
 	import TonePromptModal from '$lib/components/TonePromptModal.svelte';
 	import AutoPromptModal from '$lib/components/AutoPromptModal.svelte';
 	import { agentToasts } from '$lib/stores/agentToasts';
@@ -33,6 +34,7 @@
 	let showAutoPrompt = false;
 	let autoPromptLoading = false;
 	let autoPromptError = '';
+	let policyLearningEnabled = false;
 	let draftOriginal = draft?.original_body ?? null;
 	let draftDiff = draft?.draft_diff ?? null;
 	let messageParts = { main: '', quoted: '' };
@@ -236,6 +238,7 @@
 	};
 
 	const openTonePrompt = () => {
+		if (!policyLearningEnabled) return;
 		tonePromptError = '';
 		showTonePrompt = true;
 	};
@@ -247,6 +250,7 @@
 	};
 
 	const openAutoPrompt = () => {
+		if (!policyLearningEnabled) return;
 		autoPromptError = '';
 		showAutoPrompt = true;
 	};
@@ -254,6 +258,10 @@
 	const handleSendClick = () => {
 		if (!draft?.message_id && !draft?.issue_id) return;
 		if (isSending || isSent) return;
+		if (!policyLearningEnabled) {
+			sendDraft();
+			return;
+		}
 		if (hasToneDiff) {
 			openTonePrompt();
 			return;
@@ -507,6 +515,13 @@
 	})();
 	$: diffColumns = splitDiffColumns(diffSegments);
 	$: hasToneDiff = hasMeaningfulDiff(diffSegments);
+	$: policyLearningEnabled = Boolean($page?.data?.workspace?.policy_learning_enabled);
+	$: if (!policyLearningEnabled) {
+		showTonePrompt = false;
+		showAutoPrompt = false;
+		tonePromptError = '';
+		autoPromptError = '';
+	}
 
 	$: messageParts = splitEmailBody(message?.message ?? '');
 	$: sentParts = splitEmailBody(sentMessage?.message ?? '');
@@ -852,26 +867,28 @@
 		{/if}
 	</div>
 
-	<TonePromptModal
-		show={showTonePrompt}
-		{diffColumns}
-		errorMessage={tonePromptError}
-		onClose={closeTonePrompt}
-		onSecondary={sendOnce}
-		onPrimary={approveAndSend}
-		isLoading={tonePromptLoading}
-		secondaryDisabled={tonePromptLoading || isSending}
-		primaryDisabled={!hasToneDiff || tonePromptLoading || isSending}
-	/>
-	<AutoPromptModal
-		show={showAutoPrompt}
-		template={draftBody}
-		errorMessage={autoPromptError}
-		onClose={closeAutoPrompt}
-		onSecondary={requireApproval}
-		onPrimary={automateReply}
-		isLoading={autoPromptLoading}
-		secondaryDisabled={autoPromptLoading || isSending}
-		primaryDisabled={autoPromptLoading || isSending}
-	/>
+	{#if policyLearningEnabled}
+		<TonePromptModal
+			show={showTonePrompt}
+			{diffColumns}
+			errorMessage={tonePromptError}
+			onClose={closeTonePrompt}
+			onSecondary={sendOnce}
+			onPrimary={approveAndSend}
+			isLoading={tonePromptLoading}
+			secondaryDisabled={tonePromptLoading || isSending}
+			primaryDisabled={!hasToneDiff || tonePromptLoading || isSending}
+		/>
+		<AutoPromptModal
+			show={showAutoPrompt}
+			template={draftBody}
+			errorMessage={autoPromptError}
+			onClose={closeAutoPrompt}
+			onSecondary={requireApproval}
+			onPrimary={automateReply}
+			isLoading={autoPromptLoading}
+			secondaryDisabled={autoPromptLoading || isSending}
+			primaryDisabled={autoPromptLoading || isSending}
+		/>
+	{/if}
 </div>

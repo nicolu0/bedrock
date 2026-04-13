@@ -6,6 +6,7 @@ import { supabaseAdmin } from '$lib/supabaseAdmin';
 export const load = async ({ locals, params, depends, url }) => {
 	depends('app:properties');
 	depends('app:units');
+	depends('app:workspace');
 	if (!locals.user) {
 		const returnTo = encodeURIComponent(`${url.pathname}${url.search}`);
 		throw redirect(303, `/login?returnTo=${returnTo}`);
@@ -20,16 +21,30 @@ export const load = async ({ locals, params, depends, url }) => {
 			data: { session }
 		},
 		,
-		{ data: workspaceBySlug }
+		workspaceResp
 	] = await Promise.all([
 		locals.supabase.auth.getSession(),
 		ensureWorkspace(locals.supabase, locals.user),
 		supabaseAdmin
 			.from('workspaces')
-			.select('id, name, slug, admin_user_id')
+			.select('id, name, slug, admin_user_id, policy_learning_enabled')
 			.eq('slug', params.workspace)
 			.maybeSingle()
 	]);
+
+	// If the DB hasn't been migrated yet (missing columns), don't treat that as “workspace doesn't exist”.
+	let workspaceBySlug = workspaceResp?.data ?? null;
+	if (!workspaceBySlug && workspaceResp?.error) {
+		const fallback = await supabaseAdmin
+			.from('workspaces')
+			.select('id, name, slug, admin_user_id')
+			.eq('slug', params.workspace)
+			.maybeSingle();
+		workspaceBySlug = fallback?.data ?? null;
+		if (workspaceBySlug && workspaceBySlug.policy_learning_enabled == null) {
+			workspaceBySlug.policy_learning_enabled = false;
+		}
+	}
 	if (workspaceBySlug?.id) {
 		const { data: personProfile } = await supabaseAdmin
 			.from('people')
