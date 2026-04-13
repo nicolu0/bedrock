@@ -5,6 +5,7 @@
 	import { getContext } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import { goto } from '$app/navigation';
+	import { encodePathSegment } from '$lib/utils/url.js';
 	import SidebarButton from '$lib/components/SidebarButton.svelte';
 	import { toggleChatPanel } from '$lib/stores/rightPanel.js';
 	import { seedIssueDetail } from '$lib/stores/issueDetailCache.js';
@@ -256,7 +257,7 @@
 		const slug = slugify(item.title);
 		const readableId = item.readableId;
 		if (!readableId) return undefined;
-		return `${basePath}/issue/${readableId}/${slug}?from=my-issues`;
+		return `${basePath}/issue/${encodePathSegment(readableId)}/${slug}?from=my-issues`;
 	};
 
 	const avatarPalette = [

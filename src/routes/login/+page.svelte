@@ -36,7 +36,7 @@
 		<a
 			class="anim-auth-1 font-regular mb-8 flex items-center gap-1 text-xl tracking-[0.1em] text-neutral-800 uppercase"
 			style="font-family: 'Zalando Sans Expanded', sans-serif;"
-			href="/">Bedrock</a
+			href="/">Deepslate</a
 		>
 		<div class="anim-auth-2 w-full max-w-xs">
 			<form method="POST" action="?/login" use:enhance={handleLogin} class="flex flex-col gap-4">
