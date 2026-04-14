@@ -19,7 +19,7 @@ export const load = async ({ parent, params, depends }) => {
 	const issueRowPromise = supabaseAdmin
 		.from('issues')
 		.select(
-			'id, name, description, status, urgent, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, source, appfolio_id, updated_at, recommended_vendors, properties(name), units(name, property_id, properties(name))'
+			'id, name, description, status, urgent, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, tenant_id, source, appfolio_id, updated_at, recommended_vendors, properties(name), units(name, property_id, properties(name)), tenants(id, name, email, phone)'
 		)
 		.eq('workspace_id', workspace.id)
 		.eq('readable_id', readableId)
@@ -62,7 +62,9 @@ export const load = async ({ parent, params, depends }) => {
 				unitId: issueRow.unit_id ?? null,
 				source: issueRow.source ?? 'native',
 				appfolio_id: issueRow.appfolio_id ?? null,
-				recommended_vendors: issueRow.recommended_vendors ?? null
+				recommended_vendors: issueRow.recommended_vendors ?? null,
+				tenant_id: issueRow.tenant_id ?? null,
+				tenant: issueRow.tenants ?? null
 			};
 		});
 

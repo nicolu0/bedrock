@@ -101,14 +101,12 @@ serve(async () => {
 				continue;
 			}
 
-			const state = stateByConnectionId.get(connection.id);
-			if (state && !shouldRenew(state.watch_expires_at)) {
-				continue;
-			}
-
+			// Always refresh token if needed, independent of watch status.
+			// Access tokens expire in ~1 hour; without proactive refresh they
+			// silently die between watch renewals, breaking push notifications.
 			let accessToken = connection.access_token;
 			const expiresAt = new Date(connection.expires_at).getTime();
-			const refreshNeeded = Number.isNaN(expiresAt) || expiresAt - Date.now() < 120000;
+			const refreshNeeded = Number.isNaN(expiresAt) || expiresAt - Date.now() < 5 * 60 * 1000;
 
 			if (refreshNeeded) {
 				const refreshed = await refreshAccessToken(connection.refresh_token);
@@ -122,6 +120,12 @@ serve(async () => {
 						updated_at: new Date().toISOString()
 					})
 					.eq('id', connection.id);
+			}
+
+			// Only renew watch subscription if it's expiring soon
+			const state = stateByConnectionId.get(connection.id);
+			if (state && !shouldRenew(state.watch_expires_at)) {
+				continue;
 			}
 
 			const watch = await registerWatch(accessToken);

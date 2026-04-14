@@ -65,6 +65,13 @@ function mapWorkOrderStatus(status: string): string {
 	return 'todo';
 }
 
+function normalizePhone(raw: string | null): string | null {
+	if (!raw) return null;
+	let digits = raw.replace(/\D/g, '');
+	if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+	return digits.length === 10 ? digits : null;
+}
+
 function normalizeTenantName(name: string | null | undefined): string | null {
 	if (!name) return null;
 	const trimmed = name.trim();
@@ -200,6 +207,7 @@ serve(async (req) => {
 			'work_order_id', 'service_request_number', 'property_id', 'unit_id',
 			'status', 'priority', 'job_description', 'service_request_description',
 			'vendor_id', 'vendor', 'status_notes', 'created_at', 'work_order_type',
+			'requesting_tenant', 'submitted_by_tenant',
 			'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
 		]
 	});
@@ -296,13 +304,37 @@ serve(async (req) => {
 		await supabase.from('issues').update(updateData).eq('id', issueId);
 	}
 
-	// Parse tenant info from email body or work order data
+	// Resolve tenant — prefer requesting_tenant (who actually submitted the WO)
+	// over primary_tenant (first tenant on the lease, not necessarily the submitter)
 	const emailParsed = parseAppfolioBody(emailBody ?? '');
 	const tenantName = normalizeTenantName(
-		(row.primary_tenant as string) || emailParsed.residentName || null
+		(row.requesting_tenant as string) || (row.submitted_by_tenant as string) || (row.primary_tenant as string) || emailParsed.residentName || null
 	);
-	const tenantEmail = (row.primary_tenant_email as string) || emailParsed.residentEmail || null;
-	const tenantPhone = (row.primary_tenant_phone_number as string) || emailParsed.residentPhone || null;
+
+	let tenantMatch: any = null;
+	let tenantEmail: string | null = null;
+	let tenantPhone: string | null = null;
+
+	if (unitId && tenantName) {
+		const { data } = await supabase
+			.from('tenants')
+			.select('id, email, phone')
+			.eq('unit_id', unitId)
+			.eq('name', tenantName)
+			.limit(1)
+			.maybeSingle();
+		tenantMatch = data;
+	}
+
+	if (tenantMatch) {
+		await supabase.from('issues').update({ tenant_id: tenantMatch.id }).eq('id', issueId);
+		tenantEmail = tenantMatch.email ?? null;
+		tenantPhone = tenantMatch.phone ?? null;
+	} else {
+		// Fallback to primary_tenant contact fields / email body parsing
+		tenantEmail = (row.primary_tenant_email as string) || emailParsed.residentEmail || null;
+		tenantPhone = normalizePhone((row.primary_tenant_phone_number as string) || emailParsed.residentPhone || null);
+	}
 
 	// Insert activity log for issue_created
 	const logData: Record<string, any> = {

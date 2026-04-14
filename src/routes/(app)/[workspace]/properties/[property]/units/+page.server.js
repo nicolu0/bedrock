@@ -2,6 +2,13 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
+const normalizePhone = (raw) => {
+	if (!raw) return null;
+	let digits = raw.replace(/\D/g, '');
+	if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+	return digits.length === 10 ? digits : null;
+};
+
 const slugify = (value) => {
 	if (!value) return '';
 	return value
@@ -107,8 +114,9 @@ export const actions = {
 					typeof tenantEmail === 'string' && tenantEmail.trim()
 						? tenantEmail.trim().toLowerCase()
 						: null,
-				phone:
+				phone: normalizePhone(
 					typeof tenantPhone === 'string' && tenantPhone.trim() ? tenantPhone.trim() : null
+				)
 			});
 			if (tenantError) return fail(500, { error: tenantError.message });
 		}
@@ -180,8 +188,9 @@ export const actions = {
 							typeof tenantEmail === 'string' && tenantEmail.trim()
 								? tenantEmail.trim().toLowerCase()
 								: null,
-						phone:
-							typeof tenantPhone === 'string' && tenantPhone.trim() ? tenantPhone.trim() : null,
+						phone: normalizePhone(
+							typeof tenantPhone === 'string' && tenantPhone.trim() ? tenantPhone.trim() : null
+						),
 						updated_at: new Date().toISOString()
 					})
 					.eq('id', tenantId)
@@ -196,8 +205,9 @@ export const actions = {
 						typeof tenantEmail === 'string' && tenantEmail.trim()
 							? tenantEmail.trim().toLowerCase()
 							: null,
-					phone:
+					phone: normalizePhone(
 						typeof tenantPhone === 'string' && tenantPhone.trim() ? tenantPhone.trim() : null
+					)
 				});
 				if (tenantError) return fail(500, { error: tenantError.message });
 			}

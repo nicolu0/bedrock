@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const supabaseAnonJwt = Deno.env.get('ANON_JWT') ?? '';
 const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
 
 if (!supabaseUrl || !supabaseServiceKey) {
@@ -995,6 +996,11 @@ const formatVendorDraftAddress = (propertyName: string | null, unitName: string 
 	return 'the property';
 };
 
+function formatPhoneDisplay(digits: string): string {
+	if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+	return digits;
+}
+
 const buildVendorDraftTemplate = ({
 	vendorName,
 	issueTitle,
@@ -1023,7 +1029,7 @@ const buildVendorDraftTemplate = ({
 		'Please schedule with tenant.',
 		'',
 		`Name: ${tenantName ?? ''}`,
-		`Phone: ${tenantPhone ?? ''}`,
+		`Phone: ${tenantPhone ? formatPhoneDisplay(tenantPhone) : ''}`,
 		`Email: ${tenantEmail ?? ''}`,
 		'',
 		'Thanks,',
@@ -2808,56 +2814,75 @@ const processMessage = async ({
 	// ── AppFolio email detection ──────────────────────────────────────────────
 	// Route AppFolio work order notification emails to the dedicated trigger function
 	// instead of processing them as tenant emails.
+	// Workspace is resolved by property ownership (not Gmail connection) so that
+	// emails received on any linked account land in the correct workspace.
 	if (senderEmail === 'donotreply@appfolio.com') {
-		const wsId = connection.workspace_id ?? (await getWorkspaceIdForUser(connection.user_id));
-		if (wsId) {
-			const { data: ws } = await supabase
-				.from('workspaces')
-				.select('appfolio_email_tracking')
-				.eq('id', wsId)
-				.single();
-			if (ws?.appfolio_email_tracking) {
+		// Parse subject to extract WO number and property number.
+		// Format varies: "WO #7575-1 - Rain Gutters - 206" (single family, no unit)
+		//                "WO #7522-1 - Water Heater - 292 - 292-18" (standard)
+		//                "WO #7570-1 - Landscaping - Trees - 292 - 292-12" (multi-part description)
+		// Property number is always the first purely numeric segment after the WO prefix.
+		const subjectParts = (messageSubject ?? '').split(' - ');
+		const woMatch = (subjectParts[0] ?? '').match(/WO\s*#([\w-]+)/i);
+		const serviceRequestNumber = woMatch?.[1] ?? null;
+		let appfolioPropertyId: string | null = null;
+		for (let i = 1; i < subjectParts.length; i++) {
+			const part = subjectParts[i].trim();
+			if (/^\d+$/.test(part)) {
+				appfolioPropertyId = part;
+				break;
+			}
+		}
+
+		if (serviceRequestNumber && appfolioPropertyId) {
+			// Find the workspace that owns this property and has email tracking enabled
+			const { data: propWs } = await supabase
+				.from('properties')
+				.select('workspace_id, workspaces!inner(appfolio_email_tracking)')
+				.eq('appfolio_property_number', appfolioPropertyId)
+				.eq('workspaces.appfolio_email_tracking', true)
+				.maybeSingle();
+
+			if (propWs) {
+				const wsId = propWs.workspace_id;
 				const plain = findBodyPart(message.payload, 'text/plain');
 				const html = plain ? null : findBodyPart(message.payload, 'text/html');
 				const rawBody = plain ? decodeBase64Url(plain) : html ? decodeBase64Url(html) : '';
 				const emailBody = normalizeQuotedPrintable(rawBody);
 
-				// Parse subject: "WO #7561-1 - Water Heater - 292 - 292-8"
-				const subjectParts = (messageSubject ?? '').split(' - ');
-				const woMatch = (subjectParts[0] ?? '').match(/WO\s*#([\w-]+)/i);
-				const serviceRequestNumber = woMatch?.[1] ?? null;
-				const appfolioPropertyId = subjectParts.length >= 3 ? subjectParts[subjectParts.length - 2].trim() : null;
-
-				if (serviceRequestNumber && appfolioPropertyId) {
-					const INTERNAL_AGENT_KEY = Deno.env.get('INTERNAL_AGENT_KEY') ?? '';
-					fetch(`${supabaseUrl}/functions/v1/appfolio-email-trigger`, {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json',
-							apikey: supabaseServiceKey,
-							Authorization: `Bearer ${supabaseServiceKey}`,
-							'x-internal-agent-key': INTERNAL_AGENT_KEY
-						},
-						body: JSON.stringify({
-							workspaceId: wsId,
-							serviceRequestNumber,
-							appfolioPropertyId,
-							subject: messageSubject,
-							body: emailBody,
-							gmailMessageId: message.id
-						})
-					}).catch(err => console.error('appfolio-email-trigger dispatch failed:', err));
-				} else {
-					console.warn('agent: AppFolio email detected but could not parse subject:', messageSubject);
-				}
+				const INTERNAL_AGENT_KEY = Deno.env.get('INTERNAL_AGENT_KEY') ?? '';
+				await fetch(`${supabaseUrl}/functions/v1/appfolio-email-trigger`, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						apikey: supabaseAnonJwt,
+						Authorization: `Bearer ${supabaseAnonJwt}`,
+						'x-internal-agent-key': INTERNAL_AGENT_KEY
+					},
+					body: JSON.stringify({
+						workspaceId: wsId,
+						serviceRequestNumber,
+						appfolioPropertyId,
+						subject: messageSubject,
+						body: emailBody,
+						gmailMessageId: message.id
+					})
+				}).catch(err => console.error('appfolio-email-trigger dispatch failed:', err));
 				await insertIngestionLog({
 					userId: connection.user_id,
 					source: 'gmail-push',
-					detail: JSON.stringify({ phase: 'routed-to-appfolio-trigger', subject: messageSubject })
+					detail: JSON.stringify({ phase: 'routed-to-appfolio-trigger', subject: messageSubject, workspaceId: wsId })
 				});
 				return;
+			} else {
+				console.warn('agent: AppFolio email — no workspace with email tracking for property:', appfolioPropertyId);
 			}
+		} else {
+			console.warn('agent: AppFolio email detected but could not parse subject:', messageSubject);
 		}
+		// Always ignore donotreply@appfolio.com — non-WO emails (e.g. payment
+		// confirmations, lease notices) should not enter the tenant email pipeline.
+		return;
 	}
 
 	if (pmEmail && senderEmail === pmEmail) {
@@ -3621,10 +3646,14 @@ const handleAppfolioWorkOrder = async ({
 
 		// row may be null for stale re-queues — fall back to the activity_log recorded at issue
 		// creation which stores the exact tenant who submitted the work order (data.from / data.from_email).
-		let tenantName = normalizeTenantName(row?.primary_tenant ? String(row.primary_tenant) : null);
-		let tenantEmail: string | null = row?.primary_tenant_email
-			? String(row.primary_tenant_email)
-			: null;
+		// Prefer requesting_tenant (who actually submitted) over primary_tenant (first on lease).
+		let tenantName = normalizeTenantName(
+			row?.requesting_tenant ? String(row.requesting_tenant)
+			: row?.submitted_by_tenant ? String(row.submitted_by_tenant)
+			: row?.primary_tenant ? String(row.primary_tenant) : null
+		);
+		let tenantEmail: string | null = null;
+		let tenantPhone: string | null = null;
 		if (!tenantName) {
 			const { data: createdLog } = await supabase
 				.from('activity_logs')
@@ -3634,6 +3663,23 @@ const handleAppfolioWorkOrder = async ({
 				.maybeSingle();
 			if (createdLog?.data?.from) tenantName = normalizeTenantName(String(createdLog.data.from));
 			if (createdLog?.data?.from_email) tenantEmail = String(createdLog.data.from_email);
+		}
+		// Look up tenant contact info from DB by issue's tenant_id or by name match
+		if (issueRow.unit_id && tenantName) {
+			const { data: tenantRow } = await supabase
+				.from('tenants')
+				.select('email, phone')
+				.eq('unit_id', issueRow.unit_id)
+				.eq('name', tenantName)
+				.limit(1)
+				.maybeSingle();
+			if (tenantRow) {
+				tenantEmail = tenantRow.email ?? tenantEmail;
+				tenantPhone = tenantRow.phone ?? null;
+			}
+		}
+		if (!tenantEmail && row?.primary_tenant_email) {
+			tenantEmail = String(row.primary_tenant_email);
 		}
 		const description = issueRow.description ?? issueRow.name ?? '';
 		const autoPolicyMatch = findAutoPolicyMatch(autoPolicies, issueRow.name ?? description);
@@ -3653,7 +3699,7 @@ const handleAppfolioWorkOrder = async ({
 			urgencyDecision: null,
 			tenantName,
 			tenantEmail,
-			tenantPhone: null,
+			tenantPhone,
 			userName: userProfile?.name ?? 'Bedrock',
 			defaultSenderEmail: null,
 			replyMessageId: null,

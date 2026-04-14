@@ -190,7 +190,7 @@ const loadUnitsList = async (
 		let q = client
 			.from('units')
 			.select(
-				'id, name, property_id, tenants(id, name, email, unit_id), properties!inner(workspace_id)'
+				'id, name, property_id, tenants(id, name, email, phone, unit_id), properties!inner(workspace_id)'
 			)
 			.eq('properties.workspace_id', workspaceId)
 			.order('name', { ascending: true });
