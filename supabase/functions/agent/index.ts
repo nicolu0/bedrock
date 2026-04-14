@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const supabaseAnonJwt = Deno.env.get('ANON_JWT') ?? '';
 const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
 
 if (!supabaseUrl || !supabaseServiceKey) {
@@ -2854,8 +2855,8 @@ const processMessage = async ({
 					method: 'POST',
 					headers: {
 						'Content-Type': 'application/json',
-						apikey: supabaseServiceKey,
-						Authorization: `Bearer ${supabaseServiceKey}`,
+						apikey: supabaseAnonJwt,
+						Authorization: `Bearer ${supabaseAnonJwt}`,
 						'x-internal-agent-key': INTERNAL_AGENT_KEY
 					},
 					body: JSON.stringify({

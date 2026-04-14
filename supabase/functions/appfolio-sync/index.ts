@@ -92,8 +92,9 @@ async function appfolioFetch(
 }
 
 // Light throttle to avoid burning through the rate limit (7 req / 15s).
-// 800ms spacing lets us process ~68 properties in ~55s with room for retries.
 const MIN_DELAY_MS = 800;
+// Wall-clock budget: stop starting new properties after this many ms to avoid gateway 504.
+const WALL_CLOCK_BUDGET_MS = 120_000;
 let lastRequestTime = 0;
 
 async function throttledAppfolioFetch(
@@ -537,6 +538,8 @@ async function enqueueAgentEvent(
 
 // ── Work Order Sync (Fast Path) ──────────────────────────────────────────────
 
+const syncStartTime = Date.now();
+
 async function syncWorkOrders(
 	workspaceId: string,
 	appfolioPropertyIds: number[]
@@ -616,6 +619,12 @@ async function syncWorkOrders(
 	// IMPORTANT: The work_order API uses the property NUMBER (e.g., "292") as its filter,
 	// NOT the internal property_id (e.g., "202") from property_directory.
 	for (const appfolioPropId of appfolioPropertyIds) {
+		// Stop starting new properties if we're running low on time
+		if (Date.now() - syncStartTime > WALL_CLOCK_BUDGET_MS) {
+			console.warn(`syncWorkOrders: wall-clock budget exceeded after ${Math.round((Date.now() - syncStartTime) / 1000)}s — stopping`);
+			break;
+		}
+
 		// Look up the property number for the work_order API
 		const propNumber = propNumberMap.get(String(appfolioPropId));
 		if (!propNumber) {
@@ -1127,7 +1136,7 @@ serve(async (req) => {
 
 	const { data: workspaces, error: wsError } = await supabase
 		.from('workspaces')
-		.select('id, appfolio_property_ids, last_metadata_sync_at, appfolio_seen_vendor_ids')
+		.select('id, appfolio_property_ids, last_metadata_sync_at, appfolio_seen_vendor_ids, sync_property_cursor')
 		.eq('appfolio_enabled', true);
 
 	if (wsError) {
@@ -1176,6 +1185,9 @@ serve(async (req) => {
 				results[ws.id] = { ok: true, properties: appfolioPropertyIds.length };
 			} else {
 				// FAST PATH: work orders + agent dispatch
+				// Process properties in batches using a round-robin cursor to stay
+				// within the function timeout.
+				const PROPERTIES_PER_RUN = 30;
 				let allPropertyIds: number[];
 				if (allowedIds) {
 					allPropertyIds = allowedIds;
@@ -1189,10 +1201,25 @@ serve(async (req) => {
 				}
 
 				if (allPropertyIds.length > 0) {
-					console.log(`fast-path: syncing ${allPropertyIds.length} properties`);
-					await syncWorkOrders(ws.id, allPropertyIds);
+					// Sort deterministically so cursor position is stable across runs
+					allPropertyIds.sort((a, b) => a - b);
+
+					const cursor = ws.sync_property_cursor ?? 0;
+					const batch = allPropertyIds.slice(cursor, cursor + PROPERTIES_PER_RUN);
+					const nextCursor = cursor + PROPERTIES_PER_RUN >= allPropertyIds.length ? 0 : cursor + PROPERTIES_PER_RUN;
+
+					console.log(`fast-path: properties ${cursor}..${cursor + batch.length - 1} of ${allPropertyIds.length} (batch=${batch.length}, next_cursor=${nextCursor})`);
+
+					await syncWorkOrders(ws.id, batch);
 					await processDispatchQueue(ws.id);
-					results[ws.id] = { ok: true, total_properties: allPropertyIds.length };
+
+					// Advance cursor
+					await supabase
+						.from('workspaces')
+						.update({ sync_property_cursor: nextCursor })
+						.eq('id', ws.id);
+
+					results[ws.id] = { ok: true, batch: batch.length, total_properties: allPropertyIds.length, cursor: nextCursor };
 				} else {
 					console.warn(`Workspace ${ws.id}: no properties to sync work orders for`);
 					results[ws.id] = { ok: true, total_properties: 0 };
