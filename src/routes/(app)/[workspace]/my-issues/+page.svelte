@@ -3,6 +3,7 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/stores';
 	import { getContext } from 'svelte';
+	import { onMount } from 'svelte';
 	import { fade, scale } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { encodePathSegment } from '$lib/utils/url.js';
@@ -39,6 +40,8 @@
 	let filterCategory = 'assignee';
 	let filterValue = 'any';
 	let showClosedIssues = true;
+	const SHOW_CLOSED_ISSUES_STORAGE_KEY = 'my-issues:show_closed_issues';
+	let showClosedIssuesHydrated = false;
 	let filteredSections = [];
 	let dividerTooltipX = 0;
 	let dividerTooltipY = 0;
@@ -260,6 +263,17 @@
 		return `${basePath}/issue/${encodePathSegment(readableId)}/${slug}?from=my-issues`;
 	};
 
+	const formatCreatedAtLabel = (value) => {
+		if (!value) return '';
+		try {
+			const date = new Date(value);
+			if (!Number.isFinite(date.getTime())) return '';
+			return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+		} catch {
+			return '';
+		}
+	};
+
 	const avatarPalette = [
 		'bg-amber-200',
 		'bg-blue-200',
@@ -429,8 +443,24 @@
 			groups.get(name).push(row);
 		}
 		return [...groups.entries()]
-			.map(([name, items]) => ({ name, items }))
-			.sort((a, b) => a.name.localeCompare(b.name));
+			.map(([name, items]) => {
+				const sorted = [...(items ?? [])].sort((a, b) => {
+					// Newest first within the property group.
+					const aTs = getTimestamp(a?.created_at ?? a?.createdAt);
+					const bTs = getTimestamp(b?.created_at ?? b?.createdAt);
+					if (aTs !== bTs) return bTs - aTs;
+					return String(a?.title ?? a?.name ?? '').localeCompare(String(b?.title ?? b?.name ?? ''));
+				});
+				const latestCreatedAt = sorted.length
+					? getTimestamp(sorted[0]?.created_at ?? sorted[0]?.createdAt)
+					: 0;
+				return { name, items: sorted, latestCreatedAt };
+			})
+			.sort((a, b) => {
+				// Newest property groups first (still grouped by property).
+				if (a.latestCreatedAt !== b.latestCreatedAt) return b.latestCreatedAt - a.latestCreatedAt;
+				return a.name.localeCompare(b.name);
+			});
 	};
 
 	let collapsedPropertyGroups = {};
@@ -491,6 +521,26 @@
 		})
 		.filter((section) => section.rows.length > 0);
 	$: hasActiveFilter = filterValue !== 'any';
+
+	onMount(() => {
+		try {
+			const stored = localStorage.getItem(SHOW_CLOSED_ISSUES_STORAGE_KEY);
+			if (stored === 'true' || stored === 'false') {
+				showClosedIssues = stored === 'true';
+			}
+		} catch {
+			// ignore storage errors
+		}
+		showClosedIssuesHydrated = true;
+	});
+
+	$: if (browser && showClosedIssuesHydrated) {
+		try {
+			localStorage.setItem(SHOW_CLOSED_ISSUES_STORAGE_KEY, showClosedIssues ? 'true' : 'false');
+		} catch {
+			// ignore storage errors
+		}
+	}
 
 	const openNewIssueModal = () => {
 		showNewIssueModal = true;
@@ -1078,6 +1128,9 @@
 								{#if !collapsedPropertyGroups[getPropertyGroupKey(section.id, group.name)]}
 									<div class="mb-2">
 										{#each group.items as item}
+											{@const createdAtLabel = formatCreatedAtLabel(
+												item.created_at ?? item.createdAt
+											)}
 											<a
 												class={`group block w-full px-6.5 py-2 text-left transition ${
 													isRowSelected(item, selectedIssueIds)
@@ -1412,6 +1465,13 @@
 																	/>
 																</svg>
 															</div>
+														{/if}
+														{#if createdAtLabel}
+															<span
+																class="hidden w-12 text-right text-sm text-neutral-400 sm:block"
+															>
+																{createdAtLabel}
+															</span>
 														{/if}
 													</div>
 												</div>

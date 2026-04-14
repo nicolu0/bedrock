@@ -15,6 +15,7 @@
 	import { rightPanel } from '$lib/stores/rightPanel.js';
 	import { supabase } from '$lib/supabaseClient.js';
 	import { encodePathSegment } from '$lib/utils/url.js';
+	import { updateIssueFieldsInListCache } from '$lib/stores/issuesCache.js';
 	import {
 		getIssueDetailById,
 		getIssueDetailByReadableId,
@@ -1231,7 +1232,8 @@
 		if (!canEditIssue) return;
 		if (!issueId) return;
 		const nextId = member?.user_id ?? null;
-		const currentId = assignee?.id ?? null;
+		// Prefer the source-of-truth id even if the member object hasn't resolved yet.
+		const currentId = issueAssigneeId ?? assignee?.id ?? null;
 		if (nextId === currentId) {
 			assigneeOpen = false;
 			return;
@@ -1240,8 +1242,16 @@
 		const nextAssignee = normalizeAssignee(member);
 		const prevAssignee = assignee;
 		const prevAssigneeId = issueAssigneeId;
+		const prevIssue = issue;
+
+		// Optimistically update caches so list rows reflect the change immediately.
+		updateIssueFieldsInListCache(issueId, { assignee_id: nextId, assigneeId: nextId });
 		assignee = nextAssignee;
 		issueAssigneeId = nextId;
+		if (issue) {
+			issue = { ...issue, assignee_id: nextId, assigneeId: nextId };
+			if (browser) seedIssueDetail(issue, subIssues ?? []);
+		}
 		assigneeOpen = false;
 
 		const { error } = await supabase
@@ -1250,8 +1260,14 @@
 			.eq('id', issueId);
 
 		if (error) {
+			updateIssueFieldsInListCache(issueId, {
+				assignee_id: prevAssigneeId,
+				assigneeId: prevAssigneeId
+			});
 			assignee = prevAssignee;
 			issueAssigneeId = prevAssigneeId;
+			issue = prevIssue;
+			if (browser && issue) seedIssueDetail(issue, subIssues ?? []);
 			return;
 		}
 
@@ -1857,6 +1873,20 @@
 			return;
 		}
 		if (document.querySelector('[role="dialog"]')) return;
+
+		// When viewing a subissue we often have a preloaded parent route. If the user
+		// has changed data (eg status) that preload can be stale, which would make
+		// the subissues section show old values. Prefer history.back() (same as swipe
+		// back gesture) and fall back to a forced revalidation.
+		if (browser && fromIssueId) {
+			if (window.history.length > 1) {
+				window.history.back();
+				return;
+			}
+			goto(backHref, { invalidateAll: true });
+			return;
+		}
+
 		goto(backHref);
 	}
 
