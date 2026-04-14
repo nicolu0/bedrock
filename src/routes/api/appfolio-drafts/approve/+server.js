@@ -2,23 +2,6 @@
 import { json } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
-const pickLowestLoadAssignee = (candidates, issues) => {
-	const counts = new Map();
-	for (const candidate of candidates) {
-		counts.set(candidate.user_id, 0);
-	}
-	for (const issue of issues ?? []) {
-		if (!issue?.assignee_id || !counts.has(issue.assignee_id)) continue;
-		counts.set(issue.assignee_id, counts.get(issue.assignee_id) + 1);
-	}
-	return [...counts.entries()]
-		.sort((a, b) => {
-			if (a[1] !== b[1]) return a[1] - b[1];
-			return String(a[0]).localeCompare(String(b[0]));
-		})
-		.map(([userId]) => userId)[0];
-};
-
 export const POST = async ({ locals, request }) => {
 	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -57,13 +40,6 @@ export const POST = async ({ locals, request }) => {
 		}
 	}
 
-	const { data: bedrockPeople } = await supabaseAdmin
-		.from('people')
-		.select('user_id, users(name)')
-		.eq('workspace_id', issue.workspace_id)
-		.eq('role', 'bedrock')
-		.not('user_id', 'is', null);
-
 	const draftQuery = supabaseAdmin
 		.from('drafts')
 		.select(
@@ -79,43 +55,12 @@ export const POST = async ({ locals, request }) => {
 					.eq('channel', 'appfolio')
 					.maybeSingle();
 
-	const candidates = (bedrockPeople ?? []).filter((row) => row?.user_id);
-	if (!candidates.length) {
-		return json({ error: 'No bedrock assignees found' }, { status: 400 });
-	}
-
-	const candidateIds = candidates.map((row) => row.user_id);
-	const { data: openIssues } = await supabaseAdmin
-		.from('issues')
-		.select('id, assignee_id, status')
-		.eq('workspace_id', issue.workspace_id)
-		.neq('status', 'done')
-		.in('assignee_id', candidateIds);
-
-	const assigneeId = pickLowestLoadAssignee(candidates, openIssues ?? []);
-	if (!assigneeId) {
-		return json({ error: 'Unable to select assignee' }, { status: 400 });
-	}
-
-	await supabaseAdmin
-		.from('issues')
-		.update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
-		.eq('id', issue.id);
-
-	if (issue.parent_id) {
-		await supabaseAdmin
-			.from('issues')
-			.update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
-			.eq('id', issue.parent_id);
-	}
-
 	const { data: approver } = await supabaseAdmin
 		.from('users')
 		.select('name')
 		.eq('id', locals.user.id)
 		.maybeSingle();
 	const approvedBy = approver?.name ?? 'Unknown';
-	const assigneeName = candidates.find((row) => row.user_id === assigneeId)?.users?.name ?? null;
 
 	await supabaseAdmin.from('activity_logs').insert({
 		workspace_id: issue.workspace_id,
@@ -124,8 +69,6 @@ export const POST = async ({ locals, request }) => {
 		data: {
 			approved_by: approvedBy,
 			approved_by_id: locals.user.id,
-			assignee_id: assigneeId,
-			assignee_name: assigneeName,
 			draft: {
 				id: approvedDraft?.id ?? draftId,
 				message_id: approvedDraft?.message_id ?? messageId ?? null,
@@ -143,9 +86,9 @@ export const POST = async ({ locals, request }) => {
 	const isTriage = /^triage\s+/i.test(issueName);
 	const isSchedule = /^schedule\s+/i.test(issueName);
 	const followupBody = isSchedule
-		? 'Just checking in to see if you scheduled with the tenant.'
+		? 'Have you contacted the tenant to schedule?'
 		: isTriage
-			? 'Just checking in if the vendor got in contact with you to schedule.'
+			? 'Has the vendor gotten in contact with you to schedule?'
 			: null;
 	let followupDraft = null;
 
@@ -183,38 +126,18 @@ export const POST = async ({ locals, request }) => {
 		}
 	}
 
-	await supabaseAdmin
-		.from('issues')
-		.update({ status: 'in_progress', updated_at: new Date().toISOString() })
-		.eq('id', issue.id);
+	// Approval should only advance the approved *subissue*.
+	// Never change root issue status.
 	if (issue.parent_id) {
 		await supabaseAdmin
 			.from('issues')
 			.update({ status: 'in_progress', updated_at: new Date().toISOString() })
-			.eq('id', issue.parent_id);
-	}
-
-	// Notify all bedrock users that a draft was approved and needs action
-	// (reuses bedrockPeople already fetched above)
-	if (bedrockPeople?.length) {
-		await supabaseAdmin.from('notifications').insert(
-			bedrockPeople.map((p) => ({
-				workspace_id: issue.workspace_id,
-				issue_id: issue.id,
-				user_id: p.user_id,
-				title: 'Draft Approved',
-				body: `${approvedBy} approved a draft — ${issue.name}`,
-				type: 'draft_approved',
-				requires_action: true
-			}))
-		);
+			.eq('id', issue.id);
 	}
 
 	return json({
 		ok: true,
 		approved_by: approvedBy,
-		assignee_id: assigneeId,
-		assignee_name: assigneeName,
 		issue_id: issue.id,
 		parent_issue_id: issue.parent_id ?? null,
 		followup_draft: followupDraft ?? null
