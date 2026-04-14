@@ -15,7 +15,10 @@
 	import { rightPanel } from '$lib/stores/rightPanel.js';
 	import { supabase } from '$lib/supabaseClient.js';
 	import { encodePathSegment } from '$lib/utils/url.js';
-	import { updateIssueFieldsInListCache } from '$lib/stores/issuesCache.js';
+	import {
+		updateIssueFieldsInListCache,
+		updateIssueStatusInListCache
+	} from '$lib/stores/issuesCache.js';
 	import {
 		getIssueDetailById,
 		getIssueDetailByReadableId,
@@ -337,7 +340,8 @@
 	const formatPhone = (raw) => {
 		if (!raw) return '';
 		const digits = raw.replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
-		if (digits.length === 10) return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+		if (digits.length === 10)
+			return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 		return raw;
 	};
 
@@ -519,29 +523,72 @@
 	$: hasActivity =
 		subIssues.some(
 			(item) =>
-				(logsByIssue[item.id] ?? []).length > 0 ||
-				(messagesByIssue[item.id] ?? []).length > 0
+				(logsByIssue[item.id] ?? []).length > 0 || (messagesByIssue[item.id] ?? []).length > 0
 		) ||
 		(logsByIssue[issueId]?.length ?? 0) > 0 ||
 		(messagesByIssue[issueId]?.length ?? 0) > 0;
 
+	const ACTIVITY_FILTER_STORAGE_PREFIX = 'issue:activity_filter';
+	const getActivityFilterStorageKey = (slug) =>
+		slug ? `${ACTIVITY_FILTER_STORAGE_PREFIX}:${slug}` : null;
+	const isValidActivityFilter = (value) =>
+		value === 'all' || value === 'activity' || value === 'comms';
+
 	let activityFilter = 'all';
+	let _activityFilterHydratedWorkspaceSlug = null;
+
+	$: if (browser && workspaceSlug && workspaceSlug !== _activityFilterHydratedWorkspaceSlug) {
+		_activityFilterHydratedWorkspaceSlug = workspaceSlug;
+		const key = getActivityFilterStorageKey(workspaceSlug);
+		if (key) {
+			try {
+				const stored = localStorage.getItem(key);
+				if (isValidActivityFilter(stored)) {
+					activityFilter = stored;
+				}
+			} catch {
+				// ignore storage errors
+			}
+		}
+	}
+
+	const setActivityFilter = (next) => {
+		if (!isValidActivityFilter(next)) return;
+		activityFilter = next;
+		if (!browser) return;
+		const key = getActivityFilterStorageKey(workspaceSlug);
+		if (!key) return;
+		try {
+			localStorage.setItem(key, next);
+		} catch {
+			// ignore storage errors
+		}
+	};
 
 	const buildTimeline = (logs, messages, filter) => {
 		const logItems = (logs ?? [])
 			.filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound')
 			.map((l) => ({ _kind: 'log', _ts: new Date(l.created_at).getTime(), ...l }));
-		const msgItems = (messages ?? [])
-			.map((m) => ({ _kind: 'message', _ts: new Date(m.timestamp).getTime(), ...m }));
+		const msgItems = (messages ?? []).map((m) => ({
+			_kind: 'message',
+			_ts: new Date(m.timestamp).getTime(),
+			...m
+		}));
 
 		if (filter === 'activity') return logItems.sort((a, b) => a._ts - b._ts);
 
 		// Group SMS messages by participant type, keep emails inline
 		const smsMessages = msgItems.filter((m) => m.channel === 'appfolio_sms' || m.channel === 'sms');
-		const emailMessages = msgItems.filter((m) => m.channel !== 'appfolio_sms' && m.channel !== 'sms');
+		const emailMessages = msgItems.filter(
+			(m) => m.channel !== 'appfolio_sms' && m.channel !== 'sms'
+		);
 
-		const tenantSms = smsMessages.filter((m) => m._participant_type === 'tenant').sort((a, b) => a._ts - b._ts);
-		const vendorSms = smsMessages.filter((m) => m._participant_type === 'vendor').sort((a, b) => a._ts - b._ts);
+		const tenantSms = smsMessages
+			.filter((m) => m._participant_type === 'tenant')
+			.sort((a, b) => a._ts - b._ts);
+		const vendorSms = smsMessages
+			.filter((m) => m._participant_type === 'vendor')
+			.sort((a, b) => a._ts - b._ts);
 
 		const result = [];
 		if (filter !== 'comms') {
@@ -635,11 +682,16 @@
 	const isAppfolioDraftApproved = (draft) =>
 		Boolean(draft?.id && approvedAppfolioDraftMap?.[draft.id]);
 
-	const isFollowupDraft = (draft) =>
-		String(draft?.body ?? '')
+	const isFollowupDraft = (draft) => {
+		const body = String(draft?.body ?? '')
 			.trim()
-			.toLowerCase()
-			.startsWith('just checking in');
+			.toLowerCase();
+		return (
+			body.startsWith('just checking in') ||
+			body.startsWith('has the vendor gotten in contact with you to schedule') ||
+			body.startsWith('have you contacted the tenant to schedule')
+		);
+	};
 
 	const hasFollowupDraft = (drafts) => (drafts ?? []).some((draft) => isFollowupDraft(draft));
 
@@ -1220,6 +1272,18 @@
 				FIELD_MENU_WIDTH_NARROW
 			);
 		}
+		if (subIssueStatusMenuOpenId && subIssueStatusAnchorEl) {
+			subIssueStatusMenuStyle = buildFieldMenuStyle(
+				subIssueStatusAnchorEl,
+				FIELD_MENU_WIDTH_NARROW
+			);
+		}
+		if (subIssueAssigneeMenuOpenId && subIssueAssigneeAnchorEl) {
+			subIssueAssigneeMenuStyle = buildFieldMenuStyle(
+				subIssueAssigneeAnchorEl,
+				FIELD_MENU_WIDTH_WIDE
+			);
+		}
 	};
 	let showUrgencyPolicyPrompt = false;
 	let urgencyPolicyValue = 'not_urgent';
@@ -1289,6 +1353,93 @@
 			fromValue: prevAssigneeId,
 			toValue: nextId
 		});
+	};
+
+	let subIssueStatusMenuOpenId = null;
+	let subIssueAssigneeMenuOpenId = null;
+	let subIssueActionHoverId = null;
+	let subIssueActionHoverKind = null;
+	let subIssueStatusAnchorEl;
+	let subIssueAssigneeAnchorEl;
+	let subIssueStatusMenuStyle = '';
+	let subIssueAssigneeMenuStyle = '';
+
+	const getSubIssueAssigneeId = (subIssue) => {
+		if (!subIssue?.id) return subIssue?.assigneeId ?? subIssue?.assignee_id ?? null;
+		return (
+			subIssueAssigneeOverrides.get(subIssue.id) ??
+			subIssue?.assigneeId ??
+			subIssue?.assignee_id ??
+			null
+		);
+	};
+
+	const applySubIssueOptimisticDelta = (payload) => {
+		applySubIssueDelta(payload);
+		// Ensure derived list updates immediately for the sub-issues section.
+		subIssuesWithAssignees = buildSubIssuesWithAssignees(subIssues);
+		if (browser && issue) {
+			seedIssueDetail(issue, subIssues);
+			const updated = subIssues.find((s) => s.id === payload?.id);
+			if (updated) seedIssueDetail(updated, []);
+		}
+	};
+
+	const handleSubIssueStatusSelect = async (subIssue, nextStatus) => {
+		if (!canEditIssue) return;
+		const id = subIssue?.id ?? null;
+		if (!id) return;
+		const prevStatus = subIssue?.status ?? 'todo';
+		subIssueStatusMenuOpenId = null;
+		subIssueStatusAnchorEl = null;
+		if (prevStatus === nextStatus) return;
+
+		updateIssueStatusInListCache(id, nextStatus);
+		applySubIssueOptimisticDelta({ id, status: nextStatus, updated_at: new Date().toISOString() });
+
+		const { error } = await supabase
+			.from('issues')
+			.update({ status: nextStatus, updated_at: new Date().toISOString() })
+			.eq('id', id);
+
+		if (error) {
+			updateIssueStatusInListCache(id, prevStatus);
+			applySubIssueOptimisticDelta({
+				id,
+				status: prevStatus,
+				updated_at: new Date().toISOString()
+			});
+		}
+	};
+
+	const handleSubIssueAssigneeSelect = async (subIssue, member) => {
+		if (!canEditIssue) return;
+		const id = subIssue?.id ?? null;
+		if (!id) return;
+		const nextId = member?.user_id ?? null;
+		const prevAssigneeId = getSubIssueAssigneeId(subIssue);
+		subIssueAssigneeMenuOpenId = null;
+		subIssueAssigneeAnchorEl = null;
+		if (nextId === prevAssigneeId) return;
+
+		updateIssueFieldsInListCache(id, { assignee_id: nextId, assigneeId: nextId });
+		setSubIssueAssigneeOverride(id, nextId);
+		applySubIssueOptimisticDelta({ id, assignee_id: nextId, updated_at: new Date().toISOString() });
+
+		const { error } = await supabase
+			.from('issues')
+			.update({ assignee_id: nextId, updated_at: new Date().toISOString() })
+			.eq('id', id);
+
+		if (error) {
+			updateIssueFieldsInListCache(id, { assignee_id: prevAssigneeId, assigneeId: prevAssigneeId });
+			setSubIssueAssigneeOverride(id, prevAssigneeId);
+			applySubIssueOptimisticDelta({
+				id,
+				assignee_id: prevAssigneeId,
+				updated_at: new Date().toISOString()
+			});
+		}
 	};
 
 	const handlePropertySelect = async (propertyId) => {
@@ -1862,7 +2013,10 @@
 
 	function onKeydown(e) {
 		if (e.key !== 'Escape') return;
-		if (tenantModalOpen) { tenantModalOpen = false; return; }
+		if (tenantModalOpen) {
+			tenantModalOpen = false;
+			return;
+		}
 		if (propertyOpen || unitOpen || statusOpen || assigneeOpen || urgentOpen || urgentHelpOpen) {
 			propertyOpen = false;
 			unitOpen = false;
@@ -1870,6 +2024,14 @@
 			assigneeOpen = false;
 			urgentOpen = false;
 			urgentHelpOpen = false;
+			return;
+		}
+		if (subIssueStatusMenuOpenId || subIssueAssigneeMenuOpenId) {
+			subIssueStatusMenuOpenId = null;
+			subIssueAssigneeMenuOpenId = null;
+			subIssueStatusAnchorEl = null;
+			subIssueAssigneeAnchorEl = null;
+			subIssueActionHoverKind = null;
 			return;
 		}
 		if (document.querySelector('[role="dialog"]')) return;
@@ -1896,6 +2058,11 @@
 		if (propertyOpen) propertyOpen = false;
 		if (unitOpen) unitOpen = false;
 		if (urgentOpen) urgentOpen = false;
+		if (subIssueStatusMenuOpenId) subIssueStatusMenuOpenId = null;
+		if (subIssueAssigneeMenuOpenId) subIssueAssigneeMenuOpenId = null;
+		subIssueStatusAnchorEl = null;
+		subIssueAssigneeAnchorEl = null;
+		subIssueActionHoverKind = null;
 	}
 </script>
 
@@ -2515,6 +2682,7 @@
 											<div class="overflow-hidden">
 												<div class="mt-2">
 													{#each subIssuesWithAssignees as subIssue}
+														{@const currentSubAssigneeId = getSubIssueAssigneeId(subIssue)}
 														<a
 															href={getSubIssueHref(subIssue)}
 															class="relative flex items-center justify-between px-3 py-3 text-sm transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-200 focus-visible:outline-none"
@@ -2531,41 +2699,246 @@
 															on:mouseleave={() => {
 																subIssueTooltipVisible = false;
 																subIssueHoverId = null;
+																if (subIssueActionHoverId === subIssue.id)
+																	subIssueActionHoverId = null;
+																subIssueActionHoverKind = null;
 															}}
 														>
 															<div class="flex items-center gap-2">
-																<span
-																	class={`h-4 w-4 rounded-full border-[1.5px] ${
-																		statusConfig[subIssue.status ?? 'todo']?.statusClass ??
-																		'border-neutral-300 text-neutral-700'
-																	}`}
-																></span>
+																<div class="relative">
+																	<button
+																		type="button"
+																		class={`tooltip-target relative -m-1 flex items-center justify-center rounded-md p-1 transition ${
+																			canEditIssue
+																				? 'hover:bg-neutral-100'
+																				: 'cursor-not-allowed opacity-60'
+																		}`}
+																		disabled={!canEditIssue}
+																		aria-disabled={!canEditIssue}
+																		on:mouseenter={() => {
+																			subIssueActionHoverId = subIssue.id;
+																			subIssueActionHoverKind = 'status';
+																		}}
+																		on:mouseleave={() => {
+																			if (subIssueActionHoverId === subIssue.id)
+																				subIssueActionHoverId = null;
+																			if (subIssueActionHoverKind === 'status')
+																				subIssueActionHoverKind = null;
+																		}}
+																		on:click|stopPropagation|preventDefault={(event) => {
+																			if (!canEditIssue) return;
+																			const nextOpen =
+																				subIssueStatusMenuOpenId === subIssue.id
+																					? null
+																					: subIssue.id;
+																			subIssueStatusMenuOpenId = nextOpen;
+																			subIssueAssigneeMenuOpenId = null;
+																			subIssueStatusAnchorEl = nextOpen
+																				? event.currentTarget
+																				: null;
+																			subIssueAssigneeAnchorEl = null;
+																			if (nextOpen) refreshOpenFieldMenus();
+																			statusOpen = false;
+																			assigneeOpen = false;
+																			propertyOpen = false;
+																			unitOpen = false;
+																			urgentOpen = false;
+																			urgentHelpOpen = false;
+																		}}
+																	>
+																		<span
+																			class={`h-4 w-4 rounded-full border-[1.5px] ${
+																				statusConfig[subIssue.status ?? 'todo']?.statusClass ??
+																				'border-neutral-300 text-neutral-700'
+																			}`}
+																		></span>
+																	</button>
+																	{#if subIssueStatusMenuOpenId === subIssue.id && canEditIssue}
+																		<div
+																			class="fixed z-[100] w-48 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+																			style={subIssueStatusMenuStyle}
+																			on:click|stopPropagation
+																		>
+																			<div class="sr-only">Change status</div>
+																			{#each statusCycle as status}
+																				<button
+																					type="button"
+																					class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																						subIssue.status === status ? 'bg-neutral-50' : ''
+																					}`}
+																					on:click|preventDefault={() =>
+																						handleSubIssueStatusSelect(subIssue, status)}
+																				>
+																					<span
+																						class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${(statusConfig[status] ?? statusConfig.todo).statusClass}`}
+																					></span>
+																					<span
+																						>{(statusConfig[status] ?? statusConfig.todo)
+																							.label}</span
+																					>
+																				</button>
+																			{/each}
+																		</div>
+																	{/if}
+																</div>
 																<span class="text-neutral-800">{subIssue.name}</span>
 															</div>
-															{#if subIssue.assignee}
+															<div class="relative">
+																<button
+																	type="button"
+																	class={`tooltip-target relative -m-1 flex items-center justify-center rounded-md p-1 transition ${
+																		canEditIssue
+																			? 'hover:bg-neutral-100'
+																			: 'cursor-not-allowed opacity-60'
+																	}`}
+																	disabled={!canEditIssue}
+																	aria-disabled={!canEditIssue}
+																	on:mouseenter={() => {
+																		subIssueActionHoverId = subIssue.id;
+																		subIssueActionHoverKind = 'assignee';
+																	}}
+																	on:mouseleave={() => {
+																		if (subIssueActionHoverId === subIssue.id)
+																			subIssueActionHoverId = null;
+																		if (subIssueActionHoverKind === 'assignee')
+																			subIssueActionHoverKind = null;
+																	}}
+																	on:click|stopPropagation|preventDefault={(event) => {
+																		if (!canEditIssue) return;
+																		const nextOpen =
+																			subIssueAssigneeMenuOpenId === subIssue.id
+																				? null
+																				: subIssue.id;
+																		subIssueAssigneeMenuOpenId = nextOpen;
+																		subIssueStatusMenuOpenId = null;
+																		subIssueAssigneeAnchorEl = nextOpen
+																			? event.currentTarget
+																			: null;
+																		subIssueStatusAnchorEl = null;
+																		if (nextOpen) refreshOpenFieldMenus();
+																		statusOpen = false;
+																		assigneeOpen = false;
+																		propertyOpen = false;
+																		unitOpen = false;
+																		urgentOpen = false;
+																		urgentHelpOpen = false;
+																	}}
+																>
+																	{#if subIssue.assignee}
+																		<div
+																			class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(subIssue.assignee).color}`}
+																			aria-label={getAssigneeAvatar(subIssue.assignee).name}
+																		>
+																			{getAssigneeAvatar(subIssue.assignee).initial}
+																		</div>
+																	{:else}
+																		<svg
+																			xmlns="http://www.w3.org/2000/svg"
+																			width="16"
+																			height="16"
+																			fill="currentColor"
+																			class="text-neutral-400"
+																			viewBox="0 0 16 16"
+																		>
+																			<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+																			<path
+																				fill-rule="evenodd"
+																				d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+																			/>
+																		</svg>
+																	{/if}
+																</button>
+																{#if subIssueAssigneeMenuOpenId === subIssue.id && canEditIssue}
+																	<div
+																		class="fixed z-[100] w-56 rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+																		style={subIssueAssigneeMenuStyle}
+																		on:click|stopPropagation
+																	>
+																		<div class="sr-only">Change assignee</div>
+																		<button
+																			type="button"
+																			class={`flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50 ${
+																				!currentSubAssigneeId ? 'bg-neutral-50' : ''
+																			}`}
+																			on:click|preventDefault={() =>
+																				handleSubIssueAssigneeSelect(subIssue, null)}
+																		>
+																			<svg
+																				xmlns="http://www.w3.org/2000/svg"
+																				width="16"
+																				height="16"
+																				fill="currentColor"
+																				class="text-neutral-400"
+																				viewBox="0 0 16 16"
+																			>
+																				<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+																				<path
+																					fill-rule="evenodd"
+																					d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+																				/>
+																			</svg>
+																			<span class="font-medium text-neutral-500"> Unassigned </span>
+																		</button>
+																		<div class="my-1 h-px bg-neutral-100"></div>
+																		{#if membersLoading}
+																			<div class="px-3 py-2 text-neutral-400">
+																				Loading members...
+																			</div>
+																		{:else if assignableMembers.length}
+																			{#each assignableMembers as member}
+																				<button
+																					type="button"
+																					class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																						currentSubAssigneeId === member.user_id
+																							? 'bg-neutral-50'
+																							: ''
+																					}`}
+																					on:click|preventDefault={() =>
+																						handleSubIssueAssigneeSelect(subIssue, member)}
+																				>
+																					<div
+																						class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getMemberAvatar(member).color}`}
+																						aria-label={getMemberAvatar(member).name}
+																					>
+																						{getMemberAvatar(member).initial}
+																					</div>
+																					<span class="truncate">
+																						{member.users?.name ??
+																							member.name ??
+																							member.users?.id ??
+																							member.user_id ??
+																							'Unknown member'}
+																					</span>
+																					<span
+																						class="ml-auto rounded-full bg-stone-100 px-2 py-0.5 font-medium text-neutral-600"
+																					>
+																						{roleLabels[member.role] ?? member.role}
+																					</span>
+																				</button>
+																			{/each}
+																		{:else if membersReady}
+																			<div class="px-3 py-2 text-neutral-400">
+																				No members found.
+																			</div>
+																		{:else}
+																			<div class="px-3 py-2 text-neutral-400">
+																				Unable to load members.
+																			</div>
+																		{/if}
+																	</div>
+																{/if}
+															</div>
+															{#if subIssueTooltipVisible && subIssueHoverId === subIssue.id && subIssueActionHoverId === subIssue.id && subIssueActionHoverKind && subIssueStatusMenuOpenId !== subIssue.id && subIssueAssigneeMenuOpenId !== subIssue.id}
 																<div
-																	class={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getAssigneeAvatar(subIssue.assignee).color}`}
-																	aria-label={getAssigneeAvatar(subIssue.assignee).name}
+																	class="subissue-hover-tooltip fixed z-50 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+																	style={`left: ${subIssueTooltipX}px; top: ${subIssueTooltipY}px;`}
 																>
-																	{getAssigneeAvatar(subIssue.assignee).initial}
+																	{subIssueActionHoverKind === 'status'
+																		? 'Change status'
+																		: 'Change assignee'}
 																</div>
-															{:else}
-																<svg
-																	xmlns="http://www.w3.org/2000/svg"
-																	width="16"
-																	height="16"
-																	fill="currentColor"
-																	class="text-neutral-400"
-																	viewBox="0 0 16 16"
-																>
-																	<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
-																	<path
-																		fill-rule="evenodd"
-																		d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
-																	/>
-																</svg>
 															{/if}
-															{#if subIssueTooltipVisible && subIssueHoverId === subIssue.id}
+															{#if subIssueTooltipVisible && subIssueHoverId === subIssue.id && subIssueActionHoverId !== subIssue.id && subIssueStatusMenuOpenId !== subIssue.id && subIssueAssigneeMenuOpenId !== subIssue.id}
 																<div
 																	class="subissue-hover-tooltip fixed z-50 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
 																	style={`left: ${subIssueTooltipX}px; top: ${subIssueTooltipY}px;`}
@@ -2750,8 +3123,17 @@
 														if (tenantInfo) tenantModalOpen = true;
 													}}
 												>
-													<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
-														<path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="14"
+														height="14"
+														fill="currentColor"
+														class="text-neutral-400"
+														viewBox="0 0 16 16"
+													>
+														<path
+															d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"
+														/>
 													</svg>
 													<span class="truncate">{tenantName}</span>
 												</button>
@@ -3767,21 +4149,21 @@
 											class="rounded-l-md px-2 py-1 transition"
 											class:bg-neutral-900={activityFilter === 'all'}
 											class:text-white={activityFilter === 'all'}
-											on:click={() => (activityFilter = 'all')}>All</button
+											on:click={() => setActivityFilter('all')}>All</button
 										>
 										<button
 											type="button"
 											class="border-l border-neutral-200 px-2 py-1 transition"
 											class:bg-neutral-900={activityFilter === 'activity'}
 											class:text-white={activityFilter === 'activity'}
-											on:click={() => (activityFilter = 'activity')}>Activity</button
+											on:click={() => setActivityFilter('activity')}>Activity</button
 										>
 										<button
 											type="button"
 											class="rounded-r-md border-l border-neutral-200 px-2 py-1 transition"
 											class:bg-neutral-900={activityFilter === 'comms'}
 											class:text-white={activityFilter === 'comms'}
-											on:click={() => (activityFilter = 'comms')}>Comms</button
+											on:click={() => setActivityFilter('comms')}>Comms</button
 										>
 									</div>
 									<div class="text-sm text-neutral-400">Unsubscribe</div>
@@ -3845,8 +4227,17 @@
 										{#if item._kind === 'sms_header'}
 											<div class="mt-4 mb-1 flex items-center gap-2 px-1">
 												<div class="flex items-center gap-1.5">
-													<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
-														<path d="M3 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2zm6 11a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/>
+													<svg
+														xmlns="http://www.w3.org/2000/svg"
+														width="12"
+														height="12"
+														fill="currentColor"
+														class="text-neutral-400"
+														viewBox="0 0 16 16"
+													>
+														<path
+															d="M3 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2zm6 11a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"
+														/>
 													</svg>
 													<span class="text-xs font-medium text-neutral-500">{item.label}</span>
 												</div>
@@ -3926,8 +4317,8 @@
 															<p class="flex-1 text-sm text-neutral-700">
 																{#if item.type === 'issue_created'}
 																	{#if item.data?.from || item.data?.from_email}
-																		{formatTenantName(item.data.from) ?? item.data.from_email} created the
-																		issue
+																		{formatTenantName(item.data.from) ?? item.data.from_email} created
+																		the issue
 																	{:else}
 																		Issue created
 																	{/if}
@@ -3940,7 +4331,8 @@
 																		item
 																	)}
 																{:else if item.type === 'appfolio_approved'}
-																	Approved by {item?.data?.approved_by ?? getActivityActor(item).name}
+																	Approved by {item?.data?.approved_by ??
+																		getActivityActor(item).name}
 																{/if}
 															</p>
 															<span class="shrink-0 text-xs text-neutral-400">
@@ -4071,10 +4463,21 @@
 																{#if item._kind === 'sms_header'}
 																	<div class="mt-4 mb-1 flex items-center gap-2 px-1">
 																		<div class="flex items-center gap-1.5">
-																			<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
-																				<path d="M3 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2zm6 11a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/>
+																			<svg
+																				xmlns="http://www.w3.org/2000/svg"
+																				width="12"
+																				height="12"
+																				fill="currentColor"
+																				class="text-neutral-400"
+																				viewBox="0 0 16 16"
+																			>
+																				<path
+																					d="M3 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2zm6 11a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"
+																				/>
 																			</svg>
-																			<span class="text-xs font-medium text-neutral-500">{item.label}</span>
+																			<span class="text-xs font-medium text-neutral-500"
+																				>{item.label}</span
+																			>
 																		</div>
 																		<div class="h-px flex-1 bg-neutral-100"></div>
 																		<span class="text-[10px] text-neutral-400">{item.count}</span>
@@ -4876,16 +5279,34 @@
 					type="button"
 					aria-label="Close"
 				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
-						<path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"/>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="18"
+						height="18"
+						fill="currentColor"
+						viewBox="0 0 16 16"
+					>
+						<path
+							d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"
+						/>
 					</svg>
 				</button>
 			</div>
 			<div class="mt-5 flex flex-col gap-3 text-sm">
 				<div class="flex items-center gap-3">
-					<div class="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500">
-						<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-							<path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0m4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4m-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10s-3.516.68-4.168 1.332c-.678.678-.83 1.418-.832 1.664z"/>
+					<div
+						class="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="20"
+							height="20"
+							fill="currentColor"
+							viewBox="0 0 16 16"
+						>
+							<path
+								d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0m4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4m-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10s-3.516.68-4.168 1.332c-.678.678-.83 1.418-.832 1.664z"
+							/>
 						</svg>
 					</div>
 					<div>
@@ -4896,16 +5317,35 @@
 				<div class="h-px bg-neutral-100"></div>
 				{#if tenantInfo.email}
 					<div class="flex items-center gap-2 text-neutral-600">
-						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
-							<path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z"/>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="14"
+							height="14"
+							fill="currentColor"
+							class="text-neutral-400"
+							viewBox="0 0 16 16"
+						>
+							<path
+								d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v.217l7 4.2 7-4.2V4a1 1 0 0 0-1-1zm13 2.383-4.708 2.825L15 11.105zm-.034 6.876-5.64-3.471L8 9.583l-1.326-.795-5.64 3.47A1 1 0 0 0 2 13h12a1 1 0 0 0 .966-.741M1 11.105l4.708-2.897L1 5.383z"
+							/>
 						</svg>
 						<span>{tenantInfo.email}</span>
 					</div>
 				{/if}
 				{#if tenantInfo.phone}
 					<div class="flex items-center gap-2 text-neutral-600">
-						<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
-							<path fill-rule="evenodd" d="M1.885.511a1.745 1.745 0 0 1 2.61.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.68.68 0 0 0 .178.643l2.457 2.457a.68.68 0 0 0 .644.178l2.189-.547a1.75 1.75 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.6 18.6 0 0 1-7.01-4.42 18.6 18.6 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877z"/>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="14"
+							height="14"
+							fill="currentColor"
+							class="text-neutral-400"
+							viewBox="0 0 16 16"
+						>
+							<path
+								fill-rule="evenodd"
+								d="M1.885.511a1.745 1.745 0 0 1 2.61.163L6.29 2.98c.329.423.445.974.315 1.494l-.547 2.19a.68.68 0 0 0 .178.643l2.457 2.457a.68.68 0 0 0 .644.178l2.189-.547a1.75 1.75 0 0 1 1.494.315l2.306 1.794c.829.645.905 1.87.163 2.611l-1.034 1.034c-.74.74-1.846 1.065-2.877.702a18.6 18.6 0 0 1-7.01-4.42 18.6 18.6 0 0 1-4.42-7.009c-.362-1.03-.037-2.137.703-2.877z"
+							/>
 						</svg>
 						<span>{formatPhone(tenantInfo.phone)}</span>
 					</div>

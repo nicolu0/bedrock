@@ -209,6 +209,14 @@
 		in_progress: 'border-orange-500 text-orange-600',
 		done: 'border-emerald-500 text-emerald-700'
 	};
+
+	const roleLabels = {
+		owner: 'Owner',
+		admin: 'Admin',
+		bedrock: 'Bedrock',
+		member: 'Member',
+		vendor: 'Vendor'
+	};
 	const filterCategories = [
 		{ value: 'assignee', label: 'Assignee' },
 		{ value: 'status', label: 'Status' },
@@ -301,6 +309,14 @@
 		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
 		const color = getAvatarColor(assigneeId ?? name);
 		if (!assigneeId) return null;
+		return { name, initial, color };
+	};
+
+	const getMemberAvatar = (member) => {
+		const name = member?.users?.name ?? member?.name ?? 'User';
+		const seed = member?.user_id ?? member?.users?.id ?? name;
+		const initial = (name ?? 'U').toString().trim().charAt(0).toUpperCase() || 'U';
+		const color = getAvatarColor(seed);
 		return { name, initial, color };
 	};
 
@@ -532,6 +548,15 @@
 			// ignore storage errors
 		}
 		showClosedIssuesHydrated = true;
+
+		if (!browser) return;
+		const handleViewport = () => refreshOpenRowMenus();
+		window.addEventListener('resize', handleViewport);
+		window.addEventListener('scroll', handleViewport, true);
+		return () => {
+			window.removeEventListener('resize', handleViewport);
+			window.removeEventListener('scroll', handleViewport, true);
+		};
 	});
 
 	$: if (browser && showClosedIssuesHydrated) {
@@ -587,21 +612,109 @@
 
 	const onWindowClick = () => {
 		if (filterOpen || filterCategoryOpen || filterValueOpen) closeFilterMenus();
-		if (statusMenuOpenId || urgentMenuOpenId) {
+		if (statusMenuOpenId || urgentMenuOpenId || assigneeMenuOpenId) {
 			statusMenuOpenId = null;
 			urgentMenuOpenId = null;
+			assigneeMenuOpenId = null;
+			statusMenuAnchorEl = null;
+			urgentMenuAnchorEl = null;
+			assigneeMenuAnchorEl = null;
 		}
 	};
 
 	const getRowIssueId = (item) => item?.id ?? item?.issueId ?? null;
 	let statusMenuOpenId = null;
 	let urgentMenuOpenId = null;
+	let assigneeMenuOpenId = null;
+	let statusMenuAnchorEl;
+	let urgentMenuAnchorEl;
+	let assigneeMenuAnchorEl;
+	let statusMenuStyle = '';
+	let urgentMenuStyle = '';
+	let assigneeMenuStyle = '';
+
+	const ROW_MENU_PADDING = 8;
+	const ROW_MENU_GAP = 8;
+	const ROW_MENU_WIDTH_NARROW = 192;
+	const ROW_MENU_WIDTH_WIDE = 224;
+	const ROW_MENU_MAX_HEIGHT_STATUS = 200;
+	const ROW_MENU_MAX_HEIGHT_URGENT = 180;
+	const ROW_MENU_MAX_HEIGHT_ASSIGNEE = 320;
+
+	const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+	const buildRowMenuStyle = (anchor, menuWidth, menuMaxHeight, align = 'left') => {
+		if (!browser || !anchor) return '';
+		const rect = anchor.getBoundingClientRect();
+		const viewportWidth = window.innerWidth;
+		const viewportHeight = window.innerHeight;
+		let left = align === 'right' ? rect.right - menuWidth : rect.left;
+		left = clamp(left, ROW_MENU_PADDING, viewportWidth - ROW_MENU_PADDING - menuWidth);
+		const spaceBelow = Math.max(0, viewportHeight - rect.bottom - ROW_MENU_PADDING);
+		const spaceAbove = Math.max(0, rect.top - ROW_MENU_PADDING);
+		const openBelow = spaceBelow >= spaceAbove;
+		const available = openBelow ? spaceBelow : spaceAbove;
+		const maxHeight = clamp(
+			Math.min(menuMaxHeight, Math.max(0, available - ROW_MENU_GAP)),
+			80,
+			menuMaxHeight
+		);
+		if (openBelow) {
+			const top = rect.bottom + ROW_MENU_GAP;
+			return `left: ${left}px; top: ${top}px; max-height: ${maxHeight}px;`;
+		}
+		const bottom = viewportHeight - rect.top + ROW_MENU_GAP;
+		return `left: ${left}px; bottom: ${bottom}px; max-height: ${maxHeight}px;`;
+	};
+
+	const refreshOpenRowMenus = () => {
+		if (statusMenuOpenId && statusMenuAnchorEl) {
+			statusMenuStyle = buildRowMenuStyle(
+				statusMenuAnchorEl,
+				ROW_MENU_WIDTH_NARROW,
+				ROW_MENU_MAX_HEIGHT_STATUS,
+				'left'
+			);
+		}
+		if (urgentMenuOpenId && urgentMenuAnchorEl) {
+			urgentMenuStyle = buildRowMenuStyle(
+				urgentMenuAnchorEl,
+				ROW_MENU_WIDTH_NARROW,
+				ROW_MENU_MAX_HEIGHT_URGENT,
+				'left'
+			);
+		}
+		if (assigneeMenuOpenId && assigneeMenuAnchorEl) {
+			assigneeMenuStyle = buildRowMenuStyle(
+				assigneeMenuAnchorEl,
+				ROW_MENU_WIDTH_WIDE,
+				ROW_MENU_MAX_HEIGHT_ASSIGNEE,
+				'right'
+			);
+		}
+	};
 	let showUrgencyPolicyPrompt = false;
 	let urgencyPolicyValue = 'not_urgent';
 	let urgencyPolicyIssue = '';
 	let urgencyPolicyMatchingId = null;
 	let urgencyPolicyLoading = false;
 	let urgencyPolicyError = '';
+
+	$: assignableMembers = [...members]
+		.filter((member) => {
+			const r = (member?.role ?? '').toLowerCase();
+			return (r === 'admin' || r === 'bedrock' || r === 'member') && Boolean(member?.user_id);
+		})
+		.sort((a, b) => {
+			const order = { admin: 0, bedrock: 1, member: 2 };
+			const rA = (a?.role ?? '').toLowerCase();
+			const rB = (b?.role ?? '').toLowerCase();
+			const roleDiff = (order[rA] ?? 9) - (order[rB] ?? 9);
+			if (roleDiff !== 0) return roleDiff;
+			const nameA = (a?.users?.name ?? a?.name ?? '').toString();
+			const nameB = (b?.users?.name ?? b?.name ?? '').toString();
+			return nameA.localeCompare(nameB);
+		});
 
 	const handleStatusSelect = async (item, nextStatus) => {
 		if (!canEditIssue) return;
@@ -620,6 +733,7 @@
 			return 'todo';
 		};
 		statusMenuOpenId = null;
+		statusMenuAnchorEl = null;
 		const prevStatusByKey = {};
 		const keysToUpdate = [];
 		for (const key of targetKeys) {
@@ -650,6 +764,7 @@
 			? (item?.root_urgent ?? item?.urgent ?? false)
 			: (item?.urgent ?? false);
 		urgentMenuOpenId = null;
+		urgentMenuAnchorEl = null;
 		if (prevUrgent === nextUrgent) return;
 		updateIssueFieldsInListCache(targetId, { urgent: nextUrgent });
 		const { error } = await supabase
@@ -662,6 +777,53 @@
 		}
 		if (!item?.isSubIssue && !item?.parentId && !item?.parent_id) {
 			openUrgencyPolicyPrompt(nextUrgent, item);
+		}
+	};
+
+	const handleAssigneeSelect = async (item, member) => {
+		if (!canEditIssue) return;
+		const clickedIssueId = getRowIssueId(item);
+		if (!clickedIssueId) return;
+		const clickedKey = String(clickedIssueId);
+		const isBulk = Boolean(selectedIssueIds?.size && selectedIssueIds.has(clickedKey));
+		const targetKeys = isBulk ? [...selectedIssueIds] : [clickedKey];
+		const nextId = member?.user_id ?? null;
+
+		const getAssigneeIdByKey = (key) => {
+			for (const section of expandedSections ?? []) {
+				for (const row of section?.rows ?? []) {
+					const rowId = getRowIssueId(row);
+					if (rowId && String(rowId) === String(key)) {
+						return row?.assigneeId ?? row?.assignee_id ?? null;
+					}
+				}
+			}
+			return null;
+		};
+
+		assigneeMenuOpenId = null;
+		assigneeMenuAnchorEl = null;
+		const prevAssigneeByKey = {};
+		const keysToUpdate = [];
+		for (const key of targetKeys) {
+			const prev = getAssigneeIdByKey(key);
+			prevAssigneeByKey[key] = prev;
+			if (prev === nextId) continue;
+			keysToUpdate.push(key);
+			updateIssueFieldsInListCache(key, { assignee_id: nextId, assigneeId: nextId });
+		}
+		if (keysToUpdate.length === 0) return;
+
+		const { error } = await supabase
+			.from('issues')
+			.update({ assignee_id: nextId })
+			.in('id', keysToUpdate);
+
+		if (error) {
+			for (const key of keysToUpdate) {
+				const prev = prevAssigneeByKey[key] ?? null;
+				updateIssueFieldsInListCache(key, { assignee_id: prev, assigneeId: prev });
+			}
 		}
 	};
 
@@ -799,6 +961,15 @@
 		if (event.key === 'Escape') {
 			if (showNewIssueModal) {
 				closeNewIssueModal();
+				return;
+			}
+			if (statusMenuOpenId || urgentMenuOpenId || assigneeMenuOpenId) {
+				statusMenuOpenId = null;
+				urgentMenuOpenId = null;
+				assigneeMenuOpenId = null;
+				statusMenuAnchorEl = null;
+				urgentMenuAnchorEl = null;
+				assigneeMenuAnchorEl = null;
 				return;
 			}
 			if (selectedIssueIds?.size) {
@@ -1131,6 +1302,8 @@
 											{@const createdAtLabel = formatCreatedAtLabel(
 												item.created_at ?? item.createdAt
 											)}
+											{@const rowId = getRowIssueId(item)}
+											{@const currentAssigneeId = item.assigneeId ?? item.assignee_id ?? null}
 											<a
 												class={`group block w-full px-6.5 py-2 text-left transition ${
 													isRowSelected(item, selectedIssueIds)
@@ -1197,11 +1370,17 @@
 																		? 'hover:bg-neutral-100'
 																		: 'cursor-not-allowed'
 																}`}
-																on:click|stopPropagation|preventDefault={() => {
+																on:click|stopPropagation|preventDefault={(event) => {
 																	if (!canEditIssue || item.isSubIssue) return;
 																	const id = getRowIssueId(item);
-																	urgentMenuOpenId = urgentMenuOpenId === id ? null : id;
+																	const nextOpen = urgentMenuOpenId === id ? null : id;
+																	urgentMenuOpenId = nextOpen;
 																	statusMenuOpenId = null;
+																	assigneeMenuOpenId = null;
+																	urgentMenuAnchorEl = nextOpen ? event.currentTarget : null;
+																	statusMenuAnchorEl = null;
+																	assigneeMenuAnchorEl = null;
+																	if (nextOpen) refreshOpenRowMenus();
 																}}
 															>
 																{#if urgentMenuOpenId !== getRowIssueId(item)}
@@ -1251,7 +1430,8 @@
 															</button>
 															{#if urgentMenuOpenId === getRowIssueId(item)}
 																<div
-																	class="absolute left-0 z-20 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+																	class="fixed z-40 w-48 overflow-y-auto rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+																	style={urgentMenuStyle}
 																	on:click|stopPropagation
 																>
 																	<div class="sr-only">Change urgency</div>
@@ -1308,11 +1488,17 @@
 																		? 'hover:bg-neutral-100'
 																		: 'cursor-not-allowed opacity-60'
 																}`}
-																on:click|stopPropagation|preventDefault={() => {
+																on:click|stopPropagation|preventDefault={(event) => {
 																	if (!canEditIssue) return;
 																	const id = getRowIssueId(item);
-																	statusMenuOpenId = statusMenuOpenId === id ? null : id;
+																	const nextOpen = statusMenuOpenId === id ? null : id;
+																	statusMenuOpenId = nextOpen;
 																	urgentMenuOpenId = null;
+																	assigneeMenuOpenId = null;
+																	statusMenuAnchorEl = nextOpen ? event.currentTarget : null;
+																	urgentMenuAnchorEl = null;
+																	assigneeMenuAnchorEl = null;
+																	if (nextOpen) refreshOpenRowMenus();
 																}}
 															>
 																{#if statusMenuOpenId !== getRowIssueId(item)}
@@ -1330,7 +1516,8 @@
 															</button>
 															{#if statusMenuOpenId === getRowIssueId(item)}
 																<div
-																	class="absolute left-0 z-20 mt-2 w-48 origin-top-left rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+																	class="fixed z-40 w-48 overflow-y-auto rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+																	style={statusMenuStyle}
 																	on:click|stopPropagation
 																>
 																	<div class="sr-only">Change status</div>
@@ -1436,36 +1623,129 @@
 																<span>{getUnitDisplay(item.unit)}</span>
 															</span>
 														</div>
-														{#if item.assigneeBadge}
-															<div
-																class={`hidden h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold text-neutral-700 sm:flex ${item.assigneeBadge.color}`}
-																aria-label={item.assigneeBadge.name}
-																title={item.assigneeBadge.name}
+														<div class="relative hidden sm:flex">
+															<button
+																type="button"
+																class={`tooltip-target relative -m-1 flex items-center justify-center rounded-md p-1 transition ${
+																	canEditIssue
+																		? 'hover:bg-neutral-100'
+																		: 'cursor-not-allowed opacity-60'
+																}`}
+																disabled={!canEditIssue}
+																aria-disabled={!canEditIssue}
+																on:click|stopPropagation|preventDefault={(event) => {
+																	if (!canEditIssue) return;
+																	const nextOpen = assigneeMenuOpenId === rowId ? null : rowId;
+																	assigneeMenuOpenId = nextOpen;
+																	statusMenuOpenId = null;
+																	urgentMenuOpenId = null;
+																	assigneeMenuAnchorEl = nextOpen ? event.currentTarget : null;
+																	statusMenuAnchorEl = null;
+																	urgentMenuAnchorEl = null;
+																	if (nextOpen) refreshOpenRowMenus();
+																}}
 															>
-																{item.assigneeBadge.initial}
-															</div>
-														{:else}
-															<div
-																class="hidden h-6 w-6 items-center justify-center rounded-full text-neutral-300 sm:flex"
-																aria-label="Unassigned"
-																title="Unassigned"
-															>
-																<svg
-																	xmlns="http://www.w3.org/2000/svg"
-																	width="18"
-																	height="18"
-																	fill="currentColor"
-																	class="bi bi-person-circle"
-																	viewBox="0 0 16 16"
+																{#if assigneeMenuOpenId !== rowId}
+																	<span
+																		class="delayed-tooltip absolute top-full right-0 z-20 mt-2 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] whitespace-nowrap text-white shadow-sm"
+																	>
+																		Change assignee
+																	</span>
+																{/if}
+																{#if item.assigneeBadge}
+																	<div
+																		class={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold text-neutral-700 ${item.assigneeBadge.color}`}
+																		aria-label={item.assigneeBadge.name}
+																		title={item.assigneeBadge.name}
+																	>
+																		{item.assigneeBadge.initial}
+																	</div>
+																{:else}
+																	<svg
+																		xmlns="http://www.w3.org/2000/svg"
+																		width="18"
+																		height="18"
+																		fill="currentColor"
+																		class="text-neutral-300"
+																		viewBox="0 0 16 16"
+																	>
+																		<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+																		<path
+																			fill-rule="evenodd"
+																			d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+																		/>
+																	</svg>
+																{/if}
+															</button>
+															{#if assigneeMenuOpenId === rowId && canEditIssue}
+																<div
+																	class="fixed z-40 w-56 overflow-y-auto rounded-md border border-neutral-200 bg-white py-1 text-xs text-neutral-700 shadow-lg"
+																	style={assigneeMenuStyle}
+																	on:click|stopPropagation
 																>
-																	<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
-																	<path
-																		fill-rule="evenodd"
-																		d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
-																	/>
-																</svg>
-															</div>
-														{/if}
+																	<div class="sr-only">Change assignee</div>
+																	<button
+																		type="button"
+																		class={`flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-600 transition hover:bg-neutral-50 ${
+																			!currentAssigneeId ? 'bg-neutral-50' : ''
+																		}`}
+																		on:click|preventDefault={() => handleAssigneeSelect(item, null)}
+																	>
+																		<svg
+																			xmlns="http://www.w3.org/2000/svg"
+																			width="16"
+																			height="16"
+																			fill="currentColor"
+																			class="text-neutral-400"
+																			viewBox="0 0 16 16"
+																		>
+																			<path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0" />
+																			<path
+																				fill-rule="evenodd"
+																				d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1"
+																			/>
+																		</svg>
+																		<span class="font-medium text-neutral-500"> Unassigned </span>
+																	</button>
+																	<div class="my-1 h-px bg-neutral-100"></div>
+																	{#if assignableMembers.length}
+																		{#each assignableMembers as member}
+																			<button
+																				type="button"
+																				class={`flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-neutral-50 ${
+																					currentAssigneeId === member.user_id
+																						? 'bg-neutral-50'
+																						: ''
+																				}`}
+																				on:click|preventDefault={() =>
+																					handleAssigneeSelect(item, member)}
+																			>
+																				<div
+																					class={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold text-neutral-700 ${getMemberAvatar(member).color}`}
+																					aria-label={getMemberAvatar(member).name}
+																				>
+																					{getMemberAvatar(member).initial}
+																				</div>
+																				<span class="truncate">
+																					{member.users?.name ??
+																						member.name ??
+																						member.users?.id ??
+																						member.user_id ??
+																						'Unknown member'}
+																				</span>
+																				<span
+																					class="ml-auto rounded-full bg-stone-100 px-2 py-0.5 font-medium text-neutral-600"
+																				>
+																					{roleLabels[member.role] ?? member.role}
+																				</span>
+																			</button>
+																		{/each}
+																	{:else}
+																		<div class="px-3 py-2 text-neutral-400">No members found.</div>
+																	{/if}
+																</div>
+															{/if}
+														</div>
 														{#if createdAtLabel}
 															<span
 																class="hidden w-12 text-right text-sm text-neutral-400 sm:block"
