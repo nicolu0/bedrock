@@ -511,9 +511,36 @@
 		return acc;
 	}, {});
 
-	$: hasTasks =
-		subIssues.some((item) => (draftsByIssue[item.id]?.length ?? 0) > 0) ||
-		(draftsByIssue[issueId]?.length ?? 0) > 0;
+	// Tasks view: for AppFolio issues, hide Gmail/email thread + drafts from the Tasks section.
+	const isAppfolioTaskMessage = (m) => m?.channel === 'appfolio' || m?.channel === 'appfolio_sms';
+	const isAppfolioTaskDraft = (d) => d?.channel === 'appfolio';
+	$: tasksMessagesByIssue = isAppfolioIssue
+		? Object.fromEntries(
+				Object.entries(messagesByIssue ?? {}).map(([id, msgs]) => [
+					id,
+					(msgs ?? []).filter(isAppfolioTaskMessage)
+				])
+			)
+		: messagesByIssue;
+	$: tasksDraftsByIssue = isAppfolioIssue
+		? Object.fromEntries(
+				Object.entries(draftsByIssue ?? {}).map(([id, drafts]) => [
+					id,
+					(drafts ?? []).filter(isAppfolioTaskDraft)
+				])
+			)
+		: draftsByIssue;
+
+	$: hasTasks = isAppfolioIssue
+		? subIssues.some(
+				(item) =>
+					(tasksDraftsByIssue[item.id]?.length ?? 0) > 0 ||
+					(tasksMessagesByIssue[item.id]?.length ?? 0) > 0
+			) ||
+			(tasksDraftsByIssue[issueId]?.length ?? 0) > 0 ||
+			(tasksMessagesByIssue[issueId]?.length ?? 0) > 0
+		: subIssues.some((item) => (draftsByIssue[item.id]?.length ?? 0) > 0) ||
+			(draftsByIssue[issueId]?.length ?? 0) > 0;
 
 	$: recommendedVendorsByIssueId = Object.fromEntries([
 		[issueId, issue?.recommended_vendors ?? []],
@@ -635,8 +662,24 @@
 		});
 		return acc;
 	}, {});
+	$: tasksReplyDraftsByIssue = Object.values(tasksDraftsByIssue ?? {}).reduce((acc, drafts) => {
+		(drafts ?? []).forEach((draft) => {
+			if (!draft?.issue_id || !draft?.message_id) return;
+			if (!acc[draft.issue_id]) acc[draft.issue_id] = [];
+			acc[draft.issue_id].push(draft);
+		});
+		return acc;
+	}, {});
 
 	$: newDraftsByIssue = Object.values(draftsByIssue ?? {}).reduce((acc, drafts) => {
+		(drafts ?? []).forEach((draft) => {
+			if (!draft?.issue_id || draft?.message_id) return;
+			if (!acc[draft.issue_id]) acc[draft.issue_id] = [];
+			acc[draft.issue_id].push(draft);
+		});
+		return acc;
+	}, {});
+	$: tasksNewDraftsByIssue = Object.values(tasksDraftsByIssue ?? {}).reduce((acc, drafts) => {
 		(drafts ?? []).forEach((draft) => {
 			if (!draft?.issue_id || draft?.message_id) return;
 			if (!acc[draft.issue_id]) acc[draft.issue_id] = [];
@@ -1720,9 +1763,10 @@
 
 	const getThreadSubject = (id) => {
 		if (!id) return '';
-		const messages = collectMessagesForIssue(messagesByIssue, id);
+		const messages = collectMessagesForIssue(tasksMessagesByIssue, id);
 		const messageSubject = messages.find((msg) => msg?.subject)?.subject ?? '';
-		const draftSubject = (draftsByIssue[id] ?? []).find((draft) => draft?.subject)?.subject ?? '';
+		const draftSubject =
+			(tasksDraftsByIssue[id] ?? []).find((draft) => draft?.subject)?.subject ?? '';
 		return messageSubject || draftSubject || '';
 	};
 
@@ -3487,13 +3531,13 @@
 							<div class="mt-4 text-sm text-neutral-500">No tasks yet.</div>
 						{:else}
 							<div class="mt-4 space-y-4 text-sm">
-								{#if (draftsByIssue[issueId]?.length ?? 0) > 0}
-									{#if (messagesByIssue[issueId]?.length ?? 0) > 0 || (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
+								{#if (tasksDraftsByIssue[issueId]?.length ?? 0) > 0}
+									{#if (tasksMessagesByIssue[issueId]?.length ?? 0) > 0 || (tasksReplyDraftsByIssue[issueId]?.length ?? 0) > 0}
 										<div class="space-y-3">
 											{#if getThreadSubject(issueId)}
 												<div class="flex items-center gap-2">
 													<div class="flex items-center justify-center">
-														{#if (messagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
+														{#if (tasksMessagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
 															<svg
 																class="h-7 w-7"
 																viewBox="0 0 1024 1024"
@@ -3508,7 +3552,7 @@
 																	/>
 																</g>
 															</svg>
-														{:else if (messagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
+														{:else if (tasksMessagesByIssue[issueId] ?? []).some((m) => m.channel === 'appfolio')}
 															<svg
 																class="h-7 w-7"
 																viewBox="0 0 1024 1024"
@@ -3569,13 +3613,13 @@
 														{getThreadSubject(issueId)}
 													</h3>
 												</div>
-											{:else if (replyDraftsByIssue[issueId]?.length ?? 0) > 0}
+											{:else if (tasksReplyDraftsByIssue[issueId]?.length ?? 0) > 0}
 												<div class="flex items-center gap-2">
-													{#if hasFollowupDraft(replyDraftsByIssue[issueId])}
+													{#if hasFollowupDraft(tasksReplyDraftsByIssue[issueId])}
 														<h3 class="text-base font-semibold text-neutral-900">
 															{getFollowupLabelForIssue(issueId)}
 														</h3>
-													{:else if !(replyDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
+													{:else if !(tasksReplyDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
 														<div class="flex items-center justify-center">
 															<svg
 																class="h-6 w-6 text-neutral-500"
@@ -3594,7 +3638,7 @@
 												</div>
 											{/if}
 											<div class="space-y-3">
-												{#each collectMessagesForIssue(messagesByIssue, issueId) as message}
+												{#each collectMessagesForIssue(tasksMessagesByIssue, issueId) as message}
 													<EmailMessageWithDraft
 														message={{
 															...message,
@@ -3603,7 +3647,7 @@
 														draft={null}
 													/>
 												{/each}
-												{#each replyDraftsByIssue[issueId] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
+												{#each tasksReplyDraftsByIssue[issueId] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
 													{#if draft.channel === 'appfolio'}
 														<AppfolioDraftMessage
 															message={{
@@ -3645,10 +3689,10 @@
 										</div>
 									{/if}
 
-									{#if (newDraftsByIssue[issueId]?.length ?? 0) > 0}
+									{#if (tasksNewDraftsByIssue[issueId]?.length ?? 0) > 0}
 										<div class="space-y-3">
 											<div class="flex items-center gap-2">
-												{#if hasFollowupDraft(newDraftsByIssue[issueId])}
+												{#if hasFollowupDraft(tasksNewDraftsByIssue[issueId])}
 													<svg
 														class="h-7 w-7"
 														viewBox="0 0 1024 1024"
@@ -3666,7 +3710,7 @@
 													<h3 class="text-base font-semibold text-neutral-900">
 														{getFollowupLabelForIssue(issueId)}
 													</h3>
-												{:else if !(newDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
+												{:else if !(tasksNewDraftsByIssue[issueId] ?? []).some((d) => d.channel === 'appfolio')}
 													<div class="flex items-center justify-center">
 														<svg
 															class="h-[26px] w-[26px]"
@@ -3725,14 +3769,14 @@
 														</g>
 													</svg>
 													<h3 class="text-base font-semibold text-neutral-900">
-														{(newDraftsByIssue[issueId] ?? []).some((d) => d.recipient_email)
+														{(tasksNewDraftsByIssue[issueId] ?? []).some((d) => d.recipient_email)
 															? 'Assign Vendor'
 															: 'Drafted reply'}
 													</h3>
 												{/if}
 											</div>
 											<div class="space-y-3">
-												{#each newDraftsByIssue[issueId] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
+												{#each tasksNewDraftsByIssue[issueId] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
 													{#if draft.channel === 'appfolio'}
 														<AppfolioDraftMessage
 															message={{
@@ -3831,12 +3875,12 @@
 													class="space-y-3 py-2 transition-opacity duration-200"
 													class:opacity-0={!(tasksOpen[subIssue.id] ?? true)}
 												>
-													{#if (messagesByIssue[subIssue.id]?.length ?? 0) > 0 || (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
+													{#if (tasksMessagesByIssue[subIssue.id]?.length ?? 0) > 0 || (tasksReplyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 														<div class="space-y-3">
 															{#if getThreadSubject(subIssue.id)}
 																<div class="flex items-center gap-2">
 																	<div class="flex items-center justify-center">
-																		{#if (messagesByIssue[subIssue.id] ?? []).some((m) => m.channel === 'appfolio')}
+																		{#if (tasksMessagesByIssue[subIssue.id] ?? []).some((m) => m.channel === 'appfolio')}
 																			<svg
 																				class="h-7 w-7"
 																				viewBox="0 0 1024 1024"
@@ -3899,13 +3943,13 @@
 																		{getThreadSubject(subIssue.id)}
 																	</h3>
 																</div>
-															{:else if (replyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
+															{:else if (tasksReplyDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 																<div class="flex items-center gap-2">
-																	{#if hasFollowupDraft(replyDraftsByIssue[subIssue.id])}
+																	{#if hasFollowupDraft(tasksReplyDraftsByIssue[subIssue.id])}
 																		<h3 class="text-base font-semibold text-neutral-900">
 																			{getFollowupLabelForIssue(subIssue.id)}
 																		</h3>
-																	{:else if !(replyDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
+																	{:else if !(tasksReplyDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
 																		<div class="flex items-center justify-center">
 																			<svg
 																				width="18"
@@ -3930,7 +3974,7 @@
 																</div>
 															{/if}
 															<div class="space-y-3">
-																{#each collectMessagesForIssue(messagesByIssue, subIssue.id) as message}
+																{#each collectMessagesForIssue(tasksMessagesByIssue, subIssue.id) as message}
 																	<EmailMessageWithDraft
 																		message={{
 																			...message,
@@ -3939,7 +3983,7 @@
 																		draft={null}
 																	/>
 																{/each}
-																{#each replyDraftsByIssue[subIssue.id] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
+																{#each tasksReplyDraftsByIssue[subIssue.id] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
 																	{#if draft.channel === 'appfolio'}
 																		<AppfolioDraftMessage
 																			message={{
@@ -3988,10 +4032,10 @@
 														</div>
 													{/if}
 
-													{#if (newDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
+													{#if (tasksNewDraftsByIssue[subIssue.id]?.length ?? 0) > 0}
 														<div class="space-y-3">
 															<div class="flex items-center gap-2">
-																{#if hasFollowupDraft(newDraftsByIssue[subIssue.id])}
+																{#if hasFollowupDraft(tasksNewDraftsByIssue[subIssue.id])}
 																	<svg
 																		class="h-7 w-7"
 																		viewBox="0 0 1024 1024"
@@ -4011,7 +4055,7 @@
 																	<h3 class="text-base font-semibold text-neutral-900">
 																		{getFollowupLabelForIssue(subIssue.id)}
 																	</h3>
-																{:else if !(newDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
+																{:else if !(tasksNewDraftsByIssue[subIssue.id] ?? []).some((d) => d.channel === 'appfolio')}
 																	<div class="flex items-center justify-center">
 																		<svg
 																			class="h-[26px] w-[26px]"
@@ -4074,7 +4118,7 @@
 																		</g>
 																	</svg>
 																	<h3 class="text-base font-semibold text-neutral-900">
-																		{(newDraftsByIssue[subIssue.id] ?? []).some(
+																		{(tasksNewDraftsByIssue[subIssue.id] ?? []).some(
 																			(d) => d.recipient_email
 																		)
 																			? 'Assign Vendor'
@@ -4083,7 +4127,7 @@
 																{/if}
 															</div>
 															<div class="space-y-3">
-																{#each newDraftsByIssue[subIssue.id] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
+																{#each tasksNewDraftsByIssue[subIssue.id] ?? [] as draft (draft._client_key ?? draft.message_id ?? draft.id)}
 																	{#if draft.channel === 'appfolio'}
 																		<AppfolioDraftMessage
 																			message={{
