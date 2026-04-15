@@ -135,23 +135,6 @@ const normalizeEmail = (value: string) => value.trim().toLowerCase();
 const encodeBase64Url = (value: string) =>
 	btoa(value).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-const pickLowestLoadAssignee = (candidates: Array<any>, issues: Array<any>) => {
-	const counts = new Map<string, number>();
-	for (const candidate of candidates ?? []) {
-		if (candidate?.user_id) counts.set(candidate.user_id, 0);
-	}
-	for (const issue of issues ?? []) {
-		if (!issue?.assignee_id || !counts.has(issue.assignee_id)) continue;
-		counts.set(issue.assignee_id, (counts.get(issue.assignee_id) ?? 0) + 1);
-	}
-	return [...counts.entries()]
-		.sort((a, b) => {
-			if (a[1] !== b[1]) return a[1] - b[1];
-			return String(a[0]).localeCompare(String(b[0]));
-		})
-		.map(([userId]) => userId)[0];
-};
-
 const getHeaderValue = (headers: Array<{ name: string; value: string }>, name: string) =>
 	headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
 
@@ -997,7 +980,8 @@ const formatVendorDraftAddress = (propertyName: string | null, unitName: string 
 };
 
 function formatPhoneDisplay(digits: string): string {
-	if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+	if (digits.length === 10)
+		return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 	return digits;
 }
 
@@ -1109,7 +1093,9 @@ const createSubissue = async ({
 			.eq('subissue_kind', kind)
 			.maybeSingle();
 		if (existing?.id) {
-			console.log(`createSubissue: reusing existing ${kind} subissue ${existing.id} for parent ${parentIssueId}`);
+			console.log(
+				`createSubissue: reusing existing ${kind} subissue ${existing.id} for parent ${parentIssueId}`
+			);
 			return existing.id as string;
 		}
 	}
@@ -1326,40 +1312,11 @@ const autoApproveAppfolioDraft = async ({
 	approvedById: string;
 	approvedByName: string;
 }) => {
-	const { data: bedrockPeople } = await supabase
-		.from('people')
-		.select('user_id, users(name)')
-		.eq('workspace_id', workspaceId)
-		.eq('role', 'bedrock')
-		.not('user_id', 'is', null);
-	const candidates = (bedrockPeople ?? []).filter((row: any) => row?.user_id);
-	if (!candidates.length) return null;
-	const candidateIds = candidates.map((row: any) => row.user_id);
-	const { data: openIssues } = await supabase
-		.from('issues')
-		.select('id, assignee_id, status')
-		.eq('workspace_id', workspaceId)
-		.neq('status', 'done')
-		.in('assignee_id', candidateIds);
-	const assigneeId = pickLowestLoadAssignee(candidates, openIssues ?? []);
-	if (!assigneeId) return null;
 	const { data: issueRow } = await supabase
 		.from('issues')
 		.select('id, parent_id')
 		.eq('id', issueId)
 		.maybeSingle();
-	await supabase
-		.from('issues')
-		.update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
-		.eq('id', issueId);
-	if (issueRow?.parent_id) {
-		await supabase
-			.from('issues')
-			.update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
-			.eq('id', issueRow.parent_id);
-	}
-	const assigneeName =
-		candidates.find((row: any) => row.user_id === assigneeId)?.users?.name ?? null;
 	await supabase.from('activity_logs').insert({
 		workspace_id: workspaceId,
 		issue_id: issueId,
@@ -1367,26 +1324,20 @@ const autoApproveAppfolioDraft = async ({
 		data: {
 			approved_by: approvedByName,
 			approved_by_id: approvedById,
-			assignee_id: assigneeId,
-			assignee_name: assigneeName,
 			auto: true
 		},
 		created_by: approvedById
 	});
-	if (bedrockPeople?.length) {
-		await supabase.from('notifications').insert(
-			bedrockPeople.map((p: any) => ({
-				workspace_id: workspaceId,
-				issue_id: issueId,
-				user_id: p.user_id,
-				title: 'Auto-approved draft',
-				body: `${approvedByName} auto-approved a draft`,
-				type: 'draft_approved',
-				requires_action: true
-			}))
-		);
+
+	// Match the manual approval behavior: only advance the approved subissue.
+	// Never change root issue status.
+	if (issueRow?.parent_id) {
+		await supabase
+			.from('issues')
+			.update({ status: 'in_progress', updated_at: new Date().toISOString() })
+			.eq('id', issueId);
 	}
-	return { assigneeId, assigneeName };
+	return { ok: true };
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -2867,15 +2818,22 @@ const processMessage = async ({
 						body: emailBody,
 						gmailMessageId: message.id
 					})
-				}).catch(err => console.error('appfolio-email-trigger dispatch failed:', err));
+				}).catch((err) => console.error('appfolio-email-trigger dispatch failed:', err));
 				await insertIngestionLog({
 					userId: connection.user_id,
 					source: 'gmail-push',
-					detail: JSON.stringify({ phase: 'routed-to-appfolio-trigger', subject: messageSubject, workspaceId: wsId })
+					detail: JSON.stringify({
+						phase: 'routed-to-appfolio-trigger',
+						subject: messageSubject,
+						workspaceId: wsId
+					})
 				});
 				return;
 			} else {
-				console.warn('agent: AppFolio email — no workspace with email tracking for property:', appfolioPropertyId);
+				console.warn(
+					'agent: AppFolio email — no workspace with email tracking for property:',
+					appfolioPropertyId
+				);
 			}
 		} else {
 			console.warn('agent: AppFolio email detected but could not parse subject:', messageSubject);
@@ -3648,9 +3606,13 @@ const handleAppfolioWorkOrder = async ({
 		// creation which stores the exact tenant who submitted the work order (data.from / data.from_email).
 		// Prefer requesting_tenant (who actually submitted) over primary_tenant (first on lease).
 		let tenantName = normalizeTenantName(
-			row?.requesting_tenant ? String(row.requesting_tenant)
-			: row?.submitted_by_tenant ? String(row.submitted_by_tenant)
-			: row?.primary_tenant ? String(row.primary_tenant) : null
+			row?.requesting_tenant
+				? String(row.requesting_tenant)
+				: row?.submitted_by_tenant
+					? String(row.submitted_by_tenant)
+					: row?.primary_tenant
+						? String(row.primary_tenant)
+						: null
 		);
 		let tenantEmail: string | null = null;
 		let tenantPhone: string | null = null;
@@ -3755,10 +3717,13 @@ serve(async (req) => {
 				console.error('handleAppfolioWorkOrder error:', err);
 				// Mark the issue as failed so sync can retry on next run
 				try {
-					await supabase.from('issues').update({
-						agent_status: 'failed',
-						agent_error: err instanceof Error ? err.message : String(err)
-					}).eq('id', issueId);
+					await supabase
+						.from('issues')
+						.update({
+							agent_status: 'failed',
+							agent_error: err instanceof Error ? err.message : String(err)
+						})
+						.eq('id', issueId);
 				} catch {
 					// ignore status update failure
 				}
