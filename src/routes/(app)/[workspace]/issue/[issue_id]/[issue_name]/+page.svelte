@@ -604,11 +604,13 @@
 
 		if (filter === 'activity') return logItems.sort((a, b) => a._ts - b._ts);
 
-		// Group SMS messages by participant type, keep emails inline
+		// Group SMS and AppFolio email messages by participant type, keep other emails inline
+		const isGroupedChannel = (ch) =>
+			ch === 'appfolio_sms' || ch === 'sms' || ch === 'appfolio_email';
+
 		const smsMessages = msgItems.filter((m) => m.channel === 'appfolio_sms' || m.channel === 'sms');
-		const emailMessages = msgItems.filter(
-			(m) => m.channel !== 'appfolio_sms' && m.channel !== 'sms'
-		);
+		const afEmails = msgItems.filter((m) => m.channel === 'appfolio_email');
+		const inlineMessages = msgItems.filter((m) => !isGroupedChannel(m.channel));
 
 		const tenantSms = smsMessages
 			.filter((m) => m._participant_type === 'tenant')
@@ -617,32 +619,65 @@
 			.filter((m) => m._participant_type === 'vendor')
 			.sort((a, b) => a._ts - b._ts);
 
+		const tenantEmails = afEmails
+			.filter((m) => m._participant_type === 'tenant')
+			.sort((a, b) => a._ts - b._ts);
+		const vendorEmails = afEmails
+			.filter((m) => m._participant_type === 'vendor')
+			.sort((a, b) => a._ts - b._ts);
+
 		const result = [];
 		if (filter !== 'comms') {
 			result.push(...logItems);
 		}
-		result.push(...emailMessages);
+		result.push(...inlineMessages);
 		if (tenantSms.length > 0) {
 			result.push({
-				_kind: 'sms_header',
+				_kind: 'comms_header',
 				_ts: tenantSms[0]._ts - 1,
 				id: 'sms_header_tenant',
 				label: 'Texts with Tenant',
 				participantType: 'tenant',
+				icon: 'sms',
 				count: tenantSms.length
 			});
 			result.push(...tenantSms);
 		}
 		if (vendorSms.length > 0) {
 			result.push({
-				_kind: 'sms_header',
+				_kind: 'comms_header',
 				_ts: vendorSms[0]._ts - 1,
 				id: 'sms_header_vendor',
 				label: 'Texts with Vendor',
 				participantType: 'vendor',
+				icon: 'sms',
 				count: vendorSms.length
 			});
 			result.push(...vendorSms);
+		}
+		if (tenantEmails.length > 0) {
+			result.push({
+				_kind: 'comms_header',
+				_ts: tenantEmails[0]._ts - 1,
+				id: 'email_header_tenant',
+				label: 'Emails with Tenant',
+				participantType: 'tenant',
+				icon: 'email',
+				count: tenantEmails.length
+			});
+			result.push(...tenantEmails);
+		}
+		if (vendorEmails.length > 0) {
+			result.push({
+				_kind: 'comms_header',
+				_ts: vendorEmails[0]._ts - 1,
+				id: 'email_header_vendor',
+				label: 'Emails with Vendor',
+				participantType: 'vendor',
+				icon: 'email',
+				count: vendorEmails.length
+			});
+			result.push(...vendorEmails);
 		}
 
 		return result.sort((a, b) => a._ts - b._ts);
@@ -4268,21 +4303,18 @@
 										</div>
 									{/if}
 									{#each timelineByIssue[issueId] ?? [] as item (item.id)}
-										{#if item._kind === 'sms_header'}
+										{#if item._kind === 'comms_header'}
 											<div class="mt-4 mb-1 flex items-center gap-2 px-1">
 												<div class="flex items-center gap-1.5">
-													<svg
-														xmlns="http://www.w3.org/2000/svg"
-														width="12"
-														height="12"
-														fill="currentColor"
-														class="text-neutral-400"
-														viewBox="0 0 16 16"
-													>
-														<path
-															d="M3 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2zm6 11a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"
-														/>
-													</svg>
+													{#if item.icon === 'email'}
+														<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
+															<path d="M.05 3.555A2 2 0 0 1 2 2h12a2 2 0 0 1 1.95 1.555L8 8.414.05 3.555ZM0 4.697v7.104l5.803-3.558L0 4.697ZM6.761 8.83l-6.57 4.026A2 2 0 0 0 2 14h12a2 2 0 0 0 1.808-1.144l-6.57-4.027L8 9.586l-1.239-.757ZM16 11.801V4.697l-5.803 3.546L16 11.801Z"/>
+														</svg>
+													{:else}
+														<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
+															<path d="M3 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2zm6 11a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/>
+														</svg>
+													{/if}
 													<span class="text-xs font-medium text-neutral-500">{item.label}</span>
 												</div>
 												<div class="h-px flex-1 bg-neutral-100"></div>
@@ -4504,21 +4536,18 @@
 																{/if}
 															{/if}
 															{#each timelineByIssue[subIssue.id] ?? [] as item (item.id)}
-																{#if item._kind === 'sms_header'}
+																{#if item._kind === 'comms_header'}
 																	<div class="mt-4 mb-1 flex items-center gap-2 px-1">
 																		<div class="flex items-center gap-1.5">
-																			<svg
-																				xmlns="http://www.w3.org/2000/svg"
-																				width="12"
-																				height="12"
-																				fill="currentColor"
-																				class="text-neutral-400"
-																				viewBox="0 0 16 16"
-																			>
-																				<path
-																					d="M3 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2zm6 11a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"
-																				/>
-																			</svg>
+																			{#if item.icon === 'email'}
+																				<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
+																					<path d="M.05 3.555A2 2 0 0 1 2 2h12a2 2 0 0 1 1.95 1.555L8 8.414.05 3.555ZM0 4.697v7.104l5.803-3.558L0 4.697ZM6.761 8.83l-6.57 4.026A2 2 0 0 0 2 14h12a2 2 0 0 0 1.808-1.144l-6.57-4.027L8 9.586l-1.239-.757ZM16 11.801V4.697l-5.803 3.546L16 11.801Z"/>
+																				</svg>
+																			{:else}
+																				<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="text-neutral-400" viewBox="0 0 16 16">
+																					<path d="M3 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V2zm6 11a1 1 0 1 0-2 0 1 1 0 0 0 2 0z"/>
+																				</svg>
+																			{/if}
 																			<span class="text-xs font-medium text-neutral-500"
 																				>{item.label}</span
 																			>
