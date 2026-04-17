@@ -56,10 +56,25 @@
 	$: color = getSenderColor(message);
 	$: preview = getPreview(message);
 	$: isSms = message?.channel === 'sms' || message?.channel === 'appfolio_sms';
+	$: isAppfolioEmail = message?.channel === 'appfolio_email';
 	$: isEmail = !isSms;
 	$: directionIcon = message?.direction === 'outbound' ? '\u2192' : '\u2190';
 	$: participantType = message?._participant_type ?? message?.metadata?.participant_type ?? null;
 	$: roleTag = participantType === 'tenant' ? 'Tenant' : participantType === 'vendor' ? 'Vendor' : null;
+
+	const getRecipientLabel = (msg) => {
+		if (msg?.direction === 'outbound') {
+			// Outbound: recipient is the tenant/vendor
+			const ptype = msg?._participant_type ?? msg?.metadata?.participant_type;
+			const pname = msg?._participant_name ?? msg?.metadata?.sender_name;
+			if (ptype === 'tenant') return pname || 'Tenant';
+			if (ptype === 'vendor') return pname || 'Vendor';
+			return pname || 'Recipient';
+		}
+		// Inbound: recipient is the manager
+		return 'LAPM';
+	};
+	$: recipientLabel = isAppfolioEmail ? getRecipientLabel(message) : null;
 </script>
 
 <button
@@ -109,8 +124,14 @@
 					<span class="ml-1 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500">{roleTag}</span>
 				{/if}
 				<span class="mx-1 text-xs text-neutral-400">{directionIcon}</span>
-				{#if message?.subject}
+				{#if recipientLabel}
+					<span class="text-sm text-neutral-900">{recipientLabel}</span>
+				{/if}
+				{#if !recipientLabel && message?.subject}
 					<span class="text-xs text-neutral-500">{message.subject}</span>
+				{/if}
+				{#if isAppfolioEmail && message?.subject}
+					<p class="truncate text-xs text-neutral-500">{message.subject}</p>
 				{/if}
 				{#if !expanded}
 					<p class="truncate text-sm text-neutral-600">{preview}</p>
