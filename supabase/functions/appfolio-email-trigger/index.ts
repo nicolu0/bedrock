@@ -195,35 +195,48 @@ serve(async (req) => {
 
 	// Fetch work orders for this ONE property from AppFolio.
 	// The work_order API uses the property NUMBER (from the email subject), not the internal ID.
+	// AppFolio's report API can lag behind email notifications by a few seconds,
+	// so we retry up to 3 times with a delay when the WO isn't found yet.
 	const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 	const propNumber = property.appfolio_property_number ?? appfolioPropertyId;
-	const woRows = await appfolioFetch('work_order', {
-		property_visibility: 'active',
-		property: { property_id: propNumber },
-		work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
-		status_date: '0',
-		status_date_range_from: oneWeekAgo,
-		columns: [
-			'work_order_id', 'service_request_number', 'property_id', 'unit_id',
-			'status', 'priority', 'job_description', 'service_request_description',
-			'vendor_id', 'vendor', 'status_notes', 'created_at', 'work_order_type',
-			'requesting_tenant', 'submitted_by_tenant',
-			'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
-		]
-	});
-
-	// Find the specific work order matching the service request number.
-	// The email subject may include a suffix like "7561-1" but the API returns "7561",
-	// so we match on the base number (strip everything after the first dash).
 	const baseNumber = serviceRequestNumber.split('-')[0];
-	const row = (woRows as any[]).find(
-		r => String(r.service_request_number) === serviceRequestNumber
-			|| String(r.service_request_number) === baseNumber
-	);
+	const WO_RETRY_ATTEMPTS = 3;
+	const WO_RETRY_DELAY_MS = 10_000;
 
-	if (!row) {
-		console.error(`appfolio-email-trigger: WO #${serviceRequestNumber} not found in ${woRows.length} work orders for property ${appfolioPropertyId}`);
-		return Response.json({ ok: false, error: `Work order #${serviceRequestNumber} not found` }, { status: 404 });
+	let row: any = null;
+	for (let attempt = 1; attempt <= WO_RETRY_ATTEMPTS; attempt++) {
+		const woRows = await appfolioFetch('work_order', {
+			property_visibility: 'active',
+			property: { property_id: propNumber },
+			work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
+			status_date: '0',
+			status_date_range_from: oneWeekAgo,
+			columns: [
+				'work_order_id', 'service_request_number', 'property_id', 'unit_id',
+				'status', 'priority', 'job_description', 'service_request_description',
+				'vendor_id', 'vendor', 'status_notes', 'created_at', 'work_order_type',
+				'requesting_tenant', 'submitted_by_tenant',
+				'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
+			]
+		});
+
+		// Find the specific work order matching the service request number.
+		// The email subject may include a suffix like "7561-1" but the API returns "7561",
+		// so we match on the base number (strip everything after the first dash).
+		row = (woRows as any[]).find(
+			(r: any) => String(r.service_request_number) === serviceRequestNumber
+				|| String(r.service_request_number) === baseNumber
+		);
+
+		if (row) break;
+
+		if (attempt < WO_RETRY_ATTEMPTS) {
+			console.warn(`appfolio-email-trigger: WO #${serviceRequestNumber} not found in ${woRows.length} WOs for property ${appfolioPropertyId} — retrying in ${WO_RETRY_DELAY_MS / 1000}s (attempt ${attempt}/${WO_RETRY_ATTEMPTS})`);
+			await new Promise(r => setTimeout(r, WO_RETRY_DELAY_MS));
+		} else {
+			console.error(`appfolio-email-trigger: WO #${serviceRequestNumber} not found after ${WO_RETRY_ATTEMPTS} attempts (${woRows.length} WOs for property ${appfolioPropertyId})`);
+			return Response.json({ ok: false, error: `Work order #${serviceRequestNumber} not found` }, { status: 404 });
+		}
 	}
 
 	const woId = row.work_order_id;
@@ -260,6 +273,7 @@ serve(async (req) => {
 			workspace_id: workspaceId,
 			source: 'appfolio',
 			appfolio_id: String(woId),
+			service_request_number: row.service_request_number != null ? String(row.service_request_number) : null,
 			name,
 			description: description ?? null,
 			status: mapWorkOrderStatus(row.status ?? ''),

@@ -741,6 +741,7 @@ async function syncWorkOrders(
 				workspace_id: workspaceId,
 				source: 'appfolio',
 				appfolio_id: String(woId),
+				service_request_number: row.service_request_number != null ? String(row.service_request_number) : null,
 				name,
 				description: description ?? null,
 				status: mapWorkOrderStatus(row.status ?? ''),
