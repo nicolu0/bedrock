@@ -49,7 +49,7 @@ export const loadIssuesData = async (
 		let query = supabaseAdmin
 			.from('issues')
 			.select(
-				'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, source, agent_processed_at, created_at, updated_at'
+				'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, vendor_id, source, agent_processed_at, created_at, updated_at'
 			)
 			.eq('workspace_id', workspaceId)
 			.order('updated_at', { ascending: false });
@@ -84,7 +84,7 @@ export const loadIssuesData = async (
 			let fallbackQuery = supabaseAdmin
 				.from('issues')
 				.select(
-					'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, source, agent_processed_at, created_at, updated_at'
+					'id, name, description, status, urgent, parent_id, unit_id, property_id, issue_number, readable_id, assignee_id, vendor_id, source, agent_processed_at, created_at, updated_at'
 				)
 				.in('unit_id', fallbackUnitIds)
 				.order('updated_at', { ascending: false });
@@ -158,7 +158,7 @@ export const loadIssuesData = async (
 		}
 	}
 
-	const normalizedIssues = (issues ?? []).map((issue) => {
+	const normalizedIssuesBase = (issues ?? []).map((issue) => {
 		const unit = unitMap.get(issue.unit_id);
 		const resolvedPropertyId = issue.property_id ?? unit?.property_id ?? null;
 		const property = resolvedPropertyId ? propertyMap.get(resolvedPropertyId) : null;
@@ -176,6 +176,7 @@ export const loadIssuesData = async (
 			assignees: 0,
 			assigneeId: issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? null,
+			vendor_id: issue.vendor_id ?? null,
 			property: property?.name ?? 'Unknown',
 			propertyId: resolvedPropertyId,
 			property_id: resolvedPropertyId,
@@ -191,7 +192,45 @@ export const loadIssuesData = async (
 		};
 	});
 
-	const issuesById = new Map(normalizedIssues.map((i) => [i.id, i]));
+	const issuesById = new Map(normalizedIssuesBase.map((i) => [i.id, i]));
+	const resolveRoot = (issue) => {
+		let current = issue;
+		const visited = new Set();
+		for (let i = 0; i < 20; i += 1) {
+			if (!current?.id) return issue;
+			if (!current.parentId) return current;
+			if (visited.has(current.id)) return issue;
+			visited.add(current.id);
+			const parent = issuesById.get(current.parentId);
+			if (!parent) return current;
+			current = parent;
+		}
+		return issue;
+	};
+
+	// Root-level vendor assignment: store on root, but expose on every issue/subissue.
+	const normalizedIssues = normalizedIssuesBase.map((issue) => {
+		const root = resolveRoot(issue);
+		const vendorId = root?.vendor_id ?? issue.vendor_id ?? null;
+		return {
+			...issue,
+			vendorId,
+			vendor_id: issue.vendor_id ?? null
+		};
+	});
+
+	const vendorIds = Array.from(new Set(normalizedIssues.map((i) => i.vendorId).filter(Boolean)));
+	const { data: vendors } = vendorIds.length
+		? await supabaseAdmin.from('vendors').select('id, name, email').in('id', vendorIds)
+		: { data: [] };
+	const vendorMap = new Map((vendors ?? []).map((v) => [v.id, v]));
+	for (const issue of normalizedIssues) {
+		const vendor = issue.vendorId ? vendorMap.get(issue.vendorId) : null;
+		issue.vendorName = vendor?.name ?? null;
+		issue.vendorEmail = vendor?.email ?? null;
+	}
+
+	const issuesByIdFinal = new Map(normalizedIssues.map((i) => [i.id, i]));
 	const childrenByParent = new Map();
 	for (const issue of normalizedIssues) {
 		if (!issue.parentId) continue;
@@ -199,7 +238,9 @@ export const loadIssuesData = async (
 		childrenByParent.get(issue.parentId).push(issue);
 	}
 
-	const topLevelIssues = normalizedIssues.filter((i) => !i.parentId || !issuesById.has(i.parentId));
+	const topLevelIssues = normalizedIssues.filter(
+		(i) => !i.parentId || !issuesByIdFinal.has(i.parentId)
+	);
 
 	const sectionBuckets = new Map(
 		_issuesStatusOrder.map((status) => {
@@ -227,6 +268,8 @@ export const loadIssuesData = async (
 				parent_id: issue.id,
 				urgent: subIssue.urgent ?? false,
 				root_urgent: issue.urgent ?? false,
+				vendorId: subIssue.vendorId ?? issue.vendorId ?? null,
+				vendorName: subIssue.vendorName ?? issue.vendorName ?? null,
 				property: subIssue.property,
 				propertyId: subIssue.propertyId ?? subIssue.property_id ?? null,
 				property_id: subIssue.property_id ?? subIssue.propertyId ?? null,
@@ -248,6 +291,8 @@ export const loadIssuesData = async (
 			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
 			urgent: issue.urgent ?? false,
+			vendorId: issue.vendorId ?? null,
+			vendorName: issue.vendorName ?? null,
 			property: issue.property,
 			propertyId: issue.propertyId ?? issue.property_id ?? null,
 			property_id: issue.property_id ?? issue.propertyId ?? null,
@@ -276,6 +321,8 @@ export const loadIssuesData = async (
 			assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
 			assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
 			urgent: issue.urgent ?? false,
+			vendorId: issue.vendorId ?? null,
+			vendorName: issue.vendorName ?? null,
 			parentId: parent.id,
 			parent_id: parent.id,
 			root_urgent: parent.urgent ?? false,
@@ -389,7 +436,9 @@ export const loadActivityData = async (workspaceId, issueIds = null) => {
 	const baseMessagesQuery = () =>
 		supabaseAdmin
 			.from('messages')
-			.select('id, issue_id, thread_id, message, sender, subject, timestamp, direction, channel, metadata')
+			.select(
+				'id, issue_id, thread_id, message, sender, subject, timestamp, direction, channel, metadata'
+			)
 			.eq('workspace_id', workspaceId)
 			.gte('timestamp', cutoff)
 			.order('timestamp', { ascending: true });

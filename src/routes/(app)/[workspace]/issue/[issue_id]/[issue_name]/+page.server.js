@@ -19,7 +19,7 @@ export const load = async ({ parent, params, depends }) => {
 	const issueRowPromise = supabaseAdmin
 		.from('issues')
 		.select(
-			'id, name, description, status, urgent, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, tenant_id, source, appfolio_id, updated_at, recommended_vendors, properties(name), units(name, property_id, properties(name)), tenants(id, name, email, phone)'
+			'id, name, description, status, urgent, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, tenant_id, vendor_id, source, appfolio_id, updated_at, recommended_vendors, properties(name), units(name, property_id, properties(name)), tenants(id, name, email, phone)'
 		)
 		.eq('workspace_id', workspace.id)
 		.eq('readable_id', readableId)
@@ -29,14 +29,16 @@ export const load = async ({ parent, params, depends }) => {
 			const parentId = issueRow.parent_id ?? null;
 			let rootUrgent = issueRow.urgent ?? false;
 			let rootIssueId = issueRow.id;
+			let rootVendorId = issueRow.vendor_id ?? null;
 			if (parentId) {
 				const { data: parentRow } = await supabaseAdmin
 					.from('issues')
-					.select('id, urgent')
+					.select('id, urgent, vendor_id')
 					.eq('id', parentId)
 					.maybeSingle();
 				rootUrgent = parentRow?.urgent ?? rootUrgent;
 				rootIssueId = parentRow?.id ?? parentId;
+				rootVendorId = parentRow?.vendor_id ?? rootVendorId;
 			}
 			const propertyId = issueRow.property_id ?? issueRow.units?.property_id ?? null;
 			return {
@@ -49,6 +51,8 @@ export const load = async ({ parent, params, depends }) => {
 				parentId,
 				root_urgent: rootUrgent,
 				rootIssueId,
+				vendorId: rootVendorId,
+				vendor_id: rootVendorId,
 				issueNumber: issueRow.issue_number ?? null,
 				readableId: issueRow.readable_id ?? null,
 				assignee_id: issueRow.assignee_id ?? null,
@@ -73,7 +77,7 @@ export const load = async ({ parent, params, depends }) => {
 		const { data } = await supabaseAdmin
 			.from('issues')
 			.select(
-				'id, name, description, status, urgent, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, recommended_vendors, properties(name), units(name, property_id, properties(name))'
+				'id, name, description, status, urgent, parent_id, issue_number, readable_id, assignee_id, unit_id, property_id, vendor_id, recommended_vendors, properties(name), units(name, property_id, properties(name))'
 			)
 			.eq('parent_id', issue.id);
 		return (data ?? []).map((s) => ({
@@ -87,6 +91,8 @@ export const load = async ({ parent, params, depends }) => {
 			assigneeId: s.assignee_id ?? null,
 			assignee_id: s.assignee_id ?? null,
 			parent_id: issue.id,
+			vendorId: issue.vendorId ?? null,
+			vendor_id: issue.vendorId ?? null,
 			property: s.units?.properties?.name ?? s.properties?.name ?? null,
 			unit: s.units?.name ?? null,
 			property_id: s.property_id ?? s.units?.property_id ?? null,

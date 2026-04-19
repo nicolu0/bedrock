@@ -30,18 +30,6 @@
 	$: role = (data?.role ?? '').toString().toLowerCase();
 	$: canEditIssue = role === 'admin' || role === 'bedrock';
 
-	const APPFOLIO_KEY = 'appfolio_enabled';
-	let appfolioEnabled = false;
-	$: if (browser) {
-		appfolioEnabled = window.localStorage.getItem(APPFOLIO_KEY) === 'true';
-	}
-
-	const syncAppfolioSettings = () => {
-		if (!browser) return;
-		const enabled = window.localStorage.getItem(APPFOLIO_KEY) === 'true';
-		appfolioEnabled = enabled;
-	};
-
 	if (!browser) {
 		pageReady.set(false);
 	}
@@ -50,20 +38,16 @@
 	let handleViewport;
 
 	onMount(() => {
-		syncAppfolioSettings();
 		const mobileQuery = window.matchMedia('(max-width: 639px)');
 		isMobileViewport = mobileQuery.matches;
 		subIssuesOpen = !isMobileViewport;
-		const handleStorage = (event) => {
-			if (event.key === APPFOLIO_KEY) {
-				syncAppfolioSettings();
-			}
-		};
 		handleViewport = () => refreshOpenFieldMenus();
-		window.addEventListener('storage', handleStorage);
 		window.addEventListener('resize', handleViewport);
 		window.addEventListener('scroll', handleViewport, true);
-		return () => window.removeEventListener('storage', handleStorage);
+		return () => {
+			window.removeEventListener('resize', handleViewport);
+			window.removeEventListener('scroll', handleViewport, true);
+		};
 	});
 
 	const statusConfig = {
@@ -258,6 +242,14 @@
 	$: subIssues = sortSubIssues(_resolvedSubIssues);
 	$: messagesByIssue = _resolvedActivity?.messagesByIssue ?? {};
 	$: emailDraftsByMessageId = _resolvedActivity?.emailDraftsByMessageId ?? {};
+	$: vendorById = (vendors ?? []).reduce((acc, v) => {
+		if (!v?.id) return acc;
+		acc[v.id] = v;
+		return acc;
+	}, {});
+	$: rootIssueId = issue?.rootIssueId ?? issueId;
+	$: vendorId = issue?.vendorId ?? issue?.vendor_id ?? null;
+	$: vendorName = vendorId ? (vendorById?.[vendorId]?.name ?? null) : null;
 	$: draftIssueIds = _resolvedActivity?.draftIssueIds ?? [];
 	$: logsByIssue = _resolvedLogs?.logsByIssue ?? {};
 	$: members = _resolvedMembers;
@@ -1865,6 +1857,7 @@
 	// ── Realtime channels ────────────────────────────────────────────────────────
 
 	let _issueChannel = null;
+	let _rootIssueChannel = null;
 	let _subIssueChannel = null;
 
 	const mergeSubIssue = (current, next) => {
@@ -1913,10 +1906,29 @@
 			propertyId: next.property_id ?? issue?.property_id ?? issue?.propertyId ?? null,
 			unit_id: next.unit_id ?? issue?.unit_id ?? issue?.unitId ?? null,
 			unitId: next.unit_id ?? issue?.unit_id ?? issue?.unitId ?? null,
-			updated_at: next.updated_at ?? issue?.updated_at ?? null
+			updated_at: next.updated_at ?? issue?.updated_at ?? null,
+			vendorId: Object.prototype.hasOwnProperty.call(next, 'vendor_id')
+				? (next.vendor_id ?? null)
+				: (issue?.vendorId ?? issue?.vendor_id ?? null),
+			vendor_id: Object.prototype.hasOwnProperty.call(next, 'vendor_id')
+				? (next.vendor_id ?? null)
+				: (issue?.vendor_id ?? issue?.vendorId ?? null)
 		};
 		issueAssigneeId = nextAssigneeId;
 		if ((assignee?.id ?? null) !== nextAssigneeId) assignee = null;
+	};
+
+	const applyRootIssueDelta = (next) => {
+		if (!next?.id) return;
+		if (!issue) return;
+		// Root-level vendor assignment is stored on the root issue, but displayed for
+		// both root + subissues.
+		if (!Object.prototype.hasOwnProperty.call(next, 'vendor_id')) return;
+		issue = {
+			...issue,
+			vendorId: next.vendor_id ?? null,
+			vendor_id: next.vendor_id ?? null
+		};
 	};
 
 	$: if (browser && issueId) {
@@ -1931,6 +1943,22 @@
 				}
 			)
 			.subscribe();
+
+		if (_rootIssueChannel) supabase.removeChannel(_rootIssueChannel);
+		if (rootIssueId && rootIssueId !== issueId) {
+			_rootIssueChannel = supabase
+				.channel(`root-issue-${rootIssueId}`)
+				.on(
+					'postgres_changes',
+					{ event: 'UPDATE', schema: 'public', table: 'issues', filter: `id=eq.${rootIssueId}` },
+					(payload) => {
+						if (payload?.new) applyRootIssueDelta(payload.new);
+					}
+				)
+				.subscribe();
+		} else {
+			_rootIssueChannel = null;
+		}
 
 		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
 		_subIssueChannel = supabase
@@ -2054,6 +2082,7 @@
 		for (const channel of channelMap.values()) supabase.removeChannel(channel);
 		channelMap.clear();
 		if (_issueChannel) supabase.removeChannel(_issueChannel);
+		if (_rootIssueChannel) supabase.removeChannel(_rootIssueChannel);
 		if (_subIssueChannel) supabase.removeChannel(_subIssueChannel);
 		if (browser && handleViewport) {
 			window.removeEventListener('resize', handleViewport);
@@ -2260,6 +2289,10 @@
 								<h1 class="text-2xl font-semibold text-neutral-900">{issueName}</h1>
 								<div class="mt-2 text-sm text-neutral-500">
 									{issueDescription || 'Add description...'}
+								</div>
+								<div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+									<span class="text-neutral-400">Vendor:</span>
+									<span class="font-medium text-neutral-800">{vendorName ?? 'Unassigned'}</span>
 								</div>
 							{:else}
 								<div class="h-7 w-56 animate-pulse rounded bg-neutral-200"></div>
