@@ -17,6 +17,54 @@ const normalizeRecipientList = (value) => {
 	return [];
 };
 
+const normalizeEmail = (value) => {
+	const trimmed = (value ?? '').toString().trim().toLowerCase();
+	return trimmed || null;
+};
+
+const resolveRootIssueId = async (issueId) => {
+	if (!issueId) return null;
+	let currentId = issueId;
+	const visited = new Set();
+	for (let i = 0; i < 20; i += 1) {
+		if (!currentId || visited.has(currentId)) return issueId;
+		visited.add(currentId);
+		const { data } = await supabaseAdmin
+			.from('issues')
+			.select('id, parent_id')
+			.eq('id', currentId)
+			.maybeSingle();
+		if (!data?.id) return issueId;
+		if (!data.parent_id) return data.id;
+		currentId = data.parent_id;
+	}
+	return issueId;
+};
+
+const maybeAssignVendorToRootIssue = async ({ workspaceId, issueId, recipientEmails }) => {
+	// No clearing behavior for now; only set when a real vendor is selected.
+	if (!workspaceId || !issueId) return;
+	if (!Array.isArray(recipientEmails) || recipientEmails.length !== 1) return;
+	const selected = normalizeEmail(recipientEmails[0]);
+	if (!selected) return;
+
+	const { data: vendor } = await supabaseAdmin
+		.from('vendors')
+		.select('id')
+		.eq('workspace_id', workspaceId)
+		.ilike('email', selected)
+		.maybeSingle();
+	if (!vendor?.id) return;
+
+	const rootIssueId = await resolveRootIssueId(issueId);
+	if (!rootIssueId) return;
+
+	await supabaseAdmin
+		.from('issues')
+		.update({ vendor_id: vendor.id, updated_at: new Date().toISOString() })
+		.eq('id', rootIssueId);
+};
+
 export const PATCH = async ({ locals, request }) => {
 	if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -117,6 +165,16 @@ export const PATCH = async ({ locals, request }) => {
 		.from('issues')
 		.update({ updated_at: new Date().toISOString() })
 		.eq('id', draft.issue_id);
+
+	// Persist selected vendor (from the draft recipient selector) onto the *root* issue.
+	// This lets the issue header and My Issues rows show the assigned vendor.
+	if (hasRecipientEmails) {
+		await maybeAssignVendorToRootIssue({
+			workspaceId,
+			issueId: draft.issue_id,
+			recipientEmails: normalizedRecipients
+		});
+	}
 
 	return json({ ok: true, draft: updatedDraft ?? null });
 };

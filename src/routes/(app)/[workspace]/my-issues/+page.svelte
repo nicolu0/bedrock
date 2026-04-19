@@ -996,7 +996,7 @@
 
 <div class="flex h-full min-h-0 flex-col">
 	<div class="flex items-center justify-between border-b border-neutral-200 py-2.5 pr-5 pl-6">
-		<div class="flex items-center gap-2">
+		<div class="flex items-center gap-1">
 			<button
 				type="button"
 				aria-label="Open sidebar"
@@ -1024,7 +1024,7 @@
 			</div>
 		</div>
 	</div>
-	<div class="flex items-center justify-between border-b border-neutral-200 px-6 py-2">
+	<div class="flex items-center justify-between border-b border-neutral-200 px-4 py-2 sm:px-6">
 		<div class="flex items-center gap-2">
 			{#each tabs as tab}
 				<button
@@ -1224,7 +1224,7 @@
 		{#if _resolvedIssues === null}
 			<div class="space-y-2 divide-y divide-neutral-100">
 				{#each { length: 4 } as _}
-					<div class="flex items-center gap-3 px-6.5 py-2">
+					<div class="flex items-center gap-3 px-4 py-2 sm:px-6.5">
 						<div class="h-6 w-6 flex-shrink-0"></div>
 						<div class="skeleton h-3 w-3 flex-shrink-0 rounded-full"></div>
 						<div class="skeleton h-4 w-2/5"></div>
@@ -1234,7 +1234,7 @@
 				{/each}
 			</div>
 		{:else if filteredSections.length === 0}
-			<div class="px-6 py-8 text-sm text-neutral-400">
+			<div class="px-4 py-8 text-sm text-neutral-400 sm:px-6">
 				{hasActiveFilter ? 'No issues match the current filter.' : 'No issues assigned to you.'}
 			</div>
 		{:else}
@@ -1242,7 +1242,7 @@
 				{#each filteredSections as section, sectionIndex}
 					<div class={section.rows.length ? '' : 'hidden'}>
 						<div
-							class={`flex items-center justify-between border-neutral-200 bg-stone-50 px-6.5 py-2 text-sm text-neutral-600 ${
+							class={`flex items-center justify-between border-neutral-200 bg-stone-50 px-4 py-2 text-sm text-neutral-600 sm:px-6.5 ${
 								sectionIndex === 0 ? 'border-b' : 'border-y'
 							}`}
 							style={getSectionGradientStyle(section.statusClass)}
@@ -1251,16 +1251,18 @@
 								<span class={`h-3.5 w-3.5 rounded-full border-[1.5px] ${section.statusClass}`}
 								></span>
 								<span class="text-sm text-neutral-700">{section.label}</span>
-								<span class="text-sm text-neutral-400">{section.count}</span>
 							</div>
-							<div class="h-4 w-4"></div>
+							<div class="text-sm text-neutral-400">
+								{section.count}
+								{section.count === 1 ? 'issue' : 'issues'}
+							</div>
 						</div>
 						<div>
 							{#each section.propertyGroups as group}
 								{@const groupKey = getPropertyGroupKey(section.id, group.name)}
 								<button
 									type="button"
-									class="tooltip-target group relative flex w-full items-center gap-3 px-6.5 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900"
+									class="tooltip-target group relative flex w-full items-center gap-3 px-4 py-2.5 text-left text-xs text-neutral-400 transition hover:text-neutral-900 sm:px-6.5"
 									on:click={() => togglePropertyGroup(section.id, group.name)}
 									on:mouseenter={updateDividerTooltipPosition}
 									on:mousemove={updateDividerTooltipPosition}
@@ -1305,7 +1307,7 @@
 											{@const rowId = getRowIssueId(item)}
 											{@const currentAssigneeId = item.assigneeId ?? item.assignee_id ?? null}
 											<a
-												class={`group block w-full px-6.5 py-2 text-left transition ${
+												class={`group block w-full px-4 py-2 text-left transition sm:px-6.5 ${
 													isRowSelected(item, selectedIssueIds)
 														? 'bg-blue-50'
 														: getRowIssueId(item) === hoveredIssueId
@@ -1325,7 +1327,7 @@
 											>
 												<div class="flex items-center justify-between gap-4">
 													<div class="flex min-w-0 flex-1 items-center gap-2.5">
-														<div class="relative flex-shrink-0">
+														<div class="relative hidden flex-shrink-0 sm:block">
 															<button
 																type="button"
 																style="-webkit-tap-highlight-color: transparent;"
@@ -1603,8 +1605,33 @@
 																</span>
 															</div>
 														{/if}
+														{#if item.vendorName}
+															<div
+																class="hidden items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-sm text-neutral-500 sm:inline-flex"
+															>
+																<span class="flex max-w-[10rem] items-center gap-1 px-2.5 py-1">
+																	<svg
+																		xmlns="http://www.w3.org/2000/svg"
+																		width="14"
+																		height="14"
+																		fill="currentColor"
+																		class="shrink-0 text-neutral-400"
+																		viewBox="0 0 16 16"
+																		aria-hidden="true"
+																	>
+																		<path
+																			d="M16 4.5a4.5 4.5 0 0 1-1.703 3.526L13 5l2.959-1.11q.04.3.041.61"
+																		/>
+																		<path
+																			d="M11.5 9c.653 0 1.273-.139 1.833-.39L12 5.5 11 3l3.826-1.53A4.5 4.5 0 0 0 7.29 6.092l-6.116 5.096a2.583 2.583 0 1 0 3.638 3.638L9.908 8.71A4.5 4.5 0 0 0 11.5 9m-1.292-4.361-.596.893.809-.27a.25.25 0 0 1 .287.377l-.596.893.809-.27.158.475-1.5.5a.25.25 0 0 1-.287-.376l.596-.893-.809.27a.25.25 0 0 1-.287-.377l.596-.893-.809.27-.158-.475 1.5-.5a.25.25 0 0 1 .287.376M3 14a1 1 0 1 1 0-2 1 1 0 0 1 0 2"
+																		/>
+																	</svg>
+																	<span class="truncate">{item.vendorName}</span>
+																</span>
+															</div>
+														{/if}
 														<div
-															class="inline-flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-sm text-neutral-500"
+															class="hidden items-center overflow-hidden rounded-full border border-neutral-200 bg-white text-sm text-neutral-500 sm:inline-flex"
 														>
 															<span class="flex items-center gap-1 px-2.5 py-1">
 																<svg
@@ -1612,7 +1639,7 @@
 																	width="14"
 																	height="14"
 																	fill="currentColor"
-																	class="text-neutral-400"
+																	class="shrink-0 text-neutral-400"
 																	viewBox="0 0 16 16"
 																	aria-hidden="true"
 																>
@@ -1748,7 +1775,7 @@
 														</div>
 														{#if createdAtLabel}
 															<span
-																class="hidden w-12 text-right text-sm text-neutral-400 sm:block"
+																class="hidden w-11 text-right text-sm text-neutral-400 sm:block"
 															>
 																{createdAtLabel}
 															</span>

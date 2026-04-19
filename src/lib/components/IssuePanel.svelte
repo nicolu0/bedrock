@@ -1,6 +1,6 @@
 <script>
 	// @ts-nocheck
-	import { createEventDispatcher, onMount } from 'svelte';
+	import { createEventDispatcher } from 'svelte';
 	import { page } from '$app/stores';
 	import { supabase } from '$lib/supabaseClient.js';
 	import EmailMessageWithDraft from './EmailMessageWithDraft.svelte';
@@ -26,18 +26,6 @@
 	let subIssues = [];
 	let subIssuesOpen = true;
 	let activityOpen = {};
-	let appfolioEnabled = false;
-	$: if (typeof window !== 'undefined') {
-		appfolioEnabled = window.localStorage.getItem(APPFOLIO_KEY) === 'true';
-	}
-
-	const APPFOLIO_KEY = 'appfolio_enabled';
-
-	const syncAppfolioSettings = () => {
-		if (typeof window === 'undefined') return;
-		const enabled = window.localStorage.getItem(APPFOLIO_KEY) === 'true';
-		appfolioEnabled = enabled;
-	};
 
 	let _lastExternalId = null;
 	$: if (issueId && issueId !== _lastExternalId) {
@@ -57,16 +45,10 @@
 		}
 	}
 
-	onMount(() => {
-		syncAppfolioSettings();
-		const handleStorage = (event) => {
-			if (event.key === APPFOLIO_KEY) {
-				syncAppfolioSettings();
-			}
-		};
-		window.addEventListener('storage', handleStorage);
-		return () => window.removeEventListener('storage', handleStorage);
-	});
+	const isAppfolioChannel = (channel) => channel === 'appfolio' || channel === 'appfolio_sms';
+	const hasAppfolioActivity = (id) =>
+		(messagesByIssue?.[id] ?? []).some((m) => isAppfolioChannel(m?.channel)) ||
+		(draftsByIssue?.[id] ?? []).some((d) => d?.channel === 'appfolio');
 
 	async function loadIssue(id) {
 		console.log('[IssuePanel] loadIssue called', { id, seedIssue });
@@ -233,8 +215,11 @@
 		const logItems = (logs ?? [])
 			.filter((l) => l.type !== 'email_inbound' && l.type !== 'email_outbound')
 			.map((l) => ({ _kind: 'log', _ts: new Date(l.created_at).getTime(), ...l }));
-		const msgItems = (messages ?? [])
-			.map((m) => ({ _kind: 'message', _ts: new Date(m.timestamp).getTime(), ...m }));
+		const msgItems = (messages ?? []).map((m) => ({
+			_kind: 'message',
+			_ts: new Date(m.timestamp).getTime(),
+			...m
+		}));
 		return [...logItems, ...msgItems].sort((a, b) => a._ts - b._ts);
 	};
 
@@ -459,21 +444,7 @@
 									<div
 										class="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-100 bg-white"
 									>
-										{#if appfolioEnabled}
-											<svg
-												width="18"
-												height="18"
-												viewBox="0 0 1024 1024"
-												fill="none"
-												xmlns="http://www.w3.org/2000/svg"
-											>
-												<circle cx="512" cy="512" r="512" fill="#007bc7" />
-												<path
-													d="M582.49 516a77.29 77.29 0 0 0 15.31-4.9v31.72c0 69.9-67.12 85.21-93 85.21-35.29 0-73.3-18.75-73.3-49.15 0-32.73 29.44-43 91.33-52.48 16.08-2.4 42.3-7.06 59.66-10.4zm192.2-4c0 141.38-117.61 256-262.69 256S249.31 653.38 249.31 512 366.92 256 512 256s262.69 114.62 262.69 256zm-120.57-31.23c0-10.41-.33-20.26-.33-28.89 0-54.88-26.32-82.32-48.42-95.68a147.66 147.66 0 0 0-73.86-18.53c-54.77 0-95.12 15.42-120.05 45.75a115.6 115.6 0 0 0-24.93 62.78 9.53 9.53 0 0 0 0 1.78 29.28 29.28 0 0 0 29.55 26.55 27.27 27.27 0 0 0 29.72-23c6.35-29.5 20.43-56.83 80.59-56.83 31.89 0 52.71 6.57 63.62 20.09a39 39 0 0 1 10.19 30.28c0 10-3.79 22.26-33.39 28.78-19.2 4.17-39.41 6.51-58.94 8.74l-9.35 1.11c-110.77 13.1-127.47 71.54-127.47 105.16 0 61 73.36 95.51 126.34 97.18h9.8a153.19 153.19 0 0 0 58.66-10.3l1.61-.67a136.14 136.14 0 0 0 79.59-81c8.63-23.25 7.85-71.07 7.07-113.3z"
-													fill="white"
-												/>
-											</svg>
-										{:else if appfolioEnabled}
+										{#if hasAppfolioActivity(issueId)}
 											<svg
 												width="18"
 												height="18"
@@ -546,7 +517,7 @@
 									/>
 								{/each}
 								{#each draftsByIssue[issueId] ?? [] as draft (draft.id ?? draft.message_id)}
-									{#if appfolioEnabled}
+									{#if draft.channel === 'appfolio'}
 										<AppfolioDraftMessage
 											message={{
 												id: draft.message_id,
@@ -710,7 +681,7 @@
 													/>
 												{/each}
 												{#each draftsByIssue[subIssue.id] ?? [] as draft (draft.id ?? draft.message_id)}
-													{#if appfolioEnabled}
+													{#if draft.channel === 'appfolio'}
 														<AppfolioDraftMessage
 															message={{
 																id: draft.message_id,

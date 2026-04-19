@@ -14,6 +14,13 @@ export const seedIssueDetail = (issue, subIssues = []) => {
 	if (!issue?.id) return;
 	const rid = issue.readableId ?? issue.readable_id ?? null;
 	const existing = memoryCache.get(issue.id);
+	const resolvedVendorId =
+		issue.vendorId ??
+		issue.vendor_id ??
+		existing?.issue?.vendorId ??
+		existing?.issue?.vendor_id ??
+		null;
+	const resolvedVendorName = issue.vendorName ?? existing?.issue?.vendorName ?? null;
 	const normalizedIssue = {
 		id: issue.id,
 		name: issue.name ?? issue.title,
@@ -28,7 +35,9 @@ export const seedIssueDetail = (issue, subIssues = []) => {
 		issueNumber: issue.issueNumber ?? null,
 		readableId: rid,
 		assignee_id: issue.assignee_id ?? issue.assigneeId ?? null,
-		assigneeId: issue.assigneeId ?? issue.assignee_id ?? null
+		assigneeId: issue.assigneeId ?? issue.assignee_id ?? null,
+		vendorId: resolvedVendorId,
+		vendorName: resolvedVendorName
 	};
 	const normalizedSubIssues = (subIssues ?? []).map((s) => ({
 		id: s.id,
@@ -41,7 +50,9 @@ export const seedIssueDetail = (issue, subIssues = []) => {
 		issueNumber: s.issueNumber ?? null,
 		readableId: s.readableId ?? null,
 		assignee_id: s.assignee_id ?? s.assigneeId ?? null,
-		assigneeId: s.assigneeId ?? s.assignee_id ?? null
+		assigneeId: s.assigneeId ?? s.assignee_id ?? null,
+		vendorId: s.vendorId ?? s.vendor_id ?? resolvedVendorId,
+		vendorName: s.vendorName ?? resolvedVendorName
 	}));
 	memoryCache.set(issue.id, {
 		issue: normalizedIssue,

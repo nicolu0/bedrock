@@ -811,144 +811,127 @@
 					class="flex h-full min-h-0 flex-col transition-opacity duration-150"
 					class:opacity-0={!pageVisible}
 				>
-					<div class="flex flex-1 flex-col space-y-6 overflow-y-auto px-2 pt-4">
-						<div class="flex min-w-0 items-center justify-between gap-2 px-2 text-neutral-700">
-							<div class="flex min-w-0 flex-1 items-center gap-2">
-								<div
-									class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] bg-neutral-700 text-[8px] font-medium text-white"
-								>
-									A
-								</div>
-								<span class="min-w-0 flex-1 truncate text-xs text-neutral-700">
-									{data?.workspace?.name ?? ''}
-								</span>
-							</div>
-							<button
-								type="button"
-								on:click={openSearchModal}
-								class="shrink-0 rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
-								aria-label="Open search"
-							>
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="12"
-									height="12"
-									fill="currentColor"
-									class="bi bi-search"
-									viewBox="0 0 16 16"
-								>
-									<path
-										d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"
-									/>
-								</svg>
-							</button>
-						</div>
-						<div class="flex flex-1 flex-col gap-0.5 pb-4">
-							{#each navItems.filter((item) => item.id !== 'people' || canViewPeople) as item}
-								<a
-									href={`${basePath}/${item.href}`}
-									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition ${currentPath === `${basePath}/${item.href}` || currentPath.startsWith(`${basePath}/${item.href}/`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
-								>
-									<div class="flex min-w-0 flex-1 items-center gap-2">
-										{#if item.id === 'people'}
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="12"
-												height="12"
-												fill="currentColor"
-												class="shrink-0 text-neutral-600"
-												viewBox="0 0 16 16"
-											>
-												<path
-													d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5"
-												/>
-											</svg>
-										{:else if item.id === 'my-issues'}
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="12"
-												height="12"
-												fill="currentColor"
-												class="shrink-0 text-neutral-600"
-												viewBox="0 0 16 16"
-											>
-												<path
-													d="M2 2v13.5a.5.5 0 0 0 .74.439L8 13.069l5.26 2.87A.5.5 0 0 0 14 15.5V2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2"
-												/>
-											</svg>
-										{:else if item.id === 'policies'}
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="12"
-												height="12"
-												fill="currentColor"
-												class="shrink-0 text-neutral-600"
-												viewBox="0 0 16 16"
-											>
-												<path
-													d="M12.643 15C13.979 15 15 13.845 15 12.5V5H1v7.5C1 13.845 2.021 15 3.357 15zM5.5 7h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1M.8 1a.8.8 0 0 0-.8.8V3a.8.8 0 0 0 .8.8h14.4A.8.8 0 0 0 16 3V1.8a.8.8 0 0 0-.8-.8z"
-												/>
-											</svg>
-										{:else if item.id === 'inbox'}
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												width="16"
-												height="16"
-												fill="currentColor"
-												class="shrink-0 text-neutral-600"
-												viewBox="0 0 16 16"
-											>
-												<path
-													d="M4.98 4a.5.5 0 0 0-.39.188L1.54 8H6a.5.5 0 0 1 .5.5 1.5 1.5 0 1 0 3 0A.5.5 0 0 1 10 8h4.46l-3.05-3.812A.5.5 0 0 0 11.02 4zm-1.17-.437A1.5 1.5 0 0 1 4.98 3h6.04a1.5 1.5 0 0 1 1.17.563l3.7 4.625a.5.5 0 0 1 .106.374l-.39 3.124A1.5 1.5 0 0 1 14.117 13H1.883a1.5 1.5 0 0 1-1.489-1.314l-.39-3.124a.5.5 0 0 1 .106-.374z"
-												/>
-											</svg>
-										{/if}
-										<span class="truncate">{item.label}</span>
+					<div class="flex min-h-0 flex-1 flex-col px-2 pt-4">
+						<!-- Header: pinned to top -->
+						<div class="shrink-0">
+							<div class="flex min-w-0 items-center justify-between gap-2 px-2 text-neutral-700">
+								<div class="flex min-w-0 flex-1 items-center gap-2">
+									<div
+										class="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[2px] bg-neutral-700 text-[8px] font-medium text-white"
+									>
+										A
 									</div>
-									{#if item.id === 'inbox' && inboxCount > 0}
-										<span class="ml-auto inline-flex min-w-[18px] items-center justify-center">
-											<span
-												class="inline-flex items-center justify-center rounded bg-neutral-200/70 px-2 py-1 text-[11px] leading-none font-medium whitespace-nowrap text-neutral-800"
-											>
-												<span class="inline-flex whitespace-nowrap">
-													{#key inboxCount}
-														<span
-															in:fly={{ y: 6, duration: 160 }}
-															class="inline-flex items-center justify-center"
-														>
-															{inboxCountLabel}
-														</span>
-													{/key}
-												</span>
-											</span>
-										</span>
-									{/if}
-								</a>
-							{/each}
-							{#if isMobileViewport}
+									<span class="min-w-0 flex-1 truncate text-xs text-neutral-700">
+										{data?.workspace?.name ?? ''}
+									</span>
+								</div>
 								<button
 									type="button"
-									on:click={() => goto(`${basePath}/${settingsItem.href}`)}
-									class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition ${currentPath === `${basePath}/${settingsItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
+									on:click={openSearchModal}
+									class="shrink-0 rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+									aria-label="Open search"
 								>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"
-										width="14"
-										height="14"
+										width="12"
+										height="12"
 										fill="currentColor"
+										class="bi bi-search"
 										viewBox="0 0 16 16"
-										class="shrink-0"
 									>
 										<path
-											d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492M5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0"
-										/>
-										<path
-											d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.375l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115z"
+											d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"
 										/>
 									</svg>
-									<span class="truncate">{settingsItem.label}</span>
 								</button>
-							{/if}
+							</div>
+						</div>
+
+						<!-- Nav + Properties toggle: pinned below header -->
+						<div class="mt-6 shrink-0">
+							<div class="flex flex-col gap-0.5">
+								{#each navItems.filter((item) => item.id !== 'people' || canViewPeople) as item}
+									<a
+										href={`${basePath}/${item.href}`}
+										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition ${currentPath === `${basePath}/${item.href}` || currentPath.startsWith(`${basePath}/${item.href}/`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
+									>
+										<div class="flex min-w-0 flex-1 items-center gap-2">
+											{#if item.id === 'people'}
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="12"
+													height="12"
+													fill="currentColor"
+													class="shrink-0 text-neutral-600"
+													viewBox="0 0 16 16"
+												>
+													<path
+														d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5"
+													/>
+												</svg>
+											{:else if item.id === 'my-issues'}
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="12"
+													height="12"
+													fill="currentColor"
+													class="shrink-0 text-neutral-600"
+													viewBox="0 0 16 16"
+												>
+													<path
+														d="M2 2v13.5a.5.5 0 0 0 .74.439L8 13.069l5.26 2.87A.5.5 0 0 0 14 15.5V2a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2"
+													/>
+												</svg>
+											{:else if item.id === 'policies'}
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="12"
+													height="12"
+													fill="currentColor"
+													class="shrink-0 text-neutral-600"
+													viewBox="0 0 16 16"
+												>
+													<path
+														d="M12.643 15C13.979 15 15 13.845 15 12.5V5H1v7.5C1 13.845 2.021 15 3.357 15zM5.5 7h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1M.8 1a.8.8 0 0 0-.8.8V3a.8.8 0 0 0 .8.8h14.4A.8.8 0 0 0 16 3V1.8a.8.8 0 0 0-.8-.8z"
+													/>
+												</svg>
+											{:else if item.id === 'inbox'}
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="16"
+													height="16"
+													fill="currentColor"
+													class="shrink-0 text-neutral-600"
+													viewBox="0 0 16 16"
+												>
+													<path
+														d="M4.98 4a.5.5 0 0 0-.39.188L1.54 8H6a.5.5 0 0 1 .5.5 1.5 1.5 0 1 0 3 0A.5.5 0 0 1 10 8h4.46l-3.05-3.812A.5.5 0 0 0 11.02 4zm-1.17-.437A1.5 1.5 0 0 1 4.98 3h6.04a1.5 1.5 0 0 1 1.17.563l3.7 4.625a.5.5 0 0 1 .106.374l-.39 3.124A1.5 1.5 0 0 1 14.117 13H1.883a1.5 1.5 0 0 1-1.489-1.314l-.39-3.124a.5.5 0 0 1 .106-.374z"
+													/>
+												</svg>
+											{/if}
+											<span class="truncate">{item.label}</span>
+										</div>
+										{#if item.id === 'inbox' && inboxCount > 0}
+											<span class="ml-auto inline-flex min-w-[18px] items-center justify-center">
+												<span
+													class="inline-flex items-center justify-center rounded bg-neutral-200/70 px-2 py-1 text-[11px] leading-none font-medium whitespace-nowrap text-neutral-800"
+												>
+													<span class="inline-flex whitespace-nowrap">
+														{#key inboxCount}
+															<span
+																in:fly={{ y: 6, duration: 160 }}
+																class="inline-flex items-center justify-center"
+															>
+																{inboxCountLabel}
+															</span>
+														{/key}
+													</span>
+												</span>
+											</span>
+										{/if}
+									</a>
+								{/each}
+							</div>
 							{#if canViewProperties}
 								<div class="mt-2">
 									<button
@@ -970,73 +953,77 @@
 											/>
 										</svg>
 									</button>
-									{#if propertiesOpen}
-										<div class="mt-1 space-y-1">
-											<a
-												href={`${basePath}/${propertiesItem.href}`}
-												class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] font-medium transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
-											>
-												<svg
-													xmlns="http://www.w3.org/2000/svg"
-													width="12"
-													height="12"
-													fill="currentColor"
-													class="text-neutral-600"
-													viewBox="0 0 16 16"
+								</div>
+							{/if}
+						</div>
+
+						<!-- Properties list: only scrollable region -->
+						<div class="mt-2 min-h-0 flex-1 overflow-y-auto pb-4">
+							{#if canViewProperties && propertiesOpen}
+								<div class="space-y-1">
+									<a
+										href={`${basePath}/${propertiesItem.href}`}
+										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] font-medium transition ${currentPath === `${basePath}/${propertiesItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+									>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="12"
+											height="12"
+											fill="currentColor"
+											class="text-neutral-600"
+											viewBox="0 0 16 16"
+										>
+											<path
+												d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
+											/>
+										</svg>
+										<span>All properties</span>
+									</a>
+									{#if properties !== null}
+										{#if properties?.length}
+											{#each properties as property}
+												<a
+													href={`${basePath}/${propertiesItem.href}/${slugify(property.name)}`}
+													class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] font-medium transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
 												>
-													<path
-														d="M3 0a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h3v-3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V16h3a1 1 0 0 0 1-1V1a1 1 0 0 0-1-1zm1 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3 0a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5M4 5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM7.5 5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zM4.5 8h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5m2.5.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5zm3.5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5"
-													/>
-												</svg>
-												<span>All properties</span>
-											</a>
-											{#if properties !== null}
-												{#if properties?.length}
-													{#each properties as property}
-														<a
-															href={`${basePath}/${propertiesItem.href}/${slugify(property.name)}`}
-															class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[13px] font-medium transition ${currentPath.startsWith(`${basePath}/${propertiesItem.href}/${slugify(property.name)}`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
-														>
-															<span class="h-1 w-1 rounded-full bg-neutral-700"></span>
-															<span class="truncate">{property.name}</span>
-														</a>
-													{/each}
-												{/if}
-											{:else}
-												<div class="px-2 py-1.5 text-[11px] text-neutral-400">
-													Loading properties...
-												</div>
-											{/if}
+													<span class="h-1 w-1 rounded-full bg-neutral-700"></span>
+													<span class="truncate">{property.name}</span>
+												</a>
+											{/each}
+										{/if}
+									{:else}
+										<div class="px-2 py-1.5 text-[11px] text-neutral-400">
+											Loading properties...
 										</div>
 									{/if}
 								</div>
 							{/if}
-							{#if !isMobileViewport}
-								<div class="mt-auto">
-									<button
-										type="button"
-										on:click={() => goto(`${basePath}/${settingsItem.href}`)}
-										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition ${currentPath === `${basePath}/${settingsItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
-									>
-										<svg
-											xmlns="http://www.w3.org/2000/svg"
-											width="14"
-											height="14"
-											fill="currentColor"
-											viewBox="0 0 16 16"
-											class="shrink-0"
-										>
-											<path
-												d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492M5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0"
-											/>
-											<path
-												d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.375l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115z"
-											/>
-										</svg>
-										<span class="truncate">{settingsItem.label}</span>
-									</button>
-								</div>
-							{/if}
+						</div>
+
+						<!-- Settings: pinned to bottom -->
+						<div class="shrink-0 border-t border-neutral-200/70 pt-2 pb-3">
+							<button
+								type="button"
+								on:click={() => goto(`${basePath}/${settingsItem.href}`)}
+								class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition ${currentPath === `${basePath}/${settingsItem.href}` ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="14"
+									height="14"
+									fill="currentColor"
+									viewBox="0 0 16 16"
+									class="shrink-0"
+								>
+									<path
+										d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492M5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0"
+									/>
+									<path
+										d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.375l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115z"
+									/>
+								</svg>
+								<span class="truncate">{settingsItem.label}</span>
+							</button>
 						</div>
 					</div>
 				</div>
