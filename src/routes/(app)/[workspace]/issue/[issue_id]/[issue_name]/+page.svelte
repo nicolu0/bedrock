@@ -598,13 +598,10 @@
 
 		// Group SMS and AppFolio email messages by participant type, keep other emails inline
 		const isGroupedChannel = (ch) =>
-			ch === 'appfolio_sms' || ch === 'sms' || ch === 'appfolio_email' || ch === 'imessage';
+			ch === 'appfolio_sms' || ch === 'sms' || ch === 'appfolio_email';
 
 		const smsMessages = msgItems.filter((m) => m.channel === 'appfolio_sms' || m.channel === 'sms');
 		const afEmails = msgItems.filter((m) => m.channel === 'appfolio_email');
-		const imessages = msgItems
-			.filter((m) => m.channel === 'imessage')
-			.sort((a, b) => a._ts - b._ts);
 		const inlineMessages = msgItems.filter((m) => !isGroupedChannel(m.channel));
 
 		const tenantSms = smsMessages
@@ -673,18 +670,6 @@
 				count: vendorEmails.length
 			});
 			result.push(...vendorEmails);
-		}
-		if (imessages.length > 0) {
-			result.push({
-				_kind: 'comms_header',
-				_ts: imessages[0]._ts - 1,
-				id: 'imessage_header_coordinator',
-				label: 'Coordinator iMessages',
-				participantType: 'coordinator',
-				icon: 'imessage',
-				count: imessages.length
-			});
-			result.push(...imessages);
 		}
 
 		return result.sort((a, b) => a._ts - b._ts);

@@ -2,7 +2,6 @@
 import { json } from '@sveltejs/kit';
 import crypto from 'node:crypto';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
-import { linkMessageToIssue } from '$lib/server/imessageLinking';
 
 const hashKey = (key) => crypto.createHash('sha256').update(key).digest('hex');
 
@@ -84,7 +83,6 @@ export const POST = async ({ request }) => {
 	const coordinatorLabel = workspace.coordinator_label ?? 'Coordinator';
 
 	let inserted = 0;
-	let linked = 0;
 	let skipped = 0;
 	const errors = [];
 
@@ -113,33 +111,16 @@ export const POST = async ({ request }) => {
 			coordinatorLabel
 		);
 
-		let issueId = null;
-		let linkMeta = null;
-		try {
-			const link = await linkMessageToIssue(text, workspace.id);
-			if (link) {
-				issueId = link.issue_id;
-				linkMeta = {
-					method: link.method,
-					confidence: link.confidence,
-					reason: link.reason ?? null
-				};
-			}
-		} catch (err) {
-			console.warn('imessage ingest: link error', err?.message);
-		}
-
 		const metadata = {
 			sender_name,
 			raw_handle: raw.sender_handle ?? null,
-			imessage_rowid: raw.rowid ?? null,
-			...(linkMeta ? { link: linkMeta } : {})
+			imessage_rowid: raw.rowid ?? null
 		};
 
 		const { error: insertError } = await supabaseAdmin.from('messages').insert({
 			workspace_id: workspace.id,
 			thread_id: threadId,
-			issue_id: issueId,
+			issue_id: null,
 			external_id: guid,
 			channel: 'imessage',
 			direction,
@@ -155,7 +136,6 @@ export const POST = async ({ request }) => {
 			continue;
 		}
 		inserted += 1;
-		if (issueId) linked += 1;
 	}
 
 	await supabaseAdmin
@@ -163,5 +143,5 @@ export const POST = async ({ request }) => {
 		.update({ last_used_at: new Date().toISOString() })
 		.eq('id', apiKey.id);
 
-	return json({ inserted, linked, skipped, errors });
+	return json({ inserted, skipped, errors });
 };

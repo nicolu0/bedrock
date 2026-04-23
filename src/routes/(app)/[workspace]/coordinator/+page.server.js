@@ -17,7 +17,7 @@ export const load = async ({ parent, depends }) => {
 	if (threadId) {
 		const { data } = await supabaseAdmin
 			.from('messages')
-			.select('id, issue_id, message, sender, direction, timestamp, channel, metadata')
+			.select('id, message, sender, direction, timestamp, channel, metadata')
 			.eq('workspace_id', workspace.id)
 			.eq('thread_id', threadId)
 			.order('timestamp', { ascending: true })
@@ -25,32 +25,12 @@ export const load = async ({ parent, depends }) => {
 		messages = data ?? [];
 	}
 
-	const linkedIssueIds = Array.from(new Set(messages.map((m) => m.issue_id).filter(Boolean)));
-	let issuesById = {};
-	if (linkedIssueIds.length) {
-		const { data: issues } = await supabaseAdmin
-			.from('issues')
-			.select('id, name, service_request_number, readable_id')
-			.in('id', linkedIssueIds);
-		issuesById = Object.fromEntries((issues ?? []).map((i) => [i.id, i]));
-	}
-
-	const { data: openIssues } = await supabaseAdmin
-		.from('issues')
-		.select('id, name, service_request_number, readable_id, status')
-		.eq('workspace_id', workspace.id)
-		.neq('status', 'done')
-		.order('updated_at', { ascending: false })
-		.limit(200);
-
 	return {
 		coordinator: {
 			threadId,
 			label: workspaceRow?.coordinator_label ?? 'Coordinator',
 			chatGuid: workspaceRow?.coordinator_chat_guid ?? null,
-			messages,
-			issuesById,
-			openIssues: openIssues ?? []
+			messages
 		}
 	};
 };
