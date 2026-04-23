@@ -41,34 +41,36 @@ const ensureWorkspace = async (supabase, user) => {
 	const { supabaseAdmin } = await import('$lib/supabaseAdmin');
 	// If the user is already a member somewhere (e.g. accepted an invite),
 	// don't create a new workspace for them.
-	const { data: existingMember } = await supabaseAdmin
+	const { data: existingMembers, error: memberError } = await supabaseAdmin
 		.from('people')
 		.select('workspace_id, updated_at, workspaces(id, slug)')
 		.eq('user_id', user.id)
 		.order('updated_at', { ascending: false })
-		.limit(1)
-		.maybeSingle();
+		.limit(1);
+	if (memberError) throw memberError;
+	const existingMember = existingMembers?.[0] ?? null;
 	if (existingMember?.workspaces) {
 		return existingMember.workspaces;
 	}
-	const { data: existingWorkspace } = await supabaseAdmin
+	const { data: adminWorkspaces, error: adminLookupError } = await supabaseAdmin
 		.from('workspaces')
 		.select('id, slug')
 		.eq('admin_user_id', user.id)
-		.maybeSingle();
-	let workspace = existingWorkspace ?? null;
+		.order('created_at', { ascending: true })
+		.limit(1);
+	if (adminLookupError) throw adminLookupError;
+	let workspace = adminWorkspaces?.[0] ?? null;
 	if (!workspace) {
 		const workspaceName = `${resolvedName} Workspace`;
 		const baseSlug = slugify(workspaceName);
 		const slug = await getAvailableSlug(supabaseAdmin, baseSlug);
-		const { data: newWorkspace } = await supabaseAdmin
+		const { data: newWorkspace, error: insertError } = await supabaseAdmin
 			.from('workspaces')
 			.insert({ admin_user_id: user.id, name: workspaceName, slug })
 			.select('id, slug')
 			.single();
+		if (insertError) throw insertError;
 		workspace = newWorkspace ?? null;
-	}
-	if (workspace?.id) {
 	}
 	return workspace;
 };

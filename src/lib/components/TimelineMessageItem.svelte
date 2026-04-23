@@ -33,6 +33,7 @@
 	};
 
 	const getSenderColor = (msg) => {
+		if (msg?.channel === 'imessage') return 'bg-green-100';
 		if (msg?.direction === 'outbound') return 'bg-blue-100';
 		const sender = msg?.sender;
 		if (sender === 'tenant') return 'bg-amber-100';
@@ -57,7 +58,8 @@
 	$: preview = getPreview(message);
 	$: isSms = message?.channel === 'sms' || message?.channel === 'appfolio_sms';
 	$: isAppfolioEmail = message?.channel === 'appfolio_email';
-	$: isEmail = !isSms;
+	$: isImessage = message?.channel === 'imessage';
+	$: isEmail = !isSms && !isImessage;
 	$: directionIcon = message?.direction === 'outbound' ? '\u2192' : '\u2190';
 	$: participantType = message?._participant_type ?? message?.metadata?.participant_type ?? null;
 	$: roleTag = participantType === 'tenant' ? 'Tenant' : participantType === 'vendor' ? 'Vendor' : null;

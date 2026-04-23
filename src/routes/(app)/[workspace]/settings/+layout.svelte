@@ -9,6 +9,7 @@
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
 	const items = [
 		{ id: 'integrations', label: 'Integrations', href: 'integrations' },
+		{ id: 'coordinator', label: 'Coordinator iMessage', href: 'coordinator' },
 		{ id: 'members', label: 'Members', href: 'members' }
 	];
 

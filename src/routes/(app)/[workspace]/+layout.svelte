@@ -534,6 +534,7 @@
 
 	const navItems = [
 		{ id: 'inbox', label: 'Inbox', href: 'inbox' },
+		{ id: 'coordinator', label: 'Coordinator', href: 'coordinator' },
 		{ id: 'my-issues', label: 'My issues', href: 'my-issues' },
 		{ id: 'policies', label: 'Policies', href: 'policies' },
 		{ id: 'people', label: 'People', href: 'people' }
@@ -906,6 +907,19 @@
 												>
 													<path
 														d="M4.98 4a.5.5 0 0 0-.39.188L1.54 8H6a.5.5 0 0 1 .5.5 1.5 1.5 0 1 0 3 0A.5.5 0 0 1 10 8h4.46l-3.05-3.812A.5.5 0 0 0 11.02 4zm-1.17-.437A1.5 1.5 0 0 1 4.98 3h6.04a1.5 1.5 0 0 1 1.17.563l3.7 4.625a.5.5 0 0 1 .106.374l-.39 3.124A1.5 1.5 0 0 1 14.117 13H1.883a1.5 1.5 0 0 1-1.489-1.314l-.39-3.124a.5.5 0 0 1 .106-.374z"
+													/>
+												</svg>
+											{:else if item.id === 'coordinator'}
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="12"
+													height="12"
+													fill="currentColor"
+													class="shrink-0 text-neutral-600"
+													viewBox="0 0 16 16"
+												>
+													<path
+														d="M2.678 11.894a1 1 0 0 1 .287.801 11 11 0 0 1-.398 2c1.395-.323 2.247-.697 2.634-.893a1 1 0 0 1 .71-.074A8 8 0 0 0 8 14c3.996 0 7-2.807 7-6s-3.004-6-7-6-7 2.808-7 6c0 1.468.617 2.83 1.678 3.894m-.493 3.905a22 22 0 0 1-.713.129c-.2.032-.352-.176-.273-.362a10 10 0 0 0 .244-.637l.003-.01c.248-.72.45-1.548.524-2.319C.743 11.37 0 9.76 0 8c0-3.866 3.582-7 8-7s8 3.134 8 7-3.582 7-8 7a9 9 0 0 1-2.347-.306c-.52.263-1.639.742-3.468 1.105"
 													/>
 												</svg>
 											{/if}
