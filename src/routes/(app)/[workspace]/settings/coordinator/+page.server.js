@@ -2,8 +2,14 @@
 import crypto from 'node:crypto';
 import { error, fail } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
+import { resolveWorkspace } from '$lib/server/workspaces';
 
 const hashKey = (key) => crypto.createHash('sha256').update(key).digest('hex');
+
+const getWorkspaceForAction = async (locals, params) => {
+	if (!locals.user) return null;
+	return resolveWorkspace(params.workspace, locals.user.id);
+};
 
 export const load = async ({ parent }) => {
 	const { workspace } = await parent();
@@ -34,9 +40,9 @@ export const load = async ({ parent }) => {
 };
 
 export const actions = {
-	save: async ({ request, locals, parent }) => {
+	save: async ({ request, locals, params }) => {
 		if (!locals.user) return fail(401, { error: 'Unauthorized' });
-		const { workspace } = await parent();
+		const workspace = await getWorkspaceForAction(locals, params);
 		if (!workspace?.id) return fail(404, { error: 'No workspace' });
 
 		const form = await request.formData();
@@ -62,9 +68,9 @@ export const actions = {
 		return { success: true };
 	},
 
-	generateKey: async ({ request, locals, parent }) => {
+	generateKey: async ({ request, locals, params }) => {
 		if (!locals.user) return fail(401, { error: 'Unauthorized' });
-		const { workspace } = await parent();
+		const workspace = await getWorkspaceForAction(locals, params);
 		if (!workspace?.id) return fail(404, { error: 'No workspace' });
 
 		const form = await request.formData();
@@ -83,9 +89,9 @@ export const actions = {
 		return { success: true, newKey: raw };
 	},
 
-	revokeKey: async ({ request, locals, parent }) => {
+	revokeKey: async ({ request, locals, params }) => {
 		if (!locals.user) return fail(401, { error: 'Unauthorized' });
-		const { workspace } = await parent();
+		const workspace = await getWorkspaceForAction(locals, params);
 		if (!workspace?.id) return fail(404, { error: 'No workspace' });
 
 		const form = await request.formData();
