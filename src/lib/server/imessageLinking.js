@@ -1,8 +1,5 @@
 // @ts-nocheck
 import { supabaseAdmin } from '$lib/supabaseAdmin';
-import { OPENAI_API_KEY } from '$env/static/private';
-
-const OPENAI_MODEL = 'gpt-5-mini-2025-08-07';
 
 const SR_NUMBER_RE = /\b(\d{4,6}(?:-\d+)?)\b/g;
 
@@ -114,90 +111,30 @@ function matchByTenantName(text, issues) {
 	return null;
 }
 
-async function matchByLLM(text, issues) {
-	if (!OPENAI_API_KEY || !issues.length) return null;
-	const trimmed = text.trim();
-	if (trimmed.length < 8) return null;
-	const candidates = issues.slice(0, 15).map((issue) => ({
-		id: issue.id,
-		name: issue.name,
-		description: (issue.description ?? '').slice(0, 400),
-		property: issue.properties?.name ?? null,
-		unit: issue.units?.name ?? null,
-		tenant: issue.tenants?.name ?? null
-	}));
-
-	const systemPrompt = [
-		'You match short iMessage chat messages from a maintenance coordinator to the single open work-order issue they most likely refer to.',
-		'You will receive a message and a list of candidate issues (id, name, description, property, unit, tenant).',
-		'If the message is clearly about one issue, return that issue id with a one-sentence reason.',
-		'If it is ambiguous, off-topic, or does not match any candidate, return null.',
-		'Prefer null over a weak guess.'
-	].join(' ');
-
-	const userPrompt = JSON.stringify({ message: trimmed, candidates });
-
-	const response = await fetch('https://api.openai.com/v1/responses', {
-		method: 'POST',
-		headers: {
-			Authorization: `Bearer ${OPENAI_API_KEY}`,
-			'Content-Type': 'application/json'
-		},
-		body: JSON.stringify({
-			model: OPENAI_MODEL,
-			input: [
-				{ role: 'system', content: systemPrompt },
-				{ role: 'user', content: userPrompt }
-			],
-			text: {
-				format: {
-					type: 'json_schema',
-					name: 'issue_match',
-					schema: {
-						type: 'object',
-						additionalProperties: false,
-						properties: {
-							issue_id: { type: ['string', 'null'] },
-							reason: { type: 'string' }
-						},
-						required: ['issue_id', 'reason']
-					}
-				}
-			}
-		})
-	}).catch((err) => {
-		console.warn('imessageLinking: LLM fetch error', err?.message);
-		return null;
-	});
-
-	if (!response || !response.ok) {
-		if (response) console.warn('imessageLinking: LLM non-ok', response.status);
-		return null;
+function matchByIssueName(text, issues) {
+	const normalizedText = normalize(text);
+	if (!normalizedText) return null;
+	let best = null;
+	for (const issue of issues) {
+		if (!issue.name) continue;
+		if (includesPhrase(normalizedText, issue.name)) {
+			return { issue_id: issue.id, method: 'issue_name_phrase', confidence: 0.85 };
+		}
+		const score = tokenOverlapScore(normalizedText, issue.name);
+		if (score >= 0.8 && (!best || score > best.score)) {
+			best = { score, issue };
+		}
 	}
-	const data = await response.json().catch(() => null);
-	const outputText = data?.output_text ?? '';
-	if (!outputText) return null;
-	let parsed = null;
-	try {
-		parsed = JSON.parse(outputText);
-	} catch {
-		return null;
+	if (best) {
+		return { issue_id: best.issue.id, method: 'issue_name_tokens', confidence: best.score };
 	}
-	if (!parsed?.issue_id) return null;
-	const exists = candidates.some((c) => c.id === parsed.issue_id);
-	if (!exists) return null;
-	return {
-		issue_id: parsed.issue_id,
-		method: 'llm_name_description',
-		confidence: 0.6,
-		reason: parsed.reason ?? null
-	};
+	return null;
 }
 
 /**
  * Attempt to link a free-text iMessage body to an existing open issue in the workspace.
- * Short-circuits on the first confident match.
- * @returns {Promise<{issue_id: string, method: string, confidence: number, reason?: string} | null>}
+ * Short-circuits on the first confident match. Regex / token-based only — no LLM.
+ * @returns {Promise<{issue_id: string, method: string, confidence: number} | null>}
  */
 export async function linkMessageToIssue(text, workspaceId) {
 	const body = String(text ?? '').trim();
@@ -205,21 +142,11 @@ export async function linkMessageToIssue(text, workspaceId) {
 	const issues = await loadOpenIssues(workspaceId);
 	if (!issues.length) return null;
 
-	const byNumber = matchByServiceRequestNumber(body, issues);
-	if (byNumber) return byNumber;
-
-	const byProperty = matchByPropertyOrUnit(body, issues);
-	if (byProperty) return byProperty;
-
-	const byTenant = matchByTenantName(body, issues);
-	if (byTenant) return byTenant;
-
-	try {
-		const byLlm = await matchByLLM(body, issues);
-		if (byLlm) return byLlm;
-	} catch (err) {
-		console.warn('imessageLinking: LLM fallback threw', err?.message);
-	}
-
-	return null;
+	return (
+		matchByServiceRequestNumber(body, issues) ||
+		matchByPropertyOrUnit(body, issues) ||
+		matchByTenantName(body, issues) ||
+		matchByIssueName(body, issues) ||
+		null
+	);
 }
