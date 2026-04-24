@@ -1,9 +1,11 @@
 // @ts-nocheck
+import { error } from '@sveltejs/kit';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
 export const load = async ({ parent, depends }) => {
 	depends('app:coordinator');
-	const { workspace } = await parent();
+	const { workspace, role } = await parent();
+	if (role !== 'bedrock') throw error(404, 'Not found');
 
 	const { data: workspaceRow } = await supabaseAdmin
 		.from('workspaces')

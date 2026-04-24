@@ -563,6 +563,7 @@
 	$: userId = data?.userId;
 	$: userRole = data?.role;
 	$: canViewPeople = userRole === 'admin' || userRole === 'bedrock' || userRole === 'member';
+	$: canViewCoordinator = userRole === 'bedrock';
 	$: canViewProperties =
 		userRole === 'admin' || userRole === 'bedrock' || userRole === 'member' || userRole === 'owner';
 
@@ -851,7 +852,7 @@
 						<!-- Nav + Properties toggle: pinned below header -->
 						<div class="mt-6 shrink-0">
 							<div class="flex flex-col gap-0.5">
-								{#each navItems.filter((item) => item.id !== 'people' || canViewPeople) as item}
+								{#each navItems.filter((item) => (item.id !== 'people' || canViewPeople) && (item.id !== 'coordinator' || canViewCoordinator)) as item}
 									<a
 										href={`${basePath}/${item.href}`}
 										class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] font-medium transition ${currentPath === `${basePath}/${item.href}` || currentPath.startsWith(`${basePath}/${item.href}/`) ? 'bg-neutral-200/50 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-100'}`}

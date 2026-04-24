@@ -8,12 +8,22 @@ const hashKey = (key) => crypto.createHash('sha256').update(key).digest('hex');
 
 const getWorkspaceForAction = async (locals, params) => {
 	if (!locals.user) return null;
-	return resolveWorkspace(params.workspace, locals.user.id);
+	const workspace = await resolveWorkspace(params.workspace, locals.user.id);
+	if (!workspace?.id) return null;
+	const { data: person } = await supabaseAdmin
+		.from('people')
+		.select('role')
+		.eq('workspace_id', workspace.id)
+		.eq('user_id', locals.user.id)
+		.maybeSingle();
+	if (person?.role !== 'bedrock') return null;
+	return workspace;
 };
 
 export const load = async ({ parent }) => {
-	const { workspace } = await parent();
+	const { workspace, role } = await parent();
 	if (!workspace?.id) throw error(404, 'Workspace not found');
+	if (role !== 'bedrock') throw error(404, 'Not found');
 
 	const [{ data: workspaceRow }, { data: apiKeys }] = await Promise.all([
 		supabaseAdmin
