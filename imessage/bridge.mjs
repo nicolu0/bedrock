@@ -147,6 +147,19 @@ async function saveState() {
 	);
 }
 
+function checkMacPermissionError(errorMessage, context) {
+	const msg = String(errorMessage || '').toLowerCase();
+	if (msg.includes('not authorized') || msg.includes('erraeeventnotpermitted') || msg.includes('-1743') || msg.includes('apple events')) {
+		conciseLog(`[${context}] macOS Automation permission required: System Settings > Privacy & Security > Automation — enable Terminal (or your shell) to control Messages`);
+		return true;
+	}
+	if (msg.includes('unable to open database') || msg.includes('authorization denied') || msg.includes('operation not permitted')) {
+		conciseLog(`[${context}] macOS Full Disk Access required: System Settings > Privacy & Security > Full Disk Access — add Terminal (or your shell)`);
+		return true;
+	}
+	return false;
+}
+
 async function runAppleScriptFile(filePath, args, context) {
 	try {
 		const { stdout, stderr } = await execFileAsync('osascript', [filePath, ...args]);
@@ -159,6 +172,7 @@ async function runAppleScriptFile(filePath, args, context) {
 		conciseLog(`[${context} error] ${error.message}`);
 		if (stderr) conciseLog(`[${context} stderr] ${stderr}`);
 		if (stdout) conciseLog(`[${context} stdout] ${stdout}`);
+		checkMacPermissionError(error.message + ' ' + stderr, context);
 		return false;
 	}
 }
@@ -553,18 +567,30 @@ WHERE m.ROWID > ${Number(afterRowId) || 0}
 ORDER BY m.ROWID ASC
 LIMIT 100;`;
 
-	const { stdout } = await execFileAsync('sqlite3', ['-json', CHAT_DB_PATH, sql]);
+	let stdout;
+	try {
+		({ stdout } = await execFileAsync('sqlite3', ['-json', CHAT_DB_PATH, sql]));
+	} catch (error) {
+		checkMacPermissionError(error.message + ' ' + (error.stderr || ''), 'fetch_messages');
+		throw error;
+	}
 	const output = stdout.trim();
 	if (!output) return [];
 	return JSON.parse(output);
 }
 
 async function fetchLatestRowId() {
-	const { stdout } = await execFileAsync('sqlite3', [
-		'-json',
-		CHAT_DB_PATH,
-		'SELECT COALESCE(MAX(ROWID), 0) AS max_rowid FROM message;'
-	]);
+	let stdout;
+	try {
+		({ stdout } = await execFileAsync('sqlite3', [
+			'-json',
+			CHAT_DB_PATH,
+			'SELECT COALESCE(MAX(ROWID), 0) AS max_rowid FROM message;'
+		]));
+	} catch (error) {
+		checkMacPermissionError(error.message + ' ' + (error.stderr || ''), 'fetch_latest_row');
+		throw error;
+	}
 	const output = stdout.trim();
 	if (!output) return 0;
 	const parsed = JSON.parse(output);
