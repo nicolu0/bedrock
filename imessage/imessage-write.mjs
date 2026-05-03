@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:http';
 
 const execFileAsync = promisify(execFile);
 
@@ -25,12 +26,21 @@ const WORKSPACE_FILTER = flag === '--test' ? WORKSPACES.test
 	: null; // null = all workspaces
 const ENV_PATH = path.join(SCRIPT_DIR, '..', '.env');
 const STATE_PATH = path.join(SCRIPT_DIR, '.appfolio-poller-state.json');
-const APPLESCRIPT_SEND = path.join(SCRIPT_DIR, 'scripts', 'send.applescript');
+const APPLESCRIPT_INJECT = path.join(SCRIPT_DIR, 'scripts', 'inject-draft.applescript');
+const DRAFT_SERVER_PORT = parseInt(process.env.DRAFT_SERVER_PORT ?? '3456', 10);
+
+// Find your chat GUID by running in Terminal:
+//   sqlite3 ~/Library/Messages/chat.db \
+//     "SELECT guid FROM chat WHERE room_name IS NOT NULL ORDER BY last_addressed_date DESC LIMIT 20;"
+// Look for the group chat containing your 510, 949, and 310 contacts.
+// Set JOSE_CHAT_GUID=iMessage;+;chat{UUID} in your .env
 
 const state = {
 	lastCheckedAt: null, // ISO string — only fetch issues created at or after this
 	processedIds: {}     // issueId -> unix ms timestamp, prevents duplicate OpenAI calls
 };
+
+let pendingDraft = null; // { text, id, ts } — cleared when iPhone shortcut consumes it
 
 // ── Env ──────────────────────────────────────────────────────────────────────
 
@@ -95,7 +105,7 @@ async function fetchNewIssues() {
 	if (!supabaseUrl || !serviceRoleKey) throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set');
 
 	const params = new URLSearchParams({
-		select: 'id,workspace_id,service_request_number,name,description,urgent,created_at,tenant:tenants!tenant_id(name),property:properties!property_id(name),unit:units!unit_id(name)',
+		select: 'id,workspace_id,service_request_number,name,description,urgent,created_at,property_id,tenant:tenants!tenant_id(name),property:properties!property_id(name),unit:units!unit_id(name)',
 		source: 'eq.appfolio',
 		order: 'created_at.asc',
 		limit: '20',
@@ -145,9 +155,32 @@ async function fetchVendors(workspaceId) {
 	return response.json();
 }
 
+// ── Owner notes ───────────────────────────────────────────────────────────────
+
+async function fetchPropertyNotes(workspaceId, propertyId) {
+	if (!propertyId) return [];
+	const supabaseUrl = process.env.SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL;
+	const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+	const params = new URLSearchParams({
+		select: 'content',
+		workspace_id: `eq.${workspaceId}`,
+		property_id: `eq.${propertyId}`,
+	});
+	const response = await fetch(`${supabaseUrl}/rest/v1/owner_notes?${params}`, {
+		headers: {
+			apikey: serviceRoleKey,
+			Authorization: `Bearer ${serviceRoleKey}`,
+			Accept: 'application/json',
+		},
+	});
+	if (!response.ok) return [];
+	const data = await response.json();
+	return Array.isArray(data) ? data.map(r => r.content) : [];
+}
+
 // ── OpenAI ────────────────────────────────────────────────────────────────────
 
-async function generateSuggestion({ serviceRequestNumber, description, tenantName, urgent, vendors, propertyName, unitName }) {
+async function generateSuggestion({ serviceRequestNumber, description, tenantName, urgent, vendors, propertyName, unitName, ownerNotes }) {
 	const apiKey = process.env.OPENAI_API_KEY;
 	if (!apiKey) throw new Error('OPENAI_API_KEY not set');
 
@@ -182,15 +215,21 @@ async function generateSuggestion({ serviceRequestNumber, description, tenantNam
 						'You write property management groupchat messages sent via iMessage. ' +
 						'Always split your response into separate iMessages using %%%% between each one.\n\n' +
 						'Example output:\n' +
-						'Tenant at Sunset Apts, unit 4 reported a leaking kitchen faucet.%%%%Should we send Yonic Herrera for this?\n\n' +
+						'Tenant at Sunset Apts, unit 4 reported a leaking kitchen faucet.%%%%Should we send Yonic for this?\n\n' +
 						'Another example:\n' +
-						'Gardener noticed the side gate latch is broken at Oak Manor, unit 2.%%%%Should we send Kori or Ismael?\n\n' +
+						'Gardener noticed the side gate latch is broken at Oak Manor, unit 2.%%%%Should we send LA Hydro Jet?\n\n' +
 						'Rules:\n' +
 						'- First message: 1-2 sentence summary. Natural tone. Include property, unit, and issue. Tenant name if available. No work order number.\n' +
-						'- Second message: casual vendor suggestion. "Should we send [Vendor]?" or "Should we send [A] or [B]?"\n' +
+						(ownerNotes?.length
+							? '- Second message: casual vendor suggestion that follows the owner/property notes below. "Should we send [Vendor]?"\n' +
+							  '- Owner/property notes (follow these strictly):\n' +
+							  ownerNotes.map(n => `  * ${n}`).join('\n') + '\n'
+							: '- Second message: ask whether the owner needs to be contacted, then suggest the vendor. Example: "Do we need to contact the owner for this or can we send Abraham?"\n'
+						) +
 						'- Vendor notes are instructions — follow them strictly. If a note says "always send first" for this property, pick that vendor.\n' +
 						'- Default to a handyman for simple repairs (battery replacement, minor fixes, general maintenance). Only pick a specialist (plumber, electrician, HVAC) when the issue clearly requires licensed trade work.\n' +
-						'- Only suggest two vendors if no note gives a clear preference and both are genuinely equally suited.\n' +
+						'- Always suggest exactly one vendor. Never offer alternatives or multiple options.\n' +
+						'- Vendor name format: use first name only for individual people (e.g. "Yonic", "Abraham"). Use the full name for companies (e.g. "LA Hydro Jet", "Drain Specialist").\n' +
 						'- Plain text only. No bullet points, no markdown. Always use %%%% to separate messages.',
 				},
 				{
@@ -213,18 +252,55 @@ async function generateSuggestion({ serviceRequestNumber, description, tenantNam
 	return suggestion;
 }
 
-// ── iMessage ──────────────────────────────────────────────────────────────────
+// ── Draft delivery ────────────────────────────────────────────────────────────
 
-async function sendIMessage(handle, text) {
-	try {
-		const { stdout, stderr } = await execFileAsync('osascript', [APPLESCRIPT_SEND, '', handle, text]);
-		if (stdout?.trim()) log(`applescript: ${stdout.trim()}`);
-		if (stderr?.trim()) log(`applescript stderr: ${stderr.trim()}`);
-		return true;
-	} catch (err) {
-		log(`applescript error: ${err.message}`);
-		return false;
+// Part 1: inject text into the Messages input box for the group chat on Mac Mini.
+// Uses clipboard+paste so the user can review and hit Send manually.
+async function injectDraft(text) {
+	const chatGuid = process.env.JOSE_CHAT_GUID;
+	if (!chatGuid) {
+		log('JOSE_CHAT_GUID not set — skipping Mac Messages injection');
+		return;
 	}
+	try {
+		const { stdout, stderr } = await execFileAsync('osascript', [APPLESCRIPT_INJECT, chatGuid, text]);
+		if (stdout?.trim()) log(`inject applescript: ${stdout.trim()}`);
+		if (stderr?.trim()) log(`inject applescript stderr: ${stderr.trim()}`);
+	} catch (err) {
+		log(`inject applescript error: ${err.message}`);
+	}
+}
+
+// Part 2: HTTP server that the iPhone Shortcut polls.
+// GET  /draft         → { text, id } or { text: null }
+// POST /draft/consume → clears pendingDraft, returns 204
+function startDraftServer(port) {
+	const server = createServer((req, res) => {
+		const { pathname } = new URL(req.url, 'http://localhost');
+
+		if (req.method === 'GET' && pathname === '/draft') {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			res.end(JSON.stringify(pendingDraft
+				? { text: pendingDraft.text, id: pendingDraft.id }
+				: { text: null }
+			));
+			return;
+		}
+
+		if (req.method === 'POST' && pathname === '/draft/consume') {
+			pendingDraft = null;
+			res.writeHead(204);
+			res.end();
+			return;
+		}
+
+		res.writeHead(404);
+		res.end();
+	});
+
+	server.listen(port, '0.0.0.0', () => {
+		log(`draft server listening on :${port}`);
+	});
 }
 
 // ── Poll loop ─────────────────────────────────────────────────────────────────
@@ -250,11 +326,11 @@ async function pollOnce() {
 
 		const description = issue.description || issue.name || null;
 		const tenantName = issue.tenant?.name ?? null;
-		const targetPhone = process.env.TARGET_PHONE_NUMBER;
-		if (!targetPhone) { log('TARGET_PHONE_NUMBER not set'); continue; }
 
 		try {
 			const vendors = await fetchVendors(issue.workspace_id);
+			const ownerNotes = await fetchPropertyNotes(issue.workspace_id, issue.property_id ?? null);
+			if (ownerNotes.length) log('owner notes found', { propertyId: issue.property_id, count: ownerNotes.length });
 			const suggestion = await generateSuggestion({
 				serviceRequestNumber: issue.service_request_number,
 				description,
@@ -263,19 +339,25 @@ async function pollOnce() {
 				vendors,
 				propertyName: issue.property?.name ?? null,
 				unitName: issue.unit?.name ?? null,
+				ownerNotes,
 			});
 
 			if (!suggestion) { log('empty suggestion, skipping'); continue; }
 
+			// Join parts with double newline so the draft reads naturally in the input box
 			const parts = (suggestion.includes('%%%%')
 				? suggestion.split('%%%%')
 				: suggestion.split(/\n\n+/)
 			).map(p => p.trim()).filter(Boolean);
-			for (let i = 0; i < parts.length; i++) {
-				log(`sending part ${i + 1}/${parts.length}`, { to: targetPhone, text: parts[i] });
-				await sendIMessage(targetPhone, parts[i]);
-				if (i < parts.length - 1) await new Promise(r => setTimeout(r, 3000));
-			}
+			const draftText = parts.join('\n\n');
+
+			log('draft ready', { id: issue.id, parts: parts.length, text: draftText });
+
+			// Part 2: store for iPhone Shortcut polling
+			pendingDraft = { text: draftText, id: issue.id, ts: Date.now() };
+
+			// Part 1: inject into Mac Messages input box
+			await injectDraft(draftText);
 		} catch (err) {
 			log(`error processing issue ${issue.id}: ${err.message}`);
 		}
@@ -287,6 +369,7 @@ async function pollOnce() {
 async function main() {
 	await loadDotEnv();
 	await loadState();
+	startDraftServer(DRAFT_SERVER_PORT);
 	log(`poller started (interval=${POLL_INTERVAL_MS}ms, workspace=${WORKSPACE_FILTER ?? 'all'})`);
 
 	let running = false;

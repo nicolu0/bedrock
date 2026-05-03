@@ -329,6 +329,25 @@ export const DELETE = async ({ locals, request }) => {
 		return json({ error: 'Forbidden' }, { status: 403 });
 	}
 
+	const { data: ownerCheck } = await supabaseAdmin
+		.from('owners')
+		.select('id')
+		.eq('id', id)
+		.eq('workspace_id', workspace.id)
+		.maybeSingle();
+
+	if (ownerCheck?.id) {
+		const { error } = await supabaseAdmin
+			.from('owners')
+			.delete()
+			.eq('id', id)
+			.eq('workspace_id', workspace.id);
+		if (error) {
+			return json({ error: error.message }, { status: 500 });
+		}
+		return json({ id });
+	}
+
 	const { data: vendorCheck } = await supabaseAdmin
 		.from('vendors')
 		.select('id')
@@ -354,14 +373,6 @@ export const DELETE = async ({ locals, request }) => {
 		.eq('id', id)
 		.eq('workspace_id', workspace.id)
 		.maybeSingle();
-
-	if (person?.role === 'owner') {
-		await supabaseAdmin
-			.from('properties')
-			.update({ owner_id: null })
-			.eq('owner_id', person.id)
-			.eq('workspace_id', workspace.id);
-	}
 
 	const { error } = await supabaseAdmin
 		.from('people')

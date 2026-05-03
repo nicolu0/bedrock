@@ -3956,6 +3956,26 @@ serve(async (req) => {
 			});
 		} finally {
 			await releaseConnectionLock(connection.id);
+			// Re-kick any pending gmail jobs that queued while we held the lock
+			const { data: queued } = await supabase
+				.from('jobs')
+				.select('id')
+				.eq('source', 'gmail')
+				.eq('status', 'pending')
+				.eq('payload->>email', connection.email.toLowerCase())
+				.limit(1)
+				.maybeSingle();
+			if (queued?.id) {
+				void fetch(`${supabaseUrl}/functions/v1/agent`, {
+					method: 'POST',
+					headers: {
+						apikey: supabaseAnonJwt,
+						Authorization: `Bearer ${supabaseAnonJwt}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify({ job_id: queued.id }),
+				}).catch((err) => console.error('agent re-kick failed:', err));
+			}
 		}
 	} catch (err) {
 		console.error('agent error', err);

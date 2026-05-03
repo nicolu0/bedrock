@@ -4,25 +4,28 @@ import { supabaseAdmin } from '$lib/supabaseAdmin';
 export const load = async ({ parent, depends }) => {
 	depends('app:people');
 
-	const { workspace, role } = await parent();
+	const { workspace, role, userId } = await parent();
 	const canViewPeople = role === 'admin' || role === 'bedrock' || role === 'member';
 
 	if (!canViewPeople) {
-		return { owners: [] };
+		return { ownersFromTable: [] };
 	}
 
 	const { data: owners } = await supabaseAdmin
 		.from('owners')
-		.select('id, name, people_id, people(user_id)')
+		.select('id, name, email, phone, people_id, created_at, people(user_id)')
 		.eq('workspace_id', workspace.id)
 		.order('name', { ascending: true });
 
 	return {
-		owners: (owners ?? []).map((o) => ({
+		ownersFromTable: (owners ?? []).map((o) => ({
 			id: o.id,
 			name: o.name,
-			people_id: o.people_id,
-			user_id: o.people?.user_id ?? null
-		}))
+			email: o.email,
+			role: 'owner',
+			user_id: o.people?.user_id ?? null,
+			people_id: o.people_id
+		})),
+		currentUserId: userId
 	};
 };

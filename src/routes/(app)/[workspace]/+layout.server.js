@@ -86,20 +86,29 @@ export const load = async ({ locals, params, depends, url }) => {
 	if (memberWorkspace?.role && workspaceBySlug?.id) {
 		const normalizedRole = (memberWorkspace.role ?? '').toLowerCase();
 		const ownerPersonId = normalizedRole === 'owner' ? (memberWorkspace.id ?? null) : null;
-		const ownerScopeId = normalizedRole === 'owner' ? (ownerPersonId ?? locals.user.id) : null;
+		let ownerTableId = null;
+		if (normalizedRole === 'owner' && ownerPersonId) {
+			const { data: ownerRec } = await supabaseAdmin
+				.from('owners')
+				.select('id')
+				.eq('people_id', ownerPersonId)
+				.eq('workspace_id', workspaceBySlug.id)
+				.maybeSingle();
+			ownerTableId = ownerRec?.id ?? null;
+		}
 		const properties = loadPropertiesList(
 			locals.supabase,
 			supabaseAdmin,
 			workspaceBySlug.id,
 			normalizedRole,
-			ownerScopeId
+			ownerTableId
 		);
 		const units = loadUnitsList(
 			locals.supabase,
 			supabaseAdmin,
 			workspaceBySlug.id,
 			normalizedRole,
-			ownerScopeId
+			ownerTableId
 		);
 		return {
 			workspace: workspaceBySlug,
@@ -160,21 +169,36 @@ const addPropertyCounts = async (adminClient, properties, workspaceId) => {
 	}));
 };
 
-const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, userId) => {
-	const buildQuery = (client) => {
-		let q = client
-			.from('properties')
-			.select('id, name, address, city, state, postal_code, country, owner_id')
-			.eq('workspace_id', workspaceId)
-			.order('name', { ascending: true });
-		if (userRole === 'owner') {
-			q = q.eq('owner_id', userId);
-		}
-		return q;
-	};
-	const { data: properties, error: propertiesError } = await buildQuery(supabase);
+const loadPropertiesList = async (supabase, adminClient, workspaceId, userRole, ownerTableId) => {
+	const baseSelect =
+		'id, name, address, city, state, postal_code, country, owner_properties(owner_id, owners(id, name))';
+	const { data: properties, error: propertiesError } = await supabase
+		.from('properties')
+		.select(baseSelect)
+		.eq('workspace_id', workspaceId)
+		.order('name', { ascending: true });
 	if (!propertiesError) return addPropertyCounts(adminClient, properties ?? [], workspaceId);
-	const { data: adminProperties } = await buildQuery(adminClient);
+
+	// Admin fallback: for owner role, filter via owner_properties
+	if (userRole === 'owner' && ownerTableId) {
+		const { data: ownerProps } = await adminClient
+			.from('owner_properties')
+			.select('property_id')
+			.eq('owner_id', ownerTableId);
+		const propertyIds = (ownerProps ?? []).map((op) => op.property_id);
+		if (propertyIds.length === 0) return [];
+		const { data: adminProperties } = await adminClient
+			.from('properties')
+			.select(baseSelect)
+			.in('id', propertyIds)
+			.order('name', { ascending: true });
+		return addPropertyCounts(adminClient, adminProperties ?? [], workspaceId);
+	}
+	const { data: adminProperties } = await adminClient
+		.from('properties')
+		.select(baseSelect)
+		.eq('workspace_id', workspaceId)
+		.order('name', { ascending: true });
 	return addPropertyCounts(adminClient, adminProperties ?? [], workspaceId);
 };
 
@@ -183,21 +207,17 @@ const loadUnitsList = async (
 	adminClient,
 	workspaceId,
 	userRole = null,
-	ownerScopeId = null
+	ownerTableId = null
 ) => {
 	const isOwner = (userRole ?? '').toLowerCase() === 'owner';
 	const buildQuery = (client) => {
-		let q = client
+		return client
 			.from('units')
 			.select(
 				'id, name, property_id, tenants(id, name, email, phone, unit_id), properties!inner(workspace_id)'
 			)
 			.eq('properties.workspace_id', workspaceId)
 			.order('name', { ascending: true });
-		if (isOwner && ownerScopeId) {
-			q = q.eq('properties.owner_id', ownerScopeId);
-		}
-		return q;
 	};
 	const { data: units, error: unitsError } = await buildQuery(supabase);
 	const mappedUnits = (units ?? []).map((unit) => ({
@@ -206,10 +226,27 @@ const loadUnitsList = async (
 		tenant: (unit.tenants ?? [])[0] ?? null,
 		property_id: unit.property_id
 	}));
-	const needsAdminFallback =
-		!!unitsError || (isOwner && ownerScopeId && Array.isArray(units) && units.length === 0);
-	if (!needsAdminFallback) {
-		return mappedUnits;
+	if (!unitsError) return mappedUnits;
+
+	// Admin fallback: for owner role, filter via owner_properties
+	if (isOwner && ownerTableId) {
+		const { data: ownerProps } = await adminClient
+			.from('owner_properties')
+			.select('property_id')
+			.eq('owner_id', ownerTableId);
+		const propertyIds = (ownerProps ?? []).map((op) => op.property_id);
+		if (propertyIds.length === 0) return [];
+		const { data: adminUnits } = await adminClient
+			.from('units')
+			.select('id, name, property_id, tenants(id, name, email, phone, unit_id)')
+			.in('property_id', propertyIds)
+			.order('name', { ascending: true });
+		return (adminUnits ?? []).map((unit) => ({
+			id: unit.id,
+			name: unit.name,
+			tenant: (unit.tenants ?? [])[0] ?? null,
+			property_id: unit.property_id
+		}));
 	}
 	const { data: adminUnits } = await buildQuery(adminClient);
 	return (adminUnits ?? []).map((unit) => ({

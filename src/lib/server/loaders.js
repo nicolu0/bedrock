@@ -37,12 +37,20 @@ export const loadIssuesData = async (
 
 	let ownerUnitIds = [];
 	if (isOwnerScoped && ownerPersonId) {
-		const { data: ownerUnits } = await supabaseAdmin
-			.from('units')
-			.select('id, properties!inner(id, workspace_id, owner_id)')
-			.eq('properties.workspace_id', workspaceId)
-			.eq('properties.owner_id', ownerPersonId);
-		ownerUnitIds = Array.from(new Set((ownerUnits ?? []).map((unit) => unit.id).filter(Boolean)));
+		const { data: ownerRecord } = await supabaseAdmin
+			.from('owners')
+			.select('id, owner_properties(property_id)')
+			.eq('people_id', ownerPersonId)
+			.eq('workspace_id', workspaceId)
+			.maybeSingle();
+		const propertyIds = (ownerRecord?.owner_properties ?? []).map((op) => op.property_id);
+		if (propertyIds.length > 0) {
+			const { data: unitRows } = await supabaseAdmin
+				.from('units')
+				.select('id')
+				.in('property_id', propertyIds);
+			ownerUnitIds = Array.from(new Set((unitRows ?? []).map((u) => u.id).filter(Boolean)));
+		}
 	}
 
 	const buildIssuesQuery = () => {

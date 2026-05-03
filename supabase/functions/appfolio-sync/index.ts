@@ -509,6 +509,94 @@ async function syncVendors(workspaceId: string, seenVendorIds: string[]): Promis
 	console.log(`syncVendors: synced ${filtered.length} vendors (${activeVendorIds.size} IDs accumulated from work orders)`);
 }
 
+async function syncOwners(workspaceId: string, allowedPropertyIds: number[] | null): Promise<void> {
+	const body: Record<string, unknown> = { owner_visibility: 'active' };
+	if (allowedPropertyIds?.length) {
+		body.properties = { properties_ids: allowedPropertyIds.map(String) };
+	}
+
+	const rows = await throttledAppfolioFetch('owner_directory', body);
+	if (!rows.length) {
+		console.log('syncOwners: no owners returned');
+		return;
+	}
+
+	// Build a lookup of appfolio_property_id -> internal property UUID for this workspace
+	const { data: propRows } = await supabase
+		.from('properties')
+		.select('id, appfolio_property_id')
+		.eq('workspace_id', workspaceId)
+		.not('appfolio_property_id', 'is', null);
+	const propByAppfolioId = new Map<string, string>();
+	for (const p of propRows ?? []) {
+		propByAppfolioId.set(String(p.appfolio_property_id), p.id);
+	}
+
+	let synced = 0;
+	for (const row of rows as any[]) {
+		const appfolioOwnerId = row.owner_id;
+		if (appfolioOwnerId == null) continue;
+
+		// AppFolio may return first_name + last_name or a combined name field
+		const name = (
+			row.name ||
+			[row.first_name, row.last_name].filter(Boolean).join(' ') ||
+			String(appfolioOwnerId)
+		).trim();
+
+		const phone = normalizePhone(
+			row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : (row.phone ?? null)
+		);
+
+		const { data: owner, error: ownerErr } = await supabase
+			.from('owners')
+			.upsert(
+				{
+					workspace_id: workspaceId,
+					appfolio_owner_id: String(appfolioOwnerId),
+					name,
+					email: row.email ? String(row.email).split(',')[0].trim() || null : null,
+					phone,
+					updated_at: new Date().toISOString(),
+				},
+				{ onConflict: 'workspace_id,appfolio_owner_id', ignoreDuplicates: false }
+			)
+			.select('id')
+			.single();
+
+		if (ownerErr || !owner) {
+			console.error(`syncOwners upsert error for owner_id=${appfolioOwnerId}:`, ownerErr?.message);
+			continue;
+		}
+
+		// Sync owner-property associations.
+		// AppFolio returns property IDs in the `properties_owned_i_ds` field
+		// as a comma-separated string of AppFolio property IDs.
+		const rawPropertyIds: string[] = [];
+		if (row.properties_owned_i_ds != null) {
+			rawPropertyIds.push(...String(row.properties_owned_i_ds).split(',').map((s: string) => s.trim()).filter(Boolean));
+		}
+
+		for (const appfolioPropId of rawPropertyIds) {
+			const internalPropertyId = propByAppfolioId.get(appfolioPropId);
+			if (!internalPropertyId) continue;
+			const { error: opErr } = await supabase
+				.from('owner_properties')
+				.upsert(
+					{ owner_id: owner.id, property_id: internalPropertyId, workspace_id: workspaceId },
+					{ onConflict: 'owner_id,property_id', ignoreDuplicates: true }
+				);
+			if (opErr) {
+				console.error(`syncOwners owner_properties upsert error:`, opErr.message);
+			}
+		}
+
+		synced++;
+	}
+
+	console.log(`syncOwners: synced ${synced} owners from ${rows.length} rows`);
+}
+
 // ── Enqueue Helper ────────────────────────────────────────────────────────────
 
 async function enqueueAgentEvent(
@@ -1112,6 +1200,20 @@ serve(async (req) => {
 		}
 	}
 
+	// ?debug_owners=1 — return raw owner_directory response to inspect field names (no DB writes)
+	if (url.searchParams.get('debug_owners') === '1') {
+		try {
+			const rows = await appfolioFetch('owner_directory', { owner_visibility: 'active' });
+			return Response.json({
+				ok: true,
+				count: rows.length,
+				sample: (rows as any[]).slice(0, 3)
+			});
+		} catch (err) {
+			return Response.json({ ok: false, error: String(err) }, { status: 500 });
+		}
+	}
+
 	// ?discover=1 — return all AppFolio property IDs and names (no DB writes)
 	if (url.searchParams.get('discover') === '1') {
 		try {
@@ -1131,7 +1233,8 @@ serve(async (req) => {
 
 	// ── Sync modes ───────────────────────────────────────────────────────────
 	// Default (no mode param): fast path — work orders + agent dispatch (every minute)
-	// ?mode=metadata: slow path — properties, units, tenants, vendors (every 6 hours)
+	// ?mode=metadata: slow path — properties, units, tenants, vendors, owners (every 6 hours)
+	// ?mode=owners: owners-only — sync owners and their property associations
 
 	const mode = url.searchParams.get('mode');
 
@@ -1162,13 +1265,18 @@ serve(async (req) => {
 		}
 
 		try {
-			if (mode === 'metadata') {
+			if (mode === 'owners') {
+				// OWNERS-ONLY PATH: sync owners and their property associations
+				await syncOwners(ws.id, allowedIds);
+				results[ws.id] = { ok: true };
+			} else if (mode === 'metadata') {
 				// SLOW PATH: properties, units, tenants, vendors
 				const appfolioPropertyIds = await syncProperties(ws.id, allowedIds);
 				if (appfolioPropertyIds.length > 0) {
 					await syncUnits(ws.id, appfolioPropertyIds);
 					await syncTenants(ws.id, appfolioPropertyIds);
 					await syncVendors(ws.id, ws.appfolio_seen_vendor_ids ?? []);
+					await syncOwners(ws.id, appfolioPropertyIds);
 				}
 				await supabase
 					.from('workspaces')

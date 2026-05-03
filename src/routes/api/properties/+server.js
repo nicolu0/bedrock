@@ -31,11 +31,10 @@ export const POST = async ({ locals, request }) => {
 	const ownerIdValue = typeof ownerId === 'string' && ownerId.trim() ? ownerId.trim() : null;
 	if (ownerIdValue) {
 		const { data: ownerRow } = await supabaseAdmin
-			.from('people')
+			.from('owners')
 			.select('id')
 			.eq('id', ownerIdValue)
 			.eq('workspace_id', workspace.id)
-			.eq('role', 'owner')
 			.maybeSingle();
 		if (!ownerRow?.id) return json({ error: 'Owner not found.' }, { status: 400 });
 	}
@@ -49,13 +48,19 @@ export const POST = async ({ locals, request }) => {
 			city: city.trim(),
 			state: state.trim(),
 			postal_code: postalCode.trim(),
-			country: country.trim(),
-			owner_id: ownerIdValue
+			country: country.trim()
 		})
 		.select('id, name')
 		.single();
 
 	if (error) return json({ error: error.message }, { status: 500 });
+
+	if (ownerIdValue && data?.id) {
+		await supabaseAdmin
+			.from('owner_properties')
+			.insert({ owner_id: ownerIdValue, property_id: data.id, workspace_id: workspace.id });
+	}
+
 	return json(data);
 };
 
@@ -89,11 +94,10 @@ export const PATCH = async ({ locals, request }) => {
 	const ownerIdValue = typeof ownerId === 'string' && ownerId.trim() ? ownerId.trim() : null;
 	if (ownerIdValue) {
 		const { data: ownerRow } = await supabaseAdmin
-			.from('people')
+			.from('owners')
 			.select('id')
 			.eq('id', ownerIdValue)
 			.eq('workspace_id', workspace.id)
-			.eq('role', 'owner')
 			.maybeSingle();
 		if (!ownerRow?.id) return json({ error: 'Owner not found.' }, { status: 400 });
 	}
@@ -106,8 +110,7 @@ export const PATCH = async ({ locals, request }) => {
 			city: city.trim(),
 			state: state.trim(),
 			postal_code: postalCode.trim(),
-			country: country.trim(),
-			owner_id: ownerIdValue
+			country: country.trim()
 		})
 		.eq('id', propertyId)
 		.eq('workspace_id', workspace.id)
@@ -115,6 +118,19 @@ export const PATCH = async ({ locals, request }) => {
 		.single();
 
 	if (error) return json({ error: error.message }, { status: 500 });
+
+	// Replace owner assignment via owner_properties join table
+	await supabaseAdmin
+		.from('owner_properties')
+		.delete()
+		.eq('property_id', propertyId)
+		.eq('workspace_id', workspace.id);
+	if (ownerIdValue) {
+		await supabaseAdmin
+			.from('owner_properties')
+			.insert({ owner_id: ownerIdValue, property_id: propertyId, workspace_id: workspace.id });
+	}
+
 	return json(data);
 };
 
