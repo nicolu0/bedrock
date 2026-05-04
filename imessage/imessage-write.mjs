@@ -104,20 +104,24 @@ async function fetchNewIssues() {
 	const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 	if (!supabaseUrl || !serviceRoleKey) throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set');
 
+	// Pull issues_v2 with all agent_runs and joined display rows. Readiness
+	// (both intake + vendor runs done) is filtered in JS so the cursor can
+	// pause on not-yet-ready issues instead of skipping past them.
 	const params = new URLSearchParams({
-		select: 'id,workspace_id,service_request_number,name,description,urgent,created_at,property_id,tenant:tenants!tenant_id(name),property:properties!property_id(name),unit:units!unit_id(name)',
-		source: 'eq.appfolio',
+		select:
+			'id,workspace_id,appfolio_id,name,description,urgent,created_at,property_id,vendor_id,' +
+			'tenant:tenants!tenant_id(name),' +
+			'property:properties!property_id(name),' +
+			'unit:units!unit_id(name),' +
+			'vendor:vendors!vendor_id(name),' +
+			'agent_runs(agent_name,status)',
 		order: 'created_at.asc',
 		limit: '20',
 	});
 	if (WORKSPACE_FILTER) params.set('workspace_id', `eq.${WORKSPACE_FILTER}`);
-	if (state.lastCheckedAt) {
-		// gte so we don't miss issues with the same-millisecond timestamp;
-		// processedIds handles the resulting duplicates
-		params.set('created_at', `gte.${state.lastCheckedAt}`);
-	}
+	if (state.lastCheckedAt) params.set('created_at', `gte.${state.lastCheckedAt}`);
 
-	const response = await fetch(`${supabaseUrl}/rest/v1/issues?${params}`, {
+	const response = await fetch(`${supabaseUrl}/rest/v1/issues_v2?${params}`, {
 		headers: {
 			apikey: serviceRoleKey,
 			Authorization: `Bearer ${serviceRoleKey}`,
@@ -133,27 +137,14 @@ async function fetchNewIssues() {
 	return response.json();
 }
 
-// ── Vendors ───────────────────────────────────────────────────────────────────
-
-async function fetchVendors(workspaceId) {
-	const supabaseUrl = process.env.SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL;
-	const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-	const params = new URLSearchParams({
-		select: 'name,trade,note',
-		workspace_id: `eq.${workspaceId}`,
-		order: 'preference_index.asc',
-		limit: '30',
-	});
-	const response = await fetch(`${supabaseUrl}/rest/v1/vendors?${params}`, {
-		headers: {
-			apikey: serviceRoleKey,
-			Authorization: `Bearer ${serviceRoleKey}`,
-			Accept: 'application/json',
-		},
-	});
-	if (!response.ok) return [];
-	return response.json();
+function isReady(issue) {
+	const runs = issue.agent_runs ?? [];
+	const intake = runs.find((r) => r.agent_name === 'intake');
+	const vendor = runs.find((r) => r.agent_name === 'vendor');
+	return intake?.status === 'done' && vendor?.status === 'done';
 }
+
+// ── Vendors ───────────────────────────────────────────────────────────────────
 
 // ── Owner notes ───────────────────────────────────────────────────────────────
 
@@ -180,7 +171,7 @@ async function fetchPropertyNotes(workspaceId, propertyId) {
 
 // ── OpenAI ────────────────────────────────────────────────────────────────────
 
-async function generateSuggestion({ serviceRequestNumber, description, tenantName, urgent, vendors, propertyName, unitName, ownerNotes }) {
+async function generateSuggestion({ description, name, tenantName, urgent, vendorName, propertyName, unitName, ownerNotes }) {
 	const apiKey = process.env.OPENAI_API_KEY;
 	if (!apiKey) throw new Error('OPENAI_API_KEY not set');
 
@@ -188,16 +179,14 @@ async function generateSuggestion({ serviceRequestNumber, description, tenantNam
 
 	const workOrderLines = [
 		location ? `Location: ${location}` : null,
+		name ? `Title: ${name}` : null,
 		description ? `Issue: ${description}` : null,
 		tenantName ? `Tenant: ${tenantName}` : null,
 		urgent ? 'Priority: URGENT' : null,
+		vendorName ? `Recommended vendor: ${vendorName}` : null,
 	].filter(Boolean);
 
-	const vendorLines = vendors.length
-		? vendors.map(v => [v.name, v.trade, v.note].filter(Boolean).join(' — ')).join('\n')
-		: 'No vendors on file.';
-
-	log('calling openai', { model: OPENAI_MODEL, wo: serviceRequestNumber });
+	log('calling openai', { model: OPENAI_MODEL, name });
 	const t0 = Date.now();
 
 	const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -226,15 +215,13 @@ async function generateSuggestion({ serviceRequestNumber, description, tenantNam
 							  ownerNotes.map(n => `  * ${n}`).join('\n') + '\n'
 							: '- Second message: ask whether the owner needs to be contacted, then suggest the vendor. Example: "Do we need to contact the owner for this or can we send Abraham?"\n'
 						) +
-						'- Vendor notes are instructions — follow them strictly. If a note says "always send first" for this property, pick that vendor.\n' +
-						'- Default to a handyman for simple repairs (battery replacement, minor fixes, general maintenance). Only pick a specialist (plumber, electrician, HVAC) when the issue clearly requires licensed trade work.\n' +
-						'- Always suggest exactly one vendor. Never offer alternatives or multiple options.\n' +
+						'- Use the recommended vendor from the work order when one is provided. The selection has already been made.\n' +
 						'- Vendor name format: use first name only for individual people (e.g. "Yonic", "Abraham"). Use the full name for companies (e.g. "LA Hydro Jet", "Drain Specialist").\n' +
 						'- Plain text only. No bullet points, no markdown. Always use %%%% to separate messages.',
 				},
 				{
 					role: 'user',
-					content: `${workOrderLines.join('\n')}\n\nAvailable vendors:\n${vendorLines}`,
+					content: workOrderLines.join('\n'),
 				},
 			],
 			max_tokens: 200,
@@ -310,7 +297,13 @@ async function pollOnce() {
 	if (!issues.length) return;
 
 	for (const issue of issues) {
-		// Advance cursor regardless so we don't re-query old issues forever
+		// Pause cursor advancement on the first not-yet-ready issue so we
+		// re-poll it next tick instead of skipping past it forever.
+		if (!isReady(issue)) {
+			log('issue not ready, waiting for agents', { id: issue.id, appfolio_id: issue.appfolio_id });
+			break;
+		}
+
 		if (!state.lastCheckedAt || issue.created_at > state.lastCheckedAt) {
 			state.lastCheckedAt = issue.created_at;
 		}
@@ -322,21 +315,21 @@ async function pollOnce() {
 		state.processedIds[issue.id] = Date.now();
 		await saveState();
 
-		log('new work order', { id: issue.id, wo: issue.service_request_number });
+		log('new work order', { id: issue.id, appfolio_id: issue.appfolio_id });
 
 		const description = issue.description || issue.name || null;
 		const tenantName = issue.tenant?.name ?? null;
+		const vendorName = issue.vendor?.name ?? null;
 
 		try {
-			const vendors = await fetchVendors(issue.workspace_id);
 			const ownerNotes = await fetchPropertyNotes(issue.workspace_id, issue.property_id ?? null);
 			if (ownerNotes.length) log('owner notes found', { propertyId: issue.property_id, count: ownerNotes.length });
 			const suggestion = await generateSuggestion({
-				serviceRequestNumber: issue.service_request_number,
 				description,
+				name: issue.name,
 				tenantName,
 				urgent: !!issue.urgent,
-				vendors,
+				vendorName,
 				propertyName: issue.property?.name ?? null,
 				unitName: issue.unit?.name ?? null,
 				ownerNotes,
