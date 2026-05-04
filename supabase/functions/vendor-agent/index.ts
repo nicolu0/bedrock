@@ -8,7 +8,6 @@ import { claimAgentRun, completeAgentRun, failAgentRun } from '../_shared/agent-
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const INTERNAL_AGENT_KEY = Deno.env.get('INTERNAL_AGENT_KEY')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
 const OPENAI_MODEL = 'gpt-4.1-mini';
 
@@ -78,10 +77,6 @@ async function pickVendor(
 }
 
 serve(async (req) => {
-	if (req.headers.get('x-internal-agent-key') !== INTERNAL_AGENT_KEY) {
-		return new Response('Unauthorized', { status: 401 });
-	}
-
 	const { issueId } = await req.json();
 	if (!issueId) return Response.json({ ok: false, error: 'Missing issueId' }, { status: 400 });
 

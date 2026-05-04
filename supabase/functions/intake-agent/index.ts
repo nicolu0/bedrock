@@ -10,8 +10,6 @@ import { ensureAgentRuns, claimAgentRun, completeAgentRun, failAgentRun } from '
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const ANON_JWT = Deno.env.get('ANON_JWT')!;
-const INTERNAL_AGENT_KEY = Deno.env.get('INTERNAL_AGENT_KEY')!;
 const APPFOLIO_CLIENT_ID = Deno.env.get('APPFOLIO_CLIENT_ID')!;
 const APPFOLIO_CLIENT_SECRET = Deno.env.get('APPFOLIO_CLIENT_SECRET')!;
 const APPFOLIO_VHOST = Deno.env.get('APPFOLIO_VHOST')!;
@@ -112,13 +110,13 @@ async function generateNameAndUrgency(description: string): Promise<{ name: stri
 
 function dispatchVendorAgent(issueId: string): void {
 	// Fire-and-forget — vendor-agent claims its own run and updates agent_runs.
+	// Authenticated with the service role key (verify_jwt accepts it).
 	fetch(`${SUPABASE_URL}/functions/v1/vendor-agent`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
-			apikey: ANON_JWT,
-			Authorization: `Bearer ${ANON_JWT}`,
-			'x-internal-agent-key': INTERNAL_AGENT_KEY
+			apikey: SUPABASE_SERVICE_ROLE_KEY,
+			Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
 		},
 		body: JSON.stringify({ issueId })
 	}).catch((err) => console.error('vendor-agent dispatch failed:', err));
@@ -127,10 +125,6 @@ function dispatchVendorAgent(issueId: string): void {
 // ── Main Handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-	if (req.headers.get('x-internal-agent-key') !== INTERNAL_AGENT_KEY) {
-		return new Response('Unauthorized', { status: 401 });
-	}
-
 	const {
 		workspaceId,
 		serviceRequestNumber,

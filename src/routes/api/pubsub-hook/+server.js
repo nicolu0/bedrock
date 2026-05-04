@@ -7,7 +7,6 @@ import {
 	AGENT_WEBHOOK_SECRET,
 	GOOGLE_CLIENT_ID,
 	GOOGLE_CLIENT_SECRET,
-	INTERNAL_AGENT_KEY,
 	SUPABASE_SERVICE_ROLE_KEY
 } from '$env/static/private';
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
@@ -179,17 +178,12 @@ const resolveWorkspace = async (appfolioPropertyId) => {
 };
 
 const dispatchIntakeAgent = (payload) => {
-	if (!INTERNAL_AGENT_KEY) {
-		console.error('pubsub-hook intake-agent dispatch: INTERNAL_AGENT_KEY missing');
-		return Promise.resolve();
-	}
 	return fetch(`${PUBLIC_SUPABASE_URL}/functions/v1/intake-agent`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
 			apikey: SUPABASE_SERVICE_ROLE_KEY,
-			Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-			'x-internal-agent-key': INTERNAL_AGENT_KEY
+			Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
 		},
 		body: JSON.stringify(payload)
 	})
