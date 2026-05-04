@@ -12,7 +12,7 @@ import {
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
-const APPFOLIO_SENDER = 'donotreply@appfolio.com';
+const APPFOLIO_SENDERS = new Set(['donotreply@appfolio.com', 'johnbedrocktest@gmail.com']);
 const agentSecretHeader = 'x-agent-secret';
 const pubsubSecretParam = 'secret';
 
@@ -201,7 +201,7 @@ const processMessage = async (accessToken, messageId) => {
 	if (!message) return;
 	const headers = message.payload?.headers ?? [];
 	const senderEmail = extractEmail(getHeader(headers, 'from'));
-	if (senderEmail !== APPFOLIO_SENDER) return; // tenant emails dropped in v2
+	if (!APPFOLIO_SENDERS.has(senderEmail)) return; // tenant emails dropped in v2
 
 	const subject = getHeader(headers, 'subject');
 	const { serviceRequestNumber, appfolioPropertyId } = parseAppfolioSubject(subject);

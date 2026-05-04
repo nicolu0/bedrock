@@ -108,18 +108,23 @@ async function generateNameAndUrgency(description: string): Promise<{ name: stri
 	};
 }
 
-function dispatchVendorAgent(issueId: string): void {
-	// Fire-and-forget — vendor-agent claims its own run and updates agent_runs.
-	// Authenticated with the service role key (verify_jwt accepts it).
-	fetch(`${SUPABASE_URL}/functions/v1/vendor-agent`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			apikey: SUPABASE_SERVICE_ROLE_KEY,
-			Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
-		},
-		body: JSON.stringify({ issueId })
-	}).catch((err) => console.error('vendor-agent dispatch failed:', err));
+async function dispatchVendorAgent(issueId: string): Promise<void> {
+	// Awaited because fire-and-forget HTTP from edge functions gets aborted on
+	// shutdown. Adds vendor-agent latency to intake's response.
+	try {
+		const res = await fetch(`${SUPABASE_URL}/functions/v1/vendor-agent`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				apikey: SUPABASE_SERVICE_ROLE_KEY,
+				Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+			},
+			body: JSON.stringify({ issueId })
+		});
+		if (!res.ok) console.error(`vendor-agent dispatch ${res.status}: ${(await res.text()).slice(0, 200)}`);
+	} catch (err) {
+		console.error('vendor-agent dispatch failed:', err);
+	}
 }
 
 // ── Main Handler ─────────────────────────────────────────────────────────────
@@ -195,7 +200,8 @@ serve(async (req) => {
 			columns: [
 				'work_order_id', 'service_request_number', 'property_id', 'unit_id',
 				'job_description', 'service_request_description',
-				'requesting_tenant', 'submitted_by_tenant', 'primary_tenant'
+				'requesting_tenant', 'submitted_by_tenant', 'primary_tenant',
+				'created_at'
 			]
 		});
 		row = (woRows as any[]).find(
@@ -258,7 +264,8 @@ serve(async (req) => {
 				description,
 				unit_id: unitId,
 				property_id: propertyId,
-				tenant_id: tenantId
+				tenant_id: tenantId,
+				...(row.created_at ? { created_at: new Date(row.created_at).toISOString() } : {})
 			},
 			{ onConflict: 'workspace_id,appfolio_id', ignoreDuplicates: true }
 		)
@@ -294,7 +301,7 @@ serve(async (req) => {
 	const intakeRunId = await claimAgentRun(supabase, issueId, 'intake');
 	if (!intakeRunId) {
 		console.log(`intake-agent: ${issueId} intake already claimed/done — firing vendor and exiting`);
-		dispatchVendorAgent(issueId);
+		await dispatchVendorAgent(issueId);
 		return Response.json({ ok: true, issueId, skipped: 'intake-already-claimed' });
 	}
 
@@ -312,7 +319,7 @@ serve(async (req) => {
 		console.log(`intake-agent: ${issueId} intake done — name="${name}" urgent=${urgent}`);
 
 		// Sequential: vendor-agent fires after intake completes.
-		dispatchVendorAgent(issueId);
+		await dispatchVendorAgent(issueId);
 
 		return Response.json({ ok: true, issueId, name, urgent });
 	} catch (err) {
