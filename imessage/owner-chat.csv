@@ -1,0 +1,320 @@
+rowid,timestamp,sender,message
+386,2026-04-30T20:06:01.069Z,AI Agent (me),Can Abraham also take care of that? Or should we send Yonic?
+459,2026-04-30T20:05:42.839Z,AI Agent (me),She also reported that the sinks in the bathroom are draining slowly.
+474,2026-04-30T20:04:46.078Z,AI Agent (me),"Tenant at Van Buren, Unit 2919 1/2 reported that the entryway doorknob at the top of the stairs stopped working; it twists but doesn’t open the door anymore."
+700,2026-04-30T20:09:55.345Z,Property Manager,Send both to Abraham
+728,2026-04-30T20:04:52.233Z,AI Agent (me),Should we send Abraham for this?
+743,2026-04-30T20:10:08.209Z,AI Agent (me),Liked “Send both to Abraham”
+822,2026-04-30T02:48:14.618Z,AI Agent (949),"Liked “I’m on it, no need to do anything for the moment. Im coordinating directly. ”"
+830,2026-04-30T02:47:07.214Z,Property Manager,"I’m on it, no need to do anything for the moment. Im coordinating directly. "
+963,2026-04-30T01:59:02.397Z,AI Agent (949),Did either owner get back to you about which actions to take?
+1006,2026-04-29T18:38:03.899Z,AI Agent (949),Liked “I’ll send it to the owner for approval later today.”
+1011,2026-04-29T18:35:11.343Z,AI Agent (949),"Regarding kitchen skylight leaking in Unit 19/12 at 19 Ozone:
+
+Precision Roofing sent estimate for $850 to replace damaged kitchen skylight that has been leaking from the rain.
+
+Should we send this to the owner for approval before moving forward?"
+1028,2026-04-29T18:38:00.246Z,AI Agent (949),Sounds good. How about the issue at 213 Arnaz?
+1076,2026-04-29T18:36:26.298Z,Property Manager,I’ll send it to the owner for approval later today.
+1115,2026-04-29T18:26:09.303Z,AI Agent (949),"Tenant at 213 S Arnaz Dr. mentioned that the gardener reported wooden door covering electrical panel has rotted and fallen off.
+
+Should we send Ismael or Abraham for this?"
+1127,2026-04-29T14:54:42.697Z,AI Agent (949),"Hi Jose,
+
+Unit 4 at 1951 22nd St reported that kitchen window screen fell off due to wind and living room screen appears loose/damaged and may fall off as well.
+
+Send Abraham?"
+1149,2026-04-29T18:38:33.652Z,Property Manager,I will discuss with the owner as well and see who he wants us to send.
+1214,2026-04-29T14:59:53.444Z,AI Agent (949),Liked “Yes please ”
+1248,2026-04-29T18:38:41.853Z,AI Agent (949),Liked “I will discuss with the owner as well and see who he wants us to send.”
+1307,2026-04-29T14:57:12.108Z,Property Manager,Yes please 
+1668,2026-04-27T16:23:16.054Z,AI Agent (949),"Unit 6 at Ocean Park said the electrical panel is properly set but there is no power near the sink in the kitchen. Also, the power trips whenever the microwave is used.
+
+Should we send Osalpa?"
+1676,2026-04-27T16:30:29.988Z,Property Manager,"Yes, send it to Osalpa "
+1788,2026-04-28T21:21:12.133Z,AI Agent (me),"Hi Jose
+
+A new work order from Ozone unit 3 came in.
+
+It's regarding a broken water heater, water coming in from the 2 patio sliders, and
+
+""Also, A threshold between the DR and Kit was supposed to be installed""
+
+Should we send Kori for the sliders? 
+
+He mentioned that Kori has reset the water heater multiple times. What should we do about that?"
+1842,2026-04-27T14:38:17.761Z,AI Agent (me),"Hi Jose
+
+There are 3 more work orders that came in over the weekend:
+1. Front call box broken @ Primrose
+2. Clog in main drain from kitchen @ Palos Verdes
+3. Noise complaint regarding unit 1 @ Westmoreland
+
+I was thinking we could send LA HydroJet for the clogged drain. Could you take a look at the call box?
+
+For the noise complaint, should we notify unit 1 via email?"
+1958,2026-04-26T02:21:08.994Z,AI Agent (me),"Liked “Tell them to check the breakers to see if one is tripped. If so, do turn it back on. If she issue persists ask to see if we can send an electrician on Monday.”"
+1959,2026-04-26T02:21:11.624Z,AI Agent (me),Got it
+1961,2026-04-27T16:32:10.219Z,AI Agent (949),"Liked “Yes, send it to Osalpa ”"
+1991,2026-04-27T15:20:38.678Z,Property Manager,"Yes, send LA hydro for kitchen sink. I’ll take care of the other two "
+2047,2026-04-27T15:21:06.126Z,AI Agent (me),"Liked “Yes, send LA hydro for kitchen sink. I’ll take care of the other two ”"
+2051,2026-04-24T19:05:03.245Z,Property Manager,I’ll stop by soon 
+2094,2026-04-24T22:07:11.505Z,AI Agent (me),"The tenant from unit 3 at 144 S. Westmoreland said that almost all of the washing machines in the laundry room aren't working properly. 
+
+""Washing machines are taking coins, resetting after coins are put in""
+
+What should we do about this?"
+2105,2026-04-26T02:11:48.120Z,AI Agent (me),"Hi Jose
+
+I know it's the weekend, but unit 6 at 829 Ocean park reported that kitchen power keeps going out. 
+
+Should we do something about that right now or wait till Monday?"
+2121,2026-04-24T22:38:48.787Z,Property Manager,I’ll take care of the soon 
+2213,2026-04-24T21:57:02.034Z,AI Agent (me),Liked “Yes”
+2224,2026-04-24T18:13:21.499Z,AI Agent (me),"Hi Jose,
+
+Alexandra from Unit 8 at Rose Avenue said a homeless person is camped in her parking spot.
+
+Should we send Kori to look since it's Rose or will you take a look?
+I remember last time you went for the homeless situation."
+2259,2026-04-26T02:19:57.446Z,Property Manager,"Tell them to check the breakers to see if one is tripped. If so, do turn it back on. If she issue persists ask to see if we can send an electrician on Monday."
+2313,2026-04-24T22:38:37.842Z,Property Manager,For that I will have to send a regular request via the company’s portal
+2347,2026-04-24T22:39:57.381Z,AI Agent (949),Alright sounds good.
+2375,2026-04-24T21:55:53.265Z,Property Manager,Yes
+2392,2026-04-24T22:39:07.271Z,Property Manager,S
+2399,2026-04-24T21:54:34.608Z,AI Agent (me),"Hi Jose,
+
+Tenant at unit 4 908 15th street says they need help securing the shower drain cover. No problems with drain functionality.
+
+Should we send Abraham?"
+2447,2026-04-24T19:06:36.804Z,AI Agent (me),"Alexandra's phone number is (503) 956-0494 
+in case you need it."
+2464,2026-04-24T22:39:05.757Z,Property Manager,I told him to contact them as well since we don’t own the machine
+2477,2026-04-24T19:05:53.764Z,AI Agent (me),Liked “I’ll stop by soon ”
+2868,2026-04-23T20:26:51.660Z,AI Agent (me),"Hi Jose,
+
+Tenant at Unit 6 829 Ocean Park is reporting that the curtain rod keeps falling down because the wall mount is weak.
+
+Can you take a look at this or should we send Abraham?"
+2988,2026-04-23T20:45:50.896Z,AI Agent (949),"Liked “Yes, send it to Abraham please ”"
+3037,2026-04-23T20:40:31.371Z,Property Manager,"Yes, send it to Abraham please "
+3086,2026-04-22T20:01:26.339Z,AI Agent (me),"Hi Jose
+
+Water leaking under toilet at Unit 5 W 12th Place
+
+Should we send Yonic?"
+3112,2026-04-22T20:10:47.264Z,AI Agent (me),Sounds good
+3121,2026-04-22T14:25:32.530Z,Property Manager,Send it to Yonic please. 
+3192,2026-04-22T20:10:38.929Z,Property Manager,One second I need to discuss it with the owner 
+3213,2026-04-22T14:25:51.860Z,AI Agent (949),Liked “Send it to Yonic please. ”
+3300,2026-04-22T13:38:19.793Z,AI Agent (me),"Hi Jose
+
+No hot water in bathroom at 223-7 Union place
+
+Should we send Abraham?"
+3365,2026-04-22T16:00:43.438Z,Property Manager,Yes 
+3373,2026-04-22T16:00:13.219Z,AI Agent (949),"Leaking faucet in bathroom and kitchen at 227-14 Union Place.
+
+Send Yonic for this too?"
+3407,2026-04-21T20:31:10.389Z,AI Agent (me),Yes. Unit 4. Same one we sent Abraham to for plumbing.
+3415,2026-04-21T23:00:24.713Z,Property Manager,It is a different Juan 
+3431,2026-04-22T16:01:12.906Z,Property Manager,"Yonic is a plumber, more experienced "
+3447,2026-04-22T16:03:32.260Z,AI Agent (949),"Liked “Yonic is a plumber, more experienced ”"
+3453,2026-04-21T22:26:42.181Z,AI Agent (949),"Hi Jose,
+
+Sarah at 18201 Hatteras St mentioned her previous maintenance request about a chimney and broken towel rack. However, she mentioned that Juan has not answered any of her calls, texts, or emails.
+
+Should we notify the owner and try to send Juan again or tell the owner we will send a different vendor?"
+3455,2026-04-21T20:32:03.067Z,AI Agent (me),Liked “I’ll contact them directly and see if I can give them instructions over the phone ”
+3457,2026-04-22T15:45:35.162Z,AI Agent (949),"Quick question, any reason you went with Yonic for this issue?"
+3483,2026-04-21T20:32:16.076Z,AI Agent (me),Got it
+3514,2026-04-21T19:40:19.256Z,AI Agent (me),"Hi Jose
+
+Electrical outlet isn't working at 22nd Santa monica.
+
+Should we send Osalpa?"
+3523,2026-04-21T23:00:18.207Z,Property Manager,I have a new vendor that I’m adding 
+3575,2026-04-21T22:37:59.155Z,AI Agent (949),Sounds good. Is this a vendor LAPM uses or the owner requested?
+3587,2026-04-20T21:06:13.992Z,Property Manager,Send Abraham 
+3608,2026-04-21T23:01:21.724Z,AI Agent (949),Liked “I have a new vendor that I’m adding ”
+3609,2026-04-21T20:29:42.608Z,Property Manager,Is it at 1951 22nd? Which unit?
+3611,2026-04-21T22:34:44.122Z,Property Manager,I’ll be sending someone else soon
+3626,2026-04-20T21:06:19.307Z,AI Agent (me),Liked “Send Abraham ”
+3650,2026-04-20T21:01:45.432Z,AI Agent (me),"There are 2 plumbing issues at unit 4 on 22nd street. Toilet tank is not refilling. Shower is draining slowly and pooling.
+
+Should we send The Drain Specialist?"
+3674,2026-04-21T18:03:07.642Z,Property Manager,"Yes, we need a quote to replace it "
+3707,2026-04-21T18:07:59.346Z,AI Agent (949),"Liked “Yes, we need a quote to replace it ”"
+3725,2026-04-20T21:06:21.201Z,AI Agent (me),"Irene at Primrose also mentioned that the light outside her front door is out.
+
+Can you take a look or should we send someone?"
+3728,2026-04-20T15:29:25.195Z,Property Manager,Send Kori please 
+3763,2026-04-21T17:29:39.992Z,AI Agent (949),"For the broken dishwasher at 50 Rose that we assigned to Waadt appliance, they said they don’t handle repairs. 
+
+Should we still try to get a quote from them or choose someone else?"
+3818,2026-04-21T18:47:55.654Z,Property Manager,Yes 
+3819,2026-04-21T20:31:44.395Z,Property Manager,I’ll contact them directly and see if I can give them instructions over the phone 
+3835,2026-04-20T06:19:11.569Z,AI Agent (me),"Hi Jose,
+
+The power is out at 294 Ozone, and the tenant mentioned that the fridge is getting no power.
+
+Is this as an emeregency? Or should we wait until tomorrow and send Kori first?"
+3851,2026-04-21T18:48:14.000Z,AI Agent (949),Liked “Yes ”
+3861,2026-04-20T21:48:18.217Z,Property Manager,Send guox maintenance 
+3867,2026-04-21T18:43:03.114Z,AI Agent (949),"Quotes for both white/stainless steel dishwasher + installation + dishwasher install kit is $559.34. Same for both colors.
+
+Since the tenant prefers stainless steel and there’s no price difference, would you like me to approve the stainless steel replacement and have the vendor move forward?"
+3903,2026-04-20T15:29:41.449Z,AI Agent (me),Liked “Send Kori please ”
+4395,2026-04-17T00:15:56.068Z,AI Agent (949),Was the no hot water issue at 17th street fixed?
+4497,2026-04-17T00:17:14.678Z,AI Agent (949),Sounds good
+4498,2026-04-16T22:09:32.049Z,AI Agent (949),They have a white dishwasher but are requesting a stainless steel one to match their fridge. Should I ask Waadt for an estimate for a white or stainless steel dishwasher?
+4530,2026-04-17T00:16:10.124Z,Property Manager,Yes
+4562,2026-04-16T21:50:50.245Z,Property Manager,Thanks 
+4572,2026-04-17T00:16:15.910Z,AI Agent (949),Liked “Yes”
+4609,2026-04-16T21:45:39.996Z,Property Manager,Yes 
+4656,2026-04-16T22:24:51.602Z,Property Manager,Maybe there is no real price difference 
+4659,2026-04-16T17:52:57.964Z,AI Agent (949),Do you know approximately what time you will be there so I can let the tenant know? Thanks 
+4665,2026-04-17T00:16:25.284Z,Property Manager,She can test the water and let us know if the issue continues 
+4694,2026-04-16T21:57:17.555Z,AI Agent (949),Liked “Thanks ”
+4708,2026-04-16T21:49:13.514Z,Property Manager,We can send the work order to Waad appliance and request an estimate to replace. We need to know what color they have first. 
+4712,2026-04-16T22:24:38.646Z,Property Manager,Request and estimate for both 
+4730,2026-04-16T14:20:35.823Z,AI Agent (me),"Hi Jose
+
+No hot water @ Unit D17th St.
+
+Should we send Abraham? He currently has 5 open work orders."
+4756,2026-04-16T21:45:45.336Z,AI Agent (949),Liked “Yes ”
+4766,2026-04-16T22:28:43.390Z,AI Agent (949),"Okay, will do"
+4772,2026-04-16T21:50:39.635Z,AI Agent (949),"Okay, will ask tenant what color they have and then reassign the work order to Waad"
+4789,2026-04-16T21:48:17.760Z,AI Agent (949),"Kori went out to 50 Rose Unit 5 to take a look at the dishwasher and said the motherboard is going bad and getting old, and thinks the dishwasher should be replaced. What should be done about that?"
+4850,2026-04-16T17:51:11.127Z,Property Manager,I will be out of the office most of the day today.
+4891,2026-04-16T17:51:40.848Z,AI Agent (949),Liked “I’ll be stopping by to check the water heater at 17th street. Assign it to JL”
+4892,2026-04-16T17:58:06.843Z,AI Agent (949),Liked “I’ll be there in the next 10-15mins. I’ll be checking the water heater room first ”
+4904,2026-04-16T17:55:49.975Z,Property Manager,I’ll be there in the next 10-15mins. I’ll be checking the water heater room first 
+4938,2026-04-16T16:29:00.492Z,AI Agent (949),"Hi Jose, will you be at the office today?"
+4955,2026-04-16T17:51:32.188Z,Property Manager,I’ll be stopping by to check the water heater at 17th street. Assign it to JL
+5016,2026-04-16T21:34:36.476Z,AI Agent (949),Broken oven door and shelf at 50 Rose. Should we send Kori?
+5056,2026-04-16T17:51:38.920Z,AI Agent (949),"Got it, sounds good."
+5064,2026-04-14T15:00:52.560Z,AI Agent (949),Liked “You can assign it to Abraham ”
+5068,2026-04-14T14:57:15.682Z,Property Manager,You guys can delete Darwin from the system. We no longer use him 
+5147,2026-04-14T18:08:30.773Z,AI Agent (me),"Liked “Send him for the blinds, assign JL for carbon monoxide ”"
+5180,2026-04-14T18:08:08.156Z,Property Manager,"Send him for the blinds, assign JL for carbon monoxide "
+5195,2026-04-14T15:54:41.401Z,AI Agent (949),"Hi Jose, here are new issues:
+
+1. Freezer not working after self-triaging @ Primrose. Send Cross Appliance?
+2. No hot water since Sunday @ 829 Ocean Park. Send Home Improvement?
+3. Broken range hood @ 829 Ocean Park. Abraham was assigned for the same issue previously but I don’t believe he ever did the work. Should I assign him again and make sure to confirm with him?
+
+Work orders 2 and 3 are the same tenant/unit. Should I send the same vendor or different ones as suggested above?"
+5206,2026-04-14T15:45:51.259Z,AI Agent (me),Liked “You guys can delete Darwin from the system. We no longer use him ”
+5285,2026-04-14T14:00:00.000Z,AI Agent (me),"Hi Jose,
+
+Garbage disposal is broken @ Harvard. 
+Should I send Abraham? We've also sent Darwin before."
+5310,2026-04-14T14:56:41.432Z,Property Manager,You can assign it to Abraham 
+5351,2026-04-13T23:41:46.835Z,Property Manager,"Yes, please "
+5352,2026-04-14T16:04:33.267Z,AI Agent (949),Also- did you hear back from the website guy about the site credentials?
+5363,2026-04-14T18:07:25.137Z,AI Agent (me),"Should we send Abraham for:
+1. Carbon monoxide @ 11th St.
+2. Kitchen blinds @ 11th St."
+5367,2026-04-14T17:01:57.771Z,Property Manager,"No, not yet. I’ll let you guys know ones he send the info. "
+5397,2026-04-13T20:19:01.418Z,Property Manager,"Yes, send it to him please "
+5459,2026-04-14T17:02:11.644Z,AI Agent (949),"Liked “No, not yet. I’ll let you guys know ones he send the info. ”"
+5469,2026-04-14T15:00:59.597Z,AI Agent (949),"Sounds good, will remove him"
+5486,2026-04-13T16:32:07.368Z,AI Agent (949),"Just notified the vendors. For the broken toilet seat at Glencoe, the tenant provided these available times:
+
+Tuesday 4/14 - 8am-5pm
+Wednesday 4/15 - 8am-5pm
+
+What time are you available to check out the issue?"
+5525,2026-04-13T23:41:12.423Z,AI Agent (me),"Fridge ice maker @ Budlong is broken.
+Should I send Cross Appliance for this?"
+5542,2026-04-13T20:19:09.866Z,AI Agent (949),"Liked “Yes, send it to him please ”"
+5573,2026-04-13T20:17:43.046Z,AI Agent (me),"Toilet handle is broken @ 180-10 11th St.
+We usually send Abraham to this property. Should I send him?"
+5591,2026-04-13T23:55:51.816Z,AI Agent (949),"Liked “Yes, please ”"
+5748,2026-04-13T14:00:00.001Z,AI Agent (me),It looks like you've handled most of these issues in the past.  Do we need to send vendors for these?
+5762,2026-04-13T14:00:00.000Z,AI Agent (me),"Hi Jose, these issues came up over the weekend.
+Vendor suggestions are next to each issue.
+
+1. Smoke alarm going off @ Rose Ave (JL, Abraham)
+2. Debris on roof + gutters @ Palos Verdes: (JL, Luis)
+3. Broken toilet seat @ Glencoe: (JL, Abraham, Luis)"
+5772,2026-04-13T15:28:33.396Z,Property Manager,"Please send Kori to take care of the smoke detector, palos verdes we can send LA’s Best Gutters and the Glenco to JL"
+5785,2026-04-13T15:36:47.214Z,AI Agent (949),"Liked “Please send Kori to take care of the smoke detector, palos verdes we can send LA’s Best Gutters and the Glenco to JL”"
+5940,2026-04-10T00:27:47.116Z,AI Agent (949),"Hi Jose, will you be in the office and have some time to meet tomorrow? Just want to check in with how everything is going! Let me know when you’re available."
+5958,2026-04-10T00:50:29.872Z,Property Manager,Tomorrow will be a busy day.
+6197,2026-04-10T00:53:31.490Z,AI Agent (949),"Got it, no worries. Do you have just 10 minutes? We can keep it very quick."
+6216,2026-04-08T18:08:27.041Z,Property Manager,Send cross appliance please 
+6217,2026-04-10T00:54:29.678Z,AI Agent (949),We can also do a quick phone call if that works better.
+6223,2026-04-08T21:35:04.661Z,AI Agent (949),"“Hi Jose,
+
+The technician found the tree branches to be the cause of the rats getting on the roof. Do I have to put in a separate request on the maintenance portal to get the trees trimmed around the property?”
+
+———————————
+
+This is what Irene Victoria said. Does she have to create a new work order or will the vendor handle it?
+"
+6252,2026-04-08T18:08:50.549Z,AI Agent (me),Liked “For the primrose I’ll be there around 2pm”
+6268,2026-04-09T00:33:19.225Z,AI Agent (949),Liked “I’m on it and will be getting a tree trimmer onsite soon. No need to do anything at the moment ”
+6287,2026-04-08T18:04:28.374Z,AI Agent (me),"Hi Jose, the garage door is stuck open at Primrose.
+
+Should we send Kori for this too? They previously fixed the garage at Ozone."
+6375,2026-04-08T18:07:59.049Z,AI Agent (me),"There's also a water leak under the fridge at 15th street. 
+
+They mentioned you took a look at it the previous times. Should we send Cross Appliance or will you take a look at it?"
+6400,2026-04-08T18:08:45.458Z,Property Manager,For the primrose I’ll be there around 2pm
+6431,2026-04-08T18:09:07.359Z,AI Agent (me),"Sounds good, will let the tenant know"
+6457,2026-04-09T00:30:14.635Z,Property Manager,I’m on it and will be getting a tree trimmer onsite soon. No need to do anything at the moment 
+6471,2026-04-08T18:08:36.404Z,AI Agent (me),Liked “Send cross appliance please ”
+6530,2026-04-08T14:00:00.000Z,AI Agent (me),"Hi Jose a new workorder came in from Ozone about a broken closet door.
+
+Should we send Guox for this? I already sent a acknowledgement email to the tenant. "
+6549,2026-04-07T19:07:11.892Z,AI Agent (me),"Hi Jose, a tenant at Pickford is requesting another pest spray. 
+
+Should we send Primex for this? Primex is 19 miles away.
+Another option is Dever which is only 4 miles away."
+6557,2026-04-08T16:58:51.808Z,AI Agent (949),Liked “Send Kori ”
+6602,2026-04-08T16:58:26.358Z,Property Manager,Send Kori 
+6603,2026-04-07T19:22:22.439Z,AI Agent (me),https://www.usebedrock.co/lapm/my-issues
+6642,2026-04-07T18:58:20.667Z,Property Manager,"Yes, assign it to JL"
+6660,2026-04-07T17:50:38.375Z,AI Agent (949),"Hi Jose, we will be there at 11:10"
+6699,2026-04-07T19:08:26.703Z,Property Manager,Send it to primex 
+6733,2026-04-07T18:57:38.219Z,AI Agent (me),"Hi Jose, a new workorder came in for Glencoe about the fire alram going off. Tenant reports that they tried checking the battery already.
+
+Should we send JL Unlimited Services to take a look? I already sent a acknowledgement email to the tenant. "
+6784,2026-04-06T21:02:33.391Z,AI Agent (949),"Hi Jose, will you be in the office around 3pm today? If so, can we come by and go through some of the work orders? Thanks!"
+6845,2026-04-07T17:52:07.996Z,Property Manager,"Liked “Hi Jose, we will be there at 11:10”"
+7067,2026-04-03T23:00:44.517Z,AI Agent (949),"Hi Jose, we are planning on coming into the office on Monday. Is there any time Monday afternoon you know you’ll be out of the office?"
+7157,2026-04-03T21:19:15.970Z,Property Manager,When I click approve it takes me to the screen I texted 
+7175,2026-04-03T20:46:41.914Z,AI Agent (949),"Try this link, let me know if it doesnt work. This link is for the water intrusion issue at Primrose."
+7179,2026-04-03T19:45:17.376Z,AI Agent (949),"Liked “Yes, sorry since it is a new property. I wasn’t sure who to send ”"
+7239,2026-04-03T21:18:00.470Z,AI Agent (949),"Got it, there is an “approve” button that should show up, but I think it got cut off on the mobile view. 
+
+Is it okay if we approve it for you if the modified draft looks good?"
+7270,2026-04-03T20:50:43.348Z,AI Agent (949),￼You can click 'Change’ to select a different vendor. If you will check it out yourself then just put JL Unlimited Services. You can also edit the messages as well. Let me know once you approve them!
+7280,2026-04-03T20:29:09.956Z,AI Agent (949),Also - I was just wondering if the water intrusion issue at Primrose was taken care of yet or if you handled it already. Let me know!
+7329,2026-04-03T19:26:40.208Z,AI Agent (949),"Hey Jose! Saw you assigned the rats work order to Primex Termite Co. I was wondering if it’d be okay if we sent a follow up to the tenant letting them know a vendor was contacted.
+
+We can also create a draft for your approval and link it here if you’d prefer so you can read it over. Let me know, thank you!"
+7377,2026-04-03T21:11:22.309Z,Property Manager,￼
+7391,2026-04-03T21:19:22.157Z,Property Manager,Please approve it on your end 
+7401,2026-04-03T19:27:41.179Z,Property Manager,"Yes, sorry since it is a new property. I wasn’t sure who to send "
+7416,2026-04-03T20:33:15.089Z,Property Manager,￼
+7422,2026-04-03T21:20:01.498Z,AI Agent (949),"Sounds good, sorry about that. We are fixing it right now"
+7453,2026-04-03T21:11:47.071Z,Property Manager,I made the changes but it does not do anything after that.
+7460,2026-04-03T20:37:11.780Z,AI Agent (949),"Sorry about that! I think those links expired, we will send the new links ASAP"
+7466,2026-04-03T20:33:35.116Z,Property Manager,￼It won’t allow me to select a property. 
+7475,2026-04-03T20:46:28.477Z,AI Agent (949),https://www.usebedrock.co/lapm/issue/633-292-6-18/interior-water-intrusion?from=my-issues
+7550,2026-04-02T00:23:26.083Z,AI Agent (me),"Hi Jose, let me know if you got a chance to take a look at the above links. Thanks!"
+7591,2026-04-02T22:24:15.409Z,AI Agent (me),"Hi Jose, could we call for 5 minutes? Just wanted to run a few things by you"
+7681,2026-04-01T17:51:06.785Z,AI Agent (me),https://www.usebedrock.co/lapm/issue/221-223-8-32/bathtub-faucet-issue?from=my-issues
+7739,2026-04-01T17:42:51.046Z,AI Agent (me),https://www.usebedrock.co/lapm/issue/633-292-6-34/severe-water-intrusion?from=my-issues
+7958,2026-04-01T17:46:13.405Z,AI Agent (me),Let me know if you need anything!
+8011,2026-04-01T17:42:45.692Z,AI Agent (me),"Hi Jose, new issue came out for a water intrusion at primrose"
+8019,2026-04-01T17:51:06.957Z,AI Agent (me),This is for the bathtub issue at Union
+8069,2026-04-01T17:45:55.956Z,AI Agent (me),If you're on your phone you'll have to log in again
+9898,2026-03-20T22:04:44.913Z,AI Agent (949),"Hi Jose this is Nico, I added Andrew to this chat. We can use this for communication"
+9942,2026-03-20T22:29:10.671Z,AI Agent (me),"Hi Jose, thanks for the time. Looking forward to working with you."
+10031,2026-03-20T22:35:56.574Z,Property Manager,Thank you both! 
+10035,2026-03-20T23:04:24.512Z,AI Agent (949),Loved “Thank you both! ”

@@ -3,21 +3,16 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import PeopleModal from '$lib/components/PeopleModal.svelte';
-	import { peopleCache, removePersonFromCache, addPersonToCache } from '$lib/stores/peopleCache.js';
 
 	export let data;
 
 	let editingPerson = null;
 	let openRowMenu = null;
 	let hoveredRow = null;
+	let owners = data.ownersFromTable ?? [];
 
 	$: workspaceSlug = $page.params.workspace;
-
-	$: people =
-		$peopleCache.workspace === workspaceSlug && $peopleCache.data != null
-			? $peopleCache.data
-			: null;
-	$: owners = Array.isArray(people) ? people.filter((person) => person.role === 'owner') : [];
+	$: owners = data.ownersFromTable ?? [];
 
 	const formatRole = (role) => {
 		if (!role) return 'Member';
@@ -57,16 +52,17 @@
 	async function deletePerson(person) {
 		if (!person?.id) return;
 		openRowMenu = null;
-		removePersonFromCache(person.id);
+		const prev = owners;
+		owners = owners.filter((o) => o.id !== person.id);
 		try {
 			const res = await fetch('/api/people', {
 				method: 'DELETE',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ id: person.id, workspace: workspaceSlug })
 			});
-			if (!res.ok) throw new Error('Failed to delete person');
+			if (!res.ok) throw new Error('Failed to delete owner');
 		} catch (error) {
-			addPersonToCache(person, workspaceSlug);
+			owners = prev;
 			console.error(error);
 		}
 	}
@@ -74,19 +70,7 @@
 
 <div class="space-y-2">
 	<div>
-		{#if people === null}
-			<div>
-				{#each { length: 4 } as _}
-					<div class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-3">
-						<div class="skeleton h-5 w-16 rounded-sm"></div>
-						<div class="skeleton h-4 w-32"></div>
-						<div></div>
-						<div class="skeleton h-4 w-40"></div>
-						<div></div>
-					</div>
-				{/each}
-			</div>
-		{:else if owners.length}
+		{#if owners.length}
 			<div
 				class="grid grid-cols-[0.6fr_1.6fr_1fr_2fr_2rem] gap-4 px-6 py-2 text-xs text-neutral-500"
 			>

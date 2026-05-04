@@ -94,7 +94,8 @@ async function appfolioFetch(
 // Light throttle to avoid burning through the rate limit (7 req / 15s).
 const MIN_DELAY_MS = 800;
 // Wall-clock budget: stop starting new properties after this many ms to avoid gateway 504.
-const WALL_CLOCK_BUDGET_MS = 120_000;
+// Must leave ~65s for processDispatchQueue (8 dispatches × 6s + overhead) before the 150s limit.
+const WALL_CLOCK_BUDGET_MS = 75_000;
 let lastRequestTime = 0;
 
 async function throttledAppfolioFetch(
@@ -507,6 +508,94 @@ async function syncVendors(workspaceId: string, seenVendorIds: string[]): Promis
 		.eq('id', workspaceId);
 
 	console.log(`syncVendors: synced ${filtered.length} vendors (${activeVendorIds.size} IDs accumulated from work orders)`);
+}
+
+async function syncOwners(workspaceId: string, allowedPropertyIds: number[] | null): Promise<void> {
+	const body: Record<string, unknown> = { owner_visibility: 'active' };
+	if (allowedPropertyIds?.length) {
+		body.properties = { properties_ids: allowedPropertyIds.map(String) };
+	}
+
+	const rows = await throttledAppfolioFetch('owner_directory', body);
+	if (!rows.length) {
+		console.log('syncOwners: no owners returned');
+		return;
+	}
+
+	// Build a lookup of appfolio_property_id -> internal property UUID for this workspace
+	const { data: propRows } = await supabase
+		.from('properties')
+		.select('id, appfolio_property_id')
+		.eq('workspace_id', workspaceId)
+		.not('appfolio_property_id', 'is', null);
+	const propByAppfolioId = new Map<string, string>();
+	for (const p of propRows ?? []) {
+		propByAppfolioId.set(String(p.appfolio_property_id), p.id);
+	}
+
+	let synced = 0;
+	for (const row of rows as any[]) {
+		const appfolioOwnerId = row.owner_id;
+		if (appfolioOwnerId == null) continue;
+
+		// AppFolio may return first_name + last_name or a combined name field
+		const name = (
+			row.name ||
+			[row.first_name, row.last_name].filter(Boolean).join(' ') ||
+			String(appfolioOwnerId)
+		).trim();
+
+		const phone = normalizePhone(
+			row.phone_numbers ? String(row.phone_numbers).split(',')[0].trim() || null : (row.phone ?? null)
+		);
+
+		const { data: owner, error: ownerErr } = await supabase
+			.from('owners')
+			.upsert(
+				{
+					workspace_id: workspaceId,
+					appfolio_owner_id: String(appfolioOwnerId),
+					name,
+					email: row.email ? String(row.email).split(',')[0].trim() || null : null,
+					phone,
+					updated_at: new Date().toISOString(),
+				},
+				{ onConflict: 'workspace_id,appfolio_owner_id', ignoreDuplicates: false }
+			)
+			.select('id')
+			.single();
+
+		if (ownerErr || !owner) {
+			console.error(`syncOwners upsert error for owner_id=${appfolioOwnerId}:`, ownerErr?.message);
+			continue;
+		}
+
+		// Sync owner-property associations.
+		// AppFolio returns property IDs in the `properties_owned_i_ds` field
+		// as a comma-separated string of AppFolio property IDs.
+		const rawPropertyIds: string[] = [];
+		if (row.properties_owned_i_ds != null) {
+			rawPropertyIds.push(...String(row.properties_owned_i_ds).split(',').map((s: string) => s.trim()).filter(Boolean));
+		}
+
+		for (const appfolioPropId of rawPropertyIds) {
+			const internalPropertyId = propByAppfolioId.get(appfolioPropId);
+			if (!internalPropertyId) continue;
+			const { error: opErr } = await supabase
+				.from('owner_properties')
+				.upsert(
+					{ owner_id: owner.id, property_id: internalPropertyId, workspace_id: workspaceId },
+					{ onConflict: 'owner_id,property_id', ignoreDuplicates: true }
+				);
+			if (opErr) {
+				console.error(`syncOwners owner_properties upsert error:`, opErr.message);
+			}
+		}
+
+		synced++;
+	}
+
+	console.log(`syncOwners: synced ${synced} owners from ${rows.length} rows`);
 }
 
 // ── Enqueue Helper ────────────────────────────────────────────────────────────
@@ -1112,6 +1201,20 @@ serve(async (req) => {
 		}
 	}
 
+	// ?debug_owners=1 — return raw owner_directory response to inspect field names (no DB writes)
+	if (url.searchParams.get('debug_owners') === '1') {
+		try {
+			const rows = await appfolioFetch('owner_directory', { owner_visibility: 'active' });
+			return Response.json({
+				ok: true,
+				count: rows.length,
+				sample: (rows as any[]).slice(0, 3)
+			});
+		} catch (err) {
+			return Response.json({ ok: false, error: String(err) }, { status: 500 });
+		}
+	}
+
 	// ?discover=1 — return all AppFolio property IDs and names (no DB writes)
 	if (url.searchParams.get('discover') === '1') {
 		try {
@@ -1131,7 +1234,9 @@ serve(async (req) => {
 
 	// ── Sync modes ───────────────────────────────────────────────────────────
 	// Default (no mode param): fast path — work orders + agent dispatch (every minute)
-	// ?mode=metadata: slow path — properties, units, tenants, vendors (every 6 hours)
+	// ?mode=new_only: lightweight cron — inserts work orders from last 7 days that are new to DB only, no change detection
+	// ?mode=metadata: slow path — properties, units, tenants, vendors, owners (every 6 hours)
+	// ?mode=owners: owners-only — sync owners and their property associations
 
 	const mode = url.searchParams.get('mode');
 
@@ -1162,13 +1267,18 @@ serve(async (req) => {
 		}
 
 		try {
-			if (mode === 'metadata') {
+			if (mode === 'owners') {
+				// OWNERS-ONLY PATH: sync owners and their property associations
+				await syncOwners(ws.id, allowedIds);
+				results[ws.id] = { ok: true };
+			} else if (mode === 'metadata') {
 				// SLOW PATH: properties, units, tenants, vendors
 				const appfolioPropertyIds = await syncProperties(ws.id, allowedIds);
 				if (appfolioPropertyIds.length > 0) {
 					await syncUnits(ws.id, appfolioPropertyIds);
 					await syncTenants(ws.id, appfolioPropertyIds);
 					await syncVendors(ws.id, ws.appfolio_seen_vendor_ids ?? []);
+					await syncOwners(ws.id, appfolioPropertyIds);
 				}
 				await supabase
 					.from('workspaces')
@@ -1184,6 +1294,137 @@ serve(async (req) => {
 					.lt('processed_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
 
 				results[ws.id] = { ok: true, properties: appfolioPropertyIds.length };
+			} else if (mode === 'new_only') {
+				// NEW-ONLY PATH: insert work orders from last 7 days that aren't in DB yet.
+				// No change detection, no stale re-queue — safe to cron every minute.
+				const newOnlyFromDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+				let allPropertyIds: number[];
+				if (allowedIds?.length) {
+					allPropertyIds = allowedIds;
+				} else {
+					const { data: props } = await supabase
+						.from('properties')
+						.select('appfolio_property_id')
+						.eq('workspace_id', ws.id)
+						.not('appfolio_property_id', 'is', null);
+					allPropertyIds = (props ?? []).map((p: any) => Number(p.appfolio_property_id));
+				}
+
+				if (allPropertyIds.length === 0) {
+					results[ws.id] = { ok: true, new_issues: 0 };
+				} else {
+					// Batch-fetch all existing AppFolio IDs for fast dedup
+					const { data: existingRows } = await supabase
+						.from('issues')
+						.select('appfolio_id')
+						.eq('workspace_id', ws.id)
+						.eq('source', 'appfolio')
+						.not('appfolio_id', 'is', null);
+					const existingIds = new Set((existingRows ?? []).map((r: any) => String(r.appfolio_id)));
+
+					const { data: noProps } = await supabase
+						.from('properties')
+						.select('id, appfolio_property_id, appfolio_property_number')
+						.eq('workspace_id', ws.id)
+						.in('appfolio_property_id', allPropertyIds.map(String));
+					const noPropMap = new Map<string, string>((noProps ?? []).map((p: any) => [p.appfolio_property_id, p.id]));
+					const noPropNumMap = new Map<string, string>(
+						(noProps ?? []).filter((p: any) => p.appfolio_property_number).map((p: any) => [p.appfolio_property_id, p.appfolio_property_number])
+					);
+
+					const { data: noUnits } = await supabase
+						.from('units').select('id, property_id, appfolio_unit_id').not('appfolio_unit_id', 'is', null);
+					const noUnitMap = new Map<string, { id: string; property_id: string }>(
+						(noUnits ?? []).map((u: any) => [u.appfolio_unit_id, { id: u.id, property_id: u.property_id }])
+					);
+
+					let newIssueCount = 0;
+
+					for (const appfolioPropId of allPropertyIds) {
+						if (Date.now() - syncStartTime > 130_000) break;
+						const propNumber = noPropNumMap.get(String(appfolioPropId));
+						const bedrockPropertyId = noPropMap.get(String(appfolioPropId)) ?? null;
+						if (!propNumber || !bedrockPropertyId) continue;
+
+						let rows: any[];
+						try {
+							rows = (await throttledAppfolioFetch('work_order', {
+								property_visibility: 'active',
+								property: { property_id: propNumber },
+								work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
+								status_date: '0',
+								status_date_range_from: newOnlyFromDate,
+								columns: [
+									'work_order_id', 'service_request_number', 'property_id', 'unit_id',
+									'status', 'priority', 'job_description', 'service_request_description',
+									'vendor_id', 'status_notes', 'created_at',
+									'requesting_tenant', 'submitted_by_tenant',
+									'primary_tenant', 'primary_tenant_email', 'primary_tenant_phone_number'
+								]
+							})) as any[];
+						} catch { continue; }
+
+						for (const row of rows) {
+							const woId = row.work_order_id;
+							if (woId == null || existingIds.has(String(woId))) continue;
+
+							let unitId: string | null = null;
+							let propertyId: string | null = bedrockPropertyId;
+							if (row.unit_id != null) {
+								const unit = noUnitMap.get(String(row.unit_id));
+								if (unit) { unitId = unit.id; propertyId = unit.property_id ?? propertyId; }
+							}
+
+							const description = row.job_description || row.service_request_description || null;
+							const name = description ? description.slice(0, 120) : `Work Order ${row.service_request_number ?? woId}`;
+
+							const { data: inserted, error } = await supabase.from('issues').insert({
+								workspace_id: ws.id,
+								source: 'appfolio',
+								appfolio_id: String(woId),
+								service_request_number: row.service_request_number != null ? String(row.service_request_number) : null,
+								name,
+								description: description ?? null,
+								status: mapWorkOrderStatus(row.status ?? ''),
+								urgent: (row.priority ?? '').toLowerCase() === 'urgent',
+								unit_id: unitId,
+								property_id: propertyId,
+								appfolio_raw_status: String(row.status ?? ''),
+								appfolio_status_notes: row.status_notes || null,
+								appfolio_vendor_id: row.vendor_id != null ? String(row.vendor_id) : null,
+								vendor_assigned_at: row.vendor_id != null ? new Date().toISOString() : null
+							}).select('id').single();
+
+							if (error) {
+								if (error.code !== '23505') console.error(`new_only insert error for work_order_id=${woId}:`, error.message);
+								continue;
+							}
+
+							existingIds.add(String(woId));
+							newIssueCount++;
+							await enqueueAgentEvent(ws.id, inserted.id, 'new', row);
+
+							const tenantName = normalizeTenantName(row.requesting_tenant || row.submitted_by_tenant || row.primary_tenant || null);
+							await supabase.from('activity_logs').insert({
+								workspace_id: ws.id,
+								issue_id: inserted.id,
+								type: 'issue_created',
+								created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+								data: {
+									source: 'appfolio',
+									appfolio_id: String(woId),
+									from: tenantName,
+									from_email: row.primary_tenant_email || null,
+									from_phone: normalizePhone(row.primary_tenant_phone_number || null)
+								}
+							});
+						}
+					}
+
+					await processDispatchQueue(ws.id);
+					results[ws.id] = { ok: true, new_issues: newIssueCount };
+				}
 			} else {
 				// FAST PATH: work orders + agent dispatch
 				// Process properties in batches using a round-robin cursor to stay

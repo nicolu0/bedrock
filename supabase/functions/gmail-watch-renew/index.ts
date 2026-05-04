@@ -139,7 +139,7 @@ serve(async () => {
 				updated_at: new Date().toISOString()
 			});
 		} catch (err) {
-			await supabase.from('ingestion_errors').insert({
+			await supabase.schema('errors').from('ingestion_errors').insert({
 				user_id: connection.user_id,
 				source: 'gmail-watch-renew',
 				detail: err instanceof Error ? err.message : 'Unknown error'

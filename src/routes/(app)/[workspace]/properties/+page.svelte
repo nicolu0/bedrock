@@ -93,7 +93,9 @@
 		showNewPropertyModal = true;
 		createPropertyError = '';
 		addressTarget = 'new';
-		newPropertyOwnerId = isOwnerRole && ownerPersonId ? ownerPersonId : '';
+		newPropertyOwnerId = isOwnerRole
+			? (owners.find((o) => o.user_id === $page.data.userId)?.id ?? '')
+			: '';
 		newOwnerOpen = false;
 	};
 
@@ -121,7 +123,7 @@
 		editPropertyState = property?.state ?? '';
 		editPropertyPostalCode = property?.postal_code ?? '';
 		editPropertyCountry = property?.country ?? '';
-		editPropertyOwnerId = property?.owner_id ?? '';
+		editPropertyOwnerId = property?.owner_properties?.[0]?.owner_id ?? '';
 		editPropertyOwnerName = isOwnerRole ? ownerFallbackName : '';
 		updatePropertyError = '';
 		addressTarget = 'edit';
@@ -250,6 +252,7 @@
 		if (!editingProperty?.id) return;
 
 		const previous = _properties;
+		const newOwnerId = editPropertyOwnerId?.trim() ? editPropertyOwnerId.trim() : null;
 		const updated = {
 			...editingProperty,
 			name: editPropertyName.trim(),
@@ -258,7 +261,14 @@
 			state: editPropertyState.trim(),
 			postal_code: editPropertyPostalCode.trim(),
 			country: editPropertyCountry.trim(),
-			owner_id: editPropertyOwnerId?.trim() ? editPropertyOwnerId.trim() : null
+			owner_properties: newOwnerId
+				? [
+						{
+							owner_id: newOwnerId,
+							owners: owners.find((o) => o.id === newOwnerId) ?? { id: newOwnerId, name: '' }
+						}
+					]
+				: []
 		};
 		propertiesCache.set(_properties.map((p) => (p.id === editingProperty.id ? updated : p)));
 		closeEditPropertyModal();
@@ -276,7 +286,7 @@
 					state: updated.state,
 					postalCode: updated.postal_code,
 					country: updated.country,
-					ownerId: updated.owner_id
+					ownerId: updated.owner_properties?.[0]?.owner_id ?? null
 				})
 			});
 			if (!res.ok) throw new Error('Failed to update property');
@@ -399,7 +409,7 @@
 						<div
 							class="flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 text-[10px] font-medium text-neutral-600"
 						>
-							{getInitials(getOwnerLabel(owners, property.owner_id, ownerFallbackName))}
+							{getInitials(getOwnerLabel(owners, property.owner_properties?.[0]?.owner_id, ownerFallbackName))}
 						</div>
 					</div>
 					<div class="relative flex items-center justify-end">
