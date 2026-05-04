@@ -3869,13 +3869,7 @@ serve(async (req) => {
 					.eq('id', connection.id);
 			}
 
-			const { data: state } = await supabase
-				.from('email_ingestion_state')
-				.select('last_history_id')
-				.eq('connection_id', connection.id)
-				.maybeSingle();
-
-			let storedHistoryId = state?.last_history_id ?? null;
+			let storedHistoryId = connection.last_history_id ?? null;
 			if (storedHistoryId && storedHistoryId.length >= 13) {
 				storedHistoryId = null;
 			}
@@ -3887,12 +3881,13 @@ serve(async (req) => {
 				const status = err && typeof err === 'object' ? err.status : null;
 				if (status === 404) {
 					const profile = await fetchProfile(accessToken);
-					await supabase.from('email_ingestion_state').upsert({
-						user_id: connection.user_id,
-						connection_id: connection.id,
-						last_history_id: String(profile.historyId),
-						updated_at: new Date().toISOString()
-					});
+					await supabase
+						.from('gmail_connections')
+						.update({
+							last_history_id: String(profile.historyId),
+							updated_at: new Date().toISOString()
+						})
+						.eq('id', connection.id);
 					await markJobDone(job.id);
 					return new Response(JSON.stringify({ status: 'reset' }), {
 						headers: { 'Content-Type': 'application/json' }
@@ -3942,12 +3937,13 @@ serve(async (req) => {
 			}
 
 			const newHistoryId = historyResponse.historyId ?? historyId;
-			await supabase.from('email_ingestion_state').upsert({
-				user_id: connection.user_id,
-				connection_id: connection.id,
-				last_history_id: String(newHistoryId),
-				updated_at: new Date().toISOString()
-			});
+			await supabase
+				.from('gmail_connections')
+				.update({
+					last_history_id: String(newHistoryId),
+					updated_at: new Date().toISOString()
+				})
+				.eq('id', connection.id);
 
 			await markJobDone(job.id);
 			console.log('agent job done', { job_id: job.id });

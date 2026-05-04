@@ -112,11 +112,6 @@ export const POST = async ({ locals, params }) => {
 		.delete()
 		.eq('id', connection.id)
 		.eq('user_id', user.id);
-	await supabaseAdmin
-		.from('email_ingestion_state')
-		.delete()
-		.eq('connection_id', connection.id)
-		.eq('user_id', user.id);
 
 	throw redirect(303, `/${params.workspace}/settings/integrations`);
 };

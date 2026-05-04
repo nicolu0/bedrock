@@ -13,7 +13,7 @@
 
 <div
 	class="relative flex min-h-screen flex-col overflow-hidden text-stone-900"
-	style="background: linear-gradient(to bottom, #E8E6E1 calc(100% - 260px), #080808 calc(100% - 260px));"
+	style="background: linear-gradient(to bottom, #E8E6E1 calc(100% - 180px), #080808 calc(100% - 80px));"
 >
 
 	<!-- Nav -->
@@ -31,7 +31,7 @@
 	<!-- Hero -->
 	<main class="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pb-48 text-center">
 		<h1 class="anim-hero max-w-2xl text-5xl font-medium leading-tight tracking-tight text-stone-700 sm:text-6xl">
-			Bedrock handles your<br /><span class="italic text-stone-400">maintenance.</span> You just say yes.
+			<span class="italic text-stone-600">Maintenance simplified</span><br />Just text Bedrock.
 		</h1>
 		<p class="anim-sub mt-5 text-base text-stone-500">
 			It starts with one text.
@@ -59,14 +59,15 @@
 		</div>
 	</main>
 
-	<!-- Skyline anchored at bottom, corners softened slightly -->
-	<div class="pointer-events-none absolute inset-x-0 bottom-0 z-0">
+	<!-- Skyline anchored above footer -->
+	<div class="pointer-events-none absolute inset-x-0 bottom-[52px] z-0 overflow-hidden " style="background: linear-gradient(to bottom, #E8E6E1 70%, #1a1714 100%);">
 		<img
 			src={skyline}
 			alt=""
-			class="w-full opacity-90"
-			style="mask-image: radial-gradient(ellipse 90% 120% at 50% 100%, black 70%, transparent 100%); -webkit-mask-image: radial-gradient(ellipse 90% 120% at 50% 100%, black 70%, transparent 100%);"
+			class="w-full opacity-40"
+			style="mask-image: linear-gradient(to bottom, black 60%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);"
 		/>
+		<div class="pointer-events-none absolute inset-x-0 bottom-0 h-[180px]" style="background: linear-gradient(to bottom, transparent 30%, rgba(26,23,20,0.55) 100%);"></div>
 	</div>
 
 <!-- Footer -->
