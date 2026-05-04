@@ -12,7 +12,10 @@ import {
 import { PUBLIC_SUPABASE_URL } from '$env/static/public';
 import { supabaseAdmin } from '$lib/supabaseAdmin';
 
-const APPFOLIO_SENDERS = new Set(['donotreply@appfolio.com', 'johnbedrocktest@gmail.com']);
+const APPFOLIO_SENDER = 'donotreply@appfolio.com';
+const TEST_SENDERS = new Set(['johnbedrocktest@gmail.com']);
+// Workspace used for test-mode emails (no AppFolio property to resolve from).
+const TEST_WORKSPACE_ID = '2e4373a0-40b8-42c2-a873-b08c99dbf76a';
 const agentSecretHeader = 'x-agent-secret';
 const pubsubSecretParam = 'secret';
 
@@ -201,9 +204,25 @@ const processMessage = async (accessToken, messageId) => {
 	if (!message) return;
 	const headers = message.payload?.headers ?? [];
 	const senderEmail = extractEmail(getHeader(headers, 'from'));
-	if (!APPFOLIO_SENDERS.has(senderEmail)) return; // tenant emails dropped in v2
-
 	const subject = getHeader(headers, 'subject');
+	const body = extractPlainBody(message.payload);
+
+	// Test-mode: johnbedrocktest@gmail.com → skip subject parsing + AppFolio API.
+	// intake-agent treats it as a synthetic work order.
+	if (TEST_SENDERS.has(senderEmail)) {
+		console.log('pubsub-hook routing test email to intake-agent', { messageId, subject });
+		await dispatchIntakeAgent({
+			isTest: true,
+			workspaceId: TEST_WORKSPACE_ID,
+			subject,
+			body,
+			gmailMessageId: messageId
+		});
+		return;
+	}
+
+	if (senderEmail !== APPFOLIO_SENDER) return; // tenant emails dropped in v2
+
 	const { serviceRequestNumber, appfolioPropertyId } = parseAppfolioSubject(subject);
 	if (!serviceRequestNumber || !appfolioPropertyId) {
 		console.warn('pubsub-hook appfolio: could not parse subject', { subject });
@@ -215,8 +234,6 @@ const processMessage = async (accessToken, messageId) => {
 		console.warn('pubsub-hook appfolio: no workspace with email tracking', { appfolioPropertyId });
 		return;
 	}
-
-	const body = extractPlainBody(message.payload);
 
 	console.log('pubsub-hook routing to intake-agent', {
 		messageId,
