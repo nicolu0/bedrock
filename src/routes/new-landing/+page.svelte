@@ -33,9 +33,6 @@
 		<h1 class="anim-hero max-w-2xl text-5xl font-medium leading-tight tracking-tight text-stone-700 sm:text-6xl">
 			<span class="italic text-stone-600">Maintenance simplified</span><br />Just text Bedrock.
 		</h1>
-		<p class="anim-sub mt-5 text-base text-stone-500">
-			It starts with one text.
-		</p>
 		<div class="anim-cta mt-8 flex flex-col items-center gap-3">
 			<a
 				href={IMESSAGE_HREF}
@@ -65,7 +62,7 @@
 			src={skyline}
 			alt=""
 			class="w-full opacity-40"
-			style="mask-image: linear-gradient(to bottom, black 60%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);"
+			style="transform: translateY(80px); mask-image: linear-gradient(to bottom, black 60%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);"
 		/>
 		<div class="pointer-events-none absolute inset-x-0 bottom-0 h-[180px]" style="background: linear-gradient(to bottom, transparent 30%, rgba(26,23,20,0.55) 100%);"></div>
 	</div>
