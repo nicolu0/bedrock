@@ -1,8 +1,8 @@
 // @ts-nocheck
 // V2 intake. Receives parsed AppFolio work-order email from pubsub-hook.
-// Atomically dedupes by Gmail message_id, fetches the canonical work order
-// from AppFolio, upserts the issues_v2 row, asks an LLM for name + urgent,
-// and fires vendor-agent.
+// Atomically dedupes by Gmail message_id, inserts an issues_v2 row immediately
+// from email-derived data so failures downstream don't lose the WO, asks an
+// LLM for name + urgent, fires vendor-agent, then enriches from AppFolio last.
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
@@ -73,6 +73,10 @@ function parseAppfolioBody(body: string) {
 	return { residentName: m?.[1]?.trim() ?? null };
 }
 
+function isoDate(d: Date): string {
+	return d.toISOString().slice(0, 10);
+}
+
 async function generateNameAndUrgency(description: string): Promise<{ name: string; urgent: boolean }> {
 	const res = await fetch('https://api.openai.com/v1/chat/completions', {
 		method: 'POST',
@@ -127,6 +131,69 @@ async function dispatchVendorAgent(issueId: string): Promise<void> {
 	}
 }
 
+// AppFolio enrichment: fetched last, non-blocking. On failure, the row keeps
+// its email-derived data and the user-visible flow is unaffected.
+async function enrichFromAppfolio(
+	issueId: string,
+	baseSrn: string,
+	appfolioPropertyId: string,
+	propertyDbId: string
+): Promise<void> {
+	try {
+		const today = new Date();
+		const fromDate = new Date(today);
+		fromDate.setDate(fromDate.getDate() - 3);
+		const toDate = new Date(today);
+		toDate.setDate(toDate.getDate() + 1);
+
+		// Double-bounded: property AND date. If property_id ever drifts, the
+		// empty result is loud (vs. silently dumping all 100+ active WOs).
+		const rows = await appfolioFetch('work_order', {
+			property_visibility: 'active',
+			property: { property_id: appfolioPropertyId },
+			work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
+			status_date: '0',
+			status_date_range_from: isoDate(fromDate),
+			status_date_range_to: isoDate(toDate),
+			columns: [
+				'work_order_id', 'service_request_number', 'property_id', 'unit_id',
+				'job_description', 'service_request_description'
+			]
+		});
+
+		const row = (rows as any[]).find((r) => String(r.service_request_number) === baseSrn);
+		if (!row) {
+			console.warn(`enrich: no AppFolio match for SRN=${baseSrn} property_id=${appfolioPropertyId}`);
+			return;
+		}
+
+		// Resolve our unit_id from AppFolio's unit_id, scoped to this property.
+		let unitId: string | null = null;
+		if (row.unit_id != null) {
+			const { data: unit } = await supabase
+				.from('units')
+				.select('id')
+				.eq('property_id', propertyDbId)
+				.eq('appfolio_unit_id', String(row.unit_id))
+				.maybeSingle();
+			unitId = unit?.id ?? null;
+		}
+
+		const cleanDescription = row.job_description || row.service_request_description || null;
+		const update: Record<string, unknown> = {};
+		if (unitId) update.unit_id = unitId;
+		if (cleanDescription) update.description = cleanDescription;
+
+		if (Object.keys(update).length > 0) {
+			const { error } = await supabase.from('issues_v2').update(update).eq('id', issueId);
+			if (error) console.error(`enrich: update issue ${issueId}: ${error.message}`);
+			else console.log(`enrich: ${issueId} updated unit_id=${unitId ?? '—'} desc_overwritten=${!!cleanDescription}`);
+		}
+	} catch (err) {
+		console.error(`enrich: failed for issue ${issueId}:`, err instanceof Error ? err.message : err);
+	}
+}
+
 // ── Main Handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -161,122 +228,70 @@ serve(async (req) => {
 		return Response.json({ ok: true, skipped: true, reason: 'duplicate-no-row' });
 	}
 
-	let woId: string;
-	let description: string | null;
-	let unitId: string | null = null;
-	let propertyId: string | null = null;
+	// Resolve everything we can from email + DB before any external calls.
+	let appfolioId: string;          // upsert key on issues_v2
+	let baseSrn: string | null = null;
+	let propertyDbId: string | null = null;
+	let appfolioPropertyId: string | null = null;
 	let tenantId: string | null = null;
-	let createdAtOverride: string | null = null;
+	let initialDescription: string;
 
 	if (isTest) {
-		// Test-mode: synthesize a work order from the email itself; no AppFolio
-		// lookup, no property/unit/tenant resolution.
-		woId = `test-${gmailMessageId}`;
-		description = (emailBody && emailBody.trim()) || subject || 'Test work order';
+		appfolioId = `test-${gmailMessageId}`;
+		initialDescription = (emailBody && emailBody.trim()) || subject || 'Test work order';
 	} else {
-		const { serviceRequestNumber, appfolioPropertyId } = payload;
+		const { serviceRequestNumber, appfolioPropertyId: propNumber } = payload;
+		baseSrn = String(serviceRequestNumber).split('-')[0];   // strip email-only "-N" suffix
+		appfolioId = baseSrn;
+		initialDescription = (emailBody && emailBody.trim()) || subject || '';
 
 		const { data: property } = await supabase
 			.from('properties')
-			.select('id, appfolio_property_number')
+			.select('id, appfolio_property_id')
 			.eq('workspace_id', workspaceId)
-			.eq('appfolio_property_number', appfolioPropertyId)
+			.eq('appfolio_property_number', propNumber)
 			.maybeSingle();
 
-		if (!property) {
-			console.error(`intake-agent: no property for number=${appfolioPropertyId}`);
-			return Response.json({ ok: false, error: `Unknown property ${appfolioPropertyId}` }, { status: 404 });
+		if (property) {
+			propertyDbId = property.id;
+			appfolioPropertyId = property.appfolio_property_id ?? null;
+		} else {
+			console.warn(`intake-agent: no property for number=${propNumber} — proceeding without property_id`);
 		}
 
-		const { data: unitRows } = await supabase
-			.from('units')
-			.select('id, property_id, appfolio_unit_id')
-			.eq('property_id', property.id);
-		const unitMap = new Map<string, { id: string; property_id: string }>(
-			(unitRows ?? []).map((u: any) => [u.appfolio_unit_id, { id: u.id, property_id: u.property_id }])
-		);
-
-		// Fetch the canonical work order from AppFolio. Email notifications can
-		// arrive a few seconds before the WO is queryable; retry up to 3x.
-		const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-		const baseNumber = serviceRequestNumber.split('-')[0];
-		let row: any = null;
-		for (let attempt = 1; attempt <= 3; attempt++) {
-			const woRows = await appfolioFetch('work_order', {
-				property_visibility: 'active',
-				property: { property_id: appfolioPropertyId },
-				work_order_statuses: ['0', '1', '2', '9', '3', '6', '8', '12', '4', '5', '7'],
-				status_date: '0',
-				status_date_range_from: oneWeekAgo,
-				columns: [
-					'work_order_id', 'service_request_number', 'property_id', 'unit_id',
-					'job_description', 'service_request_description',
-					'requesting_tenant', 'submitted_by_tenant', 'primary_tenant',
-					'created_at'
-				]
-			});
-			row = (woRows as any[]).find(
-				(r: any) => String(r.service_request_number) === serviceRequestNumber
-					|| String(r.service_request_number) === baseNumber
-			);
-			if (row) break;
-			if (attempt < 3) {
-				console.warn(`intake-agent: WO #${serviceRequestNumber} not found, retry ${attempt}/3`);
-				await new Promise((r) => setTimeout(r, 10_000));
-			} else {
-				console.error(`intake-agent: WO #${serviceRequestNumber} not found after 3 attempts`);
-				return Response.json({ ok: false, error: `Work order #${serviceRequestNumber} not found` }, { status: 404 });
-			}
-		}
-
-		woId = String(row.work_order_id);
-		propertyId = property.id;
-		if (row.unit_id != null) {
-			const unit = unitMap.get(String(row.unit_id));
-			if (unit) {
-				unitId = unit.id;
-				propertyId = unit.property_id ?? propertyId;
-			}
-		}
-
-		description = row.job_description || row.service_request_description || null;
-
-		const emailParsed = parseAppfolioBody(emailBody ?? '');
-		const tenantName = normalizeTenantName(
-			(row.requesting_tenant as string) ||
-			(row.submitted_by_tenant as string) ||
-			(row.primary_tenant as string) ||
-			emailParsed.residentName ||
-			null
-		);
-
-		if (unitId && tenantName) {
-			const { data: tenantMatch } = await supabase
-				.from('tenants')
+		// Tenant: exact-match on parsed "Resident Name:" scoped to property's units.
+		// Unit isn't reliably resolvable from email alone — left for enrichment.
+		const tenantName = normalizeTenantName(parseAppfolioBody(emailBody ?? '').residentName);
+		if (propertyDbId && tenantName) {
+			const { data: unitRows } = await supabase
+				.from('units')
 				.select('id')
-				.eq('unit_id', unitId)
-				.eq('name', tenantName)
-				.limit(1)
-				.maybeSingle();
-			tenantId = tenantMatch?.id ?? null;
+				.eq('property_id', propertyDbId);
+			const unitIds = (unitRows ?? []).map((u: any) => u.id);
+			if (unitIds.length > 0) {
+				const { data: tenantMatch } = await supabase
+					.from('tenants')
+					.select('id')
+					.in('unit_id', unitIds)
+					.eq('name', tenantName)
+					.limit(1)
+					.maybeSingle();
+				tenantId = tenantMatch?.id ?? null;
+			}
 		}
-
-		if (row.created_at) createdAtOverride = new Date(row.created_at).toISOString();
 	}
 
-	// Upsert issue. ignoreDuplicates so re-runs (post-dedup-check) don't clobber
-	// agent-written fields on an existing row.
+	// Insert issue immediately. If a duplicate (workspace_id, appfolio_id) row
+	// already exists, ignore — agent_runs claim will short-circuit downstream.
 	const { data: upserted, error: upsertErr } = await supabase
 		.from('issues_v2')
 		.upsert(
 			{
 				workspace_id: workspaceId,
-				appfolio_id: woId,
-				description,
-				unit_id: unitId,
-				property_id: propertyId,
-				tenant_id: tenantId,
-				...(createdAtOverride ? { created_at: createdAtOverride } : {})
+				appfolio_id: appfolioId,
+				description: initialDescription,
+				property_id: propertyDbId,
+				tenant_id: tenantId
 			},
 			{ onConflict: 'workspace_id,appfolio_id', ignoreDuplicates: true }
 		)
@@ -293,7 +308,7 @@ serve(async (req) => {
 			.from('issues_v2')
 			.select('id')
 			.eq('workspace_id', workspaceId)
-			.eq('appfolio_id', woId)
+			.eq('appfolio_id', appfolioId)
 			.maybeSingle();
 		issueId = existing?.id ?? null;
 	}
@@ -303,12 +318,11 @@ serve(async (req) => {
 		return Response.json({ ok: false, error: 'Issue id resolution failed' }, { status: 500 });
 	}
 
+	// Create both agent_runs rows up front so the status page can see the
+	// pipeline progressing. Claim intake immediately.
+	await ensureAgentRuns(supabase, issueId, ['intake', 'vendor']);
 	await supabase.from('gmail_message_dedup').update({ issue_id: issueId }).eq('message_id', gmailMessageId);
 
-	// Create both agent_runs rows up front so macmini's "both done" gate can
-	// see them. Mark intake processing immediately, vendor stays pending until
-	// vendor-agent claims it.
-	await ensureAgentRuns(supabase, issueId, ['intake', 'vendor']);
 	const intakeRunId = await claimAgentRun(supabase, issueId, 'intake');
 	if (!intakeRunId) {
 		console.log(`intake-agent: ${issueId} intake already claimed/done — firing vendor and exiting`);
@@ -317,8 +331,8 @@ serve(async (req) => {
 	}
 
 	try {
-		if (!description) throw new Error('work order has no description');
-		const { name, urgent } = await generateNameAndUrgency(description);
+		if (!initialDescription) throw new Error('work order has no description');
+		const { name, urgent } = await generateNameAndUrgency(initialDescription);
 
 		const { error: updateErr } = await supabase
 			.from('issues_v2')
@@ -329,8 +343,14 @@ serve(async (req) => {
 		await completeAgentRun(supabase, issueId, 'intake');
 		console.log(`intake-agent: ${issueId} intake done — name="${name}" urgent=${urgent}`);
 
-		// Sequential: vendor-agent fires after intake completes.
+		// Vendor fires on email-derived data — doesn't wait on AppFolio.
 		await dispatchVendorAgent(issueId);
+
+		// AppFolio enrichment is the last step. Awaited so the response reflects
+		// final row state, but failures here don't break anything.
+		if (!isTest && baseSrn && appfolioPropertyId && propertyDbId) {
+			await enrichFromAppfolio(issueId, baseSrn, appfolioPropertyId, propertyDbId);
+		}
 
 		return Response.json({ ok: true, issueId, name, urgent });
 	} catch (err) {

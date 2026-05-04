@@ -302,12 +302,7 @@ export const POST = async ({ request }) => {
 	}
 	if (!accessToken) return json({ status: 'skip' }, { status: 200 });
 
-	const { data: state } = await supabaseAdmin
-		.from('email_ingestion_state')
-		.select('last_history_id')
-		.eq('connection_id', connection.id)
-		.maybeSingle();
-	let storedHistoryId = state?.last_history_id ?? null;
+	let storedHistoryId = connection.last_history_id ?? null;
 	if (storedHistoryId && storedHistoryId.length >= 13) storedHistoryId = null;
 
 	let historyResponse;
@@ -317,12 +312,13 @@ export const POST = async ({ request }) => {
 		if (err?.status === 404) {
 			// History expired — reset cursor to current and acknowledge.
 			const profile = await fetchProfile(accessToken);
-			await supabaseAdmin.from('email_ingestion_state').upsert({
-				user_id: connection.user_id,
-				connection_id: connection.id,
-				last_history_id: String(profile.historyId),
-				updated_at: new Date().toISOString()
-			});
+			await supabaseAdmin
+				.from('gmail_connections')
+				.update({
+					last_history_id: String(profile.historyId),
+					updated_at: new Date().toISOString()
+				})
+				.eq('id', connection.id);
 			return json({ status: 'reset' }, { status: 200 });
 		}
 		console.error('pubsub-hook history error', err);
@@ -345,12 +341,13 @@ export const POST = async ({ request }) => {
 	}
 
 	const newHistoryId = historyResponse.historyId ?? historyId;
-	await supabaseAdmin.from('email_ingestion_state').upsert({
-		user_id: connection.user_id,
-		connection_id: connection.id,
-		last_history_id: String(newHistoryId),
-		updated_at: new Date().toISOString()
-	});
+	await supabaseAdmin
+		.from('gmail_connections')
+		.update({
+			last_history_id: String(newHistoryId),
+			updated_at: new Date().toISOString()
+		})
+		.eq('id', connection.id);
 
 	console.log('pubsub-hook processed', { email, message_count: messageIds.size });
 	return json({ status: 'ok' }, { status: 200 });

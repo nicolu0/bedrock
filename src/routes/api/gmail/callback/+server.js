@@ -206,13 +206,18 @@ export const GET = async ({ url }) => {
 			});
 	}
 
-	await supabaseAdmin.from('email_ingestion_state').upsert({
-		user_id: userId,
-		connection_id: connectionRow?.id ?? null,
-		last_history_id: watch?.historyId ?? profile.historyId ?? null,
-		watch_expires_at: watch?.expiration ? new Date(Number(watch.expiration)).toISOString() : null,
-		updated_at: new Date().toISOString()
-	});
+	if (connectionRow?.id) {
+		await supabaseAdmin
+			.from('gmail_connections')
+			.update({
+				last_history_id: watch?.historyId ?? profile.historyId ?? null,
+				watch_expires_at: watch?.expiration
+					? new Date(Number(watch.expiration)).toISOString()
+					: null,
+				updated_at: new Date().toISOString()
+			})
+			.eq('id', connectionRow.id);
+	}
 
 	if (workspaceSlug) {
 		throw redirect(302, `/${workspaceSlug}/settings/integrations`);

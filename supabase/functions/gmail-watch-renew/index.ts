@@ -78,23 +78,6 @@ serve(async () => {
 		return new Response(`Failed to load connections: ${error.message}`, { status: 500 });
 	}
 
-	const { data: ingestionState, error: ingestionError } = await supabase
-		.from('email_ingestion_state')
-		.select('connection_id, watch_expires_at');
-
-	if (ingestionError) {
-		return new Response(`Failed to load ingestion state: ${ingestionError.message}`, {
-			status: 500
-		});
-	}
-
-	const stateByConnectionId = new Map<string, { watch_expires_at: string | null }>();
-	for (const state of ingestionState ?? []) {
-		if (state.connection_id) {
-			stateByConnectionId.set(state.connection_id, { watch_expires_at: state.watch_expires_at });
-		}
-	}
-
 	for (const connection of connections ?? []) {
 		try {
 			if (connection.mode === 'write') {
@@ -123,21 +106,21 @@ serve(async () => {
 			}
 
 			// Only renew watch subscription if it's expiring soon
-			const state = stateByConnectionId.get(connection.id);
-			if (state && !shouldRenew(state.watch_expires_at)) {
+			if (!shouldRenew(connection.watch_expires_at)) {
 				continue;
 			}
 
 			const watch = await registerWatch(accessToken);
-			await supabase.from('email_ingestion_state').upsert({
-				user_id: connection.user_id,
-				connection_id: connection.id,
-				last_history_id: watch?.historyId ?? null,
-				watch_expires_at: watch?.expiration
-					? new Date(Number(watch.expiration)).toISOString()
-					: null,
-				updated_at: new Date().toISOString()
-			});
+			await supabase
+				.from('gmail_connections')
+				.update({
+					last_history_id: watch?.historyId ?? null,
+					watch_expires_at: watch?.expiration
+						? new Date(Number(watch.expiration)).toISOString()
+						: null,
+					updated_at: new Date().toISOString()
+				})
+				.eq('id', connection.id);
 		} catch (err) {
 			await supabase.schema('errors').from('ingestion_errors').insert({
 				user_id: connection.user_id,

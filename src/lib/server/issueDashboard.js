@@ -447,7 +447,6 @@ export const actions = {
 		}
 
 		await deleteData('gmail_connections');
-		await deleteData('email_ingestion_state');
 		await deleteData('ingestion_errors');
 
 		await locals.supabase.from('users').delete().eq('id', user.id);
@@ -561,11 +560,6 @@ export const actions = {
 			.from('gmail_connections')
 			.delete()
 			.eq('id', connectionId)
-			.eq('user_id', user.id);
-		await locals.supabase
-			.from('email_ingestion_state')
-			.delete()
-			.eq('connection_id', connectionId)
 			.eq('user_id', user.id);
 		throw redirect(303, params?.workspace ? `/${params.workspace}` : '/');
 	},
