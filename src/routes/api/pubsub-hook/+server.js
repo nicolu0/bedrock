@@ -104,7 +104,7 @@ const refreshAccessTokenIfNeeded = async (connection) => {
 	const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
 	await supabaseAdmin
 		.from('gmail_connections')
-		.update({ access_token: refreshed.access_token, expires_at: newExpiresAt, updated_at: new Date().toISOString() })
+		.update({ access_token: refreshed.access_token, expires_at: newExpiresAt })
 		.eq('id', connection.id);
 	return refreshed.access_token;
 };
@@ -169,28 +169,33 @@ const extractPlainBody = (payload) => {
 	return '';
 };
 
-const dispatchIntakeAgent = (payload) => {
-	return fetch(`${PUBLIC_SUPABASE_URL}/functions/v1/intake-agent`, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			apikey: SUPABASE_SERVICE_ROLE_KEY,
-			Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
-		},
-		body: JSON.stringify(payload)
-	})
-		.then(async (response) => {
-			if (!response.ok) {
-				const detail = await response.text().catch(() => '');
-				console.error('pubsub-hook intake-agent dispatch failed', { status: response.status, detail });
-			}
-		})
-		.catch((err) => console.error('pubsub-hook intake-agent dispatch error', err));
+const dispatchIntakeAgent = async (payload) => {
+	try {
+		const response = await fetch(`${PUBLIC_SUPABASE_URL}/functions/v1/intake-agent`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				apikey: SUPABASE_SERVICE_ROLE_KEY,
+				Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+			},
+			body: JSON.stringify(payload)
+		});
+		if (!response.ok) {
+			const detail = await response.text().catch(() => '');
+			console.error('pubsub-hook intake-agent dispatch failed', { status: response.status, detail });
+			return false;
+		}
+		return true;
+	} catch (err) {
+		console.error('pubsub-hook intake-agent dispatch error', err);
+		return false;
+	}
 };
 
+// Returns true if the message was dispatched to intake-agent successfully.
 const processMessage = async (accessToken, messageId, connectionWorkspaceId) => {
 	const message = await fetchMessage(accessToken, messageId);
-	if (!message) return;
+	if (!message) return false;
 	const headers = message.payload?.headers ?? [];
 	const senderEmail = extractEmail(getHeader(headers, 'from'));
 	const subject = getHeader(headers, 'subject');
@@ -200,27 +205,26 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 	// intake-agent treats it as a synthetic work order.
 	if (TEST_SENDERS.has(senderEmail)) {
 		console.log('pubsub-hook routing test email to intake-agent', { messageId, subject });
-		await dispatchIntakeAgent({
+		return await dispatchIntakeAgent({
 			isTest: true,
 			workspaceId: TEST_WORKSPACE_ID,
 			subject,
 			body,
 			gmailMessageId: messageId
 		});
-		return;
 	}
 
-	if (senderEmail !== APPFOLIO_SENDER) return; // tenant emails dropped in v2
+	if (senderEmail !== APPFOLIO_SENDER) return false; // tenant emails dropped in v2
 
 	const { serviceRequestNumber, appfolioPropertyId } = parseAppfolioSubject(subject);
 	if (!serviceRequestNumber || !appfolioPropertyId) {
 		console.warn('pubsub-hook appfolio: could not parse subject', { subject });
-		return;
+		return false;
 	}
 
 	if (!connectionWorkspaceId) {
 		console.warn('pubsub-hook appfolio: gmail connection has no workspace_id', { messageId });
-		return;
+		return false;
 	}
 
 	console.log('pubsub-hook routing to intake-agent', {
@@ -230,7 +234,7 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 		workspaceId: connectionWorkspaceId
 	});
 
-	await dispatchIntakeAgent({
+	return await dispatchIntakeAgent({
 		workspaceId: connectionWorkspaceId,
 		serviceRequestNumber,
 		appfolioPropertyId,
@@ -281,6 +285,12 @@ export const POST = async ({ request }) => {
 		return json({ status: 'skip' }, { status: 200 });
 	}
 
+	// Mark "Pub/Sub push received" — read by the status page's Gmail Pub/Sub box.
+	await supabaseAdmin
+		.from('gmail_connections')
+		.update({ updated_at: new Date().toISOString() })
+		.eq('id', connection.id);
+
 	let accessToken;
 	try {
 		accessToken = await refreshAccessTokenIfNeeded(connection);
@@ -302,10 +312,7 @@ export const POST = async ({ request }) => {
 			const profile = await fetchProfile(accessToken);
 			await supabaseAdmin
 				.from('gmail_connections')
-				.update({
-					last_history_id: String(profile.historyId),
-					updated_at: new Date().toISOString()
-				})
+				.update({ last_history_id: String(profile.historyId) })
 				.eq('id', connection.id);
 			return json({ status: 'reset' }, { status: 200 });
 		}
@@ -320,21 +327,23 @@ export const POST = async ({ request }) => {
 		}
 	}
 
+	let anyDispatched = false;
 	for (const messageId of messageIds) {
 		try {
-			await processMessage(accessToken, messageId, connection.workspace_id);
+			const dispatched = await processMessage(accessToken, messageId, connection.workspace_id);
+			if (dispatched) anyDispatched = true;
 		} catch (err) {
 			console.error('pubsub-hook process-message-failed', { messageId, error: err?.message ?? 'unknown' });
 		}
 	}
 
 	const newHistoryId = historyResponse.historyId ?? historyId;
+	const finalUpdate = { last_history_id: String(newHistoryId) };
+	// Mark "dispatched to intake-agent" — read by the status page's pubsub-hook box.
+	if (anyDispatched) finalUpdate.last_message_ts = new Date().toISOString();
 	await supabaseAdmin
 		.from('gmail_connections')
-		.update({
-			last_history_id: String(newHistoryId),
-			updated_at: new Date().toISOString()
-		})
+		.update(finalUpdate)
 		.eq('id', connection.id);
 
 	console.log('pubsub-hook processed', { email, message_count: messageIds.size });

@@ -99,8 +99,7 @@ serve(async () => {
 					.from('gmail_connections')
 					.update({
 						access_token: accessToken,
-						expires_at: newExpiresAt,
-						updated_at: new Date().toISOString()
+						expires_at: newExpiresAt
 					})
 					.eq('id', connection.id);
 			}
@@ -117,8 +116,7 @@ serve(async () => {
 					last_history_id: watch?.historyId ?? null,
 					watch_expires_at: watch?.expiration
 						? new Date(Number(watch.expiration)).toISOString()
-						: null,
-					updated_at: new Date().toISOString()
+						: null
 				})
 				.eq('id', connection.id);
 		} catch (err) {
