@@ -216,6 +216,17 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 
 	if (senderEmail !== APPFOLIO_SENDER) return false; // tenant emails dropped in v2
 
+	// internalDate = ms-since-epoch when Gmail received the message. Compare
+	// against arrival to see how much lag is upstream (AppFolio → Gmail → Pub/Sub).
+	const internalDateMs = message.internalDate ? Number(message.internalDate) : null;
+	const gmailLagMs = internalDateMs ? Date.now() - internalDateMs : null;
+	console.log('pubsub-hook APPFOLIO email', {
+		messageId,
+		subject,
+		gmail_received: internalDateMs ? new Date(internalDateMs).toISOString() : null,
+		lag_seconds: gmailLagMs != null ? Math.round(gmailLagMs / 1000) : null
+	});
+
 	const { serviceRequestNumber, appfolioPropertyId } = parseAppfolioSubject(subject);
 	if (!serviceRequestNumber || !appfolioPropertyId) {
 		console.warn('pubsub-hook appfolio: could not parse subject', { subject });
@@ -247,6 +258,8 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 // ── Handler ──────────────────────────────────────────────────────────────────
 
 export const POST = async ({ request }) => {
+	const arrivedAt = Date.now();
+	console.log('pubsub-hook ARRIVED', new Date(arrivedAt).toISOString());
 	if (!AGENT_WEBHOOK_SECRET) return json({ error: 'Missing AGENT_WEBHOOK_SECRET' }, { status: 500 });
 	if (!SUPABASE_SERVICE_ROLE_KEY) return json({ error: 'Missing SUPABASE_SERVICE_ROLE_KEY' }, { status: 500 });
 
@@ -295,8 +308,13 @@ export const POST = async ({ request }) => {
 	try {
 		accessToken = await refreshAccessTokenIfNeeded(connection);
 	} catch (err) {
-		console.error('pubsub-hook refresh failed', err);
-		return json({ error: err?.message ?? 'Token refresh failed' }, { status: 500 });
+		// Ack with 200 so Pub/Sub stops redelivering. Otherwise a revoked
+		// refresh_token (invalid_grant) puts us in a permanent retry loop
+		// — the same push hammers this endpoint until the watch expires.
+		const message = err?.message ?? '';
+		const revoked = /invalid_grant|Token has been expired or revoked/i.test(message);
+		console.error('pubsub-hook refresh failed', { email, revoked, message });
+		return json({ status: revoked ? 'auth_revoked' : 'auth_error' }, { status: 200 });
 	}
 	if (!accessToken) return json({ status: 'skip' }, { status: 200 });
 
