@@ -109,7 +109,7 @@ async function fetchNewIssues() {
 	// pause on not-yet-ready issues instead of skipping past them.
 	const params = new URLSearchParams({
 		select:
-			'id,workspace_id,appfolio_id,name,description,urgent,created_at,property_id,vendor_id,' +
+			'id,workspace_id,appfolio_srn,name,description,urgent,created_at,property_id,vendor_id,' +
 			'tenant:tenants!tenant_id(name),' +
 			'property:properties!property_id(name),' +
 			'unit:units!unit_id(name),' +
@@ -300,7 +300,7 @@ async function pollOnce() {
 		// Pause cursor advancement on the first not-yet-ready issue so we
 		// re-poll it next tick instead of skipping past it forever.
 		if (!isReady(issue)) {
-			log('issue not ready, waiting for agents', { id: issue.id, appfolio_id: issue.appfolio_id });
+			log('issue not ready, waiting for agents', { id: issue.id, appfolio_srn: issue.appfolio_srn });
 			break;
 		}
 
@@ -315,7 +315,7 @@ async function pollOnce() {
 		state.processedIds[issue.id] = Date.now();
 		await saveState();
 
-		log('new work order', { id: issue.id, appfolio_id: issue.appfolio_id });
+		log('new work order', { id: issue.id, appfolio_srn: issue.appfolio_srn });
 
 		const description = issue.description || issue.name || null;
 		const tenantName = issue.tenant?.name ?? null;

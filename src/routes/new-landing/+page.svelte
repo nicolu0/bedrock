@@ -2,7 +2,7 @@
 	import skyline from '$lib/assets/skyline.png';
 
 	const PHONE = '6504443716';
-	const SMS_BODY = encodeURIComponent('Hey, I want to try Bedrock');
+	const SMS_BODY = encodeURIComponent("let's run through a demo maintenance request together");
 	const IMESSAGE_HREF = `sms:${PHONE}&body=${SMS_BODY}`;
 </script>
 
@@ -13,7 +13,7 @@
 
 <div
 	class="relative flex min-h-screen flex-col overflow-hidden text-stone-900"
-	style="background: linear-gradient(to bottom, #E8E6E1 calc(100% - 180px), #080808 calc(100% - 80px));"
+	style="background: #E8E6E1;"
 >
 
 	<!-- Nav -->
@@ -25,13 +25,13 @@
 		>
 			Bedrock
 		</a>
-		<a href="/login" class="text-sm text-stone-500 transition hover:text-stone-900">Log in</a>
+<a href="/login" class="text-sm text-stone-500 transition hover:text-stone-900">Log in</a>
 	</header>
 
 	<!-- Hero -->
 	<main class="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pb-48 text-center">
-		<h1 class="anim-hero max-w-2xl text-5xl font-medium leading-tight tracking-tight text-stone-700 sm:text-6xl">
-			<span class="italic text-stone-600">Maintenance simplified</span><br />Just text Bedrock.
+		<h1 class="anim-hero max-w-4xl text-5xl font-medium leading-tight tracking-tight text-stone-700 sm:text-6xl">
+			Property management <span class="italic text-stone-600">simplified</span><br />Just text Bedrock.
 		</h1>
 		<div class="anim-cta mt-8 flex flex-col items-center gap-3">
 			<a
@@ -57,18 +57,20 @@
 	</main>
 
 	<!-- Skyline anchored above footer -->
-	<div class="pointer-events-none absolute inset-x-0 bottom-[52px] z-0 overflow-hidden " style="background: linear-gradient(to bottom, #E8E6E1 70%, #1a1714 100%);">
+	<div class="pointer-events-none absolute inset-0 z-0 overflow-hidden" style="background: #E8E6E1;">
 		<img
 			src={skyline}
 			alt=""
-			class="w-full opacity-40"
-			style="transform: translateY(80px); mask-image: linear-gradient(to bottom, black 60%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);"
+			class="h-full w-full object-cover opacity-40"
+			style="object-position: center 40%;"
 		/>
-		<div class="pointer-events-none absolute inset-x-0 bottom-0 h-[180px]" style="background: linear-gradient(to bottom, transparent 30%, rgba(26,23,20,0.55) 100%);"></div>
 	</div>
 
-<!-- Footer -->
-	<footer class="relative z-20 flex items-center justify-center gap-4 px-8 py-5 text-[11px] text-white/30">
+<!-- Footer background -->
+	<div class="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[56px]" style="background: #080808;"></div>
+
+	<!-- Footer -->
+	<footer class="relative z-20 flex h-[56px] items-center justify-center gap-4 px-8 text-[13px] text-white/30">
 		<span>© {new Date().getFullYear()} Bedrock</span>
 		<a href="/terms" class="hover:text-white/60">Terms</a>
 		<a href="/privacy" class="hover:text-white/60">Privacy</a>

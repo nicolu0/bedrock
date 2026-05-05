@@ -169,17 +169,6 @@ const extractPlainBody = (payload) => {
 	return '';
 };
 
-// Resolve which workspace owns the property, requiring AppFolio email tracking.
-const resolveWorkspace = async (appfolioPropertyId) => {
-	const { data } = await supabaseAdmin
-		.from('properties')
-		.select('workspace_id, workspaces!inner(appfolio_email_tracking)')
-		.eq('appfolio_property_number', appfolioPropertyId)
-		.eq('workspaces.appfolio_email_tracking', true)
-		.maybeSingle();
-	return data?.workspace_id ?? null;
-};
-
 const dispatchIntakeAgent = (payload) => {
 	return fetch(`${PUBLIC_SUPABASE_URL}/functions/v1/intake-agent`, {
 		method: 'POST',
@@ -199,7 +188,7 @@ const dispatchIntakeAgent = (payload) => {
 		.catch((err) => console.error('pubsub-hook intake-agent dispatch error', err));
 };
 
-const processMessage = async (accessToken, messageId) => {
+const processMessage = async (accessToken, messageId, connectionWorkspaceId) => {
 	const message = await fetchMessage(accessToken, messageId);
 	if (!message) return;
 	const headers = message.payload?.headers ?? [];
@@ -229,9 +218,8 @@ const processMessage = async (accessToken, messageId) => {
 		return;
 	}
 
-	const workspaceId = await resolveWorkspace(appfolioPropertyId);
-	if (!workspaceId) {
-		console.warn('pubsub-hook appfolio: no workspace with email tracking', { appfolioPropertyId });
+	if (!connectionWorkspaceId) {
+		console.warn('pubsub-hook appfolio: gmail connection has no workspace_id', { messageId });
 		return;
 	}
 
@@ -239,11 +227,11 @@ const processMessage = async (accessToken, messageId) => {
 		messageId,
 		serviceRequestNumber,
 		appfolioPropertyId,
-		workspaceId
+		workspaceId: connectionWorkspaceId
 	});
 
 	await dispatchIntakeAgent({
-		workspaceId,
+		workspaceId: connectionWorkspaceId,
 		serviceRequestNumber,
 		appfolioPropertyId,
 		subject,
@@ -334,7 +322,7 @@ export const POST = async ({ request }) => {
 
 	for (const messageId of messageIds) {
 		try {
-			await processMessage(accessToken, messageId);
+			await processMessage(accessToken, messageId, connection.workspace_id);
 		} catch (err) {
 			console.error('pubsub-hook process-message-failed', { messageId, error: err?.message ?? 'unknown' });
 		}
