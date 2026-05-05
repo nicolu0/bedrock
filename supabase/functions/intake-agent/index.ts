@@ -157,7 +157,7 @@ async function enrichFromAppfolio(
 			status_date_range_to: isoDate(toDate),
 			columns: [
 				'work_order_id', 'service_request_number', 'property_id', 'unit_id',
-				'job_description', 'service_request_description'
+				'job_description', 'service_request_description', 'requesting_tenant'
 			]
 		});
 
@@ -179,15 +179,38 @@ async function enrichFromAppfolio(
 			unitId = unit?.id ?? null;
 		}
 
+		// Resolve tenant via requesting_tenant. AppFolio only emails us WOs the
+		// tenant submitted themselves, so requesting_tenant *is* the submitter.
+		let tenantId: string | null = null;
+		const tenantName = normalizeTenantName(row.requesting_tenant);
+		if (tenantName && propertyDbId) {
+			const { data: unitRows } = await supabase
+				.from('units')
+				.select('id')
+				.eq('property_id', propertyDbId);
+			const unitIds = (unitRows ?? []).map((u: any) => u.id);
+			if (unitIds.length > 0) {
+				const { data: tenantMatch } = await supabase
+					.from('tenants')
+					.select('id')
+					.in('unit_id', unitIds)
+					.eq('name', tenantName)
+					.limit(1)
+					.maybeSingle();
+				tenantId = tenantMatch?.id ?? null;
+			}
+		}
+
 		const cleanDescription = row.job_description || row.service_request_description || null;
 		const update: Record<string, unknown> = {};
 		if (unitId) update.unit_id = unitId;
+		if (tenantId) update.tenant_id = tenantId;
 		if (cleanDescription) update.description = cleanDescription;
 
 		if (Object.keys(update).length > 0) {
 			const { error } = await supabase.from('issues_v2').update(update).eq('id', issueId);
 			if (error) console.error(`enrich: update issue ${issueId}: ${error.message}`);
-			else console.log(`enrich: ${issueId} updated unit_id=${unitId ?? '—'} desc_overwritten=${!!cleanDescription}`);
+			else console.log(`enrich: ${issueId} updated unit_id=${unitId ?? '—'} tenant_id=${tenantId ?? '—'} desc_overwritten=${!!cleanDescription}`);
 		}
 	} catch (err) {
 		console.error(`enrich: failed for issue ${issueId}:`, err instanceof Error ? err.message : err);
@@ -211,7 +234,7 @@ serve(async (req) => {
 
 	// Atomic dedup: insert message_id; on conflict (already processed), bail.
 	const { data: dedupRow, error: dedupErr } = await supabase
-		.from('gmail_message_dedup')
+		.from('intake_dedup')
 		.insert({ message_id: gmailMessageId })
 		.select('message_id')
 		.maybeSingle();
@@ -229,7 +252,7 @@ serve(async (req) => {
 	}
 
 	// Resolve everything we can from email + DB before any external calls.
-	let appfolioId: string;          // upsert key on issues_v2
+	let appfolioSrn: string;          // upsert key on issues_v2
 	let baseSrn: string | null = null;
 	let propertyDbId: string | null = null;
 	let appfolioPropertyId: string | null = null;
@@ -237,12 +260,12 @@ serve(async (req) => {
 	let initialDescription: string;
 
 	if (isTest) {
-		appfolioId = `test-${gmailMessageId}`;
+		appfolioSrn = `test-${gmailMessageId}`;
 		initialDescription = (emailBody && emailBody.trim()) || subject || 'Test work order';
 	} else {
 		const { serviceRequestNumber, appfolioPropertyId: propNumber } = payload;
 		baseSrn = String(serviceRequestNumber).split('-')[0];   // strip email-only "-N" suffix
-		appfolioId = baseSrn;
+		appfolioSrn = baseSrn;
 		initialDescription = (emailBody && emailBody.trim()) || subject || '';
 
 		const { data: property } = await supabase
@@ -281,19 +304,19 @@ serve(async (req) => {
 		}
 	}
 
-	// Insert issue immediately. If a duplicate (workspace_id, appfolio_id) row
+	// Insert issue immediately. If a duplicate (workspace_id, appfolio_srn) row
 	// already exists, ignore — agent_runs claim will short-circuit downstream.
 	const { data: upserted, error: upsertErr } = await supabase
 		.from('issues_v2')
 		.upsert(
 			{
 				workspace_id: workspaceId,
-				appfolio_id: appfolioId,
+				appfolio_srn: appfolioSrn,
 				description: initialDescription,
 				property_id: propertyDbId,
 				tenant_id: tenantId
 			},
-			{ onConflict: 'workspace_id,appfolio_id', ignoreDuplicates: true }
+			{ onConflict: 'workspace_id,appfolio_srn', ignoreDuplicates: true }
 		)
 		.select('id');
 
@@ -308,7 +331,7 @@ serve(async (req) => {
 			.from('issues_v2')
 			.select('id')
 			.eq('workspace_id', workspaceId)
-			.eq('appfolio_id', appfolioId)
+			.eq('appfolio_srn', appfolioSrn)
 			.maybeSingle();
 		issueId = existing?.id ?? null;
 	}
@@ -321,7 +344,7 @@ serve(async (req) => {
 	// Create both agent_runs rows up front so the status page can see the
 	// pipeline progressing. Claim intake immediately.
 	await ensureAgentRuns(supabase, issueId, ['intake', 'vendor']);
-	await supabase.from('gmail_message_dedup').update({ issue_id: issueId }).eq('message_id', gmailMessageId);
+	await supabase.from('intake_dedup').update({ issue_id: issueId }).eq('message_id', gmailMessageId);
 
 	const intakeRunId = await claimAgentRun(supabase, issueId, 'intake');
 	if (!intakeRunId) {
