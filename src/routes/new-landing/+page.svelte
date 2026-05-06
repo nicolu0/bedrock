@@ -1,9 +1,46 @@
 <script lang="ts">
 	import skyline from '$lib/assets/skyline.png';
+	import imessageIcon from '$lib/assets/imessage-icon.png';
+	import { onMount } from 'svelte';
 
 	const PHONE = '6504443716';
 	const SMS_BODY = encodeURIComponent("let's run through a demo maintenance request together");
 	const IMESSAGE_HREF = `sms:${PHONE}&body=${SMS_BODY}`;
+
+	const WORDS = ['responds', 'dispatches', 'follows up', 'works'];
+	let wordIndex = 0;
+	let displayWord = WORDS[0];
+	let visible = true;
+	let containerWidth = 0;
+	let wordEl: HTMLSpanElement;
+	let widths: number[] = [];
+
+	onMount(() => {
+		const clone = wordEl.cloneNode(true) as HTMLSpanElement;
+		clone.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none';
+		wordEl.parentElement!.appendChild(clone);
+		for (const word of WORDS) {
+			clone.textContent = word;
+			widths.push(clone.offsetWidth);
+		}
+		clone.remove();
+		containerWidth = widths[0];
+
+		const interval = setInterval(async () => {
+			// fade out
+			visible = false;
+			await new Promise((r) => setTimeout(r, 200));
+
+			// swap word + width simultaneously so they animate together
+			wordIndex = (wordIndex + 1) % WORDS.length;
+			displayWord = WORDS[wordIndex];
+			containerWidth = widths[wordIndex];
+
+			// fade in
+			visible = true;
+		}, 3200);
+		return () => clearInterval(interval);
+	});
 </script>
 
 <svelte:head>
@@ -30,22 +67,24 @@
 
 	<!-- Hero -->
 	<main class="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pb-48 text-center">
-		<h1 class="anim-hero max-w-4xl text-5xl font-medium leading-tight tracking-tight text-stone-700 sm:text-6xl">
-			Property management <span class="italic text-stone-600">simplified</span><br />Just text Bedrock.
+		<h1 class="anim-hero w-full text-5xl font-medium leading-tight tracking-tight text-stone-700 sm:text-6xl">
+			<div>Bedrock <span
+					class="flip-container italic text-stone-600"
+					style="width: {containerWidth}px"
+				><span
+					bind:this={wordEl}
+					class="flip-word"
+					class:word-hidden={!visible}
+				>{displayWord}</span></span> for you.</div>
+			<div>Just send a text.</div>
 		</h1>
 		<div class="anim-cta mt-8 flex flex-col items-center gap-3">
 			<a
 				href={IMESSAGE_HREF}
-				class="inline-flex items-center gap-2.5 rounded-full bg-stone-700 px-7 py-3.5 text-[15px] font-medium text-white transition hover:bg-stone-600"
+				class="inline-flex items-center gap-3 rounded-full bg-stone-700 px-12 py-3.5 text-2xl font-medium text-white transition hover:bg-stone-600"
 			>
-				<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-					<rect width="18" height="18" rx="5" fill="#34C759" />
-					<path
-						d="M9 3.5C5.96 3.5 3.5 5.68 3.5 8.38c0 1.48.74 2.8 1.91 3.71L4.9 14l2.13-1.07A6.1 6.1 0 0 0 9 13.26c3.04 0 5.5-2.18 5.5-4.88S12.04 3.5 9 3.5Z"
-						fill="white"
-					/>
-				</svg>
-				Get Started
+				<img src={imessageIcon} alt="iMessage" width="32" height="32" />
+				Try it now
 			</a>
 			<p class="text-[11px] text-stone-400">
 				By continuing, you agree to our
@@ -96,5 +135,20 @@
 			opacity: 1;
 			transform: translateY(0);
 		}
+	}
+
+	.flip-container {
+		display: inline-block;
+		white-space: nowrap;
+		text-align: center;
+		transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+		will-change: width;
+	}
+	.flip-word {
+		display: inline-block;
+		transition: opacity 0.2s ease;
+	}
+	.word-hidden {
+		opacity: 0;
 	}
 </style>
