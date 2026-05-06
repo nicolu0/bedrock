@@ -1,6 +1,7 @@
 <script lang="ts">
 	import skyline from '$lib/assets/skyline.png';
 	import imessageIcon from '$lib/assets/imessage-icon.png';
+	import bedrockWordmark from '$lib/assets/bedrock-wordmark.svg?raw';
 	import { onMount } from 'svelte';
 
 	const PHONE = '6504443716';
@@ -16,6 +17,9 @@
 	let widths: number[] = [];
 
 	onMount(() => {
+		document.documentElement.classList.add('is-landing');
+		document.body.classList.add('is-landing');
+
 		const clone = wordEl.cloneNode(true) as HTMLSpanElement;
 		clone.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none';
 		wordEl.parentElement!.appendChild(clone);
@@ -34,7 +38,11 @@
 			containerWidth = widths[wordIndex];
 			visible = true;
 		}, 3200);
-		return () => clearInterval(interval);
+		return () => {
+			clearInterval(interval);
+			document.documentElement.classList.remove('is-landing');
+			document.body.classList.remove('is-landing');
+		};
 	});
 </script>
 
@@ -43,48 +51,40 @@
 	<meta name="description" content="Your maintenance inbox, handled. Text Bedrock to get started." />
 </svelte:head>
 
-<!-- Safe area color fills -->
-<div class="fixed inset-x-0 top-0 z-50" style="height: env(safe-area-inset-top); background: #E8E6E1;"></div>
-<div class="fixed inset-x-0 bottom-0 z-50" style="height: env(safe-area-inset-bottom); background: #080808;"></div>
-
 <div
 	class="relative flex flex-col overflow-hidden text-stone-900"
-	style="background: #E8E6E1; min-height: 100dvh; padding-top: env(safe-area-inset-top);"
+	style="background: #E8E6E1; min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));"
 >
 
 	<!-- Nav -->
 	<header class="relative z-20 flex items-center justify-between px-8 py-6">
-		<a
-			href="/"
-			class="text-sm font-medium tracking-[0.12em] uppercase text-stone-700"
-			style="font-family: 'Zalando Sans Expanded', sans-serif;"
-		>
-			Bedrock
+		<a href="/" class="logo-link text-stone-700" aria-label="Bedrock">
+			{@html bedrockWordmark}
 		</a>
 		<a href="/login" class="text-sm text-stone-500 transition hover:text-stone-900">Log in</a>
 	</header>
 
 	<!-- Hero -->
-	<main class="relative z-10 flex flex-1 flex-col items-center px-6 text-center">
+	<main class="relative z-10 flex flex-1 flex-col items-center px-4 text-center sm:px-6">
 		<!-- Hero text — centered on desktop, upper-center on mobile -->
 		<div class="flex flex-1 flex-col items-center justify-center sm:pb-48">
-			<h1 class="anim-hero w-full font-medium leading-tight tracking-tight text-stone-700" style="font-size: clamp(1.2rem, 7.2vw, 3.75rem);">
-				<div class="whitespace-nowrap">Bedrock <span
+			<h1 class="anim-hero w-full font-medium leading-tight tracking-tight text-stone-700">
+				<div class="whitespace-nowrap" style="font-size: clamp(1.7rem, 10.5vw, 3.75rem);">Bedrock <span
 						class="flip-container italic text-stone-600"
 						style="width: {containerWidth}px"
 					><span
 						bind:this={wordEl}
 						class="flip-word"
 						class:word-hidden={!visible}
-					>{displayWord}</span></span> for you.</div>
-				<div>Just send a text.</div>
+					>{displayWord}</span></span><br class="sm:hidden"> for you.</div>
+				<div class="mt-1 font-normal text-stone-500" style="font-size: clamp(1rem, 5vw, 2rem);">Just send a text message.</div>
 			</h1>
 
 			<!-- CTA: visible only on desktop (sm+) -->
 			<div class="anim-cta mt-8 hidden flex-col items-center gap-3 sm:flex">
 				<a
 					href={IMESSAGE_HREF}
-					class="inline-flex items-center gap-3 rounded-full bg-stone-700 px-12 py-3.5 text-2xl font-medium text-white transition hover:bg-stone-600"
+					class="inline-flex items-center gap-3 rounded-full bg-black/80 px-12 py-3.5 text-2xl font-medium text-white transition hover:bg-black/90"
 				>
 					<img src={imessageIcon} alt="iMessage" width="32" height="32" />
 					Try it now
@@ -102,7 +102,7 @@
 		<div class="anim-cta z-20 w-full pb-20 sm:hidden">
 			<a
 				href={IMESSAGE_HREF}
-				class="mx-auto flex w-3/4 items-center justify-center gap-3 rounded-full bg-stone-700 py-3 text-lg font-medium text-white transition hover:bg-stone-600"
+				class="mx-auto flex w-3/4 items-center justify-center gap-3 rounded-full bg-black/80 py-3 text-lg font-medium text-white transition hover:bg-black/90"
 			>
 				<img src={imessageIcon} alt="iMessage" width="28" height="28" />
 				Try it now
@@ -116,7 +116,7 @@
 		</div>
 	</main>
 
-	<!-- Skyline anchored above footer -->
+	<!-- Skyline anchored above footer with bottom fade-out to beige -->
 	<div class="pointer-events-none absolute inset-0 z-0 overflow-hidden" style="background: #E8E6E1;">
 		<img
 			src={skyline}
@@ -124,16 +124,15 @@
 			class="h-full w-full object-cover opacity-40"
 			style="object-position: center 40%;"
 		/>
+		<!-- Fade overlay: skyline melts into the page bg toward the bottom -->
+		<div class="absolute inset-x-0 bottom-0 h-1/3" style="background: linear-gradient(to bottom, transparent 0%, #E8E6E1 85%);"></div>
 	</div>
 
-	<!-- Footer background -->
-	<div class="pointer-events-none absolute inset-x-0 bottom-0 z-10" style="background: #080808; height: calc(56px + env(safe-area-inset-bottom));"></div>
-
 	<!-- Footer -->
-	<footer class="relative z-20 flex items-center justify-center gap-4 px-8 text-[13px] text-white/30" style="height: calc(56px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);">
+	<footer class="relative z-20 flex items-center justify-center gap-4 px-8 text-[13px] text-stone-400" style="height: calc(56px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);">
 		<span>© {new Date().getFullYear()} Bedrock</span>
-		<a href="/terms" class="hover:text-white/60">Terms</a>
-		<a href="/privacy" class="hover:text-white/60">Privacy</a>
+		<a href="/terms" class="hover:text-stone-600">Terms</a>
+		<a href="/privacy" class="hover:text-stone-600">Privacy</a>
 	</footer>
 </div>
 
@@ -171,5 +170,14 @@
 	}
 	.word-hidden {
 		opacity: 0;
+	}
+	.logo-link {
+		display: inline-block;
+		line-height: 0;
+	}
+	.logo-link :global(svg) {
+		height: 10px;
+		width: auto;
+		display: block;
 	}
 </style>
