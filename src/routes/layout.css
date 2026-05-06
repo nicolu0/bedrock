@@ -1,4 +1,11 @@
 @import 'tailwindcss';
+
+html {
+	background-color: #E8E6E1;
+}
+body {
+	background-color: #080808;
+}
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
 
