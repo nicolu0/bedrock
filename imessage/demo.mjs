@@ -21,11 +21,14 @@ const BETWEEN_PARTS_MS = 2500;
 const OPENAI_MODEL = 'gpt-5.4-2026-03-05';
 const MESSAGE_SEPARATOR = '%%%%';
 const FALLBACK_REPLY = 'hey!';
-const MAX_HISTORY = 40; // messages to keep per conversation for context
+const MAX_HISTORY = 40;
+const COMPACT_AT = 10;   // trigger compaction when history reaches this length
+const KEEP_RECENT = 15;  // messages to retain after compaction
 
 const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db');
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const STATE_PATH = path.join(SCRIPT_DIR, '.demo-state.json');
+const MEMORIES_PATH = path.join(SCRIPT_DIR, '.demo-memories.json');
 const ENV_PATH = path.join(SCRIPT_DIR, '..', '.env');
 const LOCAL_ENV_PATH = path.join(SCRIPT_DIR, '.env');
 const APPLESCRIPT_SEND = path.join(SCRIPT_DIR, 'scripts', 'send.applescript');
@@ -43,6 +46,13 @@ const state = {
 // handle -> [{ role: 'user'|'assistant', content: string, ts: ISO }]
 const conversations = new Map();
 
+// Compacted memory summaries per handle, persisted to disk
+// handle -> string
+const memories = new Map();
+
+// Tracks handles currently being compacted so we don't double-compact
+const compacting = new Set();
+
 let polling = false;
 let sending = false;
 const outgoingQueue = [];
@@ -53,8 +63,12 @@ function sleep(ms) {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
-function log(msg, extra = {}) {
-	console.log(JSON.stringify({ ts: new Date().toISOString(), msg, ...extra }));
+function shortHandle(handle) {
+	return handle.replace(/^\+1/, '').replace(/[^\d@.]/g, '') || handle;
+}
+
+function log(msg) {
+	console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
 }
 
 function normalizeHandle(raw) {
@@ -106,12 +120,10 @@ async function loadState() {
 		const parsed = JSON.parse(raw);
 		state.lastSeenRowId = Number(parsed.lastSeenRowId ?? 0);
 		state.processed = parsed.processed ?? {};
-		log('state loaded', { lastSeenRowId: state.lastSeenRowId });
 	} catch {
-		state.lastSeenRowId = await fetchLatestRowId();
+		state.lastSeenRowId = fetchLatestRowId();
 		state.processed = {};
 		await saveState();
-		log('state initialized', { lastSeenRowId: state.lastSeenRowId });
 	}
 }
 
@@ -119,6 +131,20 @@ async function saveState() {
 	const entries = Object.entries(state.processed).sort((a, b) => b[1] - a[1]);
 	state.processed = Object.fromEntries(entries.slice(0, 2000));
 	await fs.writeFile(STATE_PATH, JSON.stringify(state, null, 2), 'utf8');
+}
+
+async function loadMemories() {
+	try {
+		const raw = await fs.readFile(MEMORIES_PATH, 'utf8');
+		const parsed = JSON.parse(raw);
+		for (const [handle, memory] of Object.entries(parsed)) {
+			memories.set(handle, memory);
+		}
+	} catch { /* first run */ }
+}
+
+async function saveMemories() {
+	await fs.writeFile(MEMORIES_PATH, JSON.stringify(Object.fromEntries(memories), null, 2), 'utf8');
 }
 
 // ── Routing ────────────────────────────────────────────────────────────────────
@@ -176,7 +202,7 @@ function fetchLatestRowId() {
 		const row = getDb().prepare('SELECT COALESCE(MAX(ROWID),0) AS max_rowid FROM message').get();
 		return Number(row?.max_rowid ?? 0);
 	} catch (err) {
-		log('fetchLatestRowId error', { err: err.message });
+		log(`db error: ${err.message}`);
 		return 0;
 	}
 }
@@ -211,7 +237,7 @@ function fetchNewMessages(afterRowId) {
 		`).all(Number(afterRowId) || 0);
 		return rows.map(r => ({ ...r, text: extractText(r) }));
 	} catch (err) {
-		log('fetchNewMessages error', { err: err.message });
+		log(`db error: ${err.message}`);
 		return [];
 	}
 }
@@ -220,14 +246,13 @@ function fetchNewMessages(afterRowId) {
 
 async function sendPartViaAppleScript(chatGuid, handle, text) {
 	try {
-		const { stdout, stderr } = await execFileAsync('osascript', [
+		const { stderr } = await execFileAsync('osascript', [
 			APPLESCRIPT_SEND, chatGuid || '', handle, text,
 		]);
-		if (stdout?.trim()) log('applescript stdout', { stdout: stdout.trim() });
-		if (stderr?.trim()) log('applescript stderr', { stderr: stderr.trim() });
+		if (stderr?.trim()) log(`applescript: ${stderr.trim()}`);
 		return true;
 	} catch (err) {
-		log('applescript error', { err: err.message });
+		log(`applescript error: ${err.message}`);
 		return false;
 	}
 }
@@ -243,7 +268,7 @@ async function processOutgoingQueue() {
 			if (!item) continue;
 			const ok = await sendPartViaAppleScript(item.chatGuid, item.handle, item.text);
 			if (ok) {
-				log('sent', { handle: item.handle, text: item.text });
+				log(`Bedrock → ${shortHandle(item.handle)}: "${item.text}"`);
 				const conv = conversations.get(item.handle) ?? [];
 				conv.push({ role: 'assistant', content: item.text, ts: new Date().toISOString() });
 				if (conv.length > MAX_HISTORY) conv.splice(0, conv.length - MAX_HISTORY);
@@ -294,17 +319,77 @@ const SYSTEM_PROMPT =
 	'Write in all lowercase. No capitalization, even at the start of sentences. ' +
 	'Plain text only. No markdown. No bullet points. No emoji unless they used one first.';
 
+async function compactMemory(handle) {
+	if (compacting.has(handle)) return;
+	const conv = conversations.get(handle);
+	if (!conv || conv.length < COMPACT_AT) return;
+
+	compacting.add(handle);
+	const toCompact = conv.slice(0, conv.length - KEEP_RECENT);
+	const keep = conv.slice(conv.length - KEEP_RECENT);
+
+	try {
+		const apiKey = process.env.OPENAI_API_KEY;
+		const transcript = toCompact.map(m => `${m.role}: ${m.content}`).join('\n');
+		const existing = memories.get(handle);
+
+		const response = await fetch('https://api.openai.com/v1/chat/completions', {
+			method: 'POST',
+			headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				model: 'gpt-5-nano-2025-08-07',
+				messages: [
+					{
+						role: 'system',
+						content:
+							'Extract and preserve the most important facts from this conversation for future reference. ' +
+							'Focus on: property names, vendor/contractor names, decisions made, preferences stated, reasons given. ' +
+							'Be concise. Write in plain prose, 3-5 sentences max. ' +
+							(existing ? `Merge with this existing memory:\n${existing}` : ''),
+					},
+					{ role: 'user', content: transcript },
+				],
+				max_tokens: 300,
+			}),
+		});
+
+		if (response.ok) {
+			const data = await response.json();
+			const summary = data.choices?.[0]?.message?.content?.trim();
+			if (summary) {
+				const before = toCompact.map(m => `  ${m.role === 'assistant' ? 'Bedrock' : shortHandle(handle)}: "${m.content}"`).join('\n');
+				const afterLines = [
+					`  [memory] ${summary}`,
+					...keep.map(m => `  ${m.role === 'assistant' ? 'Bedrock' : shortHandle(handle)}: "${m.content}"`),
+				].join('\n');
+				log(`compacting ${shortHandle(handle)} — before:\n${before}\n  — after:\n${afterLines}`);
+				memories.set(handle, summary);
+				conversations.set(handle, keep);
+				await saveMemories();
+			}
+		}
+	} catch (err) {
+		log(`compaction error: ${err.message}`);
+	} finally {
+		compacting.delete(handle);
+	}
+}
+
 async function callOpenAI(handle, chatGuid) {
 	const apiKey = process.env.OPENAI_API_KEY;
 	if (!apiKey) {
-		log('OPENAI_API_KEY not set');
+		log('OPENAI_API_KEY not set — sending fallback');
 		enqueue(handle, chatGuid, FALLBACK_REPLY);
 		return;
 	}
 
 	const history = conversations.get(handle) ?? [];
+	const memory = memories.get(handle);
+	const systemContent = memory
+		? `${SYSTEM_PROMPT}\n\nMEMORY (from earlier in this conversation):\n${memory}`
+		: SYSTEM_PROMPT;
 	const messages = [
-		{ role: 'system', content: SYSTEM_PROMPT },
+		{ role: 'system', content: systemContent },
 		...history.map(({ role, content }) => ({ role, content })),
 	];
 
@@ -374,7 +459,6 @@ async function callOpenAI(handle, chatGuid) {
 	}
 
 	if (emitted === 0) enqueue(handle, chatGuid, FALLBACK_REPLY);
-	log('openai raw response', { handle, raw: fullRaw });
 }
 
 function splitIntoParts(raw) {
@@ -385,7 +469,7 @@ function splitIntoParts(raw) {
 // ── Poll loop ──────────────────────────────────────────────────────────────────
 
 async function pollOnce() {
-	const rows = await fetchNewMessages(state.lastSeenRowId);
+	const rows = fetchNewMessages(state.lastSeenRowId);
 	if (!rows.length) return;
 
 	for (const row of rows) {
@@ -401,10 +485,7 @@ async function pollOnce() {
 		if (!handle) continue;
 
 		// Routing: known number → ignore
-		if (isKnown(handle)) {
-			log('known number, ignoring', { handle });
-			continue;
-		}
+		if (isKnown(handle)) continue;
 
 		// Dedup
 		if (state.processed[row.guid]) continue;
@@ -413,7 +494,7 @@ async function pollOnce() {
 		const text = String(row.text || '').trim();
 		if (!text) continue;
 
-		log('inbound from unknown', { handle, text });
+		log(`${shortHandle(handle)}: "${text}"`);
 
 		// Append to conversation history
 		const conv = conversations.get(handle) ?? [];
@@ -421,12 +502,13 @@ async function pollOnce() {
 		if (conv.length > MAX_HISTORY) conv.splice(0, conv.length - MAX_HISTORY);
 		conversations.set(handle, conv);
 
-		// Generate and send reply
+		// Fire compaction in background if history is getting long — don't await
+		if (conv.length >= COMPACT_AT) void compactMemory(handle);
+
 		try {
 			await callOpenAI(handle, row.chat_guid ?? '');
-			log('agent reply enqueued', { handle });
 		} catch (err) {
-			log('agent error', { handle, err: err.message });
+			log(`agent error: ${err.message}`);
 			enqueue(handle, row.chat_guid ?? '', FALLBACK_REPLY);
 		}
 	}
@@ -494,7 +576,7 @@ function startWebUI(port) {
 		res.end(buildHtml());
 	});
 	server.listen(port, '127.0.0.1', () => {
-		log('web UI started', { url: `http://localhost:${port}` });
+		log(`web UI → http://localhost:${port}`);
 	});
 }
 
@@ -504,15 +586,11 @@ async function main() {
 	await loadDotEnv(ENV_PATH);
 	await loadDotEnv(LOCAL_ENV_PATH);
 	await loadState();
+	await loadMemories();
 
 	startWebUI(DEMO_PORT);
 
-	log('demo agent started', {
-		poll: `${POLL_INTERVAL_MS}ms`,
-		model: OPENAI_MODEL,
-		knownNumbers: KNOWN_NUMBERS.length,
-		ui: `http://localhost:${DEMO_PORT}`,
-	});
+	log(`demo agent started — model: ${OPENAI_MODEL}, known: ${KNOWN_NUMBERS.length}`);
 
 	setInterval(async () => {
 		if (polling) return;
@@ -520,7 +598,7 @@ async function main() {
 		try {
 			await pollOnce();
 		} catch (err) {
-			log('poll error', { err: err.message });
+			log(`poll error: ${err.message}`);
 		} finally {
 			polling = false;
 		}
