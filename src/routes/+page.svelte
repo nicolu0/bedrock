@@ -13,6 +13,8 @@
 	let displayWord = WORDS[0];
 	let visible = true;
 	let containerWidth = 0;
+	let maxWidth = 0;
+	let suppressTransition = false;
 	let wordEl: HTMLSpanElement;
 	let widths: number[] = [];
 
@@ -28,7 +30,25 @@
 			widths.push(clone.offsetWidth);
 		}
 		clone.remove();
-		containerWidth = widths[0];
+		maxWidth = Math.max(...widths);
+
+		// On mobile, suppress the entrance width transition (0 → first-word-width)
+		// so the entrance has no horizontal movement. Per-word transitions
+		// afterward animate normally.
+		const isMobile = window.matchMedia('(max-width: 639px)').matches;
+		if (isMobile) {
+			suppressTransition = true;
+			containerWidth = widths[0];
+			// Two RAFs ensure the width was applied with no transition before
+			// we re-enable transitions for future word changes.
+			requestAnimationFrame(() => {
+				requestAnimationFrame(() => {
+					suppressTransition = false;
+				});
+			});
+		} else {
+			containerWidth = widths[0];
+		}
 
 		const interval = setInterval(async () => {
 			visible = false;
@@ -68,10 +88,14 @@
 	<main class="relative z-10 flex flex-1 flex-col items-center px-4 text-center sm:px-6">
 		<!-- Hero text — centered on desktop, upper-center on mobile -->
 		<div class="flex flex-1 flex-col items-center justify-center sm:pb-48">
+				<div class="mb-5">
+					<span class="px-4 py-1.5 text-xs italic text-stone-500">Helping 100+ property managers</span>
+				</div>
 			<h1 class="anim-hero w-full font-medium leading-tight tracking-tight text-stone-700">
 				<div class="whitespace-nowrap" style="font-size: clamp(1.7rem, 10.5vw, 3.75rem);">Bedrock <span
 						class="flip-container italic text-stone-600"
-						style="width: {containerWidth}px"
+						class:no-transition={suppressTransition}
+						style="--w: {containerWidth}px; --max-w: {maxWidth}px;"
 					><span
 						bind:this={wordEl}
 						class="flip-word"
@@ -99,7 +123,7 @@
 		</div>
 
 		<!-- CTA: pinned to bottom on mobile -->
-		<div class="anim-cta z-20 w-full pb-20 sm:hidden">
+		<div class="anim-cta z-20 w-full pb-10 pt-12 sm:hidden">
 			<a
 				href={IMESSAGE_HREF}
 				class="mx-auto flex w-3/4 items-center justify-center gap-3 rounded-full bg-black/80 py-3 text-lg font-medium text-white transition hover:bg-black/90"
@@ -129,7 +153,7 @@
 	</div>
 
 	<!-- Footer -->
-	<footer class="relative z-20 flex items-center justify-center gap-4 px-8 text-[13px] text-stone-400" style="height: calc(56px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);">
+	<footer class="relative z-20 flex items-center justify-center gap-4 px-8 text-[13px] text-stone-400" style="height: calc(36px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);">
 		<span>© {new Date().getFullYear()} Bedrock</span>
 		<a href="/terms" class="hover:text-stone-600">Terms</a>
 		<a href="/privacy" class="hover:text-stone-600">Privacy</a>
@@ -161,8 +185,12 @@
 		display: inline-block;
 		white-space: nowrap;
 		text-align: center;
+		width: var(--w);
 		transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 		will-change: width;
+	}
+	.flip-container.no-transition {
+		transition: none;
 	}
 	.flip-word {
 		display: inline-block;
