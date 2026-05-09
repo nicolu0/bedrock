@@ -51,16 +51,13 @@ const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db');
 const STATE_PATH = path.join(SCRIPT_DIR, '.imessage-state.json');
 const APPLESCRIPT_SEND = path.join(REPO_IMESSAGE_DIR, 'scripts', 'send.applescript');
 
-// ── Routing: ignore numbers we know (so testing in a real-world chat doesn't
-// hijack actual conversations). Reuses demo_v0-config.mjs since the demo_agent
-// is built on top of that demo's identity model.
-let knownSet = new Set();
-try {
-	const { KNOWN_NUMBERS } = await import('../demo_v0-config.mjs');
-	knownSet = new Set((KNOWN_NUMBERS ?? []).map(normalizeHandle));
-} catch {
-	// no config — accept all
-}
+// Real customer/vendor handles — incoming messages from these are ignored so
+// testing doesn't hijack real conversations. E.164 phone numbers or email.
+const KNOWN_NUMBERS = [
+	'+13106690643', // Jose / property manager
+	'+13102663152', // Jose (other number)
+];
+const knownSet = new Set(KNOWN_NUMBERS.map(normalizeHandle));
 
 // ── Env ────────────────────────────────────────────────────────────────────────
 

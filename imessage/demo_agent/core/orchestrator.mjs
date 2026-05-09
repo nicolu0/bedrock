@@ -8,7 +8,7 @@
 // Tool calls are dispatched inline as the stream produces them. send_text
 // results are emitted as 'message' events as soon as their args parse.
 
-import { buildSystemPrompt, OPENER_MESSAGES } from './prompts.mjs';
+import { buildSystemPrompt, OPENER_MESSAGES, FOLLOWUP_COMPLETE_CLOSER } from './prompts.mjs';
 import { TOOL_DEFS, executeTool } from './tools.mjs';
 import * as memory from './memory.mjs';
 
@@ -109,6 +109,11 @@ export async function runTurn(handle, userMessage, opts = {}) {
 				let parsed = {};
 				try { parsed = JSON.parse(c.args || '{}'); } catch { /* keep empty */ }
 				c.parsedArgs = parsed;
+				// Snapshot prior stage so we can detect the followup → complete
+				// transition and fire the hardcoded closer.
+				const priorStage = c.name === 'set_demo_stage'
+					? ((await memory.getProfile(handle, 'system/stage')) || 'intro')
+					: null;
 				c.result = await executeTool(c.name, parsed, ctx);
 				toolCallsLog.push({ name: c.name, args: parsed, result: c.result });
 				if (c.name === 'send_text') {
@@ -127,6 +132,18 @@ export async function runTurn(handle, userMessage, opts = {}) {
 					}
 				} else {
 					await onEvent({ type: 'tool_call', name: c.name, args: parsed, result: c.result });
+				}
+				// Fire the hardcoded closer on the in-order followup → complete
+				// transition only. Out-of-order transitions are intentionally silent
+				// (see SPEC.html T2).
+				if (c.name === 'set_demo_stage' && priorStage === 'followup' && parsed.stage === 'complete') {
+					for (const line of FOLLOWUP_COMPLETE_CLOSER) {
+						await onEvent({ type: 'typing' });
+						await sleep(MESSAGE_GAP_MS);
+						outbox.push(line);
+						await onEvent({ type: 'message', content: line });
+						messagesThisIter++;
+					}
 				}
 				dispatchedThrough = i;
 			}

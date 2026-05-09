@@ -24,9 +24,9 @@ const WORKSPACE_FILTER = flag === '--test' ? WORKSPACES.test
 	: flag === '--prod' ? WORKSPACES.prod
 	: flag?.startsWith('--workspace=') ? flag.split('=')[1]
 	: null; // null = all workspaces
-const ENV_PATH = path.join(SCRIPT_DIR, '..', '.env');
-const STATE_PATH = path.join(SCRIPT_DIR, '.appfolio-poller-state.json');
-const APPLESCRIPT_INJECT = path.join(SCRIPT_DIR, 'scripts', 'inject-draft.applescript');
+const ENV_PATH = path.join(SCRIPT_DIR, '..', '..', '.env');
+const STATE_PATH = path.join(SCRIPT_DIR, '.issues-poller-state.json');
+const APPLESCRIPT_INJECT = path.join(SCRIPT_DIR, 'inject-draft.applescript');
 const DRAFT_SERVER_PORT = parseInt(process.env.DRAFT_SERVER_PORT ?? '3456', 10);
 
 // Find your chat GUID by running in Terminal:
