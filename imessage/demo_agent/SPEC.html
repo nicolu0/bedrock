@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>bedrock demo_agent — hardcoded-response audit & prompt refactor spec</title>
+<style>
+	:root {
+		--fg: #1a1a1a;
+		--muted: #666;
+		--bg: #fafaf7;
+		--card: #fff;
+		--border: #e3e3dc;
+		--accent: #2a5e8a;
+		--code-bg: #f3f1ec;
+		--bad: #b03030;
+		--good: #2c7a3e;
+	}
+	* { box-sizing: border-box; }
+	body {
+		font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+		color: var(--fg);
+		background: var(--bg);
+		max-width: 880px;
+		margin: 0 auto;
+		padding: 32px 24px 64px;
+	}
+	h1 { font-size: 26px; margin: 0 0 4px; }
+	h2 { font-size: 20px; margin: 36px 0 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+	h3 { font-size: 16px; margin: 20px 0 6px; color: var(--accent); }
+	h4 { font-size: 14px; margin: 14px 0 4px; }
+	.subtitle { color: var(--muted); margin-bottom: 24px; }
+	code, kbd, pre {
+		font-family: ui-monospace, "SF Mono", Menlo, monospace;
+		font-size: 13px;
+	}
+	code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+	pre {
+		background: var(--code-bg);
+		padding: 10px 12px;
+		border-radius: 4px;
+		border: 1px solid var(--border);
+		overflow-x: auto;
+		white-space: pre-wrap;
+	}
+	.card {
+		background: var(--card);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 14px 18px;
+		margin: 12px 0;
+	}
+	.tag {
+		display: inline-block;
+		font-size: 11px;
+		padding: 2px 7px;
+		border-radius: 10px;
+		background: #ece9e1;
+		color: #444;
+		margin-left: 6px;
+		vertical-align: middle;
+	}
+	.tag.hard { background: #cee5cf; color: #1f5a2a; }
+	.tag.pinned { background: #f5dcb5; color: #7a4a10; }
+	.tag.ban { background: #f5cfcf; color: #862020; }
+	.tag.struct { background: #d6dff0; color: #2a4880; }
+	.tag.done { background: #2c7a3e; color: #fff; }
+	.done-strike { text-decoration: line-through; text-decoration-color: #2c7a3e; text-decoration-thickness: 2px; }
+	.meta {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: 4px 14px;
+		font-size: 13px;
+		margin: 6px 0;
+	}
+	.meta dt { color: var(--muted); }
+	.meta dd { margin: 0; }
+	.bad { color: var(--bad); }
+	.good { color: var(--good); }
+	ul { padding-left: 22px; }
+	li { margin: 4px 0; }
+	.toc {
+		background: #fff;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 12px 18px;
+		margin-bottom: 24px;
+	}
+	.toc ol { margin: 0; padding-left: 20px; }
+	.toc a { color: var(--accent); text-decoration: none; }
+	.toc a:hover { text-decoration: underline; }
+	.legend { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 16px; }
+	blockquote {
+		border-left: 3px solid var(--border);
+		margin: 8px 0;
+		padding: 4px 12px;
+		color: #444;
+		background: #fff;
+	}
+	hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
+	.flowchart {
+		background: #fff;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 18px;
+		margin: 16px 0 24px;
+		overflow-x: auto;
+	}
+	.flowchart svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+</style>
+</head>
+<body>
+
+<h1>bedrock demo_agent — spec</h1>
+<div class="subtitle">hardcoded-response audit + prompt refactor plan · last updated 2026-05-09</div>
+
+<div class="toc">
+	<strong>contents</strong>
+	<ol>
+		<li><a href="#part1">part 1 — hardcoded-response audit</a>
+			<ol>
+				<li><a href="#a">A. truly hardcoded</a></li>
+				<li><a href="#b">B. pinned-by-prompt</a></li>
+				<li><a href="#c">C. hardcoded bans (negative pinning)</a></li>
+				<li><a href="#d">D. structurally pinned beats</a></li>
+				<li><a href="#levers">tightening levers</a></li>
+			</ol>
+		</li>
+		<li><a href="#part2">part 2 — prompts.mjs merge & prune plan</a></li>
+	</ol>
+</div>
+
+<h2 style="border:0;padding:0;margin-top:8px">stage flow</h2>
+<div class="flowchart">
+<svg viewBox="0 0 820 720" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, system-ui, sans-serif" font-size="13">
+	<defs>
+		<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+			<path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+		</marker>
+		<marker id="arrowDashed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+			<path d="M0,0 L10,5 L0,10 z" fill="#a05a1f"/>
+		</marker>
+	</defs>
+
+	<!-- stage box style: rect + label + sublabel -->
+	<!-- intro -->
+	<g>
+		<rect x="320" y="20" width="180" height="62" rx="8" fill="#eef2f8" stroke="#2a5e8a" stroke-width="1.5"/>
+		<text x="410" y="42" text-anchor="middle" font-weight="600" fill="#1a3a5a">intro</text>
+		<text x="410" y="60" text-anchor="middle" fill="#444" font-size="11">canned opener (A1)</text>
+		<text x="410" y="74" text-anchor="middle" fill="#666" font-size="11">waiting for "yes/sure"</text>
+	</g>
+
+	<!-- setup -->
+	<g>
+		<rect x="320" y="120" width="180" height="62" rx="8" fill="#eef2f8" stroke="#2a5e8a" stroke-width="1.5"/>
+		<text x="410" y="142" text-anchor="middle" font-weight="600" fill="#1a3a5a">setup</text>
+		<text x="410" y="160" text-anchor="middle" fill="#444" font-size="11">collect property + vendor</text>
+		<text x="410" y="174" text-anchor="middle" fill="#666" font-size="11">2-msg framing + ask</text>
+	</g>
+
+	<!-- dispatch -->
+	<g>
+		<rect x="320" y="220" width="180" height="62" rx="8" fill="#eef2f8" stroke="#2a5e8a" stroke-width="1.5"/>
+		<text x="410" y="242" text-anchor="middle" font-weight="600" fill="#1a3a5a">dispatch</text>
+		<text x="410" y="260" text-anchor="middle" fill="#444" font-size="11">live work order, get approval</text>
+		<text x="410" y="274" text-anchor="middle" fill="#666" font-size="11">"i texted mario, emailed tenant"</text>
+	</g>
+
+	<!-- learning -->
+	<g>
+		<rect x="320" y="320" width="180" height="62" rx="8" fill="#eef2f8" stroke="#2a5e8a" stroke-width="1.5"/>
+		<text x="410" y="342" text-anchor="middle" font-weight="600" fill="#1a3a5a">learning</text>
+		<text x="410" y="360" text-anchor="middle" fill="#444" font-size="11">"do we always send X for Y?"</text>
+		<text x="410" y="374" text-anchor="middle" fill="#666" font-size="11">case A: ask · case B: short-circuit</text>
+	</g>
+
+	<!-- followup -->
+	<g>
+		<rect x="320" y="450" width="180" height="62" rx="8" fill="#eef2f8" stroke="#2a5e8a" stroke-width="1.5"/>
+		<text x="410" y="472" text-anchor="middle" font-weight="600" fill="#1a3a5a">followup</text>
+		<text x="410" y="490" text-anchor="middle" fill="#444" font-size="11">fast-fwd → "want me to follow up?"</text>
+		<text x="410" y="504" text-anchor="middle" fill="#666" font-size="11">B2 yes/no branch (turn 1 → turn 2)</text>
+	</g>
+
+	<!-- complete -->
+	<g>
+		<rect x="320" y="610" width="180" height="62" rx="8" fill="#e7efe7" stroke="#2c7a3e" stroke-width="1.5"/>
+		<text x="410" y="632" text-anchor="middle" font-weight="600" fill="#1d4f29">complete</text>
+		<text x="410" y="650" text-anchor="middle" fill="#444" font-size="11">VERBATIM closer (B1)</text>
+		<text x="410" y="664" text-anchor="middle" fill="#666" font-size="11">"any questions?"</text>
+	</g>
+
+	<!-- main flow arrows -->
+	<line x1="410" y1="82" x2="410" y2="118" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+	<line x1="410" y1="182" x2="410" y2="218" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+	<line x1="410" y1="282" x2="410" y2="318" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+	<line x1="410" y1="382" x2="410" y2="448" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+	<line x1="410" y1="512" x2="410" y2="608" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+	<!-- main flow labels -->
+	<text x="420" y="103" fill="#555" font-size="11">user confirms ("yes/sure")</text>
+	<text x="420" y="203" fill="#555" font-size="11">property + vendor captured</text>
+	<text x="420" y="303" fill="#555" font-size="11">user approves dispatch</text>
+	<text x="420" y="420" fill="#555" font-size="11">case A: user answers default question</text>
+	<text x="420" y="436" fill="#555" font-size="11">(case B short-circuits — see right)</text>
+	<text x="420" y="555" fill="#555" font-size="11">turn 2: closer fires (yes or no)</text>
+
+	<!-- case B short-circuit (dashed orange, learning -> followup, around right side) -->
+	<path d="M 500 351 C 640 351, 640 481, 500 481" fill="none" stroke="#a05a1f" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowDashed)"/>
+	<text x="650" y="406" fill="#a05a1f" font-size="11" font-style="italic">case B</text>
+	<text x="650" y="421" fill="#a05a1f" font-size="11" font-style="italic">(rule already</text>
+	<text x="650" y="434" fill="#a05a1f" font-size="11" font-style="italic">on file)</text>
+
+	<!-- off-topic loop (dashed gray, generic — stages can re-enter themselves) -->
+	<path d="M 320 251 C 220 251, 220 251, 250 251" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="3,4"/>
+	<path d="M 250 251 C 180 251, 180 281, 220 281" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="3,4" marker-end="url(#arrow)"/>
+	<text x="100" y="247" fill="#666" font-size="11" font-style="italic">off-topic detour:</text>
+	<text x="100" y="262" fill="#666" font-size="11" font-style="italic">brief answer →</text>
+	<text x="100" y="277" fill="#666" font-size="11" font-style="italic">redirect to current stage</text>
+
+	<!-- legend -->
+	<g transform="translate(40, 580)">
+		<line x1="0" y1="6" x2="28" y2="6" stroke="#444" stroke-width="1.5" marker-end="url(#arrow)"/>
+		<text x="36" y="10" fill="#444" font-size="11">main flow (set_demo_stage)</text>
+		<line x1="0" y1="26" x2="28" y2="26" stroke="#a05a1f" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowDashed)"/>
+		<text x="36" y="30" fill="#444" font-size="11">memory short-circuit</text>
+		<line x1="0" y1="46" x2="28" y2="46" stroke="#888" stroke-width="1.5" stroke-dasharray="3,4"/>
+		<text x="36" y="50" fill="#444" font-size="11">in-stage detour (no advance)</text>
+	</g>
+</svg>
+</div>
+
+<div class="legend">
+	<span class="tag hard">truly hardcoded</span>
+	<span class="tag pinned">pinned by prompt</span>
+	<span class="tag ban">negative pin</span>
+	<span class="tag struct">structural</span>
+</div>
+
+<h2 id="part1">part 1 — hardcoded-response audit</h2>
+<p>Every place in the codebase where a fixed/verbatim string is prescribed, or the model is forced into specific phrasing. Reliability ranks from 100% (string lives in code) down to "the model usually does this, but a stray paraphrase is possible."</p>
+
+<h3 id="a">A. truly hardcoded — string in code, no model involvement</h3>
+
+<div class="card">
+	<h4>A1. the opener <span class="tag hard">100%</span> <span class="tag done">done</span></h4>
+	<dl class="meta">
+		<dt>file</dt><dd><code>prompts.mjs:5–8</code> (constant), pushed by <code>orchestrator.mjs:47–58</code></dd>
+		<dt>trigger</dt><dd>very first user message on a fresh handle (history empty)</dd>
+		<dt>strings</dt><dd>
+			<pre>"hey, i'm bedrock. i handle work orders for property managers, all over text. no logging into your pms, no chasing tenants or vendors. that's my job."
+"want to run through an example together?"</pre>
+		</dd>
+	</dl>
+	<p><em>Only one truly-hardcoded string set in the whole demo.</em></p>
+</div>
+
+<h3 id="b">B. pinned-by-prompt — model is told to emit exact words</h3>
+
+<div class="card">
+	<h4>B1. followup turn 2 closer <span class="tag hard">now hardcoded</span> <span class="tag done">done</span></h4>
+	<p><em>Promoted from VERBATIM-prompt to truly hardcoded via T1. Fired by the orchestrator on the in-order followup → complete transition. See <code>FOLLOWUP_COMPLETE_CLOSER</code> in <code>prompts.mjs</code>.</em></p>
+	<dl class="meta">
+		<dt>file</dt><dd><code>prompts.mjs:226–228</code></dd>
+		<dt>trigger</dt><dd>after the user responds to the "want me to follow up?" question</dd>
+		<dt>strings</dt><dd>
+			<pre>msg 2: "that's how we'll usually handle work orders."
+msg 3: "any questions?"</pre>
+		</dd>
+		<dt>reliability</dt><dd>generally holds; occasional paraphrase risk</dd>
+	</dl>
+</div>
+
+<div class="card">
+	<h4>B2. followup turn 2 msg 1 <span class="tag pinned">soft pin</span></h4>
+	<dl class="meta">
+		<dt>file</dt><dd><code>prompts.mjs:223–225</code></dd>
+		<dt>strings</dt><dd>
+			<pre>if yes: "on it, pinging both for an update"
+if no:  "ok, i'll leave it for now"</pre>
+		</dd>
+		<dt>note</dt><dd>not marked VERBATIM, just listed as the canonical phrasings</dd>
+	</dl>
+</div>
+
+<div class="card">
+	<h4>B3. learning turn 1 question pattern <span class="tag pinned">template</span></h4>
+	<dl class="meta">
+		<dt>file</dt><dd><code>prompts.mjs:189–192</code></dd>
+		<dt>string</dt><dd><pre>"do we always send &lt;vendor&gt; for &lt;trade&gt; at &lt;property&gt;?"</pre></dd>
+		<dt>bans</dt><dd>"is &lt;vendor&gt; your go-to" / "should i default to &lt;vendor&gt;" / the word "default"</dd>
+	</dl>
+</div>
+
+<div class="card">
+	<h4>B4. dispatch action language <span class="tag pinned">soft pin</span></h4>
+	<dl class="meta">
+		<dt>file</dt><dd><code>prompts.mjs:163–164, 171–172</code></dd>
+		<dt>strings</dt><dd>
+			<pre>msg 1: "on it"  or  "ok, on it"
+msg 2: "i texted mario and emailed the tenant"  or  "texted mario, emailed the tenant"</pre>
+		</dd>
+		<dt>banned</dt><dd>"sending mario", "dispatching mario" (anticipates an action that already happened)</dd>
+	</dl>
+</div>
+
+<div class="card">
+	<h4>B5. first-time name response <span class="tag pinned">soft pin</span></h4>
+	<dl class="meta">
+		<dt>file</dt><dd><code>prompts.mjs:99</code></dd>
+		<dt>string</dt><dd><pre>"nice to meet you &lt;name&gt;"</pre></dd>
+		<dt>banned</dt><dd>"i'll remember that", "i'll lock that in", "got it, andrew", "noted"</dd>
+	</dl>
+</div>
+
+<h3 id="c">C. hardcoded bans (negative pinning — what the model must NOT say)</h3>
+
+<div class="card">
+	<ul>
+		<li><strong>stock acks as filler</strong> <code>prompts.mjs:57</code> — opening replies with "got it", "ok", "great", "thanks" as a runway before the real content. allowed when the ack carries meaning ("ok, i'll leave it for now"). banned as warm-up.</li>
+		<li><strong>echo confirmations</strong> <code>prompts.mjs:57</code> — "got it, mariposa" (parroting their words back)</li>
+		<li><strong>meta-narration of next message</strong> <code>prompts.mjs:163</code> — "here's what i'd text you", "i'd text you exactly like this" (talking about the message instead of sending it)</li>
+		<li><strong>flow-narration in advance</strong> <code>prompts.mjs:49</code> — "next i'll show you...", "now i'll demonstrate..." (exposing the demo's outline). scenario framing like "let's say" / "imagine" is explicitly fine.</li>
+		<li><strong>completed actions in past tense</strong> <code>prompts.mjs:163–164, 170–171</code> — by the time the user reads "i texted mario", the action is already done. "sending mario" / "dispatching mario" anticipate an action that's already complete.</li>
+		<li><strong>the word "default"</strong> in learning turn 1 <code>prompts.mjs:199</code></li>
+		<li><strong>llm/ai/model/assistant talk</strong> <code>prompts.mjs:46, 257</code></li>
+		<li><strong>complete-stage greeting regress</strong> <span class="tag done">handled by mechanics</span> — used to be a prompt rule. Now solved by the orchestrator breaking the loop after the closer fires (T1 + T3), so the model never enters the complete-stage prompt mid-turn.</li>
+	</ul>
+</div>
+
+<h3 id="d">D. stage-driven beats — pinned in <em>structure</em>, not words</h3>
+
+<div class="card">
+	<p>The number of messages and what each one is for are pinned, but wording is freely generated.</p>
+	<ul>
+		<li><strong>setup turn 1</strong> — 2 messages (framing + property question) <code>prompts.mjs:132–136</code></li>
+		<li><strong>dispatch entry</strong> — 2 messages (pms-context framing + the actual work order) <code>prompts.mjs:155–158</code></li>
+		<li><strong>dispatch approval</strong> — 2 messages (decision + completed action) <code>prompts.mjs:162–164</code></li>
+		<li><strong>followup turn 1</strong> — 3 messages ("also keep an eye" + "fast forward" + "gone quiet, follow up?") <code>prompts.mjs:212–216</code></li>
+		<li><strong>followup turn 2</strong> — 3 messages (response + B1 msg 2 + B1 msg 3) <code>prompts.mjs:222–228</code></li>
+		<li><strong>complete-stage capability explanations</strong> — 2–3 short messages, never one packed list <code>prompts.mjs:239–248</code></li>
+	</ul>
+</div>
+
+<h3 id="levers">tightening levers, ranked by ROI</h3>
+<ol>
+	<li><strong>Promote B1 into truly-hardcoded.</strong> The closer is already prescribed VERBATIM and the model has zero creative latitude. Move into the orchestrator: when stage advances to <code>complete</code>, push the two strings directly into the outbox. No model call.</li>
+	<li><strong>Promote A1's "yes" branch.</strong> When the user replies "yes/sure/ok/yeah" to the opener, the intro stage just advances and asks for a property. The framing message + property question could be pinned (or at least the property question).</li>
+	<li><strong>Decide on B2.</strong> If you want it predictable, lift to VERBATIM and hardcode. If you want variability, leave it.</li>
+	<li><strong>B5 first-name response</strong> is a candidate for "code path, not prompt", but harder to factor cleanly because the model still needs to redirect back to whatever beat we were on.</li>
+</ol>
+
+<hr>
+
+<h2 id="part2">part 2 — prompts.mjs merge & prune plan</h2>
+
+<h3>context</h3>
+<p><code>imessage/demo_agent/core/prompts.mjs</code> has grown by accretion — every observed failure added a new rule or example. Several rules are now stated 2–4× across BASE and the per-stage blocks, one BASE example actively <em>contradicts</em> a newer dispatch rule, and a handful of examples illustrate rules already covered by other (more vivid) examples. This pass consolidates duplicates so the model gets a tighter, less self-conflicting prompt and so future edits have a single canonical place to land.</p>
+<p>This is purely a refactor of the prompt text. No behavior change is intended; the goal is parity with current behavior at lower token count and zero internal contradictions.</p>
+
+<h3>critical file</h3>
+<p><code>imessage/demo_agent/core/prompts.mjs</code> (only file modified)</p>
+
+<h3>findings</h3>
+
+<div class="card">
+	<h4>A. stock-acknowledgment rule stated twice</h4>
+	<ul>
+		<li>BASE line 50: <code>don't open replies with stock acknowledgments ("got it", "okay", "sounds good", "great", "thanks for letting me know")...</code></li>
+		<li>Dispatch line 172: <code>do NOT open with stock acknowledgments ("got it", "great", "perfect", "thanks", "moving on", "moving over to a live one", etc.)</code></li>
+	</ul>
+	<p><strong>Action:</strong> Merge banned-word lists into the BASE rule. Drop the dispatch repeat. Keep "moving over to a live one" / "moving on" by folding them into the BASE list.</p>
+</div>
+
+<div class="card">
+	<h4>B. "if they go off-topic, answer briefly then bring it back" stated 4×</h4>
+	<p>setup line 164, dispatch line 195, learning line 232, followup line 259</p>
+	<p><strong>Action:</strong> State once in BASE (<code># how you write</code>), drop from each stage block.</p>
+</div>
+
+<div class="card">
+	<h4>C. "don't describe the demo / break character" — overlapping <em>and</em> partially self-contradictory</h4>
+	<ul>
+		<li>BASE line 39 — no meta about being a demo/llm/ai</li>
+		<li>BASE line 42 — <code>never describe the demo or the flow in the abstract. never say "say a work order comes in"</code></li>
+		<li>Dispatch line 197 — <code>never describe the demo or list the flow. just be in the work order.</code></li>
+		<li>Complete line 284 — <code>never break character. never explain that this was a demo.</code></li>
+	</ul>
+	<p><strong>Tension:</strong> the dispatch transition explicitly frames the scenario as an example ("let's say a tenant at &lt;property&gt; just submitted a maintenance request"). So "never explain that this was a demo" in <em>complete</em> contradicts our own behavior — we ARE acknowledging it's an example.</p>
+	<p><strong>What we actually want:</strong></p>
+	<ol>
+		<li>Bedrock is the product, not an LLM/AI/assistant. Don't talk about model internals or being an AI. (BASE line 39 — keep.)</li>
+		<li>Don't <em>meta-narrate the flow</em> ahead of time ("next i'll show you X then Y"). The demo should feel like a real conversation, not a guided tour. (BASE line 42's intent — keep, reword.)</li>
+		<li>Acknowledging that something is an example or hypothetical scenario is fine and explicitly encouraged at the dispatch transition.</li>
+	</ol>
+	<p><strong>Action:</strong></p>
+	<ul>
+		<li>Reword BASE line 42: "don't narrate the flow in advance ('next i'll show you...', 'now i'll demonstrate...'). framing a scenario as 'let's say' or 'imagine' is fine — that's how a real walk-through reads."</li>
+		<li>Drop dispatch line 197 (subsumed by reworded BASE).</li>
+		<li>In complete, REMOVE "never explain that this was a demo". Keep "never break character" but clarify: "stay in character as bedrock the product (not an llm/ai/assistant). the user knows this was a walk-through; that's fine. what's not fine is suddenly talking about being a model."</li>
+	</ul>
+</div>
+
+<div class="card">
+	<h4>D. "one thought per send_text / multi-message turns expected" stated 2×</h4>
+	<ul>
+		<li>BASE line 48 — <code>one thought per message... never put a line break inside a single send_text</code></li>
+		<li>Followup line 257 — <code>multi-message turns are expected here. one thought per send_text. no line breaks inside a single message.</code></li>
+	</ul>
+	<p><strong>Action:</strong> Drop the followup duplicate.</p>
+</div>
+
+<div class="card">
+	<h4>E. "don't echo property name back as confirmation" duplicates BASE</h4>
+	<ul>
+		<li>Setup line 155 — reminds the model not to echo the property name</li>
+		<li>BASE line 50 — already says <code>don't echo their words back as confirmation ("got it, mariposa")</code></li>
+	</ul>
+	<p><strong>Action:</strong> Drop the explicit reminder in setup.</p>
+</div>
+
+<div class="card">
+	<h4>F. generic "bad replies" example block (lines 100–114) is redundant</h4>
+	<p>That block re-demonstrates the no-stock-acks / no-echoing rule already covered by the rule itself (line 50, "got it, mariposa"), the "i remember the useful stuff" good/bad pair (lines 77–85), and the "what's my name" example (lines 87–96).</p>
+	<p><strong>Action:</strong> Drop lines 100–114. Three good/bad pairs for the same rule cluster is overkill.</p>
+</div>
+
+<div class="card">
+	<h4 class="bad">G. CONFLICT: BASE example contradicts new dispatch rule</h4>
+	<ul>
+		<li>BASE line 41 — <code>write it as if it's already happening ("on it. sending mario, tenant's been notified")</code></li>
+		<li>Dispatch line 181 (recently added) — "sending mario" anticipates the action — use "i texted mario" instead.</li>
+	</ul>
+	<p><strong>Action:</strong> Fix BASE example to <code>"on it. i texted mario, tenant's been notified"</code> so BASE and dispatch agree.</p>
+</div>
+
+<div class="card">
+	<h4>H. learning-stage flow is structurally awkward</h4>
+	<p>Case A and Case B are introduced before "turn 1", but Case B's handling exits the stage entirely (jumps to followup) while Case A continues into "turn 2". The current ordering — Case A → Case B → turn 2 — makes turn 2 read as if it might apply to Case B too, which it doesn't.</p>
+	<p><strong>Action:</strong> Restructure so Case B is an early short-circuit (<code>if a prior observation already exists, do X and skip to followup</code>), then the rest reads linearly as the normal Case A flow.</p>
+</div>
+
+<h3>out of scope for this pass</h3>
+<ul>
+	<li>Stage isolation, eval loop, fine-tune — items 3, 4, 5 in the next batch.</li>
+</ul>
+
+<h3>todos</h3>
+<div class="card">
+	<h4>T1. hardcode B1 closer on followup → complete transition <span class="tag done">done</span></h4>
+	<p>Promote B1 ("that's how we'll usually handle work orders." / "any questions?") from prompt-pinned to truly hardcoded. Fires from the orchestrator when <code>set_demo_stage</code> advances stage from <code>followup</code> to <code>complete</code>. Drop the VERBATIM lines from <code>prompts.mjs</code>.</p>
+</div>
+<div class="card">
+	<h4>T2. out-of-order transitions into <code>complete</code> <span class="tag pinned">deferred</span></h4>
+	<p>T1 only fires on the in-order <code>followup → complete</code> path because "that's how we'll usually handle work orders" doesn't make sense if the user jumped stages. Decide later what should happen if <code>complete</code> is entered from <code>intro</code>, <code>setup</code>, <code>dispatch</code>, or <code>learning</code> — either a different closer or no closer at all.</p>
+</div>
+<div class="card">
+	<h4>T3. break loop after closer fires <span class="tag done">done</span></h4>
+	<p>After the followup→complete closer fires, the orchestrator breaks out of the model loop instead of continuing. The model never sees the complete-stage prompt mid-turn, so the "don't greet / don't re-introduce" rule is no longer needed. The complete-stage prompt now only runs on the user's next message — exactly when its instructions ("you're answering whatever they ask") apply.</p>
+</div>
+
+<h3>verification</h3>
+<p>Prompt-only edit. Verification is a manual end-to-end demo replay:</p>
+<ol>
+	<li><code>rm -rf imessage/demo_agent/data/+15555550199</code> (clears profile + observations to simulate a first-time user).</li>
+	<li>Restart <code>node imessage/demo_agent/imessage.mjs</code> (host process holds in-memory conversation log; restart clears it).</li>
+	<li>Run a fresh demo from "hi" through the closing "any questions?" message. Confirm:
+		<ul>
+			<li>Bot still avoids stock acks ("got it", "great", "moving on") at every turn.</li>
+			<li>On dispatch confirmation, it says "i texted mario" (not "sending mario").</li>
+			<li>On followup turn 2, still emits the verbatim "that's how we'll usually handle work orders." and "any questions?" closer.</li>
+			<li>Going off-topic mid-stage still produces a brief in-character answer plus a redirect.</li>
+		</ul>
+	</li>
+	<li>Run a SECOND demo without wiping data. Confirm the learning stage takes the Case B short-circuit (acknowledges the rule is already on file, skips the "do we always send mario" question, advances to followup).</li>
+	<li>Eyeball the full transcript for any tone regression vs. the most recent good run.</li>
+</ol>
+<p>If any beats regress, the relevant pruned rule needs to be reinstated (most likely candidate: rule B, the most stage-local).</p>
+
+</body>
+</html>
