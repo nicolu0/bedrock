@@ -69,6 +69,10 @@ export async function runTurn(handle, userMessage, opts = {}) {
 	// per-turn capabilities like a `react` callback bound to the incoming
 	// message GUID, without the orchestrator needing to know about iMessage.
 	const ctx = { handle, outbox, ...(opts.ctx || {}) };
+	// Set when a hardcoded closer fires (e.g. followup → complete) and the
+	// turn is genuinely over — we skip the next model iteration so the model
+	// never enters the new stage's prompt mid-turn.
+	let endTurnAfterDispatch = false;
 
 	for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
 		// Refresh the system prompt each iteration so a mid-turn set_demo_stage applies right away.
@@ -144,6 +148,10 @@ export async function runTurn(handle, userMessage, opts = {}) {
 						await onEvent({ type: 'message', content: line });
 						messagesThisIter++;
 					}
+					// The closer is the last word of this turn. Don't run another
+					// model iteration — the model would enter the complete-stage
+					// prompt mid-turn and feel obligated to greet/re-introduce.
+					endTurnAfterDispatch = true;
 				}
 				dispatchedThrough = i;
 			}
@@ -212,6 +220,8 @@ export async function runTurn(handle, userMessage, opts = {}) {
 					content: JSON.stringify(c.result ?? {}),
 				});
 			}
+			// A hardcoded closer fired this iteration — turn is over.
+			if (endTurnAfterDispatch) break;
 			// Loop back for another model call.
 			continue;
 		}

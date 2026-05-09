@@ -317,14 +317,14 @@ msg 2: "i texted mario and emailed the tenant"  or  "texted mario, emailed the t
 
 <div class="card">
 	<ul>
-		<li><strong>stock acks</strong> <code>prompts.mjs:50</code> — "got it", "okay", "sounds good", "great", "perfect", "thanks", "thanks for letting me know", "moving on", "moving over to a live one"</li>
-		<li><strong>echo confirmations</strong> <code>prompts.mjs:50</code> — "got it, mariposa"</li>
-		<li><strong>meta-narration of next message</strong> <code>prompts.mjs:156</code> — "here's what i'd text you", "i'd text you exactly like this", "this is what i would say"</li>
-		<li><strong>pre-narrating the flow</strong> <code>prompts.mjs:42</code> — "next i'll show you...", "now i'll demonstrate..."</li>
-		<li><strong>action-anticipating verbs</strong> <code>prompts.mjs:163–164</code> — "sending mario", "dispatching mario"</li>
-		<li><strong>complete-stage greeting regress</strong> <code>prompts.mjs:235</code> — "what can i help with" / re-introductions after the demo wraps</li>
-		<li><strong>the word "default"</strong> in learning turn 1 <code>prompts.mjs:192</code></li>
-		<li><strong>llm/ai/model/assistant talk</strong> <code>prompts.mjs:39, 254</code></li>
+		<li><strong>stock acks as filler</strong> <code>prompts.mjs:57</code> — opening replies with "got it", "ok", "great", "thanks" as a runway before the real content. allowed when the ack carries meaning ("ok, i'll leave it for now"). banned as warm-up.</li>
+		<li><strong>echo confirmations</strong> <code>prompts.mjs:57</code> — "got it, mariposa" (parroting their words back)</li>
+		<li><strong>meta-narration of next message</strong> <code>prompts.mjs:163</code> — "here's what i'd text you", "i'd text you exactly like this" (talking about the message instead of sending it)</li>
+		<li><strong>flow-narration in advance</strong> <code>prompts.mjs:49</code> — "next i'll show you...", "now i'll demonstrate..." (exposing the demo's outline). scenario framing like "let's say" / "imagine" is explicitly fine.</li>
+		<li><strong>completed actions in past tense</strong> <code>prompts.mjs:163–164, 170–171</code> — by the time the user reads "i texted mario", the action is already done. "sending mario" / "dispatching mario" anticipate an action that's already complete.</li>
+		<li><strong>the word "default"</strong> in learning turn 1 <code>prompts.mjs:199</code></li>
+		<li><strong>llm/ai/model/assistant talk</strong> <code>prompts.mjs:46, 257</code></li>
+		<li><strong>complete-stage greeting regress</strong> <span class="tag done">handled by mechanics</span> — used to be a prompt rule. Now solved by the orchestrator breaking the loop after the closer fires (T1 + T3), so the model never enters the complete-stage prompt mid-turn.</li>
 	</ul>
 </div>
 
@@ -453,6 +453,10 @@ msg 2: "i texted mario and emailed the tenant"  or  "texted mario, emailed the t
 <div class="card">
 	<h4>T2. out-of-order transitions into <code>complete</code> <span class="tag pinned">deferred</span></h4>
 	<p>T1 only fires on the in-order <code>followup → complete</code> path because "that's how we'll usually handle work orders" doesn't make sense if the user jumped stages. Decide later what should happen if <code>complete</code> is entered from <code>intro</code>, <code>setup</code>, <code>dispatch</code>, or <code>learning</code> — either a different closer or no closer at all.</p>
+</div>
+<div class="card">
+	<h4>T3. break loop after closer fires <span class="tag done">done</span></h4>
+	<p>After the followup→complete closer fires, the orchestrator breaks out of the model loop instead of continuing. The model never sees the complete-stage prompt mid-turn, so the "don't greet / don't re-introduce" rule is no longer needed. The complete-stage prompt now only runs on the user's next message — exactly when its instructions ("you're answering whatever they ask") apply.</p>
 </div>
 
 <h3>verification</h3>
