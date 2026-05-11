@@ -1,29 +1,24 @@
 #!/usr/bin/env node
-// iMessage entrypoint for demo_agent.
-//
-// Polls chat.db for incoming messages from unknown numbers, hands each one to
+// Main server entrypoint. Stands up the IPC listener (via the imessage helper),
+// watches chat.db for incoming messages from unknown numbers, hands each one to
 // the orchestrator, and maps the orchestrator's event stream to real iMessage
 // signals via the injected MessagesHelper bundle:
 //   read        -> markRead(chatGuid)        (Read receipt on the sender's phone)
 //   typing      -> setTyping(chatGuid, true) (the "..." dots)
-//   message     -> setTyping(false) + send via AppleScript
+//   message     -> setTyping(false) + send via dylib
 //   tool_call   -> just log
 //
-// Setup prerequisites are documented in imessage/native/README.md. Run:
-//   imessage/native/run-messages.sh        # in one terminal
-//   node imessage/demo_agent/imessage.mjs  # in another
+// Setup prerequisites are documented in imessage/README.md. Run:
+//   agent/imessage/run-messages.sh    # in one terminal
+//   node agent/server.mjs             # in another
 
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
-import { helper } from '../imessage-helper.mjs';
+import { helper } from './imessage/helper.mjs';
 import { runTurn } from './core/orchestrator.mjs';
-
-const execFileAsync = promisify(execFile);
 
 const POLL_INTERVAL_MS = 1000;
 const HELPER_ENABLED = process.env.HELPER_DISABLED !== '1';
@@ -46,10 +41,8 @@ function sleep(ms) {
 }
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const REPO_IMESSAGE_DIR = path.join(SCRIPT_DIR, '..');
 const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db');
 const STATE_PATH = path.join(SCRIPT_DIR, '.imessage-state.json');
-const APPLESCRIPT_SEND = path.join(REPO_IMESSAGE_DIR, 'scripts', 'send.applescript');
 
 // Real customer/vendor handles — incoming messages from these are ignored so
 // testing doesn't hijack real conversations. E.164 phone numbers or email.
@@ -77,12 +70,11 @@ async function loadDotEnv(p) {
 	} catch { /* optional */ }
 }
 
-await loadDotEnv(path.join(SCRIPT_DIR, '..', '..', '.env'));
 await loadDotEnv(path.join(SCRIPT_DIR, '..', '.env'));
 await loadDotEnv(path.join(SCRIPT_DIR, '.env'));
 
 if (!process.env.OPENAI_API_KEY) {
-	console.log('OPENAI_API_KEY not set — checked .env in repo root, imessage/, and demo_agent/');
+	console.log('OPENAI_API_KEY not set — checked .env in repo root and agent/');
 	process.exit(1);
 }
 
@@ -233,14 +225,10 @@ async function setTyping(chatGuid, typing) {
 
 // ── Send ───────────────────────────────────────────────────────────────────────
 
-async function sendPart(chatGuid, handle, text) {
-	try {
-		await execFileAsync('osascript', [APPLESCRIPT_SEND, chatGuid || '', handle, text]);
-		return true;
-	} catch (err) {
-		log(`applescript error: ${err.message}`);
-		return false;
-	}
+async function sendPart(chatGuid, _handle, text) {
+	const r = await helper.send(chatGuid, text);
+	if (!r.ok) log(`send failed: ${r.error}`);
+	return r.ok;
 }
 
 // ── Main flow per incoming message ─────────────────────────────────────────────
@@ -347,7 +335,7 @@ async function main() {
 	}
 	if (DEMO_HANDLE) log(`scoped to DEMO_HANDLE=${DEMO_HANDLE}`);
 
-	log(`demo_agent imessage started (poll=${POLL_INTERVAL_MS}ms, lastRow=${state.lastSeenRowId})`);
+	log(`agent server started (poll=${POLL_INTERVAL_MS}ms, lastRow=${state.lastSeenRowId})`);
 
 	setInterval(async () => {
 		if (polling) return;

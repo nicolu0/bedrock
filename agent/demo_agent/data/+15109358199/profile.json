@@ -1,0 +1,5 @@
+{
+  "system/stage": "dispatch",
+  "property/mariposa": "true",
+  "vendor/plumbing/mariposa": "mario"
+}

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// CLI testbed for the demo_agent. No iMessage in the loop.
-//   node demo_agent/cli.mjs [handle]
+// CLI testbed for the agent. No iMessage in the loop.
+//   node agent/cli.mjs [handle]
 // Commands:
 //   :state            print profile + recent observations
 //   :reset            wipe this handle's memory + conversation
@@ -42,16 +42,15 @@ const CLEAR_LINE = '\r\x1b[2K';
 
 const handle = process.argv[2] || '+15555550100';
 
-await loadDotEnv(path.join(SCRIPT_DIR, '..', '..', '.env'));
 await loadDotEnv(path.join(SCRIPT_DIR, '..', '.env'));
 await loadDotEnv(path.join(SCRIPT_DIR, '.env'));
 
 if (!process.env.OPENAI_API_KEY) {
-	console.log(red('OPENAI_API_KEY not set — checked .env in repo root, imessage/, and demo_agent/'));
+	console.log(red('OPENAI_API_KEY not set — checked .env in repo root and agent/'));
 	process.exit(1);
 }
 
-console.log(dim(`bedrock demo_agent cli  handle=${handle}  model=${process.env.OPENAI_MODEL || 'gpt-5.4-2026-03-05'}`));
+console.log(dim(`bedrock agent cli  handle=${handle}  model=${process.env.OPENAI_MODEL || 'gpt-5.4-2026-03-05'}`));
 console.log(dim(`commands: :state  :reset  :replay <file>  :exit`));
 
 let typingShown = false;

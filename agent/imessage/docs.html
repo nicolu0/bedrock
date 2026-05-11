@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MessagesHelper — how the native bridge works</title>
+<style>
+	:root {
+		--bg: #fbfaf7;
+		--fg: #1a1a1a;
+		--muted: #6b6b6b;
+		--accent: #c75b39;
+		--rule: #e4e0d8;
+		--code-bg: #f1ede4;
+		--box-bg: #fff;
+	}
+	html, body { background: var(--bg); color: var(--fg); }
+	body {
+		font: 16px/1.6 -apple-system, "SF Pro Text", Helvetica, Arial, sans-serif;
+		max-width: 760px;
+		margin: 3rem auto;
+		padding: 0 1.5rem 4rem;
+	}
+	h1, h2, h3 { font-family: "SF Pro Display", -apple-system, Helvetica, sans-serif; line-height: 1.2; }
+	h1 { font-size: 2rem; margin-bottom: 0.25rem; }
+	h1 + .sub { color: var(--muted); margin-top: 0; margin-bottom: 2.5rem; }
+	h2 { margin-top: 2.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--rule); }
+	h3 { margin-top: 1.8rem; font-size: 1.05rem; color: var(--accent); }
+	code, pre { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; }
+	code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+	pre {
+		background: var(--code-bg);
+		padding: 0.9rem 1rem;
+		border-radius: 6px;
+		overflow-x: auto;
+		line-height: 1.45;
+	}
+	pre code { background: none; padding: 0; }
+	.diagram {
+		background: var(--box-bg);
+		border: 1px solid var(--rule);
+		padding: 1.2rem 1.4rem;
+		border-radius: 6px;
+		font-family: "SF Mono", Menlo, monospace;
+		font-size: 0.82rem;
+		line-height: 1.5;
+		white-space: pre;
+		overflow-x: auto;
+	}
+	.callout {
+		background: #fff7f0;
+		border-left: 3px solid var(--accent);
+		padding: 0.8rem 1rem;
+		margin: 1.2rem 0;
+		border-radius: 0 4px 4px 0;
+	}
+	.callout strong { color: var(--accent); }
+	a { color: var(--accent); }
+	ul, ol { padding-left: 1.4rem; }
+	li { margin-bottom: 0.4rem; }
+	table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.93em; }
+	th, td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--rule); }
+	th { background: var(--code-bg); }
+	footer { margin-top: 4rem; color: var(--muted); font-size: 0.85em; border-top: 1px solid var(--rule); padding-top: 1rem; }
+</style>
+</head>
+<body>
+
+<h1>MessagesHelper</h1>
+<p class="sub">How the demo agent makes Messages.app fire real typing dots, read receipts, and tapbacks.</p>
+
+<h2>The big picture</h2>
+
+<p>
+The demo agent needs to feel like a real person texting from a Mac. That means
+three things that AppleScript cannot do: turn the <strong>typing dots</strong> on
+and off, fire <strong>read receipts</strong>, and send <strong>tapbacks</strong>
+(heart, laugh, etc.). Those signals are emitted by Messages.app itself when it
+calls private Objective-C methods inside Apple's internal <code>IMCore</code>
+framework.
+</p>
+
+<p>
+The only way to make those signals fire from the outside is to load our own code
+<em>into</em> Messages.app, so it runs with Messages.app's privileges and direct
+access to those private methods. That code is <code>MessagesHelper.dylib</code>,
+and the system that gets it talking back to our Node agent is what this doc
+describes.
+</p>
+
+<div class="diagram">
+   demo_agent/imessage.mjs              Messages.app process
+  ┌─────────────────────────┐          ┌─────────────────────────┐
+  │                         │          │                         │
+  │   imessage-helper.mjs   │  TCP     │   MessagesHelper.dylib  │
+  │   (TCP server :9772)    │◄─────────│   (TCP client)          │
+  │                         │  JSON    │            │            │
+  └────────────┬────────────┘          │            ▼            │
+               │                       │   private IMCore calls  │
+               │ helper.markRead()     │   - setLocalUserIsTyping│
+               │ helper.setTyping()    │   - markAllMessagesAsRead│
+               │ helper.react()        │   - sendMessage (tapback)│
+               │                       │                         │
+               ▼                       └─────────────────────────┘
+  send via AppleScript                          │
+  (scripts/send.applescript)                    ▼
+                                          real iMessage UI
+</div>
+
+<h2>The three pieces</h2>
+
+<table>
+<tr><th>File</th><th>Role</th></tr>
+<tr><td><code>native/MessagesHelper/MessagesHelper.m</code></td><td>Objective-C source. Compiled to a dylib. Runs <em>inside</em> Messages.app and calls private IMCore methods.</td></tr>
+<tr><td><code>native/run-messages.sh</code></td><td>Launches Messages.app with the dylib injected via <code>DYLD_INSERT_LIBRARIES</code>.</td></tr>
+<tr><td><code>imessage-helper.mjs</code></td><td>Node-side TCP server on <code>127.0.0.1:9772</code>. The dylib dials in. Exposes a clean JS API (<code>helper.markRead</code>, <code>helper.setTyping</code>, <code>helper.react</code>, <code>helper.ping</code>) that <code>demo_agent/imessage.mjs</code> imports and calls.</td></tr>
+</table>
+
+<p>
+So when you ask "what connects the demo agent to the native stuff?" — that's
+<code>imessage-helper.mjs</code>. It's the only file the agent code imports
+directly; everything below it (the socket, the dylib, the IMCore calls) is
+hidden behind that one module's API.
+</p>
+
+<h2>Two design choices that look weird but aren't</h2>
+
+<h3>Why inject code instead of just using AppleScript?</h3>
+<p>
+AppleScript drives Messages.app from the outside via Apple Events. That's enough
+to send and read messages, but the typing indicator, read-receipt, and tapback
+methods aren't exposed to AppleScript. They live on private classes
+(<code>IMChat</code>, <code>IMChatRegistry</code>) that are only reachable from
+<em>inside</em> the Messages.app process. Hence the dylib.
+</p>
+
+<h3>Why does Messages.app dial out to us, instead of us calling in?</h3>
+<p>
+Messages.app runs under Apple's app sandbox. Its sandbox profile grants the
+<code>network.client</code> entitlement (outbound <code>connect()</code> is
+fine) but not <code>network.server</code> (inbound <code>bind()</code> /
+<code>listen()</code> is blocked). So an in-process server would never accept a
+connection.
+</p>
+<p>
+The fix is to invert the IPC: <strong>our Node process is the server</strong>,
+listening on <code>127.0.0.1:9772</code>, and the dylib inside Messages.app is
+the <strong>client</strong>, dialing out the moment it loads. Once the socket is
+up, both sides exchange newline-delimited JSON requests with monotonic IDs.
+</p>
+
+<h2>Wire format</h2>
+
+<p>One JSON object per line. Every request gets exactly one response with the same <code>id</code>.</p>
+
+<pre><code>// agent  -> helper
+{"id":1,"op":"ping"}
+// helper -> agent
+{"id":1,"ok":true,"pid":12345}
+
+// agent  -> helper
+{"id":2,"op":"markRead","chatGuid":"iMessage;-;+15551234567"}
+// helper -> agent
+{"id":2,"ok":true}
+
+// agent  -> helper
+{"id":3,"op":"setTyping","chatGuid":"iMessage;-;+15551234567","typing":true}
+// helper -> agent
+{"id":3,"ok":true}
+
+// agent  -> helper
+{"id":4,"op":"react","chatGuid":"...","messageGuid":"...","reactionType":"love","summaryText":"hello"}
+// helper -> agent
+{"id":4,"ok":true}
+</code></pre>
+
+<p>
+If the agent restarts, the dylib reconnects with backoff. Any in-flight requests
+are resolved as <code>{ok:false,error:"helper disconnected"}</code> so callers
+never hang.
+</p>
+
+<h2>Why this needs a relaxed system config</h2>
+
+<p>
+macOS would normally refuse to inject an unsigned dylib into a hardened-runtime
+app like Messages.app. To get it to allow this on the Mac mini we did three
+one-time things:
+</p>
+
+<ol>
+	<li><strong>Disabled Library Validation</strong> system-wide so dyld won't reject our unsigned <code>.dylib</code>.</li>
+	<li><strong>Disabled SIP entirely</strong> from Recovery (<code>csrutil disable</code>) so the kernel allows <code>DYLD_INSERT_LIBRARIES</code> against a system app.</li>
+	<li><strong>Set the <code>-arm64e_preview_abi</code> boot-arg</strong> via <code>nvram</code>, so dyld will load arm64e third-party binaries (Messages.app on Apple Silicon is arm64e and won't accept an arm64-only library).</li>
+</ol>
+
+<div class="callout">
+<strong>Heads-up:</strong> this configuration is permissive on purpose, scoped to
+this dedicated Mac mini. Don't replicate it on a daily-driver machine —
+disabling SIP and library validation removes some of macOS's strongest defenses
+against malicious code.
+</div>
+
+<h2>Day-to-day usage</h2>
+
+<p>One-time, after every code change to the dylib:</p>
+<pre><code>cd imessage/native/MessagesHelper && make</code></pre>
+
+<p>Each session you want the agent live:</p>
+<pre><code># terminal 1: relaunch Messages.app with the helper injected
+imessage/native/run-messages.sh
+
+# terminal 2: start the agent — it listens on :9772 and waits for the
+# helper to dial in (happens within ~1s of Messages launching)
+node imessage/demo_agent/imessage.mjs</code></pre>
+
+<p>
+The agent will print <code>helper online (Messages.app pid=…)</code> once the
+dylib has connected and answered a <code>ping</code>. From that point on, every
+<code>helper.markRead</code> / <code>setTyping</code> / <code>react</code> call
+in the agent code shows up as a real signal on the recipient's phone.
+</p>
+
+<h2>Common breakage</h2>
+
+<table>
+<tr><th>Symptom</th><th>Likely cause</th></tr>
+<tr><td>The dylib's <code>+load</code> never logs in Console.app (filter on <code>MessagesHelper</code>)</td><td>SIP isn't fully disabled, or library validation got re-enabled, or the dylib was built as plain <code>arm64</code> instead of <code>arm64e</code> (check with <code>lipo -info</code>).</td></tr>
+<tr><td><code>+load</code> logs but the helper never connects to the agent</td><td>The Node agent isn't listening on <code>:9772</code> yet. Start it first, or check <code>lsof -i :9772</code>.</td></tr>
+<tr><td>Calls return <code>chat not found</code></td><td><code>IMChatRegistry</code> only knows about chats that have been opened in this Messages.app session. Send or receive one message in the thread to populate it, then retry.</td></tr>
+<tr><td>It used to work, now nothing fires</td><td>Major macOS update. Private <code>IMCore</code> method signatures change between OS versions — re-verify <code>setLocalUserIsTyping:</code> and <code>markAllMessagesAsRead</code> still exist on <code>IMChat</code>.</td></tr>
+</table>
+
+<footer>
+For source-level details see <code>MessagesHelper.m</code> and the README in this directory.
+</footer>
+
+</body>
+</html>
