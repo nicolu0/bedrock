@@ -1,4 +1,4 @@
-// Memory primitives for the demo_agent.
+// Memory primitives for the agent.
 // Per-handle JSON-file storage:
 //   data/<handle>/profile.json       — canonical slug → value
 //   data/<handle>/observations.jsonl — append-only fuzzy notes

@@ -5,7 +5,7 @@
 // network.client entitlement allows outbound connect). Once connected we
 // stream newline-delimited JSON requests with monotonic ids.
 //
-// Public API (unchanged from before): helper.ping / markRead / setTyping.
+// Public API: helper.ping / markRead / setTyping / react / send.
 // Each call resolves to {ok, ...} or {ok:false, error:...}. Never throws.
 
 import net from 'node:net';
@@ -109,6 +109,7 @@ export const helper = {
 	// recipients on devices that don't render tapbacks natively.
 	react: (chatGuid, messageGuid, reactionType, summaryText) =>
 		call({ op: 'react', chatGuid, messageGuid, reactionType, summaryText: summaryText ?? '' }),
+	send: (chatGuid, text) => call({ op: 'send', chatGuid, text }),
 };
 
 // Auto-start the listener on import — callers don't need to do anything.

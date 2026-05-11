@@ -36,6 +36,11 @@
          associatedMessageType:(long long)associatedMessageType
         associatedMessageRange:(NSRange)associatedMessageRange
             messageSummaryInfo:(NSDictionary *)messageSummaryInfo;
++ (instancetype)instantMessageWithText:(NSAttributedString *)text
+                        messageSubject:(NSAttributedString *)subject
+                     fileTransferGUIDs:(NSArray *)guids
+                                 flags:(uint64_t)flags
+                      threadIdentifier:(NSString *)threadIdentifier;
 @end
 
 @interface IMChat : NSObject
@@ -143,6 +148,33 @@ static NSDictionary *handleRequest(NSDictionary *req) {
 			BOOL t = [req[@"typing"] boolValue];
 			[chat setLocalUserIsTyping:t];
 			os_log(mhlog, "setTyping %{public}@ -> %d", guid, t);
+			resp[@"ok"] = @YES;
+			return resp;
+		}
+		if ([op isEqualToString:@"send"]) {
+			IMChat *chat = resolveChat(guid);
+			if (!chat) { resp[@"ok"] = @NO; resp[@"error"] = @"chat not found"; return resp; }
+			NSString *text = req[@"text"];
+			if (!text.length) { resp[@"ok"] = @NO; resp[@"error"] = @"missing text"; return resp; }
+
+			Class IMMessageClass = NSClassFromString(@"IMMessage");
+			if (!IMMessageClass) {
+				resp[@"ok"] = @NO; resp[@"error"] = @"IMMessage class not loaded"; return resp;
+			}
+
+			NSAttributedString *body = [[NSAttributedString alloc] initWithString:text];
+			// flags 0x100005 is what BlueBubbles/IMCore use for normal outgoing
+			// text — finalized message bit + outgoing bit. Plain 0 leaves the
+			// message in a draft-like state (typing dots, no send).
+			IMMessage *m = [IMMessageClass instantMessageWithText:body
+			                                       messageSubject:nil
+			                                    fileTransferGUIDs:nil
+			                                                flags:0x100005
+			                                     threadIdentifier:nil];
+			if (!m) { resp[@"ok"] = @NO; resp[@"error"] = @"failed to build IMMessage"; return resp; }
+
+			[chat sendMessage:m];
+			os_log(mhlog, "send %{public}@ (%lu chars)", guid, (unsigned long)text.length);
 			resp[@"ok"] = @YES;
 			return resp;
 		}

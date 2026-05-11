@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>agent/ architecture</title>
+<style>
+  :root {
+    --bg: #14110d;
+    --fg: #e8e4dc;
+    --muted: #8a8378;
+    --accent: #e8794f;
+    --rule: #2a2520;
+    --code-bg: #1e1a15;
+    --box-bg: #1a1612;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--fg); overflow-x: clip; }
+  body {
+    font: 16px/1.6 -apple-system, "SF Pro Text", Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+  img, svg, video, canvas { max-width: 100%; height: auto; }
+  pre, .tree { max-width: 100%; overflow-x: auto; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 48px;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 32px 100px;
+  }
+  .wrap { min-width: 0; }
+
+  aside.sidebar {
+    position: sticky;
+    top: 32px;
+    align-self: start;
+    max-height: calc(100vh - 64px);
+    overflow-y: auto;
+    padding-right: 8px;
+  }
+  aside.sidebar .eyebrow {
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 10px;
+  }
+  aside.sidebar ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    counter-reset: navsec;
+  }
+  aside.sidebar li { margin: 0; }
+  aside.sidebar a {
+    display: block;
+    padding: 7px 10px 7px 14px;
+    border-left: 2px solid transparent;
+    color: var(--muted);
+    font-size: 13.5px;
+    line-height: 1.35;
+    border-radius: 0 4px 4px 0;
+    text-decoration: none;
+    counter-increment: navsec;
+  }
+  aside.sidebar a::before {
+    content: counter(navsec) " · ";
+    color: var(--muted);
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+  }
+  aside.sidebar a:hover {
+    color: var(--fg);
+    background: var(--box-bg);
+    text-decoration: none;
+    border-left-color: var(--rule);
+  }
+  aside.sidebar a.active {
+    color: var(--accent);
+    background: var(--box-bg);
+    border-left-color: var(--accent);
+  }
+
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; gap: 24px; padding: 32px 20px 80px; }
+    aside.sidebar { position: static; max-height: none; padding-right: 0; }
+    aside.sidebar ol { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  }
+
+  h1, h2, h3 { font-family: "SF Pro Display", -apple-system, Helvetica, sans-serif; line-height: 1.2; }
+  h1 { font-size: 2rem; margin-bottom: 0.25rem; }
+  h1 + .sub { color: var(--muted); margin-top: 0; margin-bottom: 2.5rem; }
+  h2 { margin-top: 2.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--rule); }
+  h3 { margin-top: 1.8rem; font-size: 1.05rem; color: var(--accent); }
+  code, pre { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre {
+    background: var(--code-bg);
+    padding: 0.9rem 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; }
+  .tree {
+    background: var(--box-bg);
+    border: 1px solid var(--rule);
+    padding: 1.2rem 1.4rem;
+    border-radius: 6px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 0.84rem;
+    line-height: 1.55;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .tree .note { color: var(--muted); }
+  .callout {
+    background: #1f1813;
+    border-left: 3px solid var(--accent);
+    padding: 0.8rem 1rem;
+    margin: 1.2rem 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .callout strong { color: var(--accent); }
+  a { color: var(--accent); }
+  ul, ol { padding-left: 1.4rem; }
+  li { margin-bottom: 0.4rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92em; }
+  th, td { text-align: left; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { background: var(--code-bg); }
+  td.path { font-family: "SF Mono", Menlo, monospace; font-size: 0.85em; white-space: nowrap; color: var(--muted); }
+  footer { margin-top: 4rem; color: var(--muted); font-size: 0.85em; border-top: 1px solid var(--rule); padding-top: 1rem; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+<aside class="sidebar" aria-label="Contents">
+  <span class="eyebrow">Contents</span>
+  <nav>
+    <ol>
+      <li><a href="#layout">Layout</a></li>
+      <li><a href="#layers">The two layers</a></li>
+      <li><a href="#entry-points">Entry points</a></li>
+      <li><a href="#flow">Message flow</a></li>
+      <li><a href="#core">core/</a></li>
+      <li><a href="#imessage">imessage/</a></li>
+      <li><a href="#dev-tools">dev_tools/</a></li>
+      <li><a href="#running">Running it</a></li>
+    </ol>
+  </nav>
+</aside>
+
+<div class="wrap">
+
+<h1>agent/</h1>
+<p class="sub">An LLM-driven iMessage agent for property managers. This document describes how the directory is laid out and how the pieces fit together.</p>
+
+<h2 id="layout">Layout</h2>
+
+<div class="tree">agent/
+├── server.mjs        <span class="note">main entry — iMessage transport + poll loop</span>
+├── cli.mjs           <span class="note">REPL testbed (no iMessage)</span>
+├── core/             <span class="note">model-driven turn logic, independent of transport</span>
+│   ├── orchestrator.mjs
+│   ├── prompts.mjs
+│   ├── tools.mjs
+│   └── memory.mjs
+├── data/             <span class="note">per-handle profile.json + observations.jsonl</span>
+├── imessage/         <span class="note">Messages.app bridge library</span>
+│   ├── helper.mjs
+│   ├── MessagesHelper/   <span class="note">.dylib injected into Messages.app</span>
+│   ├── run-messages.sh
+│   ├── docs.html
+│   └── README.md
+├── dev_tools/        <span class="note">manual / developer-only utilities</span>
+│   ├── issues_poller.mjs
+│   └── inject-draft.applescript
+└── docs/             <span class="note">design docs (SPEC, prompt notes)</span>
+    ├── SPEC.html
+    └── prompt_refactor.html</div>
+
+<h2 id="layers">The two layers</h2>
+
+<p>
+The directory splits cleanly along one seam: <strong>transport</strong> vs.
+<strong>agent logic</strong>. Everything in <code>core/</code> is pure &mdash; it
+takes a handle and a user message and emits an event stream. Everything in
+<code>imessage/</code> + <code>server.mjs</code> deals with the Messages.app side:
+watching <code>chat.db</code>, sending replies, driving the typing dots and read
+receipts.
+</p>
+
+<p>
+Because the seam is clean, <code>cli.mjs</code> can run the same orchestrator with
+no iMessage in the loop &mdash; it just prints events to the terminal. Useful for
+iterating on prompts without spamming a real phone.
+</p>
+
+<h2 id="entry-points">Entry points</h2>
+
+<table>
+  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="path">node agent/server.mjs</td>
+      <td>The product. Polls <code>chat.db</code> for unread messages from unknown numbers, runs a turn through the orchestrator, and ships replies via the dylib bridge. Filters out known customer/vendor handles so testing doesn't hijack real conversations.</td>
+    </tr>
+    <tr>
+      <td class="path">agent/imessage/run-messages.sh</td>
+      <td>Launches Messages.app with <code>MessagesHelper.dylib</code> injected. Must be running before <code>server.mjs</code> &mdash; the helper dials out to the JS-side TCP listener on port 9772.</td>
+    </tr>
+    <tr>
+      <td class="path">node agent/cli.mjs [handle]</td>
+      <td>REPL testbed. Same orchestrator, no Messages.app. Has <code>:state</code>, <code>:reset</code>, <code>:replay</code> commands.</td>
+    </tr>
+    <tr>
+      <td class="path">node agent/dev_tools/issues_poller.mjs</td>
+      <td>Manual workflow: polls Supabase for new tenant work-order requests and injects drafts via the clipboard. Separate from the agent until drafting + sending is wired into <code>core/</code>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="flow">How a message flows through</h2>
+
+<ol>
+  <li><strong>chat.db poll.</strong> <code>server.mjs</code> queries the SQLite database every 1s for new <code>iMessage</code> rows in 1:1 chats (no group chats, no attachments). macOS Ventura+ stores message text in an <code>NSAttributedString</code> blob &mdash; <code>extractText()</code> lifts the UTF-8 string out.</li>
+  <li><strong>Filter.</strong> Drop messages from known handles (real customers/vendors), drop messages already processed (<code>state.processed</code> in <code>.imessage-state.json</code>), drop self-sent messages.</li>
+  <li><strong>Per-handle serialization.</strong> An <code>inflight</code> map chains turns per handle, so a fast follow-up doesn't race the in-flight turn. Different chats stay parallel.</li>
+  <li><strong>Orchestrator.</strong> <code>runTurn(handle, text, { onEvent, ctx })</code> appends to in-memory conversation history, builds the system prompt from the current <code>system/stage</code> (intro → setup → dispatch → learning → followup → complete), and streams the OpenAI chat completion.</li>
+  <li><strong>Tool dispatch.</strong> Tool calls are dispatched <em>inline as the stream produces them</em> &mdash; each call's args parse, the tool runs, and the result feeds back into the next iteration. <code>send_text</code> calls become <code>message</code> events; everything else becomes <code>tool_call</code> events.</li>
+  <li><strong>Transport mapping.</strong> <code>server.mjs</code>'s <code>onEvent</code> handler maps events to dylib calls: <code>read</code> → <code>markRead</code>; <code>message</code> → <code>setTyping(true)</code>, dwell, <code>setTyping(false)</code>, <code>send</code>. Typing dwell scales with message length so a short reply doesn't feel as instant as a long one.</li>
+</ol>
+
+<div class="callout">
+<strong>Why typing dots are tied to <em>messages</em>, not <em>typing</em> events.</strong>
+The orchestrator emits a <code>typing</code> event at the start of every model
+iteration, including the final no-op one where the model returns no more tool
+calls. Reacting to those events directly causes a ghost flash of dots after the
+last message. Dots come on only immediately before a real message ships &mdash;
+mirroring how iMessage works in real life.
+</div>
+
+<h2 id="core"><code>core/</code> &mdash; the agent</h2>
+
+<table>
+  <thead><tr><th>File</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td class="path">orchestrator.mjs</td><td>Streaming tool-call loop. One <code>runTurn</code> per user message. Re-reads the stage at every iteration so a mid-turn <code>set_demo_stage</code> applies on the next loop. Has a hardcoded opener (no model call on first turn) and a hardcoded closer for the followup → complete transition.</td></tr>
+    <tr><td class="path">prompts.mjs</td><td>Per-stage system prompts plus the canned <code>OPENER_MESSAGES</code> and <code>FOLLOWUP_COMPLETE_CLOSER</code> lines.</td></tr>
+    <tr><td class="path">tools.mjs</td><td>OpenAI function-calling tool definitions and their implementations: <code>send_text</code>, <code>update_profile</code>, <code>get_profile</code>, <code>add_observation</code>, <code>recall</code>, <code>list_properties</code>, <code>list_vendors</code>, <code>react_to_message</code>, <code>set_demo_stage</code>.</td></tr>
+    <tr><td class="path">memory.mjs</td><td>Per-handle JSON-file storage. <code>profile.json</code> is a flat slug → value map (slugs like <code>user/name</code>, <code>property/&lt;slug&gt;/units</code>, <code>vendor/&lt;trade&gt;/&lt;property-slug&gt;</code>). <code>observations.jsonl</code> is append-only fuzzy notes with naive substring-overlap recall.</td></tr>
+  </tbody>
+</table>
+
+<h3>Memory model</h3>
+
+<p>
+Two slots, deliberately. <strong>Profile</strong> is for facts that belong on a key
+&mdash; a property's unit count, a vendor's name for a trade. The slug shape
+(<code>vendor/plumbing/oak-st</code>) makes <code>listProperties</code> /
+<code>listVendors</code> trivial prefix scans. <strong>Observations</strong> are
+fuzzy &mdash; preferences, anecdotes, context that doesn't fit a slug. Recall is
+keyword-substring with hit-count ranking, not embeddings; cheap and good enough
+for now.
+</p>
+
+<h3>Demo state machine</h3>
+
+<p>
+A new handle starts at the <code>intro</code> stage. The model advances by calling
+<code>set_demo_stage</code>: setup → dispatch → learning → followup → complete.
+Each stage has its own system prompt block. The orchestrator refreshes the prompt
+every loop iteration, so the stage can change mid-turn. The
+<code>followup → complete</code> transition is the one place we override the
+model: a hardcoded closer ships and the turn ends, so the model never enters the
+complete-stage prompt mid-turn and feels obligated to greet again.
+</p>
+
+<h2 id="imessage"><code>imessage/</code> &mdash; the bridge</h2>
+
+<p>
+Messages.app is sandboxed and can't bind a TCP listener, but its
+<code>network.client</code> entitlement allows outbound connect. So the topology
+is inverted from what you'd expect: <strong>the JS process listens on
+<code>127.0.0.1:9772</code>; the dylib inside Messages.app dials out</strong>.
+Once connected, both sides exchange newline-delimited JSON requests with
+monotonic ids.
+</p>
+
+<p>
+<code>helper.mjs</code> exposes the surface:
+</p>
+
+<pre><code>helper.ping()
+helper.markRead(chatGuid)
+helper.setTyping(chatGuid, typing)
+helper.react(chatGuid, messageGuid, reactionType, summaryText)
+helper.send(chatGuid, text)</code></pre>
+
+<p>
+Every call resolves to <code>{ ok, ... }</code> or <code>{ ok: false, error }</code>
+&mdash; never throws. <code>send</code> replaced an earlier
+<code>osascript</code>-shelling approach so all four operations now share one
+channel. See <code>imessage/docs.html</code> for the dylib internals.
+</p>
+
+<h2 id="dev-tools"><code>dev_tools/</code> &mdash; manual utilities</h2>
+
+<p>
+<code>issues_poller.mjs</code> polls Supabase for new tenant work-order requests
+and injects drafts into Messages.app via clipboard paste
+(<code>inject-draft.applescript</code>). It is run by hand, not part of the
+product. When the agent itself can draft and send work-order replies, the useful
+parts (Supabase polling) lift into <code>core/</code> or <code>server.mjs</code>;
+the rest gets retired.
+</p>
+
+<h2 id="running">Running it</h2>
+
+<pre><code># terminal 1: launch Messages.app with the dylib injected
+agent/imessage/run-messages.sh
+
+# terminal 2: start the agent server
+node agent/server.mjs
+
+# or, no iMessage:
+node agent/cli.mjs +15555550100</code></pre>
+
+<p>
+Requires <code>OPENAI_API_KEY</code> in <code>.env</code> (repo root or
+<code>agent/.env</code>). Optional <code>DEMO_HANDLE</code> scopes the server to a
+single handle for safe testing; <code>HELPER_DISABLED=1</code> skips the dylib
+calls (no typing dots / read receipts) for orchestrator-only debugging.
+</p>
+
+<footer>
+<code>agent/README.html</code>. Companion to <code>imessage/docs.html</code> (native bridge internals) and <code>docs/SPEC.html</code> (demo behavior spec).
+</footer>
+
+</div>
+</div>
+
+<script>
+  (function () {
+    var links = document.querySelectorAll('aside.sidebar a[href^="#"]');
+    var map = {};
+    var sections = [];
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      var el = document.getElementById(id);
+      if (el) { map[id] = a; sections.push(el); }
+    });
+    if (!('IntersectionObserver' in window) || sections.length === 0) return;
+    var current = null;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          if (current) current.classList.remove('active');
+          var link = map[e.target.id];
+          if (link) { link.classList.add('active'); current = link; }
+        }
+      });
+    }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });
+    sections.forEach(function (s) { io.observe(s); });
+  })();
+</script>
+
+</body>
+</html>

@@ -51,17 +51,17 @@ dylib into Messages.app.
 ```
 # build the dylib (and the .bundle, kept around in case we ever want to
 # revisit the MacForge route)
-cd imessage/native/MessagesHelper && make
+cd agent/imessage/MessagesHelper && make
 
 # in one terminal: launch Messages with the helper injected
-imessage/native/run-messages.sh
+agent/imessage/run-messages.sh
 
 # in another terminal: run the agent (it listens on :9772 and waits for the
 # helper to dial in, which happens within a second of Messages launching)
-node imessage/textingux.mjs
+node agent/server.mjs
 ```
 
-`textingux.mjs` will print `helper online (Messages.app pid=…)` once the
+`server.mjs` will print `helper online (Messages.app pid=…)` once the
 helper has dialed in and responded to a ping.
 
 ## Wire format
@@ -91,7 +91,7 @@ get rejected as `helper disconnected` so callers don't hang.
   - Bundle architecture mismatch? `lipo -info MessagesHelper.dylib` should say
     `arm64e` (not `arm64`).
 - **`+load` logs but helper never connects to the agent**: agent isn't
-  listening on `:9772` yet. Run `node imessage/textingux.mjs` first, or check
+  listening on `:9772` yet. Run `node agent/server.mjs` first, or check
   `lsof -i :9772`.
 - **`chat not found` errors**: the chat hasn't been opened in Messages.app
   this session — `IMChatRegistry` only knows about chats it has loaded. Send
@@ -104,8 +104,9 @@ get rejected as `helper disconnected` so callers don't hang.
 ## File layout
 
 ```
-imessage/native/
+agent/imessage/
 ├── README.md
+├── helper.mjs                    — JS-side IPC server (the partner of the dylib)
 ├── run-messages.sh                — launches Messages.app with DYLD_INSERT_LIBRARIES
 └── MessagesHelper/
     ├── Makefile                   — clang -arch arm64e, ad-hoc codesign
