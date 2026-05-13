@@ -52,6 +52,22 @@
 			.ws-toggle button.active { background: #2a2f37; color: #e6e6e6; }
 			.ws-toggle button.active.prod { background: #3a1a1f; color: #f08089; }
 			.ws-toggle button.active.test { background: #1a2a3a; color: #7eb7f0; }
+
+			.clear-test-btn {
+				margin-left: 10px;
+				background: transparent;
+				border: 1px solid #3a2025;
+				color: #c48088;
+				padding: 6px 12px;
+				font-size: 11.5px;
+				letter-spacing: 0.04em;
+				text-transform: uppercase;
+				border-radius: 6px;
+				font-weight: 500;
+				cursor: pointer;
+			}
+			.clear-test-btn:hover { background: #2a1518; color: #f08089; border-color: #5a2a30; }
+			.clear-test-btn:disabled { opacity: 0.5; cursor: wait; }
 			main {
 				padding: 24px;
 				max-width: 1480px;
@@ -352,11 +368,18 @@
 				margin-bottom: 6px;
 				flex-wrap: wrap;
 			}
-			.chat-item .top .handle {
-				color: #c0c5cc;
-				font-family: ui-monospace, Menlo, monospace;
-			}
 			.chat-item .top .when { margin-left: auto; color: #6c727b; }
+			.chat-item .handle-row {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				font-size: 11.5px;
+				margin: 4px 0 8px;
+			}
+			.chat-item .handle-row .handle-text {
+				font-family: ui-monospace, Menlo, monospace;
+				color: #c0c5cc;
+			}
 			.chat-item .in-bubble {
 				background: #1f2329;
 				color: #e6e6e6;
@@ -368,6 +391,43 @@
 				max-width: 92%;
 				white-space: pre-wrap;
 				word-wrap: break-word;
+			}
+			.chat-item .agent-action {
+				font-size: 10.5px;
+				font-family: ui-monospace, Menlo, monospace;
+				letter-spacing: 0.06em;
+				padding: 2px 8px;
+				border-radius: 4px;
+			}
+			.chat-item .agent-action.drafted {
+				background: rgba(60, 200, 120, 0.14);
+				color: #74c99a;
+				border: 1px solid rgba(60, 200, 120, 0.32);
+			}
+			.chat-item .agent-action.no_match,
+			.chat-item .agent-action.no_action {
+				background: rgba(126, 130, 140, 0.14);
+				color: #8a9099;
+				border: 1px solid rgba(126, 130, 140, 0.32);
+			}
+			.chat-item .agent-action.failure {
+				background: rgba(240, 128, 137, 0.14);
+				color: #f08089;
+				border: 1px solid rgba(240, 128, 137, 0.32);
+			}
+			.chat-item .agent-action.pending {
+				background: rgba(217, 163, 102, 0.14);
+				color: #d4a855;
+				border: 1px solid rgba(217, 163, 102, 0.32);
+			}
+
+			.meta .tag.channel.tenant_appfolio {
+				background: #2a2538;
+				color: #a8a4d8;
+			}
+			.meta .tag.channel.vendor_appfolio {
+				background: #2a2520;
+				color: #d4a855;
 			}
 
 			.toast {
@@ -393,13 +453,12 @@
 	<body>
 		<header>
 			<h1>Bedrock</h1>
-			<span class="sub">work-orders</span>
 			<div class="ws-toggle" id="ws-toggle">
 				<button data-ws="all">All</button>
 				<button data-ws="prod">Prod</button>
 				<button data-ws="test">Test</button>
 			</div>
-			<span class="status" id="status">·</span>
+			<button class="clear-test-btn" id="clear-test-btn" title="Wipe test workspace drafts, logs, and Supabase issues">Clear Test</button>
 		</header>
 		<main>
 			<section id="drafts-col">
@@ -449,13 +508,35 @@
 				return workspaceFilter === 'all' || label === workspaceFilter;
 			}
 
+			// "Clear Test" button: wipes test-workspace drafts/logs/Supabase rows.
+			document.getElementById('clear-test-btn').addEventListener('click', async (e) => {
+				if (!confirm('Wipe all test-workspace data?\n\n• Drops test drafts, sent-log, response-log, chat-log entries\n• Resets the issues cursor\n• Deletes test issues + agent_runs from Supabase\n\nProd data is untouched.')) return;
+				const btn = e.currentTarget;
+				btn.disabled = true;
+				btn.textContent = 'Clearing…';
+				try {
+					const res = await fetch('/api/clear-test', { method: 'POST' });
+					if (!res.ok) throw new Error(await res.text());
+					const data = await res.json();
+					toast(`cleared (Supabase: ${data.supabase?.issues_deleted ?? 0} issues)`);
+					renderedDraftIds = '';
+					renderedHistoryIds = '';
+					renderedChatIds = '';
+					await refresh();
+				} catch (err) {
+					toast(`clear failed: ${err.message}`, 'error');
+				} finally {
+					btn.disabled = false;
+					btn.textContent = 'Clear Test';
+				}
+			});
+
 			const draftsList = document.getElementById('drafts-list');
 			const historyList = document.getElementById('history-list');
 			const chatList = document.getElementById('chat-list');
 			const draftsCount = document.getElementById('drafts-count');
 			const historyCount = document.getElementById('history-count');
 			const chatCount = document.getElementById('chat-count');
-			const statusEl = document.getElementById('status');
 			const toastEl = document.getElementById('toast');
 
 			// draftId -> { age: HTMLElement, createdAt: string } so we can refresh
@@ -543,7 +624,7 @@
 					meta.className = 'meta';
 					meta.innerHTML =
 						`<span class="tag ${wsClass}">${escapeHtml(wsLabel)}</span>` +
-						`<span class="tag channel">${escapeHtml(d.channel)}</span>` +
+						`<span class="tag channel ${escapeHtml(d.channel ?? '')}">${escapeHtml(d.channel)}</span>` +
 						`<span class="tag" title="${escapeHtml(d.issue_id ?? '')}">issue ${escapeHtml(shortIssue(d.issue_id))}</span>` +
 						`<span class="age">${fmtAge(d.created_at)}</span>` +
 						(d.hold_until ? `<span class="tag hold">hold</span>` : '');
@@ -587,11 +668,15 @@
 
 					const actions = document.createElement('div');
 					actions.className = 'actions';
-					const sendBtn = document.createElement('button');
-					sendBtn.className = 'primary';
-					sendBtn.textContent = messages.length > 1 ? `Send (${messages.length})` : 'Send';
-					sendBtn.onclick = () => act(d.id, 'send', tas, origs, sendBtn);
+
+					// Only groupchat drafts get a Send button (live dylib send). For
+					// tenant_appfolio / vendor_appfolio drafts there's no automated
+					// channel yet — the PM copies into AppFolio manually. Copy is
+					// the primary action on those.
+					const canSend = d.channel === 'groupchat';
+
 					const copyBtn = document.createElement('button');
+					copyBtn.className = canSend ? '' : 'primary';
 					copyBtn.textContent = 'Copy';
 					copyBtn.onclick = async () => {
 						const joined = tas.map((t) => t.value).join('\n\n');
@@ -600,12 +685,20 @@
 						} catch {}
 						act(d.id, 'copy', tas, origs, copyBtn);
 					};
+
+					if (canSend) {
+						const sendBtn = document.createElement('button');
+						sendBtn.className = 'primary';
+						sendBtn.textContent = messages.length > 1 ? `Send (${messages.length})` : 'Send';
+						sendBtn.onclick = () => act(d.id, 'send', tas, origs, sendBtn);
+						actions.appendChild(sendBtn);
+					}
+					actions.appendChild(copyBtn);
+
 					const dismissBtn = document.createElement('button');
 					dismissBtn.className = 'danger';
 					dismissBtn.textContent = 'Dismiss';
 					dismissBtn.onclick = () => act(d.id, 'dismiss', tas, origs, dismissBtn);
-					actions.appendChild(sendBtn);
-					actions.appendChild(copyBtn);
 					actions.appendChild(dismissBtn);
 					card.appendChild(actions);
 
@@ -839,10 +932,24 @@
 				}
 			}
 
+			function agentActionLabel(m) {
+				const action = m.agent_action;
+				if (!action) return 'no action'; // pre-F2 captures / agent never ran
+				if (action === 'drafted') {
+					const n = m.agent_drafts_count ?? 0;
+					return n ? `✓ drafted (${n})` : '✓ drafted';
+				}
+				if (action === 'no_match') return 'no match';
+				if (action === 'failure') {
+					return m.agent_error ? `✗ failure: ${m.agent_error}` : '✗ failure';
+				}
+				return action;
+			}
+
 			function renderChat(items) {
-				// Same id-set guard as drafts/history: full re-render only when the
-				// set of message_guids changes; otherwise just refresh the age.
-				const idsKey = items.map((m) => m.message_guid).join('|');
+				// Key includes agent_action so the cache invalidates when the chat
+				// poller patches the row after running the chat skill.
+				const idsKey = items.map((m) => `${m.message_guid}:${m.agent_action ?? ''}`).join('|');
 				if (idsKey === renderedChatIds && items.length > 0) {
 					for (const m of items) {
 						const ref = chatRefs.get(m.message_guid);
@@ -869,13 +976,27 @@
 					const wsLabel = m.workspace_label ?? 'unknown';
 					const wsClass = wsLabel === 'prod' ? 'tag workspace prod' : 'tag workspace';
 
+					const label = agentActionLabel(m);
+					// When agent_action is missing (pre-F2 row or agent never ran),
+					// label = 'no action'. Style it with the no_action class.
+					const actionClass = m.agent_action || 'no_action';
+					const actionChip = label
+						? `<span class="agent-action ${actionClass}">${escapeHtml(label)}</span>`
+						: '';
+
 					const top = document.createElement('div');
 					top.className = 'top';
 					top.innerHTML =
-						`<span class="${wsClass}">${escapeHtml(wsLabel)}</span>` +
-						`<span class="handle">${escapeHtml(m.handle ?? '')}</span>` +
+						actionChip +
 						`<span class="when">${fmtAge(m.received_at)}</span>`;
 					card.appendChild(top);
+
+					const handleRow = document.createElement('div');
+					handleRow.className = 'handle-row';
+					handleRow.innerHTML =
+						`<span class="${wsClass}">${escapeHtml(wsLabel)}</span>` +
+						`<span class="handle-text">${escapeHtml(m.handle ?? '')}</span>`;
+					card.appendChild(handleRow);
 
 					const b = document.createElement('div');
 					b.className = 'in-bubble';
@@ -905,11 +1026,8 @@
 					draftsCount.textContent = drafts.length ? `${drafts.length}` : '';
 					historyCount.textContent = items.length ? `${items.length}` : '';
 					chatCount.textContent = chats.length ? `${chats.length}` : '';
-					statusEl.textContent = drafts.length
-						? `${drafts.length} pending`
-						: 'no pending drafts';
 				} catch {
-					statusEl.textContent = 'offline';
+					// network or server error — silently skip this poll
 				}
 			}
 

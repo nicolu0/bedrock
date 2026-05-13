@@ -20,10 +20,11 @@ import Database from 'better-sqlite3';
 import { helper } from './imessage/helper.mjs';
 import { runTurn } from './core/orchestrator.mjs';
 import { demoSkill } from './skills/demo.mjs';
+import { chatSkill } from './skills/chat.mjs';
 import { startUi } from './work-orders/ui/index.mjs';
 import { startIssuePoller } from './work-orders/issue-poller.mjs';
 import { buildChatGuidIndex } from './work-orders/workspaces.mjs';
-import { appendChatMessage } from './work-orders/state/helpers.mjs';
+import { appendChatMessage, updateChatMessage } from './work-orders/state/helpers.mjs';
 
 const POLL_INTERVAL_MS = 1000;
 const HELPER_ENABLED = process.env.HELPER_DISABLED !== '1';
@@ -340,12 +341,15 @@ async function handleIncoming(row) {
 // silently dropped — pm_handles is the gate.
 async function handleGroupchatMessage(row, ws) {
 	const handle = normalizeHandle(row.handle);
+	const chatGuid = row.chat_guid;
 	const text = String(row.text || '').trim();
 	if (!text) return;
 
+	// Step 1: append the raw inbound to chat-log (permanent record). The
+	// agent_action field will be patched after the chat skill runs.
 	await appendChatMessage({
 		message_guid: row.guid,
-		chat_guid: row.chat_guid,
+		chat_guid: chatGuid,
 		workspace_id: ws.workspace_id,
 		workspace_label: ws.label,
 		handle,
@@ -355,6 +359,72 @@ async function handleGroupchatMessage(row, ws) {
 	});
 	const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
 	log(`◉ ${ws.label} ← ${shortHandle(handle)}: "${preview}"`);
+
+	// Step 2: fire read receipt immediately — same as the demo path.
+	await markRead(chatGuid);
+
+	// Step 3: run the chat skill. acknowledge emits live to the groupchat;
+	// draft_tenant / draft_vendor write to drafts.json for human review.
+	const onEvent = async (ev) => {
+		if (ev.type === 'read') {
+			await markRead(chatGuid);
+		} else if (ev.type === 'message') {
+			await setTyping(chatGuid, true);
+			await sleep(typingDwellMs(ev.content));
+			await setTyping(chatGuid, false);
+			const ok = await sendPart(chatGuid, handle, ev.content);
+			if (ok) log(`→ ${ws.label}: "${ev.content}"`);
+		} else if (ev.type === 'tool_call') {
+			const args = JSON.stringify(ev.args ?? {});
+			log(`  · ${ev.name}(${args.length > 80 ? args.slice(0, 77) + '...' : args})`);
+		}
+	};
+
+	const ctx = {
+		handle,
+		text,
+		chat_guid: chatGuid,
+		workspace_id: ws.workspace_id,
+		workspace_label: ws.label,
+		onEvent,
+		sendMode: 'live', // for acknowledge — the only live-send tool in this skill
+		// Groupchat with a PM is NOT a 1:1 with a PM. The send_text safety
+		// guard (refuse live + isPmHandle) is about preventing direct DMs;
+		// the chat skill doesn't expose send_text anyway.
+		isPmHandle: false
+	};
+
+	let result;
+	let runError = null;
+	try {
+		result = await runTurn(chatSkill, ctx);
+	} catch (err) {
+		runError = err;
+		log(`chat skill error: ${err.message}`);
+	} finally {
+		await setTyping(chatGuid, false);
+	}
+
+	const draftIds = ctx.draftIds ?? [];
+	const draftsCreated = draftIds.length;
+	const action = runError
+		? 'failure'
+		: result?.failure
+			? 'failure'
+			: draftsCreated > 0
+				? 'drafted'
+				: 'no_match';
+
+	await updateChatMessage(row.guid, {
+		agent_action: action,
+		agent_runs_at: new Date().toISOString(),
+		agent_drafts_count: draftsCreated,
+		agent_draft_ids: draftIds,
+		agent_error: runError?.message ?? result?.failure?.error ?? null
+	});
+	log(
+		`◉ ${ws.label} agent: ${action}${draftsCreated ? ` (${draftsCreated} drafts)` : ''}`
+	);
 }
 
 // ── Poll loop ──────────────────────────────────────────────────────────────────

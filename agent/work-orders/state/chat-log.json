@@ -1,16 +1,5 @@
 [
   {
-    "received_at": "2026-05-13T07:39:21.776Z",
-    "message_guid": "8ADE60E6-077E-41F9-97B3-741BEEB60D43",
-    "chat_guid": "iMessage;-;andrew51@illinois.edu",
-    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
-    "workspace_label": "test",
-    "handle": "andrew51@illinois.edu",
-    "text": "hi",
-    "is_from_me": false,
-    "db_date": 800350760958551900
-  },
-  {
     "received_at": "2026-05-13T16:12:09.844Z",
     "message_guid": "0B635423-B825-4580-B581-03E6A6A9127A",
     "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
@@ -20,27 +9,5 @@
     "text": "Yes please",
     "is_from_me": false,
     "db_date": 800381529457354500
-  },
-  {
-    "received_at": "2026-05-13T21:42:51.101Z",
-    "message_guid": "ABA52423-4C23-49E7-B43B-5CDF27F31FCC",
-    "chat_guid": "iMessage;-;andrew51@illinois.edu",
-    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
-    "workspace_label": "test",
-    "handle": "andrew51@illinois.edu",
-    "text": "hi",
-    "is_from_me": false,
-    "db_date": 800401370044276700
-  },
-  {
-    "received_at": "2026-05-13T21:44:20.194Z",
-    "message_guid": "B49F43F6-97D6-4900-92E3-F773248530CA",
-    "chat_guid": "iMessage;-;andrew51@illinois.edu",
-    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
-    "workspace_label": "test",
-    "handle": "andrew51@illinois.edu",
-    "text": "hi",
-    "is_from_me": false,
-    "db_date": 800401459960927700
   }
 ]

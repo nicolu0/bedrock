@@ -140,33 +140,5 @@
       "--- original\nShould we send Abraham?\n--- final\nShould we send Yonic for this too?"
     ],
     "forced_send": false
-  },
-  {
-    "timestamp": "2026-05-13T22:13:19.657Z",
-    "draft_id": "drf_d2d4696cabf95bf4",
-    "issue_id": "466efc7b-0f7b-461c-a599-49a6056a3430",
-    "channel": "groupchat",
-    "trigger": "new_issue",
-    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
-    "workspace_label": "test",
-    "to": "iMessage;-;andrew51@illinois.edu",
-    "to_participants": [
-      "andrew51@illinois.edu"
-    ],
-    "action": "send",
-    "messages_original": [
-      "Unit 701 at Hub Champaign has AC not blowing cold despite running for two days.",
-      "Should we send California Heat Air Conditioning?"
-    ],
-    "messages_final": [
-      "Unit 701 at Hub Champaign has AC not blowing cold despite running for two days.",
-      "Should we send California Heat Air Conditioning?"
-    ],
-    "edited": false,
-    "diffs": [
-      null,
-      null
-    ],
-    "forced_send": false
   }
 ]

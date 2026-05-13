@@ -24,6 +24,7 @@ import * as db from './state/helpers.mjs';
 import { runTurn } from '../core/orchestrator.mjs';
 import { f1Skill } from '../skills/f1.mjs';
 import { WORKSPACES } from './workspaces.mjs';
+import { supabaseEnv } from '../supabase.mjs';
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_PROCESSED_IDS = 1000;
@@ -62,13 +63,6 @@ function log(msg, extra) {
 }
 
 // ── Supabase ────────────────────────────────────────────────────────────────
-
-function supabaseEnv() {
-	const url = process.env.SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL;
-	const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-	if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set');
-	return { url, key };
-}
 
 async function fetchNewIssues(cursor) {
 	const { url, key } = supabaseEnv();

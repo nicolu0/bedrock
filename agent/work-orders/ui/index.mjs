@@ -18,6 +18,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as db from '../state/helpers.mjs';
+import { WORKSPACES } from '../workspaces.mjs';
+import { deleteIssuesByWorkspace } from '../../supabase.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAGE_PATH = path.join(__dirname, 'page.html');
@@ -127,6 +129,16 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				return json(res, 200, { ok: true });
 			}
 
+			if (req.method === 'POST' && pathname === '/api/clear-test') {
+				const testEntry = Object.entries(WORKSPACES).find(([, w]) => w.label === 'test');
+				if (!testEntry) return text(res, 500, 'no test workspace configured');
+				const [test_ws_id] = testEntry;
+				const local = await db.clearWorkspaceLocalState('test');
+				const supa = await deleteIssuesByWorkspace(test_ws_id);
+				log(`cleared test workspace: ${JSON.stringify({ local, supa })}`);
+				return json(res, 200, { ok: true, local, supabase: supa });
+			}
+
 			if (req.method === 'GET' && pathname === '/api/chat-log') {
 				const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit')) || 100));
 				const ws = url.searchParams.get('workspace'); // optional filter
@@ -155,7 +167,11 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 			}
 
 			if (req.method === 'GET' && pathname === '/kpi') {
-				const [sent, responses] = await Promise.all([db.loadSent(), db.loadResponses()]);
+				const [allSent, allResponses] = await Promise.all([db.loadSent(), db.loadResponses()]);
+				// KPIs are prod-only. Test traffic is dev/QA noise and would
+				// inflate or skew the real send-without-edit numbers.
+				const sent = allSent.filter((r) => r.workspace_label === 'prod');
+				const responses = allResponses.filter((r) => r.workspace_label === 'prod');
 				const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
 				const recent = responses.filter((r) => new Date(r.timestamp).getTime() >= since);
 				const sends = recent.filter((r) => r.action === 'send');
@@ -168,6 +184,7 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				}
 				return json(res, 200, {
 					window_days: 30,
+					scope: 'prod',
 					sent_total: sent.length,
 					responses_total: responses.length,
 					recent_responses: recent.length,
@@ -215,6 +232,12 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 							part_index: i,
 							issue_id: draft.issue_id,
 							channel: draft.channel,
+							workspace_id: draft.workspace_id ?? null,
+							workspace_label: draft.workspace_label ?? null,
+							// For groupchat sends, draft.to is the chat GUID. F2's chat
+							// skill filters recent sends by this to keep candidates
+							// scoped to the chat the PM is replying in.
+							chat_guid: draft.channel === 'groupchat' ? draft.to ?? null : null,
 							body
 						});
 						if (i < finals.length - 1) await sleep(SEND_GAP_MS);
