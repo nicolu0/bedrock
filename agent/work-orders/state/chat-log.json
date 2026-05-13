@@ -20,5 +20,27 @@
     "text": "Yes please",
     "is_from_me": false,
     "db_date": 800381529457354500
+  },
+  {
+    "received_at": "2026-05-13T21:42:51.101Z",
+    "message_guid": "ABA52423-4C23-49E7-B43B-5CDF27F31FCC",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "handle": "andrew51@illinois.edu",
+    "text": "hi",
+    "is_from_me": false,
+    "db_date": 800401370044276700
+  },
+  {
+    "received_at": "2026-05-13T21:44:20.194Z",
+    "message_guid": "B49F43F6-97D6-4900-92E3-F773248530CA",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "handle": "andrew51@illinois.edu",
+    "text": "hi",
+    "is_from_me": false,
+    "db_date": 800401459960927700
   }
 ]

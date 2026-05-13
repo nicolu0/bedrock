@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { helper } from './imessage/helper.mjs';
 import { runTurn } from './core/orchestrator.mjs';
+import { demoSkill } from './skills/demo.mjs';
 import { startUi } from './work-orders/ui/index.mjs';
 import { startIssuePoller } from './work-orders/issue-poller.mjs';
 import { buildChatGuidIndex } from './work-orders/workspaces.mjs';
@@ -268,6 +269,12 @@ async function handleIncoming(row) {
 
 	log(`← ${shortHandle(handle)}: "${text}"`);
 
+	// Fire the read receipt the moment we observe the message — before any
+	// agent work happens. This is independent of whatever skill runs and
+	// whether the orchestrator emits a 'read' event. The user sees "Read"
+	// immediately on every incoming message.
+	await markRead(chatGuid);
+
 	// Dots come on ONLY immediately before a real message ships — never on
 	// the orchestrator's `typing` event itself. The orchestrator emits a
 	// typing event at the start of every iteration including the final
@@ -304,10 +311,17 @@ async function handleIncoming(row) {
 	};
 
 	try {
-		await runTurn({
-			trigger: 'inbound_message',
-			ctx: { mode: 'demo', chatGuid, react, onEvent },
-			input: { handle, text }
+		await runTurn(demoSkill, {
+			handle,
+			text,
+			chatGuid,
+			onEvent,
+			react,
+			sendMode: 'live',
+			// Demo path is unknown 1:1 handles only. knownSet filtered above
+			// rejects PM numbers before we get here. Belt-and-suspenders flag
+			// for the send_text safety guard.
+			isPmHandle: false
 		});
 	} catch (err) {
 		log(`turn error: ${err.message}`);

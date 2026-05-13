@@ -1,11 +1,13 @@
-// Work-orders subagent prompts. One situational prompt per trigger.
+// F1 skill — new work order arrives in Supabase, draft a 1–2 bubble ping to
+// the property manager's groupchat.
 //
-// F1 (new_issue) is a strict slot-fill template — no creativity, no owner
-// branching, no fallback phrasings. The orchestrator calls send_text twice
-// with the literal template filled in from the issue fields. Anything more
-// flexible lives in F2's groupchat_reply prompt (later).
+// Strict slot-fill template — no creativity, no owner branching, no fallback
+// phrasings. Mini model is fine because the prompt is rigid. Always drafts
+// (sendMode='draft' set by the issue poller) — never live send.
 
-const NEW_ISSUE_PROMPT = `You are Bedrock, an AI assistant handling work-order intake for a property manager who runs a portfolio of rental properties.
+import { sendText } from '../tools/send_text.mjs';
+
+const F1_TASK_PROMPT = `# Task: draft a new-work-order ping
 
 A new work order just arrived from the property management system. Send the property manager two iMessages via the send_text tool — one per call, in order:
 
@@ -27,11 +29,7 @@ Hard rules:
 
 That's it. Two send_text calls, strict template, done.`;
 
-export const PROMPTS = {
-	new_issue: NEW_ISSUE_PROMPT
-};
-
-export function buildIssueUserMessage(issue) {
+function formatIssue(issue) {
 	const lines = ['New work order:'];
 	if (issue.property?.name) lines.push(`Property: ${issue.property.name}`);
 	if (issue.unit?.name) lines.push(`Unit: ${issue.unit.name}`);
@@ -43,3 +41,16 @@ export function buildIssueUserMessage(issue) {
 	else lines.push('Recommended vendor: (none — skip Message 2)');
 	return lines.join('\n');
 }
+
+export const f1Skill = {
+	name: 'f1',
+	model: process.env.WORK_ORDERS_MODEL || 'gpt-4.1-mini',
+	maxIterations: 3,
+	maxTokens: 300,
+	tools: [sendText],
+	taskPrompt: F1_TASK_PROMPT,
+	buildContext(ctx) {
+		if (!ctx.issue) throw new Error('f1 skill: ctx.issue required');
+		return [{ role: 'user', content: formatIssue(ctx.issue) }];
+	}
+};

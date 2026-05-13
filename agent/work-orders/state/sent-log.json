@@ -52,5 +52,23 @@
     "issue_id": "c2539005-5c9f-484d-9d72-aa863d2f43b1",
     "channel": "groupchat",
     "body": "Should we send Yonic for this too?"
+  },
+  {
+    "sent_at": "2026-05-13T22:13:19.651Z",
+    "message_guid": null,
+    "bundle_id": "drf_d2d4696cabf95bf4",
+    "part_index": 0,
+    "issue_id": "466efc7b-0f7b-461c-a599-49a6056a3430",
+    "channel": "groupchat",
+    "body": "Unit 701 at Hub Champaign has AC not blowing cold despite running for two days."
+  },
+  {
+    "sent_at": "2026-05-13T22:13:19.654Z",
+    "message_guid": null,
+    "bundle_id": "drf_d2d4696cabf95bf4",
+    "part_index": 1,
+    "issue_id": "466efc7b-0f7b-461c-a599-49a6056a3430",
+    "channel": "groupchat",
+    "body": "Should we send California Heat Air Conditioning?"
   }
 ]

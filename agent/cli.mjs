@@ -11,8 +11,9 @@ import readline from 'node:readline';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runTurn, resetConversation, getConversation } from './core/orchestrator.mjs';
-import * as memory from './demo/memory.mjs';
+import { runTurn } from './core/orchestrator.mjs';
+import { demoSkill, resetConversation, getConversation } from './skills/demo.mjs';
+import * as memory from './memory.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -83,10 +84,12 @@ function onEvent(ev) {
 
 async function turnAndPrint(line) {
 	try {
-		await runTurn({
-			trigger: 'inbound_message',
-			ctx: { mode: 'demo', onEvent },
-			input: { handle, text: line }
+		await runTurn(demoSkill, {
+			handle,
+			text: line,
+			onEvent,
+			sendMode: 'live',
+			isPmHandle: false
 		});
 		clearTyping();
 	} catch (e) {

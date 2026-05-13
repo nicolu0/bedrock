@@ -22,6 +22,7 @@ import Database from 'better-sqlite3';
 
 import * as db from './state/helpers.mjs';
 import { runTurn } from '../core/orchestrator.mjs';
+import { f1Skill } from '../skills/f1.mjs';
 import { WORKSPACES } from './workspaces.mjs';
 
 const POLL_INTERVAL_MS = 5000;
@@ -179,13 +180,27 @@ async function pollOnce({ requireReady }) {
 		});
 
 		try {
-			const ctx = { workspace_label: ws.label, chat_guid: chatGuid };
-			const { messages } = await runTurn({
-				trigger: 'new_issue',
-				ctx,
-				input: { issue }
-			});
+			const ctx = {
+				issue,
+				sendMode: 'draft',
+				workspace_label: ws.label,
+				chat_guid: chatGuid,
+				// F1 sends to a groupchat that includes the PM, but the agent
+				// never live-sends from this path. Belt-and-suspenders.
+				isPmHandle: true
+			};
+			const result = await runTurn(f1Skill, ctx);
+			const messages = result.drafts;
 
+			// Failure is a warning, not a hard skip — if the loop produced a
+			// usable bundle (drafts present) we still want the human to see
+			// it. Only skip when the bundle is empty.
+			if (result.failure) {
+				log(`f1 warning: ${JSON.stringify(result.failure)}`, {
+					id: issue.id,
+					drafts: messages?.length ?? 0
+				});
+			}
 			if (!messages?.length) {
 				log('empty message bundle, skipping draft', { id: issue.id });
 				continue;
@@ -242,7 +257,11 @@ export async function startIssuePoller() {
 		try {
 			await pollOnce({ requireReady });
 		} catch (err) {
-			log(`poll error: ${err.message}`);
+			// Node's `fetch failed` hides the real reason in err.cause. Surface it.
+			const cause = err?.cause
+				? ` (${err.cause.code || err.cause.errno || ''} ${err.cause.message || err.cause})`.trim()
+				: '';
+			log(`poll error: ${err.message}${cause}`);
 		} finally {
 			running = false;
 		}

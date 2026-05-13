@@ -1,20 +1,48 @@
-// System prompt + canned opener.
-// The system prompt is assembled per turn: BASE + stage-specific block.
-// Tuning methodology: only add rules to fix observed failures. Never speculative.
+// Demo skill — 1:1 chat with prospects (unknown handles). Live send via dylib,
+// streaming, per-handle conversation history (in-process), stage state machine.
+//
+// Shape: { name, model, maxIterations, tools, taskPrompt, buildContext,
+// preCheck, commit }
+//   - preCheck handles the canned opener on first turn (no LLM call).
+//   - taskPrompt is a function so the stage block refreshes each iteration
+//     (set_demo_stage can advance mid-turn).
+//   - buildContext loads history + appends the new user message.
+//   - commit appends the assistant's outbox to history after the loop.
 
-export const OPENER_MESSAGES = [
+import * as memory from '../memory.mjs';
+import { sendText } from '../tools/send_text.mjs';
+import { updateProfile } from '../tools/update_profile.mjs';
+import { getProfile } from '../tools/get_profile.mjs';
+import { addObservation } from '../tools/add_observation.mjs';
+import { recall } from '../tools/recall.mjs';
+import { listProperties } from '../tools/list_properties.mjs';
+import { listVendors } from '../tools/list_vendors.mjs';
+import { reactToMessage } from '../tools/react_to_message.mjs';
+import { setDemoStage } from '../tools/set_demo_stage.mjs';
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// In-process conversation log per handle (lost on restart — v1).
+// Persists when memory migrates to Supabase.
+const conversations = new Map();
+
+export function getConversation(handle) {
+	return conversations.get(handle) ?? [];
+}
+
+export function resetConversation(handle) {
+	conversations.delete(handle);
+}
+
+// Opener — canned messages sent on the first turn, no model call.
+const OPENER_MESSAGES = [
 	"hey, i'm bedrock. i handle work orders for property managers, all over text. no logging into your pms, no chasing tenants or vendors. that's my job.",
-	"want to run through an example together?",
+	'want to run through an example together?'
 ];
+const OPENER_TYPING_DELAY_MS = 600;
+const OPENER_BETWEEN_MS = 700;
 
-// Hardcoded closer fired by the orchestrator on the in-order
-// followup → complete transition. Keep these out of the prompt.
-export const FOLLOWUP_COMPLETE_CLOSER = [
-	"that's how we'll usually handle work orders.",
-	"any questions?",
-];
-
-export const STAGES = ['intro', 'setup', 'dispatch', 'learning', 'followup', 'complete'];
+// ── Voice + stage prompts (copied verbatim from previous demo/prompts.mjs) ──
 
 const BASE_PROMPT = `you are bedrock. a property manager is texting you one-on-one.
 
@@ -252,10 +280,83 @@ bad (do not produce):
 
 if they seem interested in another scenario, offer to walk through one (call set_demo_stage('dispatch') with a different property/vendor or a different issue).
 
-stay in character as bedrock the product. you can acknowledge that the previous flow was an example or walk-through (you already framed it that way). what you must NOT do is talk about being an llm, ai, model, or assistant — that breaks character.`,
+stay in character as bedrock the product. you can acknowledge that the previous flow was an example or walk-through (you already framed it that way). what you must NOT do is talk about being an llm, ai, model, or assistant — that breaks character.`
 };
 
-export function buildSystemPrompt(stage) {
+function buildStagePrompt(stage) {
 	const block = STAGE_BLOCKS[stage] || STAGE_BLOCKS.intro;
 	return `${BASE_PROMPT}\n\n${block}`;
 }
+
+// ─── the skill ──────────────────────────────────────────────────────────────
+
+export const demoSkill = {
+	name: 'demo',
+	model: process.env.OPENAI_MODEL || 'gpt-5.4-2026-03-05',
+	maxIterations: 8,
+	tools: [
+		sendText,
+		updateProfile,
+		getProfile,
+		addObservation,
+		recall,
+		listProperties,
+		listVendors,
+		reactToMessage,
+		setDemoStage
+	],
+
+	// Rebuilt each iteration so a mid-turn set_demo_stage applies on the
+	// next loop.
+	async taskPrompt(ctx) {
+		const stage = (await memory.getProfile(ctx.handle, 'system/stage')) || 'intro';
+		return buildStagePrompt(stage);
+	},
+
+	// Load history + append the new user message. The returned messages are
+	// what the orchestrator sends to OpenAI (alongside the system message).
+	async buildContext(ctx) {
+		const handle = ctx.handle;
+		const existing = conversations.get(handle) ?? [];
+		// Snapshot for OpenAI before mutating the persistent log.
+		const messagesForModel = existing.map(({ role, content }) => ({ role, content }));
+		messagesForModel.push({ role: 'user', content: ctx.text });
+		// Mutate persistent log: user goes in now; assistant gets appended by commit().
+		existing.push({ role: 'user', content: ctx.text });
+		conversations.set(handle, existing);
+		return messagesForModel;
+	},
+
+	// First turn for this handle? Fire canned opener, skip the model call.
+	async preCheck(ctx) {
+		const handle = ctx.handle;
+		const existing = conversations.get(handle) ?? [];
+		if (existing.length > 0) return null;
+
+		if (ctx.onEvent) await ctx.onEvent({ type: 'read' });
+		for (let i = 0; i < OPENER_MESSAGES.length; i++) {
+			if (ctx.onEvent) await ctx.onEvent({ type: 'typing' });
+			await sleep(OPENER_TYPING_DELAY_MS);
+			if (ctx.onEvent) await ctx.onEvent({ type: 'message', content: OPENER_MESSAGES[i] });
+			if (i < OPENER_MESSAGES.length - 1) await sleep(OPENER_BETWEEN_MS);
+		}
+
+		// Persist: this user turn + canned assistant response.
+		existing.push({ role: 'user', content: ctx.text });
+		existing.push({ role: 'assistant', content: OPENER_MESSAGES.join('\n') });
+		conversations.set(handle, existing);
+
+		return { messages: [...OPENER_MESSAGES], toolCalls: [] };
+	},
+
+	// After the LLM loop, persist the assistant's emitted bubbles as the
+	// next assistant turn in history (joined into one assistant message).
+	async commit(ctx) {
+		const handle = ctx.handle;
+		const finalText = (ctx.outbox ?? []).join('\n');
+		if (!finalText) return;
+		const history = conversations.get(handle) ?? [];
+		history.push({ role: 'assistant', content: finalText });
+		conversations.set(handle, history);
+	}
+};
