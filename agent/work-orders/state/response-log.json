@@ -1,1 +1,144 @@
-[]
+[
+  {
+    "timestamp": "2026-05-12T10:16:45.777Z",
+    "draft_id": "drf_1f0e0c112002dca6",
+    "issue_id": "b4ea084e-3e0e-4b57-b36c-2750a6e57f1c",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "action": "copy",
+    "messages_original": [
+      "URGENT: Unit 292-12 at 6337 Primrose Ave has a rat infestation in ceiling and walls.",
+      "Should we send Guox Maintenance & Remodel?"
+    ],
+    "messages_final": [
+      "Unit 12 at 6337 Primrose reported rats are back in ceiling and walls.",
+      "Should we send Primex?"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nURGENT: Unit 292-12 at 6337 Primrose Ave has a rat infestation in ceiling and walls.\n--- final\nUnit 12 at 6337 Primrose reported rats are back in ceiling and walls.",
+      "--- original\nShould we send Guox Maintenance & Remodel?\n--- final\nShould we send Primex?"
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-12T19:33:54.740Z",
+    "draft_id": "drf_998f4838a4a3e332",
+    "issue_id": "66843a99-9e2f-4611-887a-df6878906254",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "action": "send",
+    "messages_original": [
+      "Unit 299 at 50 Rose Ave has a clogged shower drain draining slowly.",
+      "Should we send Yonic?"
+    ],
+    "messages_final": [
+      "Unit 2 at 50 Rose Ave has a clogged shower drain draining slowly.",
+      "Should we send Kori?"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nUnit 299 at 50 Rose Ave has a clogged shower drain draining slowly.\n--- final\nUnit 2 at 50 Rose Ave has a clogged shower drain draining slowly.",
+      "--- original\nShould we send Yonic?\n--- final\nShould we send Kori?"
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-13T01:30:13.315Z",
+    "draft_id": "drf_c051baa195114870",
+    "issue_id": "ab6cb6dd-60b4-4bde-af6f-06e836474b31",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "dismiss",
+    "messages_original": [
+      "Unit 261 - C at 1520 Ocean Park Blvd. has flickering home lights.",
+      "Should we send Kori Anderson?"
+    ],
+    "messages_final": [
+      "Unit C at 1520 Ocean Park is complaining about flickering lights again.",
+      "He said Oscar from Osalpa didn't find any problems last time and is asking if we have anyone else we can send."
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nUnit 261 - C at 1520 Ocean Park Blvd. has flickering home lights.\n--- final\nUnit C at 1520 Ocean Park is complaining about flickering lights again.",
+      "--- original\nShould we send Kori Anderson?\n--- final\nHe said Oscar from Osalpa didn't find any problems last time and is asking if we have anyone else we can send."
+    ],
+    "forced_send": false,
+    "notes": "Jose wanted to call himself. Gave tenants phone number. Wrote manually bc away from computer",
+    "notes_updated_at": "2026-05-13T01:32:44.922Z"
+  },
+  {
+    "timestamp": "2026-05-13T16:04:50.414Z",
+    "draft_id": "drf_3a7027abc8393cb5",
+    "issue_id": "766f41a8-7eb6-48ef-9b67-9a2b51226474",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 260 at 829 Ocean Park Blvd. has a garbage disposal that does not turn on.",
+      "Should we send Cross Appliance Inc?"
+    ],
+    "messages_final": [
+      "Unit 1 at 829 Ocean Park Blvd. has a broken garbage disposal.",
+      "Should we send Yonic?"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nUnit 260 at 829 Ocean Park Blvd. has a garbage disposal that does not turn on.\n--- final\nUnit 1 at 829 Ocean Park Blvd. has a broken garbage disposal.",
+      "--- original\nShould we send Cross Appliance Inc?\n--- final\nShould we send Yonic?"
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-13T16:05:35.388Z",
+    "draft_id": "drf_5f5fedd3454a0314",
+    "issue_id": "c2539005-5c9f-484d-9d72-aa863d2f43b1",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 226-03 at 1951 22nd St has a clogged bathtub drain that is draining slowly.",
+      "Should we send Abraham?"
+    ],
+    "messages_final": [
+      "Unit 3 at 1951 22nd St has a clogged bathtub drain that is draining slowly.",
+      "Should we send Yonic for this too?"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nUnit 226-03 at 1951 22nd St has a clogged bathtub drain that is draining slowly.\n--- final\nUnit 3 at 1951 22nd St has a clogged bathtub drain that is draining slowly.",
+      "--- original\nShould we send Abraham?\n--- final\nShould we send Yonic for this too?"
+    ],
+    "forced_send": false
+  }
+]

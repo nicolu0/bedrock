@@ -17,6 +17,7 @@ const FILES = {
 	drafts: path.join(__dirname, 'drafts.json'),
 	sent: path.join(__dirname, 'sent-log.json'),
 	response: path.join(__dirname, 'response-log.json'),
+	chat: path.join(__dirname, 'chat-log.json'),
 	issuesCursor: path.join(__dirname, 'issues-cursor.json'),
 	chatCursor: path.join(__dirname, 'chat-cursor.json')
 };
@@ -69,6 +70,12 @@ export async function createDraft(record) {
 			hold_until: null,
 			...record
 		};
+		// Snapshot the agent's first output so edits don't erase the signal.
+		// Mutable `messages` is what the human edits; `original_messages` is
+		// what response-log compares against to compute diffs.
+		if (Array.isArray(draft.messages) && !Array.isArray(draft.original_messages)) {
+			draft.original_messages = draft.messages.map((m) => ({ body: m.body }));
+		}
 		drafts.push(draft);
 		await writeJsonAtomic(FILES.drafts, drafts);
 		return draft;
@@ -123,6 +130,36 @@ export async function appendResponse(entry) {
 
 export async function loadResponses() {
 	return readJson(FILES.response, []);
+}
+
+// ─── inbound chat log ──────────────────────────────────────────────────────
+// One row per incoming iMessage we observe in a mapped groupchat (F2). The
+// correlator later overlays sent-log entries by `message_guid` to know which
+// of our outbound messages each PM reply is responding to.
+
+export async function appendChatMessage(entry) {
+	return withLock(FILES.chat, async () => {
+		const log = await readJson(FILES.chat, []);
+		const row = { received_at: new Date().toISOString(), ...entry };
+		log.push(row);
+		await writeJsonAtomic(FILES.chat, log);
+		return row;
+	});
+}
+
+export async function loadChatMessages() {
+	return readJson(FILES.chat, []);
+}
+
+export async function updateResponse(draftId, patch) {
+	return withLock(FILES.response, async () => {
+		const log = await readJson(FILES.response, []);
+		const i = log.findIndex((r) => r.draft_id === draftId);
+		if (i === -1) return null;
+		log[i] = { ...log[i], ...patch };
+		await writeJsonAtomic(FILES.response, log);
+		return log[i];
+	});
 }
 
 // ─── cursors ───────────────────────────────────────────────────────────────

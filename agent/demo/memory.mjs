@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const DATA_DIR = path.join(__dirname, 'data');
 
 function handleDir(handle) {
 	return path.join(DATA_DIR, handle.replace(/[^\w@+.-]/g, '_'));

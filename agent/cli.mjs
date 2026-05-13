@@ -12,7 +12,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runTurn, resetConversation, getConversation } from './core/orchestrator.mjs';
-import * as memory from './core/memory.mjs';
+import * as memory from './demo/memory.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -83,7 +83,11 @@ function onEvent(ev) {
 
 async function turnAndPrint(line) {
 	try {
-		await runTurn(handle, line, { onEvent });
+		await runTurn({
+			trigger: 'inbound_message',
+			ctx: { mode: 'demo', onEvent },
+			input: { handle, text: line }
+		});
 		clearTyping();
 	} catch (e) {
 		clearTyping();

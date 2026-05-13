@@ -1,0 +1,920 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Bedrock · Work-order drafts</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<style>
+			* { box-sizing: border-box; }
+			html, body {
+				margin: 0;
+				background: #0e0f12;
+				color: #e6e6e6;
+				font: 14px/1.5 -apple-system, ui-sans-serif, system-ui, sans-serif;
+			}
+			header {
+				padding: 18px 24px;
+				border-bottom: 1px solid #1f2329;
+				display: flex;
+				align-items: baseline;
+				gap: 16px;
+			}
+			header h1 {
+				margin: 0;
+				font-size: 16px;
+				font-weight: 600;
+				letter-spacing: 0.2px;
+			}
+			header .sub { color: #6c727b; font-size: 12px; }
+			header .status { margin-left: 16px; font-size: 12px; color: #6c727b; }
+			.ws-toggle {
+				margin-left: auto;
+				display: flex;
+				gap: 2px;
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 6px;
+				padding: 2px;
+			}
+			.ws-toggle button {
+				background: transparent;
+				border: none;
+				color: #8a9099;
+				padding: 4px 12px;
+				font-size: 11.5px;
+				letter-spacing: 0.04em;
+				border-radius: 4px;
+				cursor: pointer;
+				text-transform: uppercase;
+				font-weight: 500;
+			}
+			.ws-toggle button:hover { color: #c0c5cc; }
+			.ws-toggle button.active { background: #2a2f37; color: #e6e6e6; }
+			.ws-toggle button.active.prod { background: #3a1a1f; color: #f08089; }
+			.ws-toggle button.active.test { background: #1a2a3a; color: #7eb7f0; }
+			main {
+				padding: 24px;
+				max-width: 1480px;
+				margin: 0 auto;
+				display: grid;
+				grid-template-columns: minmax(380px, 1.1fr) minmax(340px, 1fr) minmax(300px, 0.85fr);
+				gap: 22px;
+				align-items: start;
+			}
+			@media (max-width: 1200px) {
+				main { grid-template-columns: minmax(420px, 1.1fr) minmax(360px, 1fr); }
+				#chat-col { grid-column: 1 / -1; }
+			}
+			@media (max-width: 900px) {
+				main { grid-template-columns: 1fr; }
+				#chat-col { grid-column: auto; }
+			}
+			.col-header {
+				font-size: 11px;
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+				color: #6c727b;
+				margin: 0 0 10px;
+				display: flex;
+				align-items: baseline;
+				gap: 8px;
+			}
+			.col-header .count {
+				color: #4a5058;
+				font-family: ui-monospace, Menlo, monospace;
+				letter-spacing: 0;
+				text-transform: none;
+				font-size: 11px;
+			}
+			.empty {
+				color: #6c727b;
+				text-align: center;
+				padding: 60px 0;
+				font-size: 13px;
+			}
+			.draft {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 16px 18px;
+				margin-bottom: 14px;
+			}
+			.meta {
+				display: flex;
+				gap: 8px;
+				font-size: 11px;
+				color: #8a9099;
+				margin-bottom: 10px;
+				flex-wrap: wrap;
+				align-items: center;
+			}
+			.meta .tag {
+				background: #1f2329;
+				color: #c0c5cc;
+				padding: 2px 8px;
+				border-radius: 4px;
+				letter-spacing: 0.2px;
+			}
+			.meta .tag.workspace { background: #1a2a3a; color: #7eb7f0; }
+			.meta .tag.workspace.prod { background: #3a1a1f; color: #f08089; }
+			.meta .tag.urgent { background: #3a1a1f; color: #f08089; }
+			.meta .tag.hold { background: #2a221a; color: #d9a366; }
+			.meta .edited {
+				margin-left: auto;
+				color: #d9a366;
+				font-size: 11px;
+			}
+			.recipients {
+				font-size: 11px;
+				color: #8a9099;
+				margin: -4px 0 12px;
+				font-family: ui-monospace, SF Mono, Menlo, monospace;
+				display: flex;
+				flex-direction: column;
+				gap: 2px;
+			}
+			.recipients .handles {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 4px 8px;
+				align-items: baseline;
+			}
+			.recipients .label { color: #6c727b; }
+			.recipients .handle { color: #c0c5cc; }
+			.recipients .guid {
+				color: #4a5058;
+				font-size: 10px;
+				word-break: break-all;
+			}
+
+			.bubbles {
+				display: flex;
+				flex-direction: column;
+				gap: 3px;
+				margin: 6px 0 14px;
+				align-items: flex-end;
+			}
+			.bubble {
+				max-width: 78%;
+				background: #1d6ee2;
+				color: #ffffff;
+				border-radius: 18px;
+				padding: 9px 14px;
+				font-size: 14px;
+				line-height: 1.35;
+				transition: background 0.12s;
+				position: relative;
+				min-width: 60px;
+			}
+			.bubble:has(textarea:focus) { background: #2a82f0; box-shadow: 0 0 0 1px #4a9cff inset; }
+			.bubble textarea {
+				background: transparent;
+				border: none;
+				color: inherit;
+				font: inherit;
+				width: 100%;
+				resize: none;
+				outline: none;
+				padding: 0;
+				margin: 0;
+				display: block;
+				overflow: hidden;
+				min-height: 18px;
+			}
+			.bubble.edited::after {
+				content: 'edited';
+				position: absolute;
+				top: 50%;
+				right: calc(100% + 8px);
+				transform: translateY(-50%);
+				font-size: 10px;
+				color: #d9a366;
+				letter-spacing: 0.05em;
+				white-space: nowrap;
+			}
+
+			.actions {
+				display: flex;
+				gap: 8px;
+				margin-top: 4px;
+			}
+			button {
+				background: #1f2329;
+				color: #e6e6e6;
+				border: 1px solid #2a2f37;
+				padding: 7px 14px;
+				border-radius: 6px;
+				font: inherit;
+				font-size: 13px;
+				cursor: pointer;
+			}
+			button:hover { background: #262b32; }
+			button.primary { background: #2d6cdf; border-color: #2d6cdf; color: white; }
+			button.primary:hover { background: #3b78ea; }
+			button.danger { color: #f08089; }
+			button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+			.kpi {
+				display: flex;
+				gap: 18px;
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 14px 18px;
+				margin-bottom: 18px;
+				font-size: 12.5px;
+				flex-wrap: wrap;
+			}
+			.kpi .stat { display: flex; flex-direction: column; gap: 2px; }
+			.kpi .stat .label { color: #6c727b; font-size: 11px; letter-spacing: 0.05em; }
+			.kpi .stat .value { color: #e6e6e6; font-size: 18px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
+			.kpi .stat .value .pct { color: #74c99a; }
+			.kpi .stat .sub { color: #6c727b; font-size: 11px; }
+
+			.history-item {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 14px 16px;
+				margin-bottom: 10px;
+			}
+			.history-item .top {
+				display: flex;
+				gap: 8px;
+				align-items: center;
+				font-size: 11px;
+				color: #8a9099;
+				margin-bottom: 8px;
+				flex-wrap: wrap;
+			}
+			.action-tag {
+				font-size: 11px;
+				font-weight: 600;
+				letter-spacing: 0.08em;
+				padding: 2px 8px;
+				border-radius: 4px;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.action-tag.send { background: rgba(60, 200, 120, 0.14); color: #74c99a; border: 1px solid rgba(60, 200, 120, 0.32); }
+			.action-tag.copy { background: rgba(126, 183, 240, 0.14); color: #7eb7f0; border: 1px solid rgba(126, 183, 240, 0.32); }
+			.action-tag.dismiss { background: rgba(240, 128, 137, 0.14); color: #f08089; border: 1px solid rgba(240, 128, 137, 0.32); }
+			.history-item .when { color: #6c727b; font-size: 11px; margin-left: auto; }
+			.history-item .recipients {
+				margin: -2px 0 8px;
+			}
+			.history-item .bubbles {
+				display: flex;
+				flex-direction: column;
+				gap: 3px;
+				align-items: flex-end;
+			}
+			.history-item .bubble {
+				max-width: 78%;
+				background: #1d6ee2;
+				color: #ffffff;
+				border-radius: 18px;
+				padding: 8px 13px;
+				font-size: 13.5px;
+				line-height: 1.35;
+				white-space: pre-wrap;
+				word-wrap: break-word;
+			}
+			.history-item.dismiss .bubble { background: #2a2d33; color: #c0c5cc; text-decoration: line-through; opacity: 0.7; }
+			.history-item .bubble .strike {
+				display: block;
+				color: rgba(255, 255, 255, 0.62);
+				text-decoration: line-through;
+				font-size: 12.5px;
+				margin-bottom: 3px;
+			}
+			.history-item .edited-pill {
+				font-size: 10px;
+				color: #d9a366;
+				letter-spacing: 0.06em;
+				background: rgba(217, 163, 102, 0.12);
+				border: 1px solid rgba(217, 163, 102, 0.32);
+				padding: 1px 6px;
+				border-radius: 3px;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.notes {
+				margin-top: 10px;
+				border-top: 1px dashed #2a2f37;
+				padding-top: 8px;
+			}
+			.notes .note-empty {
+				color: #5a6068;
+				font-size: 11px;
+				cursor: pointer;
+				font-style: italic;
+				user-select: none;
+			}
+			.notes .note-empty:hover { color: #8a9099; }
+			.notes textarea {
+				width: 100%;
+				background: #0e0f12;
+				color: #e6e6e6;
+				border: 1px solid #2a2f37;
+				border-radius: 6px;
+				padding: 8px 10px;
+				font: inherit;
+				font-size: 12.5px;
+				line-height: 1.4;
+				resize: none;
+				outline: none;
+				overflow: hidden;
+				min-height: 32px;
+			}
+			.notes textarea:focus { border-color: #4a8de0; }
+			.notes textarea::placeholder { color: #5a6068; font-style: italic; }
+			.notes .saved {
+				font-size: 10px;
+				color: #74c99a;
+				margin-left: 6px;
+				opacity: 0;
+				transition: opacity 0.15s;
+			}
+			.notes .saved.show { opacity: 1; }
+
+			.chat-item {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 12px 14px;
+				margin-bottom: 8px;
+			}
+			.chat-item .top {
+				display: flex;
+				gap: 6px;
+				align-items: center;
+				font-size: 11px;
+				color: #8a9099;
+				margin-bottom: 6px;
+				flex-wrap: wrap;
+			}
+			.chat-item .top .handle {
+				color: #c0c5cc;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.chat-item .top .when { margin-left: auto; color: #6c727b; }
+			.chat-item .in-bubble {
+				background: #1f2329;
+				color: #e6e6e6;
+				border-radius: 16px;
+				padding: 8px 13px;
+				font-size: 13.5px;
+				line-height: 1.35;
+				display: inline-block;
+				max-width: 92%;
+				white-space: pre-wrap;
+				word-wrap: break-word;
+			}
+
+			.toast {
+				position: fixed;
+				bottom: 24px;
+				right: 24px;
+				background: #14161b;
+				border: 1px solid #2a2f37;
+				color: #e6e6e6;
+				padding: 10px 16px;
+				border-radius: 6px;
+				font-size: 13px;
+				opacity: 0;
+				transform: translateY(8px);
+				transition: opacity 0.15s, transform 0.15s;
+				pointer-events: none;
+				max-width: 360px;
+			}
+			.toast.show { opacity: 1; transform: translateY(0); }
+			.toast.error { border-color: #5a2a30; color: #f08089; }
+		</style>
+	</head>
+	<body>
+		<header>
+			<h1>Bedrock</h1>
+			<span class="sub">work-orders</span>
+			<div class="ws-toggle" id="ws-toggle">
+				<button data-ws="all">All</button>
+				<button data-ws="prod">Prod</button>
+				<button data-ws="test">Test</button>
+			</div>
+			<span class="status" id="status">·</span>
+		</header>
+		<main>
+			<section id="drafts-col">
+				<h2 class="col-header">Drafts <span class="count" id="drafts-count"></span></h2>
+				<div id="drafts-list"></div>
+			</section>
+			<section id="history-col">
+				<h2 class="col-header">History <span class="count" id="history-count"></span></h2>
+				<div id="history-list"></div>
+			</section>
+			<section id="chat-col">
+				<h2 class="col-header">Chat <span class="count" id="chat-count"></span></h2>
+				<div id="chat-list"></div>
+			</section>
+		</main>
+		<div class="toast" id="toast"></div>
+
+		<script>
+			// Workspace filter — global, persists across reloads. Filters drafts,
+			// history, and chat by workspace_label client-side.
+			const WS_KEY = 'bedrock.workspaceFilter';
+			let workspaceFilter = localStorage.getItem(WS_KEY) || 'all';
+			const wsToggle = document.getElementById('ws-toggle');
+			function applyWsToggleStyle() {
+				for (const btn of wsToggle.querySelectorAll('button')) {
+					const ws = btn.dataset.ws;
+					btn.classList.toggle('active', ws === workspaceFilter);
+					btn.classList.toggle('prod', ws === 'prod' && ws === workspaceFilter);
+					btn.classList.toggle('test', ws === 'test' && ws === workspaceFilter);
+				}
+			}
+			wsToggle.addEventListener('click', (e) => {
+				const btn = e.target.closest('button[data-ws]');
+				if (!btn) return;
+				workspaceFilter = btn.dataset.ws;
+				localStorage.setItem(WS_KEY, workspaceFilter);
+				applyWsToggleStyle();
+				// Bust the id-set guards so render actually rebuilds.
+				renderedDraftIds = '';
+				renderedHistoryIds = '';
+				renderedChatIds = '';
+				refresh();
+			});
+			applyWsToggleStyle();
+
+			function passesFilter(label) {
+				return workspaceFilter === 'all' || label === workspaceFilter;
+			}
+
+			const draftsList = document.getElementById('drafts-list');
+			const historyList = document.getElementById('history-list');
+			const chatList = document.getElementById('chat-list');
+			const draftsCount = document.getElementById('drafts-count');
+			const historyCount = document.getElementById('history-count');
+			const chatCount = document.getElementById('chat-count');
+			const statusEl = document.getElementById('status');
+			const toastEl = document.getElementById('toast');
+
+			// draftId -> { age: HTMLElement, createdAt: string } so we can refresh
+			// the "Xm ago" text without re-rendering the textareas (which would
+			// stomp on edits the user is currently making).
+			const cardRefs = new Map();
+			let renderedDraftIds = '';
+			let renderedHistoryIds = '';
+			let renderedChatIds = '';
+			const chatRefs = new Map();
+			// Pending save timer per draft id, for debounced auto-save on input.
+			const saveTimers = new Map();
+			const SAVE_DEBOUNCE_MS = 500;
+
+			let toastTimer = null;
+			function toast(msg, kind = 'info') {
+				toastEl.textContent = msg;
+				toastEl.classList.toggle('error', kind === 'error');
+				toastEl.classList.add('show');
+				clearTimeout(toastTimer);
+				toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+			}
+
+			function escapeHtml(s) {
+				return String(s).replace(/[&<>"']/g, (c) => ({
+					'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+				})[c]);
+			}
+
+			function fmtAge(iso) {
+				const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+				if (s < 60) return s + 's ago';
+				if (s < 3600) return Math.floor(s / 60) + 'm ago';
+				return Math.floor(s / 3600) + 'h ago';
+			}
+
+			function shortIssue(id) {
+				if (!id) return '—';
+				return id.length > 12 ? id.slice(0, 8) : id;
+			}
+
+			function autoSize(ta) {
+				ta.style.height = 'auto';
+				ta.style.height = ta.scrollHeight + 'px';
+			}
+
+			function render(drafts) {
+				// Only do a full re-render when the set of draft ids changes
+				// (something added or dismissed). Otherwise just refresh the
+				// age text — preserves in-flight textarea edits across polls.
+				const idsKey = drafts.map((d) => d.id).join('|');
+				if (idsKey === renderedDraftIds && drafts.length > 0) {
+					for (const d of drafts) {
+						const ref = cardRefs.get(d.id);
+						if (ref?.ageEl) ref.ageEl.textContent = fmtAge(d.created_at);
+					}
+					return;
+				}
+				renderedDraftIds = idsKey;
+				cardRefs.clear();
+				draftsList.innerHTML = '';
+				if (!drafts.length) {
+					const e = document.createElement('div');
+					e.className = 'empty';
+					e.textContent = 'no pending drafts';
+					draftsList.appendChild(e);
+					return;
+				}
+				for (const d of drafts) {
+					const messages = Array.isArray(d.messages) ? d.messages : [{ body: d.body ?? '' }];
+					// Server-truth originals: what the agent first produced, frozen
+					// at draft creation. Used for the "edited" badge.
+					const origs = (Array.isArray(d.original_messages) ? d.original_messages : messages).map(
+						(m) => m.body
+					);
+
+					const card = document.createElement('div');
+					card.className = 'draft';
+					card.dataset.id = d.id;
+
+					const wsLabel = d.workspace_label ?? 'unknown';
+					const wsClass = wsLabel === 'prod' ? 'workspace prod' : 'workspace';
+
+					const meta = document.createElement('div');
+					meta.className = 'meta';
+					meta.innerHTML =
+						`<span class="tag ${wsClass}">${escapeHtml(wsLabel)}</span>` +
+						`<span class="tag channel">${escapeHtml(d.channel)}</span>` +
+						`<span class="tag" title="${escapeHtml(d.issue_id ?? '')}">issue ${escapeHtml(shortIssue(d.issue_id))}</span>` +
+						`<span class="age">${fmtAge(d.created_at)}</span>` +
+						(d.hold_until ? `<span class="tag hold">hold</span>` : '');
+					card.appendChild(meta);
+					const ageEl = meta.querySelector('.age');
+					cardRefs.set(d.id, { ageEl });
+
+					const recipients = d.to_participants?.length ? d.to_participants : d.to ? [d.to] : [];
+					const recip = document.createElement('div');
+					recip.className = 'recipients';
+					recip.innerHTML =
+						`<div class="handles"><span class="label">to</span>` +
+						recipients.map((r) => `<span class="handle">${escapeHtml(r)}</span>`).join('') +
+						`</div>` +
+						(d.to ? `<div class="guid">${escapeHtml(d.to)}</div>` : '');
+					card.appendChild(recip);
+
+					const bubbles = document.createElement('div');
+					bubbles.className = 'bubbles';
+					const tas = [];
+					messages.forEach((m, i) => {
+						const b = document.createElement('div');
+						b.className = 'bubble';
+						const ta = document.createElement('textarea');
+						ta.value = m.body;
+						ta.rows = 1;
+						if (ta.value !== origs[i]) b.classList.add('edited');
+						ta.addEventListener('input', () => {
+							autoSize(ta);
+							b.classList.toggle('edited', ta.value !== origs[i]);
+							scheduleSave(d.id, tas);
+						});
+						ta.addEventListener('blur', () => flushSave(d.id, tas));
+						b.appendChild(ta);
+						bubbles.appendChild(b);
+						tas.push(ta);
+						// Defer sizing until in DOM
+						requestAnimationFrame(() => autoSize(ta));
+					});
+					card.appendChild(bubbles);
+
+					const actions = document.createElement('div');
+					actions.className = 'actions';
+					const sendBtn = document.createElement('button');
+					sendBtn.className = 'primary';
+					sendBtn.textContent = messages.length > 1 ? `Send (${messages.length})` : 'Send';
+					sendBtn.onclick = () => act(d.id, 'send', tas, origs, sendBtn);
+					const copyBtn = document.createElement('button');
+					copyBtn.textContent = 'Copy';
+					copyBtn.onclick = async () => {
+						const joined = tas.map((t) => t.value).join('\n\n');
+						try {
+							await navigator.clipboard.writeText(joined);
+						} catch {}
+						act(d.id, 'copy', tas, origs, copyBtn);
+					};
+					const dismissBtn = document.createElement('button');
+					dismissBtn.className = 'danger';
+					dismissBtn.textContent = 'Dismiss';
+					dismissBtn.onclick = () => act(d.id, 'dismiss', tas, origs, dismissBtn);
+					actions.appendChild(sendBtn);
+					actions.appendChild(copyBtn);
+					actions.appendChild(dismissBtn);
+					card.appendChild(actions);
+
+					draftsList.appendChild(card);
+				}
+			}
+
+			async function saveDraft(id, tas) {
+				const messages = tas.map((t) => ({ body: t.value }));
+				try {
+					const res = await fetch(`/api/drafts/${id}`, {
+						method: 'PATCH',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ messages })
+					});
+					if (!res.ok) throw new Error(await res.text());
+				} catch (err) {
+					toast(`save failed: ${err.message}`, 'error');
+				}
+			}
+
+			function scheduleSave(id, tas) {
+				clearTimeout(saveTimers.get(id));
+				const t = setTimeout(() => {
+					saveTimers.delete(id);
+					saveDraft(id, tas);
+				}, SAVE_DEBOUNCE_MS);
+				saveTimers.set(id, t);
+			}
+
+			function flushSave(id, tas) {
+				if (!saveTimers.has(id)) return;
+				clearTimeout(saveTimers.get(id));
+				saveTimers.delete(id);
+				saveDraft(id, tas);
+			}
+
+			async function act(id, action, tas, origs, btn) {
+				btn.disabled = true;
+				// Flush any pending edits so the server has the final body
+				// before we tell it to send/copy/dismiss.
+				flushSave(id, tas);
+				const messages = tas.map((t) => ({ body: t.value }));
+				try {
+					const res = await fetch(`/api/drafts/${id}/${action}`, {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ messages })
+					});
+					if (!res.ok) {
+						const err = await res.text();
+						toast(`${action} failed: ${err}`, 'error');
+						btn.disabled = false;
+						return;
+					}
+					toast(action === 'send' ? 'sent' : action === 'copy' ? 'copied' : 'dismissed');
+					await refresh();
+				} catch (err) {
+					toast(`${action} failed: ${err.message}`, 'error');
+					btn.disabled = false;
+				}
+			}
+
+			// ─── history rendering ──────────────────────────────────────────────
+
+			function updateKpiStrip(kpi) {
+				const k = historyList.querySelector('.kpi');
+				if (!k) return;
+				const rate = kpi.send_without_edit_rate;
+				const pct = rate == null ? '—' : `${Math.round(rate * 100)}%`;
+				k.innerHTML =
+					`<div class="stat"><span class="label">send-without-edit</span><span class="value"><span class="pct">${pct}</span></span><span class="sub">last ${kpi.window_days}d</span></div>` +
+					`<div class="stat"><span class="label">sent</span><span class="value">${kpi.sent_total}</span><span class="sub">total messages shipped</span></div>` +
+					`<div class="stat"><span class="label">actions</span><span class="value">${kpi.recent_responses}</span><span class="sub">last ${kpi.window_days}d</span></div>`;
+			}
+
+			function fmtAbsolute(iso) {
+				const d = new Date(iso);
+				const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+				const day = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+				return `${day} ${t}`;
+			}
+
+			function renderHistory(items, kpi) {
+				// Same guard as drafts: only re-render when the set of items
+				// changes, so notes/textarea edits in progress aren't stomped.
+				const idsKey = items.map((r) => r.draft_id).join('|');
+				if (idsKey === renderedHistoryIds && historyList.querySelector('.kpi')) {
+					updateKpiStrip(kpi);
+					return;
+				}
+				renderedHistoryIds = idsKey;
+				historyList.innerHTML = '';
+
+				const k = document.createElement('div');
+				k.className = 'kpi';
+				const rate = kpi.send_without_edit_rate;
+				const pct = rate == null ? '—' : `${Math.round(rate * 100)}%`;
+				k.innerHTML =
+					`<div class="stat"><span class="label">send-without-edit</span><span class="value"><span class="pct">${pct}</span></span><span class="sub">last ${kpi.window_days}d</span></div>` +
+					`<div class="stat"><span class="label">sent</span><span class="value">${kpi.sent_total}</span><span class="sub">total messages shipped</span></div>` +
+					`<div class="stat"><span class="label">actions</span><span class="value">${kpi.recent_responses}</span><span class="sub">last ${kpi.window_days}d</span></div>`;
+				historyList.appendChild(k);
+
+				if (!items.length) {
+					const e = document.createElement('div');
+					e.className = 'empty';
+					e.textContent = 'no actions yet';
+					historyList.appendChild(e);
+					return;
+				}
+
+				for (const r of items) {
+					const card = document.createElement('div');
+					card.className = 'history-item ' + r.action;
+
+					const wsLabel = r.workspace_label ?? null;
+					const wsClass = wsLabel === 'prod' ? 'tag workspace prod' : 'tag workspace';
+
+					const top = document.createElement('div');
+					top.className = 'top';
+					top.innerHTML =
+						`<span class="action-tag ${r.action}">${escapeHtml(r.action)}</span>` +
+						(wsLabel ? `<span class="${wsClass}">${escapeHtml(wsLabel)}</span>` : '') +
+						`<span class="tag channel">${escapeHtml(r.channel ?? '')}</span>` +
+						`<span class="tag" title="${escapeHtml(r.issue_id ?? '')}">issue ${escapeHtml(shortIssue(r.issue_id))}</span>` +
+						(r.edited ? `<span class="edited-pill">edited</span>` : '') +
+						(r.forced_send ? `<span class="edited-pill" style="color:#f08089;border-color:rgba(240,128,137,0.32);background:rgba(240,128,137,0.12)">forced</span>` : '') +
+						`<span class="when">${fmtAbsolute(r.timestamp)}</span>`;
+					card.appendChild(top);
+
+					if (r.to_participants?.length || r.to) {
+						const recipients = r.to_participants?.length ? r.to_participants : [r.to];
+						const recip = document.createElement('div');
+						recip.className = 'recipients';
+						recip.innerHTML =
+							`<div class="handles"><span class="label">to</span>` +
+							recipients.map((h) => `<span class="handle">${escapeHtml(h)}</span>`).join('') +
+							`</div>`;
+						card.appendChild(recip);
+					}
+
+					const finals = Array.isArray(r.messages_final) ? r.messages_final : [];
+					const origs = Array.isArray(r.messages_original) ? r.messages_original : [];
+					const bubbles = document.createElement('div');
+					bubbles.className = 'bubbles';
+					const count = Math.max(finals.length, origs.length);
+					for (let i = 0; i < count; i++) {
+						const b = document.createElement('div');
+						b.className = 'bubble';
+						const o = origs[i] ?? '';
+						const f = finals[i] ?? '';
+						if (o && f && o !== f) {
+							const s = document.createElement('span');
+							s.className = 'strike';
+							s.textContent = o;
+							b.appendChild(s);
+							b.appendChild(document.createTextNode(f));
+						} else {
+							b.textContent = f || o;
+						}
+						bubbles.appendChild(b);
+					}
+					card.appendChild(bubbles);
+
+					const notesWrap = document.createElement('div');
+					notesWrap.className = 'notes';
+					renderNotes(notesWrap, r);
+					card.appendChild(notesWrap);
+
+					historyList.appendChild(card);
+				}
+			}
+
+			function renderNotes(wrap, r) {
+				wrap.innerHTML = '';
+				const existing = (r.notes ?? '').trim();
+				if (!existing) {
+					const empty = document.createElement('div');
+					empty.className = 'note-empty';
+					empty.textContent = '+ add note';
+					empty.onclick = () => openNoteEditor(wrap, r, '');
+					wrap.appendChild(empty);
+					return;
+				}
+				openNoteEditor(wrap, r, existing);
+			}
+
+			function openNoteEditor(wrap, r, initial) {
+				wrap.innerHTML = '';
+				const ta = document.createElement('textarea');
+				ta.value = initial;
+				ta.placeholder = 'why did you edit / dismiss / send? (saved on blur)';
+				ta.rows = 1;
+				wrap.appendChild(ta);
+				const saved = document.createElement('span');
+				saved.className = 'saved';
+				saved.textContent = 'saved';
+				wrap.appendChild(saved);
+
+				const autosize = () => {
+					ta.style.height = 'auto';
+					ta.style.height = ta.scrollHeight + 'px';
+				};
+				ta.addEventListener('input', autosize);
+				requestAnimationFrame(autosize);
+
+				let lastSent = initial;
+				ta.addEventListener('blur', async () => {
+					const val = ta.value.trim();
+					if (val === lastSent.trim()) return;
+					try {
+						const res = await fetch(`/api/history/${r.draft_id}`, {
+							method: 'PATCH',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({ notes: val })
+						});
+						if (!res.ok) throw new Error(await res.text());
+						r.notes = val;
+						lastSent = val;
+						saved.classList.add('show');
+						setTimeout(() => saved.classList.remove('show'), 1400);
+					} catch (err) {
+						toast(`note save failed: ${err.message}`, 'error');
+					}
+				});
+
+				ta.focus();
+				if (initial) {
+					ta.setSelectionRange(initial.length, initial.length);
+				}
+			}
+
+			function renderChat(items) {
+				// Same id-set guard as drafts/history: full re-render only when the
+				// set of message_guids changes; otherwise just refresh the age.
+				const idsKey = items.map((m) => m.message_guid).join('|');
+				if (idsKey === renderedChatIds && items.length > 0) {
+					for (const m of items) {
+						const ref = chatRefs.get(m.message_guid);
+						if (ref?.whenEl) ref.whenEl.textContent = fmtAge(m.received_at);
+					}
+					return;
+				}
+				renderedChatIds = idsKey;
+				chatRefs.clear();
+				chatList.innerHTML = '';
+
+				if (!items.length) {
+					const e = document.createElement('div');
+					e.className = 'empty';
+					e.textContent = 'no inbound messages yet';
+					chatList.appendChild(e);
+					return;
+				}
+
+				for (const m of items) {
+					const card = document.createElement('div');
+					card.className = 'chat-item';
+
+					const wsLabel = m.workspace_label ?? 'unknown';
+					const wsClass = wsLabel === 'prod' ? 'tag workspace prod' : 'tag workspace';
+
+					const top = document.createElement('div');
+					top.className = 'top';
+					top.innerHTML =
+						`<span class="${wsClass}">${escapeHtml(wsLabel)}</span>` +
+						`<span class="handle">${escapeHtml(m.handle ?? '')}</span>` +
+						`<span class="when">${fmtAge(m.received_at)}</span>`;
+					card.appendChild(top);
+
+					const b = document.createElement('div');
+					b.className = 'in-bubble';
+					b.textContent = m.text ?? '';
+					card.appendChild(b);
+
+					chatList.appendChild(card);
+					chatRefs.set(m.message_guid, { whenEl: top.querySelector('.when') });
+				}
+			}
+
+			async function refresh() {
+				try {
+					const [dRes, hRes, kRes, cRes] = await Promise.all([
+						fetch('/api/drafts'),
+						fetch('/api/history'),
+						fetch('/kpi'),
+						fetch('/api/chat-log')
+					]);
+					const drafts = (await dRes.json()).filter((d) => passesFilter(d.workspace_label));
+					const items = (await hRes.json()).filter((r) => passesFilter(r.workspace_label));
+					const kpi = await kRes.json();
+					const chats = (await cRes.json()).filter((m) => passesFilter(m.workspace_label));
+					render(drafts);
+					renderHistory(items, kpi);
+					renderChat(chats);
+					draftsCount.textContent = drafts.length ? `${drafts.length}` : '';
+					historyCount.textContent = items.length ? `${items.length}` : '';
+					chatCount.textContent = chats.length ? `${chats.length}` : '';
+					statusEl.textContent = drafts.length
+						? `${drafts.length} pending`
+						: 'no pending drafts';
+				} catch {
+					statusEl.textContent = 'offline';
+				}
+			}
+
+			refresh();
+			setInterval(refresh, 2000);
+		</script>
+	</body>
+</html>
