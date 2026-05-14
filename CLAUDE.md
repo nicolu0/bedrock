@@ -28,9 +28,36 @@ Agent (separate from the web app):
 agent/imessage/run-messages.sh   # terminal 1: launch Messages.app with injected helper dylib
 node agent/server.mjs            # terminal 2: poll loop + IPC listener on 127.0.0.1:9772
 node agent/cli.mjs               # REPL testbed for the orchestrator, no iMessage
+node agent/evals/run.mjs         # run the eval suite (see "Eval discipline" below)
 ```
 
-No test runner is configured. Formatting: tabs, single quotes, no trailing commas, printWidth 100 (see `.prettierrc`).
+No unit-test runner. Formatting: tabs, single quotes, no trailing commas, printWidth 100 (see `.prettierrc`).
+
+## Eval discipline (REQUIRED)
+
+The agent has an eval harness at `agent/evals/`. **Before shipping any change that touches a skill prompt, a tool description, a tool's `run` function, or the orchestrator loop, run the suite and confirm no regressions.**
+
+```
+node agent/evals/run.mjs              # full suite, ~35s, ~$0.05
+node agent/evals/run.mjs --filter f1  # one skill (filter by name substring)
+node agent/evals/run.mjs --verbose    # print tool-call args on failure
+```
+
+Pattern when adding a feature:
+
+1. **Add a scenario first** in `agent/evals/scenarios.mjs` that captures the new behavior you want. Run the suite — your new scenario should FAIL because the agent doesn't do it yet.
+2. **Build the feature** (new tool, new skill, prompt edit, etc.).
+3. **Re-run the suite.** Your new scenario should now PASS. None of the others should regress.
+
+Pattern when fixing a bug:
+
+1. **Add a regression scenario** that reproduces the bug. It should FAIL.
+2. **Fix the bug.**
+3. **Re-run.** All scenarios pass.
+
+Why this matters: without evals we're tuning blind. Mini models drift on prompt-adherence between runs; a "small" prompt tweak can silently break a different scenario. The suite is the safety net. Skipping it on a prompt change is the bug.
+
+Judge model: `gpt-5.4-mini-2026-03-17`. Suite cost is negligible.
 
 ## Agent architecture (`agent/`)
 

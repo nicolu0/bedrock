@@ -34,6 +34,12 @@ export function resetConversation(handle) {
 	conversations.delete(handle);
 }
 
+// Eval-only: seed a conversation history without replaying turns. Lets
+// scenarios start mid-flow (e.g. "user is in setup stage, has named property").
+export function _setConversationForTest(handle, messages) {
+	conversations.set(handle, [...messages]);
+}
+
 // Opener — canned messages sent on the first turn, no model call.
 const OPENER_MESSAGES = [
 	"hey, i'm bedrock. i handle work orders for property managers, all over text. no logging into your pms, no chasing tenants or vendors. that's my job.",
@@ -337,6 +343,9 @@ export const demoSkill = {
 		for (let i = 0; i < OPENER_MESSAGES.length; i++) {
 			if (ctx.onEvent) await ctx.onEvent({ type: 'typing' });
 			await sleep(OPENER_TYPING_DELAY_MS);
+			// Mirror send_text: push to outbox AND fire the message event so
+			// callers (transport, evals) can read from a single place.
+			if (ctx.outbox) ctx.outbox.push(OPENER_MESSAGES[i]);
 			if (ctx.onEvent) await ctx.onEvent({ type: 'message', content: OPENER_MESSAGES[i] });
 			if (i < OPENER_MESSAGES.length - 1) await sleep(OPENER_BETWEEN_MS);
 		}

@@ -8,7 +8,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, 'data');
+// Honors BEDROCK_DATA_DIR so the eval harness redirects per-handle memory
+// reads/writes to a temp directory without touching real prod data/handles.
+const DATA_DIR = process.env.BEDROCK_DATA_DIR || path.join(__dirname, 'data');
 
 function handleDir(handle) {
 	return path.join(DATA_DIR, handle.replace(/[^\w@+.-]/g, '_'));

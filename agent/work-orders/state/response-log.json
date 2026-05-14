@@ -140,5 +140,121 @@
       "--- original\nShould we send Abraham?\n--- final\nShould we send Yonic for this too?"
     ],
     "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-14T00:39:31.362Z",
+    "draft_id": "drf_d4d162abd9fe6336",
+    "issue_id": "53033638-ebb5-4be3-973d-e56cab90a6a8",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 04 at 828 11th St has dryer not working.",
+      "Should we send Cross Appliance Inc?"
+    ],
+    "messages_final": [
+      "Unit 4 at 828 11th St has dryer not working.",
+      "Should we send Cross Appliance Inc?"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nUnit 04 at 828 11th St has dryer not working.\n--- final\nUnit 4 at 828 11th St has dryer not working.",
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-14T00:58:05.382Z",
+    "draft_id": "drf_cdd44f806894450f",
+    "issue_id": "9606c80a-7df2-4278-8873-1ddcffe7f69b",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "URGENT: Unit 292-16 at 6337 Primrose Ave has a rat infestation in the complex.",
+      "Should we send Guox Maintenance & Remodel?"
+    ],
+    "messages_final": [
+      "Unit 16 at 6337 Primrose Ave is also reporting a rat infestation in the complex. \n\n\"As someone who is currently undergoing cancer treatment and who is severely immunocompromised, I need to know ASAP what efforts are being made to resolve this issue. With hantavirus in the news, I can’t risk being exposed. Some trees were cut, but there is still access for rats to climb from limbs to the roof and balconies.\"",
+      "Should we send Primex since this tenant seems more sensitive?"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nURGENT: Unit 292-16 at 6337 Primrose Ave has a rat infestation in the complex.\n--- final\nUnit 16 at 6337 Primrose Ave is also reporting a rat infestation in the complex. \n\n\"As someone who is currently undergoing cancer treatment and who is severely immunocompromised, I need to know ASAP what efforts are being made to resolve this issue. With hantavirus in the news, I can’t risk being exposed. Some trees were cut, but there is still access for rats to climb from limbs to the roof and balconies.\"",
+      "--- original\nShould we send Guox Maintenance & Remodel?\n--- final\nShould we send Primex since this tenant seems more sensitive?"
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-14T01:01:26.991Z",
+    "draft_id": "drf_00636dc261692a46",
+    "issue_id": "9606c80a-7df2-4278-8873-1ddcffe7f69b",
+    "channel": "tenant_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "Melinda Nelson",
+    "to_participants": [
+      "Melinda Nelson"
+    ],
+    "action": "copy",
+    "messages_original": [
+      "Hi Melinda Nelson,\n\nI sent this to Guox Maintenance & Remodel. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "messages_final": [
+      "Hi Melinda,\n\nThanks for reporting this. I'm sending Primex out to take a look again. This is an active issue we are working on and are in the process of cutting back the trees.\n\nBest,\nJose"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nHi Melinda Nelson,\n\nI sent this to Guox Maintenance & Remodel. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose\n--- final\nHi Melinda,\n\nThanks for reporting this. I'm sending Primex out to take a look again. This is an active issue we are working on and are in the process of cutting back the trees.\n\nBest,\nJose"
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-14T01:03:55.245Z",
+    "draft_id": "drf_fcff02550086023f",
+    "issue_id": "9606c80a-7df2-4278-8873-1ddcffe7f69b",
+    "channel": "vendor_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "Guox Maintenance & Remodel",
+    "to_participants": [
+      "Guox Maintenance & Remodel"
+    ],
+    "action": "dismiss",
+    "messages_original": [
+      "Please schedule with the tenant for Rat infestation in complex. Their phone number is [phone]."
+    ],
+    "messages_final": [
+      "Please schedule with the tenant for Rat infestation in complex. Their phone number is [phone]."
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false,
+    "notes": "Wrong vendor + special case, checking complex not specific unit.",
+    "notes_updated_at": "2026-05-14T01:04:14.978Z"
   }
 ]

@@ -13,13 +13,18 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// State directory can be overridden via BEDROCK_STATE_DIR — used by the eval
+// harness so test runs don't trample real drafts/logs. Defaults to this
+// module's own directory (the prod state files).
+const STATE_DIR = process.env.BEDROCK_STATE_DIR || __dirname;
+
 const FILES = {
-	drafts: path.join(__dirname, 'drafts.json'),
-	sent: path.join(__dirname, 'sent-log.json'),
-	response: path.join(__dirname, 'response-log.json'),
-	chat: path.join(__dirname, 'chat-log.json'),
-	issuesCursor: path.join(__dirname, 'issues-cursor.json'),
-	chatCursor: path.join(__dirname, 'chat-cursor.json')
+	drafts: path.join(STATE_DIR, 'drafts.json'),
+	sent: path.join(STATE_DIR, 'sent-log.json'),
+	response: path.join(STATE_DIR, 'response-log.json'),
+	chat: path.join(STATE_DIR, 'chat-log.json'),
+	issuesCursor: path.join(STATE_DIR, 'issues-cursor.json'),
+	chatCursor: path.join(STATE_DIR, 'chat-cursor.json')
 };
 
 async function readJson(file, fallback) {

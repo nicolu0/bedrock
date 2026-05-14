@@ -9,25 +9,54 @@ import { sendText } from '../tools/send_text.mjs';
 
 const F1_TASK_PROMPT = `# Task: draft a new-work-order ping
 
-A new work order just arrived from the property management system. Send the property manager two iMessages via the send_text tool — one per call, in order:
+A new work order just arrived. Send the property manager 1 or 2 iMessages via the send_text tool, then STOP.
 
-Message 1: "Unit {unit} at {property} has {one-line issue summary}."
-Message 2: "Should we send {vendor}?"
+## How many messages
 
-Field substitution rules:
-- {property} and {unit} come from the work order. If unit is missing, drop the "Unit {unit} at " prefix and write "{property} has ...".
-- {one-line issue summary} is a tight rewording of the issue title or description. One sentence. No newlines.
-- {vendor} is the recommended vendor exactly as named in the work order. First name only for individuals (Yonic, Abraham, Mario). Full name for companies (LA Hydro Jet, Cross Appliance Inc). If the work order has no recommended vendor, send ONLY Message 1 and do not call send_text a second time. Never emit "Should we send ?" with an empty name. Never emit "{vendor}" as literal text.
+- If the work order has a recommended vendor: send EXACTLY 2 messages.
+- If the work order has NO recommended vendor: send EXACTLY 1 message. Do NOT call send_text again after the first call. Do NOT ask any follow-up question. Just stop.
 
-Hard rules:
-- Use the send_text tool. Two calls (or one if no vendor). Do not include both messages in a single send_text call.
-- No greetings ("Hey", "Hi"), no signoffs, no emoji, no markdown, no bullet points.
-- Do NOT mention owners, owner notes, contacting the owner, or owner approval. Owner logic is not in F1.
-- Do NOT add helpful filler ("Let me know if you have questions", "Hope that helps").
-- Do NOT invent facts not in the work order.
-- If the issue is marked urgent, you may prepend "URGENT: " to Message 1. Otherwise no urgency labels.
+## The messages
 
-That's it. Two send_text calls, strict template, done.`;
+Message 1 (always): "Unit {unit} at {property} has {one-sentence issue summary}."
+Message 2 (only if vendor): "Should we send {vendor}?"
+
+## Field rules
+
+- {one-sentence issue summary}: one short sentence. ONE. No periods in the middle. No "and" connecting multiple problems. Pick the most important detail and drop the rest. Keep it under 15 words.
+- {unit}: from the work order. If unit is missing, drop the "Unit {unit} at " prefix entirely and write "{property} has {summary}."
+- {vendor}: exactly as named in the work order. First name only for individuals (Yonic, Abraham, Mario). Full name for companies (LA Hydro Jet, Cross Appliance Inc).
+- Urgent issues: prepend "URGENT: " to Message 1. Otherwise no urgency label.
+
+## Hard rules
+
+- After the appropriate send_text call(s), STOP. Do not call any tool again. Do not produce plain text content. Return.
+- One send_text per message — never put both messages in a single call.
+- No greetings ("Hey", "Hi"), no signoffs, no emoji, no markdown.
+- Never mention owners or owner approval.
+- Never add filler ("Let me know", "Hope that helps").
+- Never emit "{vendor}", "Should we send ?", or unfilled placeholder text.
+- Never invent facts that aren't in the work order.
+
+## Examples
+
+Standard (unit + vendor present):
+  Input has: Property=829 Ocean Park, Unit=1, Title=leaky faucet, Vendor=Yonic
+  Send: "Unit 1 at 829 Ocean Park has a leaky faucet."
+  Send: "Should we send Yonic?"
+
+Unit missing (vendor present) — drop the "Unit X at" prefix:
+  Input has: Property=Lincoln Lobby, NO Unit, Title=front door buzzer broken, Vendor=Abraham
+  Send: "Lincoln Lobby has a broken front door buzzer."
+  Send: "Should we send Abraham?"
+
+Vendor missing (unit present) — send only message 1, then STOP:
+  Input has: Property=Hub Champaign, Unit=701, Title=wifi down, NO Vendor
+  Send: "Unit 701 at Hub Champaign has wifi down."
+  [STOP — no second message, no further tool calls]
+
+Urgent:
+  Input has urgent=true. Prepend "URGENT: " to message 1.`;
 
 function formatIssue(issue) {
 	const lines = ['New work order:'];

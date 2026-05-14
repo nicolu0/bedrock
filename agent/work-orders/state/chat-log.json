@@ -9,5 +9,56 @@
     "text": "Yes please",
     "is_from_me": false,
     "db_date": 800381529457354500
+  },
+  {
+    "received_at": "2026-05-14T00:40:24.029Z",
+    "message_guid": "23D70596-9002-44B9-A316-75BCEED2C556",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "I need approval from the owners before sending someone",
+    "is_from_me": false,
+    "db_date": 800412023334970000,
+    "agent_action": "no_match",
+    "agent_runs_at": "2026-05-14T00:40:24.948Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-14T00:49:27.556Z",
+    "message_guid": "6F707161-C87F-4977-AF06-18F0288E5D59",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Correct. I’ll send them an email for approval",
+    "is_from_me": false,
+    "db_date": 800412566493839000,
+    "agent_action": "no_match",
+    "agent_runs_at": "2026-05-14T00:49:29.163Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-14T00:59:56.223Z",
+    "message_guid": "69D5156F-55CC-4F14-8AA6-3D258ED4307D",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Send primex again to see if anything else can be done. Mention to her that we are in the process of cutting back the trees",
+    "is_from_me": false,
+    "db_date": 800413195943992800,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-05-14T01:00:00.627Z",
+    "agent_drafts_count": 2,
+    "agent_draft_ids": [
+      "drf_00636dc261692a46",
+      "drf_fcff02550086023f"
+    ],
+    "agent_error": null
   }
 ]

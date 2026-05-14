@@ -29,7 +29,10 @@ import { fileURLToPath } from 'node:url';
 import { identityPrompt } from '../identity.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TURNS_LOG_PATH = path.join(__dirname, '..', 'work-orders', 'state', 'turns.jsonl');
+// Honors BEDROCK_STATE_DIR so the eval harness redirects writes to a temp dir.
+const STATE_DIR =
+	process.env.BEDROCK_STATE_DIR || path.join(__dirname, '..', 'work-orders', 'state');
+const TURNS_LOG_PATH = path.join(STATE_DIR, 'turns.jsonl');
 
 const DEFAULT_MAX_ITERATIONS = 8;
 const decoder = new TextDecoder();
