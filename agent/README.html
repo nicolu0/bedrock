@@ -92,11 +92,12 @@
     aside.sidebar ol { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
   }
 
-  h1, h2, h3 { font-family: "SF Pro Display", -apple-system, Helvetica, sans-serif; line-height: 1.2; }
+  h1, h2, h3, h4 { font-family: "SF Pro Display", -apple-system, Helvetica, sans-serif; line-height: 1.25; }
   h1 { font-size: 2rem; margin-bottom: 0.25rem; }
   h1 + .sub { color: var(--muted); margin-top: 0; margin-bottom: 2.5rem; }
-  h2 { margin-top: 2.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--rule); }
+  h2 { margin-top: 3rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--rule); }
   h3 { margin-top: 1.8rem; font-size: 1.05rem; color: var(--accent); }
+  h4 { margin-top: 1.4rem; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
   code, pre { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; }
   code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
   pre {
@@ -134,6 +135,23 @@
   th, td { text-align: left; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
   th { background: var(--code-bg); }
   td.path { font-family: "SF Mono", Menlo, monospace; font-size: 0.85em; white-space: nowrap; color: var(--muted); }
+  .chip {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 1px 7px;
+    border-radius: 999px;
+    margin-left: 6px;
+    vertical-align: 2px;
+    background: var(--code-bg);
+    color: var(--muted);
+    border: 1px solid var(--rule);
+  }
+  .chip.live { color: #74c99a; border-color: #2a3a2a; }
+  .chip.draft { color: #d4a855; border-color: #3a3320; }
+  .chip.read { color: #8a8378; }
+  .chip.skill { color: var(--accent); border-color: #3a2a20; }
   footer { margin-top: 4rem; color: var(--muted); font-size: 0.85em; border-top: 1px solid var(--rule); padding-top: 1rem; }
 </style>
 </head>
@@ -146,12 +164,12 @@
   <nav>
     <ol>
       <li><a href="#layout">Layout</a></li>
-      <li><a href="#layers">The two layers</a></li>
-      <li><a href="#entry-points">Entry points</a></li>
-      <li><a href="#flow">Message flow</a></li>
-      <li><a href="#core">core/</a></li>
-      <li><a href="#imessage">imessage/</a></li>
-      <li><a href="#dev-tools">dev_tools/</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#orchestrator">Orchestrator</a></li>
+      <li><a href="#identity">Identity</a></li>
+      <li><a href="#skills">Skills</a></li>
+      <li><a href="#tools">Tools</a></li>
+      <li><a href="#transport">Transport</a></li>
       <li><a href="#running">Running it</a></li>
     </ol>
   </nav>
@@ -160,142 +178,306 @@
 <div class="wrap">
 
 <h1>agent/</h1>
-<p class="sub">An LLM-driven iMessage agent for property managers. This document describes how the directory is laid out and how the pieces fit together.</p>
+<p class="sub">An LLM-driven iMessage agent for property managers. One orchestrator, swappable skills, a shared tool catalog, and an iMessage transport. This document describes how the directory is laid out and what each piece does.</p>
 
 <h2 id="layout">Layout</h2>
 
 <div class="tree">agent/
-├── server.mjs        <span class="note">main entry — iMessage transport + poll loop</span>
-├── cli.mjs           <span class="note">REPL testbed (no iMessage)</span>
-├── core/             <span class="note">model-driven turn logic, independent of transport</span>
-│   ├── orchestrator.mjs
-│   ├── prompts.mjs
-│   ├── tools.mjs
-│   └── memory.mjs
-├── data/             <span class="note">per-handle profile.json + observations.jsonl</span>
-├── imessage/         <span class="note">Messages.app bridge library</span>
-│   ├── helper.mjs
-│   ├── MessagesHelper/   <span class="note">.dylib injected into Messages.app</span>
-│   ├── run-messages.sh
-│   ├── docs.html
-│   └── README.md
-├── dev_tools/        <span class="note">manual / developer-only utilities</span>
-│   ├── issues_poller.mjs
-│   └── inject-draft.applescript
-└── docs/             <span class="note">design docs (SPEC, prompt notes)</span>
-    ├── SPEC.html
-    └── prompt_refactor.html</div>
+├── server.mjs            <span class="note">main entrypoint — chat.db poll + issue poll + transport</span>
+├── cli.mjs               <span class="note">REPL testbed for the demo skill (no iMessage)</span>
+├── identity.mjs          <span class="note">"who you are" prompt, prepended to every skill</span>
+├── memory.mjs            <span class="note">per-handle profile + observations primitives</span>
+├── supabase.mjs          <span class="note">tiny REST helper (env + fetchIssueById)</span>
+├── core/
+│   └── orchestrator.mjs  <span class="note">THE OpenAI tool-call loop. runTurn(skill, ctx).</span>
+├── skills/               <span class="note">per-trigger configs that drive the orchestrator</span>
+│   ├── f1.mjs            <span class="note">new work order → groupchat draft</span>
+│   ├── chat.mjs          <span class="note">PM reply in groupchat → tenant + vendor drafts</span>
+│   └── demo.mjs          <span class="note">1:1 chat with a prospect</span>
+├── tools/                <span class="note">tool catalog, one file per tool</span>
+│   ├── send_text.mjs
+│   ├── acknowledge.mjs
+│   ├── draft_tenant.mjs
+│   ├── draft_vendor.mjs
+│   ├── react_to_message.mjs
+│   ├── set_demo_stage.mjs
+│   ├── get_profile.mjs
+│   ├── update_profile.mjs
+│   ├── add_observation.mjs
+│   ├── recall.mjs
+│   ├── list_properties.mjs
+│   └── list_vendors.mjs
+├── work-orders/          <span class="note">work-order plumbing (issue poller, workspaces, drafts UI, state)</span>
+│   ├── issue-poller.mjs
+│   └── workspaces.mjs
+├── imessage/             <span class="note">Messages.app bridge (helper.mjs + injected dylib)</span>
+└── data/                 <span class="note">per-handle memory: profile.json + observations.jsonl</span></div>
 
-<h2 id="layers">The two layers</h2>
+<h2 id="architecture">Architecture</h2>
 
 <p>
-The directory splits cleanly along one seam: <strong>transport</strong> vs.
-<strong>agent logic</strong>. Everything in <code>core/</code> is pure &mdash; it
-takes a handle and a user message and emits an event stream. Everything in
-<code>imessage/</code> + <code>server.mjs</code> deals with the Messages.app side:
-watching <code>chat.db</code>, sending replies, driving the typing dots and read
-receipts.
+Three layers, with sharp seams:
 </p>
+
+<ul>
+  <li><strong>Transport</strong> (<code>server.mjs</code>, <code>imessage/</code>, <code>work-orders/issue-poller.mjs</code>) — watches the world (<code>chat.db</code>, Supabase), decides <em>which</em> trigger fired, hands ctx to a skill, and turns the orchestrator's event stream back into iMessage signals or persisted drafts.</li>
+  <li><strong>Skill</strong> (<code>skills/*.mjs</code>) — a config bundle: <code>{ name, model, maxIterations, tools, taskPrompt, buildContext, preCheck?, commit? }</code>. The skill is what makes the agent behave differently for a new work order vs. a PM reply vs. a prospect chat.</li>
+  <li><strong>Orchestrator</strong> (<code>core/orchestrator.mjs</code>) — the only place OpenAI is called. Loops over tool calls, dispatches inline, surfaces failures uniformly. Trigger-agnostic and skill-agnostic by design.</li>
+</ul>
 
 <p>
-Because the seam is clean, <code>cli.mjs</code> can run the same orchestrator with
-no iMessage in the loop &mdash; it just prints events to the terminal. Useful for
-iterating on prompts without spamming a real phone.
+A <strong>skill</strong> tells the orchestrator how to assemble messages and what tools the model is allowed to call. The orchestrator never knows what a "demo" or an "f1" is — it just runs <code>skill.buildContext(ctx)</code>, prepends the identity prompt + the skill's task prompt, streams the OpenAI completion, dispatches tool calls as their args parse, and returns <code>{ messages, drafts, toolCalls, failure }</code>.
 </p>
-
-<h2 id="entry-points">Entry points</h2>
-
-<table>
-  <thead><tr><th>Command</th><th>What it does</th></tr></thead>
-  <tbody>
-    <tr>
-      <td class="path">node agent/server.mjs</td>
-      <td>The product. Polls <code>chat.db</code> for unread messages from unknown numbers, runs a turn through the orchestrator, and ships replies via the dylib bridge. Filters out known customer/vendor handles so testing doesn't hijack real conversations.</td>
-    </tr>
-    <tr>
-      <td class="path">agent/imessage/run-messages.sh</td>
-      <td>Launches Messages.app with <code>MessagesHelper.dylib</code> injected. Must be running before <code>server.mjs</code> &mdash; the helper dials out to the JS-side TCP listener on port 9772.</td>
-    </tr>
-    <tr>
-      <td class="path">node agent/cli.mjs [handle]</td>
-      <td>REPL testbed. Same orchestrator, no Messages.app. Has <code>:state</code>, <code>:reset</code>, <code>:replay</code> commands.</td>
-    </tr>
-    <tr>
-      <td class="path">node agent/dev_tools/issues_poller.mjs</td>
-      <td>Manual workflow: polls Supabase for new tenant work-order requests and injects drafts via the clipboard. Separate from the agent until drafting + sending is wired into <code>core/</code>.</td>
-    </tr>
-  </tbody>
-</table>
-
-<h2 id="flow">How a message flows through</h2>
-
-<ol>
-  <li><strong>chat.db poll.</strong> <code>server.mjs</code> queries the SQLite database every 1s for new <code>iMessage</code> rows in 1:1 chats (no group chats, no attachments). macOS Ventura+ stores message text in an <code>NSAttributedString</code> blob &mdash; <code>extractText()</code> lifts the UTF-8 string out.</li>
-  <li><strong>Filter.</strong> Drop messages from known handles (real customers/vendors), drop messages already processed (<code>state.processed</code> in <code>.imessage-state.json</code>), drop self-sent messages.</li>
-  <li><strong>Per-handle serialization.</strong> An <code>inflight</code> map chains turns per handle, so a fast follow-up doesn't race the in-flight turn. Different chats stay parallel.</li>
-  <li><strong>Orchestrator.</strong> <code>runTurn(handle, text, { onEvent, ctx })</code> appends to in-memory conversation history, builds the system prompt from the current <code>system/stage</code> (intro → setup → dispatch → learning → followup → complete), and streams the OpenAI chat completion.</li>
-  <li><strong>Tool dispatch.</strong> Tool calls are dispatched <em>inline as the stream produces them</em> &mdash; each call's args parse, the tool runs, and the result feeds back into the next iteration. <code>send_text</code> calls become <code>message</code> events; everything else becomes <code>tool_call</code> events.</li>
-  <li><strong>Transport mapping.</strong> <code>server.mjs</code>'s <code>onEvent</code> handler maps events to dylib calls: <code>read</code> → <code>markRead</code>; <code>message</code> → <code>setTyping(true)</code>, dwell, <code>setTyping(false)</code>, <code>send</code>. Typing dwell scales with message length so a short reply doesn't feel as instant as a long one.</li>
-</ol>
 
 <div class="callout">
-<strong>Why typing dots are tied to <em>messages</em>, not <em>typing</em> events.</strong>
-The orchestrator emits a <code>typing</code> event at the start of every model
-iteration, including the final no-op one where the model returns no more tool
-calls. Reacting to those events directly causes a ghost flash of dots after the
-last message. Dots come on only immediately before a real message ships &mdash;
-mirroring how iMessage works in real life.
+<strong>Grep-test invariant.</strong> <code>core/orchestrator.mjs</code> contains zero references to specific skill names (<code>f1</code>, <code>chat</code>, <code>demo</code>) or specific tool names (<code>send_text</code>, etc.). If you find yourself writing <code>if (skill.name === ...)</code> in there, the skill should own it via <code>buildContext</code>, a config field, or a tool result.
 </div>
 
-<h2 id="core"><code>core/</code> &mdash; the agent</h2>
-
-<table>
-  <thead><tr><th>File</th><th>Role</th></tr></thead>
-  <tbody>
-    <tr><td class="path">orchestrator.mjs</td><td>Streaming tool-call loop. One <code>runTurn</code> per user message. Re-reads the stage at every iteration so a mid-turn <code>set_demo_stage</code> applies on the next loop. Has a hardcoded opener (no model call on first turn) and a hardcoded closer for the followup → complete transition.</td></tr>
-    <tr><td class="path">prompts.mjs</td><td>Per-stage system prompts plus the canned <code>OPENER_MESSAGES</code> and <code>FOLLOWUP_COMPLETE_CLOSER</code> lines.</td></tr>
-    <tr><td class="path">tools.mjs</td><td>OpenAI function-calling tool definitions and their implementations: <code>send_text</code>, <code>update_profile</code>, <code>get_profile</code>, <code>add_observation</code>, <code>recall</code>, <code>list_properties</code>, <code>list_vendors</code>, <code>react_to_message</code>, <code>set_demo_stage</code>.</td></tr>
-    <tr><td class="path">memory.mjs</td><td>Per-handle JSON-file storage. <code>profile.json</code> is a flat slug → value map (slugs like <code>user/name</code>, <code>property/&lt;slug&gt;/units</code>, <code>vendor/&lt;trade&gt;/&lt;property-slug&gt;</code>). <code>observations.jsonl</code> is append-only fuzzy notes with naive substring-overlap recall.</td></tr>
-  </tbody>
-</table>
-
-<h3>Memory model</h3>
+<h2 id="orchestrator">Orchestrator</h2>
 
 <p>
-Two slots, deliberately. <strong>Profile</strong> is for facts that belong on a key
-&mdash; a property's unit count, a vendor's name for a trade. The slug shape
-(<code>vendor/plumbing/oak-st</code>) makes <code>listProperties</code> /
-<code>listVendors</code> trivial prefix scans. <strong>Observations</strong> are
-fuzzy &mdash; preferences, anecdotes, context that doesn't fit a slug. Recall is
-keyword-substring with hit-count ranking, not embeddings; cheap and good enough
-for now.
+<code>runTurn(skill, ctx)</code> is the entire surface. Both pollers and the CLI call it the same way; only <code>ctx.sendMode</code> and <code>ctx.onEvent</code> differ.
 </p>
 
-<h3>Demo state machine</h3>
+<pre><code>// Skill shape
+{
+  name, model, maxIterations, maxTokens?,
+  tools: [{ name, description, parameters, run(args, ctx) }, ...],
+  taskPrompt: string | (ctx) =&gt; string,
+  buildContext: (ctx) =&gt; OpenAI messages array,
+  preCheck?:  (ctx) =&gt; result | null,    // short-circuit before LLM
+  commit?:    (ctx) =&gt; void              // post-LLM hook
+}</code></pre>
+
+<h4>Loop</h4>
+<ol>
+  <li><strong>preCheck.</strong> If the skill defines one and returns a result, short-circuit (no LLM call). Demo uses this for the canned opener on first contact.</li>
+  <li><strong>System prompt.</strong> <code>identityPrompt</code> + <code>skill.taskPrompt</code> (re-evaluated per iteration if it's a function — demo's stage block changes mid-turn).</li>
+  <li><strong>Stream.</strong> One streamed OpenAI chat-completion per iteration. As each tool call's args complete, the tool runs <em>inline</em> — the transport sees results as they happen instead of waiting for the whole response.</li>
+  <li><strong>Tool result conventions.</strong> Two generic fields the orchestrator honors without naming any tool:
+    <ul>
+      <li><code>assistantContent</code> — concatenated into the assistant message between iterations so the model reads its own speech as plain text on the next loop.</li>
+      <li><code>endTurn</code> — break the loop after this tool runs (used by <code>set_demo_stage</code>'s closer).</li>
+    </ul>
+  </li>
+  <li><strong>Failure surface.</strong> Tool throws, OpenAI errors, or <code>maxIterations</code> hit with no output → returned as <code>{ failure }</code>. Pollers treat it as a warning and still ship any usable drafts.</li>
+  <li><strong>commit.</strong> Optional post-loop hook (demo persists the assistant's outbox to its in-memory conversation log).</li>
+  <li><strong>Telemetry.</strong> Every invocation appends one row to <code>work-orders/state/turns.jsonl</code>: skill, model, iterations, tool-call summary, drafts/outbox counts, failure, duration.</li>
+</ol>
+
+<h4>Send modes</h4>
+<p>
+The orchestrator passes <code>ctx</code> through to tools unchanged. Two values matter:
+</p>
+<ul>
+  <li><span class="chip live">live</span> — emit messages via <code>ctx.onEvent({ type: 'message' })</code>. The transport handles typing-dot dwell and dylib send. Used by demo and chat (acknowledge only).</li>
+  <li><span class="chip draft">draft</span> — append messages to <code>ctx.drafts</code> for human review in the drafts UI. Used by F1 and the chat skill's tenant/vendor drafts.</li>
+</ul>
+
+<h2 id="identity">Identity</h2>
 
 <p>
-A new handle starts at the <code>intro</code> stage. The model advances by calling
-<code>set_demo_stage</code>: setup → dispatch → learning → followup → complete.
-Each stage has its own system prompt block. The orchestrator refreshes the prompt
-every loop iteration, so the stage can change mid-turn. The
-<code>followup → complete</code> transition is the one place we override the
-model: a hardcoded closer ships and the turn ends, so the model never enters the
-complete-stage prompt mid-turn and feels obligated to greet again.
+<code>identity.mjs</code> exports one constant — <code>identityPrompt</code> — that's prepended to every skill's task prompt. Stable, small, never per-turn:
 </p>
 
-<h2 id="imessage"><code>imessage/</code> &mdash; the bridge</h2>
+<ul>
+  <li>Who Bedrock is (the product, not a model).</li>
+  <li>Hard constraints that apply to every skill: no auto-send to customers, stay in character, don't invent facts, no em-dashes, surface tool failures honestly.</li>
+</ul>
 
 <p>
-Messages.app is sandboxed and can't bind a TCP listener, but its
-<code>network.client</code> entitlement allows outbound connect. So the topology
-is inverted from what you'd expect: <strong>the JS process listens on
-<code>127.0.0.1:9772</code>; the dylib inside Messages.app dials out</strong>.
-Once connected, both sides exchange newline-delimited JSON requests with
-monotonic ids.
+Skill-specific voice and stage logic live in each skill's <code>taskPrompt</code>, not here. Tool-specific behavior lives in each tool's <code>description</code> field — descriptions are part of the prompt and get the same engineering rigor as the task prompt itself.
+</p>
+
+<h2 id="skills">Skills</h2>
+
+<p>
+A skill is a single object the orchestrator runs. The three live skills cover the three triggers we react to today.
+</p>
+
+<h3>f1<span class="chip skill">new_issue</span></h3>
+<p>
+A new work order lands in Supabase (<code>issues_v2</code>). The issue poller waits for upstream <code>agent_runs</code> (intake + vendor) to be marked <code>done</code>, then runs F1 to produce a 1–2 message groupchat draft.
+</p>
+<ul>
+  <li><strong>Model:</strong> <code>gpt-4.1-mini</code> by default. The prompt is a strict slot-fill template — no creativity, no fallback phrasings. Mini is plenty.</li>
+  <li><strong>Send mode:</strong> always <code>draft</code>. The poller surfaces it in the drafts UI for the PM to Send.</li>
+  <li><strong>Tools:</strong> <code>send_text</code> (one call per bubble).</li>
+  <li><strong>Shape of output:</strong>
+    <ul>
+      <li>Message 1 (always): <em>"Unit {unit} at {property} has {one-sentence summary}."</em> — drops the "Unit X at" prefix if no unit; prepends <code>URGENT: </code> if urgent.</li>
+      <li>Message 2 (only if recommended vendor): <em>"Should we send {vendor}?"</em></li>
+    </ul>
+  </li>
+  <li><strong>buildContext:</strong> formats <code>ctx.issue</code> into a bullet list of fields (property, unit, title, description, tenant, vendor, urgent flag). Tells the model "Recommended vendor: (none — skip Message 2)" explicitly when there's no vendor, so the model has clear signal to stop after one call.</li>
+</ul>
+
+<h3>chat<span class="chip skill">groupchat_reply</span></h3>
+<p>
+The PM replies in a mapped groupchat. The chat poller hands the message to this skill, which decides whether the reply is approving vendor dispatch on one of the recent F1 bundles we sent in that chat. If yes: live ack + tenant draft + vendor draft. If no: zero tool calls — the row is tagged <code>no_match</code> in the chat-log so a human can see it in the dashboard.
+</p>
+<ul>
+  <li><strong>Model:</strong> <code>gpt-5.4-2026-03-05</code>. Correlation needs reasoning — the body text contains property, unit, and vendor names, and the model has to match those against the reply.</li>
+  <li><strong>Send mode:</strong> <code>live</code> for the ack only (gated by the safety guard in <code>send_text</code>); the tenant and vendor outputs are <code>draft</code> by virtue of which tool produces them.</li>
+  <li><strong>Tools:</strong> <code>acknowledge</code>, <code>draft_tenant</code>, <code>draft_vendor</code>.</li>
+  <li><strong>Candidate set:</strong> last 5 groupchat sends within 7 days for this <code>chat_guid</code>, derived from <code>sent-log.json</code> by <code>bundle_id</code>. The model sees the actual message bodies plus their <code>issue_id</code>.</li>
+  <li><strong>Decision rules</strong> (from the task prompt):
+    <ul>
+      <li>Clear yes on one issue → ack + draft_tenant + draft_vendor (in that order, same <code>issue_id</code>).</li>
+      <li>Vendor swap ("send Luigi instead") → no tools (v1 doesn't handle swaps).</li>
+      <li>Question, off-topic, or ambiguous across multiple candidates → no tools.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3>demo<span class="chip skill">inbound_message</span></h3>
+<p>
+A prospect texts the agent's number from an unknown 1:1 handle. The demo skill walks them through a guided product example end-to-end — opener, setup (collect a property + plumber), dispatch (fake work order, get approval, "send" the vendor), learning (lock in the preference), followup (proactive nudge), complete (closer).
+</p>
+<ul>
+  <li><strong>Model:</strong> <code>gpt-5.4-2026-03-05</code>. Voice work; the smaller model drifts.</li>
+  <li><strong>Send mode:</strong> <code>live</code>. The transport drives typing dots, read receipts, and dylib sends.</li>
+  <li><strong>Tools:</strong> <code>send_text</code>, <code>set_demo_stage</code>, <code>react_to_message</code>, plus the full memory surface (<code>get_profile</code>, <code>update_profile</code>, <code>add_observation</code>, <code>recall</code>, <code>list_properties</code>, <code>list_vendors</code>).</li>
+  <li><strong>Stage machine:</strong> <code>intro → setup → dispatch → learning → followup → complete</code>, stored at <code>system/stage</code> in the per-handle profile. <code>taskPrompt</code> is a function that re-reads the stage every iteration so a mid-turn <code>set_demo_stage</code> applies on the next loop.</li>
+  <li><strong>preCheck:</strong> on first contact, fires the canned opener (two lines) without an LLM call. Saves latency and rules out model variance on the entry message.</li>
+  <li><strong>commit:</strong> appends the assistant's emitted bubbles to the in-process conversation log (per-handle <code>Map</code>; lost on restart for v1).</li>
+  <li><strong>Voice guards:</strong> the prompt forbids em-dashes, opens-with-stock-acks, repeating questions verbatim across redirects, and ending turns on flat statements. Engagement-first, redirect-second.</li>
+</ul>
+
+<h2 id="tools">Tools</h2>
+
+<p>
+Each tool is a single file exporting <code>{ name, description, parameters, run(args, ctx) }</code>. The <code>description</code> is treated as part of the prompt — it carries behavioral rules the model needs at decision time. <code>run</code> reads anything it needs from <code>ctx</code> (handle, sendMode, onEvent, react, workspace_label, etc.) and returns a result object. Two reserved fields: <code>assistantContent</code> (text the orchestrator merges into the assistant message) and <code>endTurn</code> (break the loop).
+</p>
+
+<h3>send_text<span class="chip live">live</span><span class="chip draft">draft</span></h3>
+<p>
+The only tool that emits a customer-visible message. One call per bubble — the prompt forbids newlines or stacked thoughts inside one call; the tool defensively splits on newlines anyway.
+</p>
+<ul>
+  <li><strong>Live mode:</strong> emits <code>ctx.onEvent({ type: 'message' })</code> per bubble. The transport handles typing-dot dwell and dylib send.</li>
+  <li><strong>Draft mode:</strong> appends <code>{ body }</code> to <code>ctx.drafts</code>. The poller writes a draft row to <code>drafts.json</code>.</li>
+  <li><strong>Safety:</strong> in live mode, refuses if <code>ctx.isPmHandle</code> is true (belt-and-suspenders against ever live-sending to a PM number through the demo path).</li>
+  <li><strong>Defensive drops:</strong> empty bodies, unfilled <code>{placeholder}</code> tokens, and the F1 empty-vendor leak <em>"Should we send ?"</em> are silently skipped.</li>
+</ul>
+
+<h3>acknowledge<span class="chip live">live</span></h3>
+<p>
+Live ack into the current chat from the chat skill. Used <em>before</em> any draft tool, so the PM sees that we've received the message and are working on it.
+</p>
+<ul>
+  <li><strong>Action space is enum-only:</strong> <code>"got it"</code>, <code>"on it"</code>, <code>"okay"</code>, <code>"thanks"</code>, <code>"noted"</code>. The model cannot write anything off-script, which is what makes it safe to live-send into a customer-visible chat without trust + eval graduation.</li>
+  <li>Same emit shape as <code>send_text</code> live mode: <code>ctx.onEvent({ type: 'message' })</code> + push to <code>ctx.outbox</code>.</li>
+</ul>
+
+<h3>draft_tenant<span class="chip draft">draft</span></h3>
+<p>
+Produces a tenant-facing draft for a given <code>issue_id</code>. Fetches the issue (Supabase), fills a hardcoded template using tenant + vendor names, writes a draft row with <code>channel='tenant_appfolio'</code>. The PM Copies it into AppFolio.
+</p>
+<ul>
+  <li><strong>Errors gracefully</strong> if the issue has no tenant or no recommended vendor — returns <code>{ ok: false, error }</code> instead of producing a half-template.</li>
+  <li>Tracks the new draft id on <code>ctx.draftIds</code> so the chat poller can tag the chat-log row with <code>drafted</code> vs <code>no_match</code>.</li>
+</ul>
+
+<h3>draft_vendor<span class="chip draft">draft</span></h3>
+<p>
+Mirror of <code>draft_tenant</code> for the vendor side. Channel is <code>vendor_appfolio</code>; template uses the issue title (or description) in the "for X" slot. Same draft-id tracking, same Supabase fetch, same graceful failure when the recommended vendor is missing.
+</p>
+
+<h3>react_to_message<span class="chip live">live</span></h3>
+<p>
+Adds an iMessage tapback (heart, thumbs up/down, ha-ha, !!, ?) on the user's most recent message. Demo only.
+</p>
+<ul>
+  <li>Requires <code>ctx.react</code>, which the transport binds to the specific incoming message GUID — the model never sees GUIDs.</li>
+  <li>Description tells the model to use it sparingly, and gives intent guidance (love when something is exciting, laugh on a joke, emphasize to flag importance).</li>
+</ul>
+
+<h3>set_demo_stage<span class="chip live">live</span></h3>
+<p>
+Advances the demo state machine by writing <code>system/stage</code> in the per-handle profile. The next iteration's <code>taskPrompt</code> picks up the new stage.
+</p>
+<ul>
+  <li><strong>Closer special case:</strong> on the in-order <code>followup → complete</code> transition, the tool emits two hardcoded closing messages inline (<em>"that's how we'll usually handle work orders."</em>, <em>"any questions?"</em>) and returns <code>endTurn: true</code>. Without that, the model would re-enter the new stage prompt and feel obligated to greet again.</li>
+  <li>Demo only. Other skills must not expose this tool.</li>
+</ul>
+
+<h3>get_profile<span class="chip read">memory</span></h3>
+<p>
+Reads a canonical fact by slug. Returns <code>{ value: string | null }</code>. The prompt tells the model to call this <em>before</em> asking the user something we might already know.
+</p>
+
+<h3>update_profile<span class="chip read">memory</span></h3>
+<p>
+Writes or deletes a canonical fact about the current handle. Slugs are slash-paths:
+</p>
+<ul>
+  <li><code>user/&lt;key&gt;</code> — e.g. <code>user/name</code></li>
+  <li><code>property/&lt;slug&gt;</code> — one entry per managed property</li>
+  <li><code>vendor/&lt;trade&gt;/&lt;property-slug&gt;</code> — vendor name for a trade at a property</li>
+  <li><code>system/&lt;key&gt;</code> — internal state (e.g. <code>system/stage</code>)</li>
+</ul>
+<p>Empty value deletes the slug. Slugs are lowercase, dash-separated for multi-word values.</p>
+
+<h3>add_observation<span class="chip read">memory</span></h3>
+<p>
+Appends a fuzzy note about the handle (preferences, anecdotes, context that doesn't fit a profile slug). Append-only, never edited. Optional tags help retrieval (<code>["preference", "vendor"]</code>, etc.).
+</p>
+
+<h3>recall<span class="chip read">memory</span></h3>
+<p>
+Searches past observations by query string. v1 ranking is keyword/substring overlap by hit count — cheap, good enough until embeddings make sense.
+</p>
+
+<h3>list_properties<span class="chip read">memory</span></h3>
+<p>
+Returns every property this handle has mentioned managing, derived from profile slugs of the form <code>property/&lt;slug&gt;</code>. Zero-arg.
+</p>
+
+<h3>list_vendors<span class="chip read">memory</span></h3>
+<p>
+Returns vendors this handle has mentioned, optionally filtered by <code>property</code> and/or <code>trade</code>. Derived from <code>vendor/&lt;trade&gt;/&lt;property&gt;</code> slugs.
+</p>
+
+<h2 id="transport">Transport</h2>
+
+<p>
+Transport turns the outside world into <code>runTurn</code> calls and turns the orchestrator's event stream back into iMessage signals or persisted drafts. Three pieces.
+</p>
+
+<h3>chat.db poller (server.mjs)</h3>
+<p>
+SQLite-readonly poll of <code>~/Library/Messages/chat.db</code> every <strong>1s</strong>. Pulls new <code>iMessage</code> rows that match either:
+</p>
+<ul>
+  <li>1:1 direct messages from unknown handles → demo skill</li>
+  <li>Any chat whose GUID is in the workspace index (<code>TEST_CHAT_GUID</code>, <code>JOSE_CHAT_GUID</code>) → chat skill, but only when the sender is on that workspace's <code>pm_handles</code> list (tenant/owner replies in the same chat are dropped)</li>
+</ul>
+<p>
+Per-handle (or per-chat) serialization via an <code>inflight</code> Map: a fast follow-up never races the in-flight turn, but different chats stay parallel. macOS Ventura+ stores message text in an <code>NSAttributedString</code> blob; <code>extractText()</code> lifts the UTF-8 string out. State (<code>lastSeenRowId</code>, dedup map) lives at <code>agent/.imessage-state.json</code>.
+</p>
+
+<h3>issue poller (work-orders/issue-poller.mjs)</h3>
+<p>
+Polls Supabase <code>issues_v2</code> every <strong>5s</strong>, scoped to the workspaces in <code>workspaces.mjs</code>. For each new issue:
+</p>
+<ol>
+  <li><strong>Readiness gate.</strong> Both upstream <code>agent_runs</code> for the issue (<code>intake</code>, <code>vendor</code>) must be <code>done</code>. Not-ready → pause the cursor and re-check next tick (the poller never skips an issue forward).</li>
+  <li><strong>Mark processed</strong> in the cursor file <em>before</em> generating, so a mid-draft crash doesn't double-fire.</li>
+  <li><strong>Run F1</strong> with <code>sendMode='draft'</code>, <code>isPmHandle=true</code> (belt-and-suspenders for the <code>send_text</code> safety guard).</li>
+  <li><strong>Persist draft.</strong> Resolves participants from <code>chat.db</code>, writes one draft row carrying <code>messages: [{ body }, ...]</code>. Weekend-hold (<code>hold_until</code> = next Mon 09:00 PT) applied unless the issue is urgent.</li>
+</ol>
+<p>
+F1 failures are logged as warnings, not skipped — if the loop produced a usable bundle (drafts present), the human still sees it.
+</p>
+
+<h3>iMessage bridge (imessage/)</h3>
+<p>
+Messages.app is sandboxed and can't bind a TCP listener, but its <code>network.client</code> entitlement allows outbound connect. So the topology is inverted: <strong>the JS process listens on <code>127.0.0.1:9772</code>; the dylib injected into Messages.app dials out</strong>. Once connected, both sides exchange newline-delimited JSON requests with monotonic ids.
 </p>
 
 <p>
-<code>helper.mjs</code> exposes the surface:
+<code>helper.mjs</code> exposes the surface, never throws — every call resolves to <code>{ ok, ... }</code> or <code>{ ok: false, error }</code>:
 </p>
 
 <pre><code>helper.ping()
@@ -305,21 +487,25 @@ helper.react(chatGuid, messageGuid, reactionType, summaryText)
 helper.send(chatGuid, text)</code></pre>
 
 <p>
-Every call resolves to <code>{ ok, ... }</code> or <code>{ ok: false, error }</code>
-&mdash; never throws. <code>send</code> replaced an earlier
-<code>osascript</code>-shelling approach so all four operations now share one
-channel. See <code>imessage/docs.html</code> for the dylib internals.
+<code>server.mjs</code> maps orchestrator events to dylib calls per incoming message:
+</p>
+<ul>
+  <li><code>read</code> → <code>markRead(chatGuid)</code> (also fired immediately on every inbound, before the agent runs)</li>
+  <li><code>typing</code> → <em>intentional no-op</em> (see callout)</li>
+  <li><code>message</code> → <code>setTyping(true)</code>, dwell, <code>setTyping(false)</code>, <code>send</code></li>
+  <li><code>tool_call</code> → log only</li>
+</ul>
+<p>
+Typing dwell scales with message length (<code>min 300ms, +25ms/char, max 2000ms</code>) so a four-word reply doesn't feel as instant as a thirty-word one.
 </p>
 
-<h2 id="dev-tools"><code>dev_tools/</code> &mdash; manual utilities</h2>
+<div class="callout">
+<strong>Why typing dots are tied to <em>messages</em>, not <em>typing</em> events.</strong>
+The orchestrator emits a <code>typing</code> event at the start of every iteration including the final no-op one where the model returns no more tool calls. Reacting to those events directly causes a ghost flash of dots after the last message. Dots come on only immediately before a real message ships — mirroring real iMessage behavior.
+</div>
 
 <p>
-<code>issues_poller.mjs</code> polls Supabase for new tenant work-order requests
-and injects drafts into Messages.app via clipboard paste
-(<code>inject-draft.applescript</code>). It is run by hand, not part of the
-product. When the agent itself can draft and send work-order replies, the useful
-parts (Supabase polling) lift into <code>core/</code> or <code>server.mjs</code>;
-the rest gets retired.
+Host setup (Library Validation off, SIP off, <code>-arm64e_preview_abi</code> boot-arg) is documented in <a href="imessage/README.md"><code>imessage/README.md</code></a>. This is a dedicated Mac mini — do not replicate on a daily-driver.
 </p>
 
 <h2 id="running">Running it</h2>
@@ -327,21 +513,18 @@ the rest gets retired.
 <pre><code># terminal 1: launch Messages.app with the dylib injected
 agent/imessage/run-messages.sh
 
-# terminal 2: start the agent server
+# terminal 2: start the agent server (chat poll + issue poll + drafts UI + transport)
 node agent/server.mjs
 
-# or, no iMessage:
+# REPL testbed for the demo skill, no iMessage in the loop
 node agent/cli.mjs +15555550100</code></pre>
 
 <p>
-Requires <code>OPENAI_API_KEY</code> in <code>.env</code> (repo root or
-<code>agent/.env</code>). Optional <code>DEMO_HANDLE</code> scopes the server to a
-single handle for safe testing; <code>HELPER_DISABLED=1</code> skips the dylib
-calls (no typing dots / read receipts) for orchestrator-only debugging.
+Required env: <code>OPENAI_API_KEY</code>, plus the Supabase + workspace vars listed in the project root <code>CLAUDE.md</code>. Optional: <code>DEMO_HANDLE</code> scopes <code>server.mjs</code> to a single 1:1 handle for safe testing; <code>HELPER_DISABLED=1</code> skips dylib calls (no typing dots / read receipts) for orchestrator-only debugging; <code>WORK_ORDERS_REQUIRE_READY=0</code> bypasses the F1 readiness gate.
 </p>
 
 <footer>
-<code>agent/README.html</code>. Companion to <code>imessage/docs.html</code> (native bridge internals) and <code>docs/SPEC.html</code> (demo behavior spec).
+<code>agent/README.html</code>. Companion to <a href="imessage/README.md"><code>imessage/README.md</code></a> (native bridge internals) and <a href="docs/AGENT_SPEC.html"><code>docs/AGENT_SPEC.html</code></a> (target architecture + trust gates).
 </footer>
 
 </div>

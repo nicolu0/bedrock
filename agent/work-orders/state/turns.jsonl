@@ -26,3 +26,5 @@
 {"ts":"2026-05-14T00:49:29.160Z","skill":"chat","model":"gpt-5.4-2026-03-05","kind":"completed","iterations":1,"tool_calls":[],"outbox_count":0,"drafts_count":0,"failure":null,"duration_ms":1601}
 {"ts":"2026-05-14T00:54:05.986Z","skill":"f1","model":"gpt-4.1-mini","kind":"completed","iterations":2,"tool_calls":[{"name":"send_text","ok":true},{"name":"send_text","ok":true}],"outbox_count":0,"drafts_count":2,"failure":null,"duration_ms":2617}
 {"ts":"2026-05-14T01:00:00.623Z","skill":"chat","model":"gpt-5.4-2026-03-05","kind":"completed","iterations":3,"tool_calls":[{"name":"acknowledge","ok":true},{"name":"draft_tenant","ok":true},{"name":"draft_vendor","ok":true}],"outbox_count":1,"drafts_count":0,"failure":null,"duration_ms":4399}
+{"ts":"2026-05-15T03:26:20.793Z","skill":"demo","kind":"precheck_short_circuit","outbox_count":0,"drafts_count":0,"duration_ms":4948}
+{"ts":"2026-05-15T03:26:30.806Z","skill":"demo","model":"gpt-5.4-2026-03-05","kind":"completed","iterations":2,"tool_calls":[{"name":"send_text","ok":true},{"name":"send_text","ok":true}],"outbox_count":2,"drafts_count":0,"failure":null,"duration_ms":4951}

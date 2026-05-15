@@ -116,7 +116,12 @@ export const scenarios = [
 		expected: {
 			tool_calls_set: ['send_text'],
 			drafts_count: 1,
-			drafts_include: ['Unit 701', 'Hub Champaign']
+			drafts_include: ['Unit 701', 'Hub Champaign'],
+			judge: {
+				target: 'drafts',
+				criteria:
+					'The single draft must reference Unit 701, Hub Champaign, and the wifi issue in one short, natural English sentence. It must NOT use a colon, em dash, or semicolon. It must NOT be a headline-style fragment like "Unit 701 at Hub Champaign: wifi down." It must NOT contain the ungrammatical phrase "has wifi down". Acceptable phrasings: "Unit 701 at Hub Champaign has no wifi.", "Unit 701 at Hub Champaign\'s wifi is down.", "The wifi at Unit 701, Hub Champaign is down.", or any other natural full-prose rewording.'
+			}
 		}
 	},
 
@@ -149,6 +154,24 @@ export const scenarios = [
 				target: 'drafts',
 				criteria:
 					'The first draft message should reference "Hub Champaign" and the issue, but must NOT start with "Unit". The phrasing should be like "Hub Champaign has a roof leak..." or similar. The second message must be exactly: "Should we send Mario?"'
+			}
+		}
+	},
+
+	{
+		name: 'f1: awkward "has X" title → natural grammar',
+		skill: 'f1',
+		ctx: {
+			issue: { ...ISSUE_FAUCET, name: 'dryer not working' },
+			sendMode: 'draft',
+			workspace_label: 'test'
+		},
+		expected: {
+			drafts_count: 2,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'The first draft must reference Unit 701, Hub Champaign, and the dryer issue in one short, natural English sentence. It must NOT contain "has dryer not working". It must NOT use a colon, em dash, or semicolon, and must NOT be a headline-style fragment like "Unit 701 at Hub Champaign: dryer not working." Acceptable phrasings: "Unit 701 at Hub Champaign has a broken dryer.", "Unit 701 at Hub Champaign\'s dryer isn\'t working.", "The dryer at Unit 701, Hub Champaign isn\'t working.", or any other natural full-prose rewording. The second draft must be exactly: "Should we send Mario?"'
 			}
 		}
 	},
