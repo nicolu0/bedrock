@@ -6,8 +6,11 @@
 // Beliefs are read via the match_beliefs RPC (vector similarity over the
 // claim text) and injected as a "Known preferences" block in the system
 // prompt. Owner notes still win on conflict — they're the human's most
-// recent direct expression of intent. PR #3 will migrate owner_notes into
-// beliefs and remove the redundant read.
+// recent direct expression of intent. PR #3 will migrate owner_notes (and
+// vendor.note free-form preferences) into beliefs and remove those reads.
+//
+// vendor.note is NOT shown to the model. It's legacy preference storage that
+// competes with beliefs; PR #3 backfills it. Trade is still shown.
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
@@ -23,7 +26,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 	auth: { persistSession: false, autoRefreshToken: false }
 });
 
-type Vendor = { id: string; name: string; trade: string | null; note: string | null };
+type Vendor = { id: string; name: string; trade: string | null };
 
 async function pickVendor(
 	description: string,
@@ -34,7 +37,7 @@ async function pickVendor(
 	if (!vendors.length) return { vendorId: null, reason: 'no vendors in workspace' };
 
 	const vendorList = vendors
-		.map((v, i) => `${i + 1}. ${v.name}${v.trade ? ` (${v.trade})` : ''}${v.note ? ` — note: ${v.note}` : ''}`)
+		.map((v) => `- ${v.name}${v.trade ? ` (${v.trade})` : ''}`)
 		.join('\n');
 
 	const beliefsBlock = beliefs.length
@@ -59,13 +62,13 @@ async function pickVendor(
 					role: 'system',
 					content:
 						'You select a single best vendor for a property maintenance work order. ' +
-						'Return JSON: { "vendor_index": <1-based index from the vendor list>, "reason": "<brief>" }. ' +
-						'Priority order:\n' +
-						'1. Owner/property notes are highest authority — if a note specifies a vendor for this kind of work, pick that vendor.\n' +
-						'2. Known preferences (beliefs) are next — if a preference matches the work order scope (property, trade), pick that vendor. Prefer more specific scope (property-specific over general) and higher confidence.\n' +
-						'3. Vendor "note" fields are instructions; follow them.\n' +
-						'4. Otherwise: prefer a handyman for simple repairs (battery swap, minor fixes, general maintenance); pick a specialist (plumber, electrician, HVAC) only when the work clearly requires licensed trade work.\n' +
-						'Always pick exactly one. Use the vendor_index of your pick (1-based). The reason field should cite which preference or note drove the choice when applicable.'
+						'Return JSON: { "vendor_name": "<exact name from the vendor list, copied verbatim>", "reason": "<brief>" }. ' +
+						'Copy the vendor name EXACTLY as it appears — character for character. Do not abbreviate, reorder, or add words.\n' +
+						'Apply these rules in STRICT priority order. A higher-priority rule always overrides a lower one.\n' +
+						'1. Owner/property notes are absolute. If a note names a vendor for this kind of work, pick that vendor.\n' +
+						'2. Known preferences (beliefs from the property manager): if a belief\'s scope matches the work order (same property and/or same trade/problem), pick the vendor the belief names. A more specific belief (property + trade) overrides a less specific one.\n' +
+						'3. Otherwise: match by trade. Prefer a handyman for simple repairs (battery swap, minor fixes, general maintenance); pick a specialist (plumber, electrician, HVAC, appliance) only when licensed trade work is required.\n' +
+						'In the "reason" field, name the rule you applied (e.g. "belief: use Mario for dryers at Hub Champaign" or "trade match: appliance specialist for a leaking washing machine"). If you saw a matching belief and did NOT follow it, you must explain why.'
 				},
 				{
 					role: 'user',
@@ -81,11 +84,27 @@ async function pickVendor(
 	const json = await res.json();
 	const content = json.choices?.[0]?.message?.content ?? '{}';
 	const parsed = JSON.parse(content);
-	const idx = Number(parsed.vendor_index);
-	const vendor = Number.isFinite(idx) && idx >= 1 && idx <= vendors.length ? vendors[idx - 1] : null;
+	const pickedName = String(parsed.vendor_name ?? '').trim();
+	const norm = (s: string) => s.toLowerCase().replace(/[\s.,'"-]+/g, ' ').trim();
+	const npicked = norm(pickedName);
+	// Longest match wins so "Mario, the onsite manager" doesn't accidentally
+	// match a vendor named "Mario" when a longer-named vendor is also a prefix.
+	const sortedByName = [...vendors].sort((a, b) => b.name.length - a.name.length);
+	const vendor = vendors.find((v) => v.name === pickedName)
+		?? vendors.find((v) => v.name.toLowerCase() === pickedName.toLowerCase())
+		?? sortedByName.find((v) => norm(v.name) === npicked)
+		// Loose: picked text contains the vendor name as a token sequence at
+		// the start (e.g. "Mario, the onsite manager" -> "Mario").
+		?? sortedByName.find((v) => npicked.startsWith(norm(v.name) + ' '))
+		?? sortedByName.find((v) => npicked === norm(v.name));
+	if (!vendor && pickedName) {
+		console.warn(`vendor-agent: model returned vendor_name "${pickedName}" not in list`);
+	}
+	console.log(`vendor-agent: picked_name="${pickedName}" -> vendor=${vendor?.name ?? 'NONE'}`);
 	return {
 		vendorId: vendor?.id ?? null,
-		reason: String(parsed.reason ?? '').slice(0, 200)
+		reason: String(parsed.reason ?? '').slice(0, 200),
+		pickedName
 	};
 }
 
@@ -113,7 +132,7 @@ serve(async (req) => {
 
 		const { data: vendors } = await supabase
 			.from('vendors')
-			.select('id, name, trade, note')
+			.select('id, name, trade')
 			.eq('workspace_id', issue.workspace_id)
 			.order('preference_index', { ascending: true })
 			.limit(50);
@@ -149,7 +168,7 @@ serve(async (req) => {
 			console.error(`vendor-agent: belief recall failed for ${issueId}:`, err);
 		}
 
-		const { vendorId, reason } = await pickVendor(
+		const { vendorId, reason, pickedName } = await pickVendor(
 			issue.description,
 			(vendors ?? []) as Vendor[],
 			ownerNotes,
@@ -168,7 +187,7 @@ serve(async (req) => {
 		console.log(
 			`vendor-agent: ${issueId} done — vendor=${vendorId ?? 'none'} beliefs=${beliefs.length} owner_notes=${ownerNotes.length} reason="${reason}"`
 		);
-		return Response.json({ ok: true, issueId, vendorId, reason, beliefs_used: beliefs.length });
+		return Response.json({ ok: true, issueId, vendorId, reason, beliefs_used: beliefs.length, picked_name: pickedName });
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		console.error(`vendor-agent: ${issueId} failed:`, message);
