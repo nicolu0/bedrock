@@ -13,8 +13,8 @@ import * as memory from '../memory.mjs';
 import { sendText } from '../tools/send_text.mjs';
 import { updateProfile } from '../tools/update_profile.mjs';
 import { getProfile } from '../tools/get_profile.mjs';
-import { addObservation } from '../tools/add_observation.mjs';
-import { recall } from '../tools/recall.mjs';
+import { addObservationDemo } from '../tools/add_observation_demo.mjs';
+import { recallDemo } from '../tools/recall_demo.mjs';
 import { listProperties } from '../tools/list_properties.mjs';
 import { listVendors } from '../tools/list_vendors.mjs';
 import { reactToMessage } from '../tools/react_to_message.mjs';
@@ -304,8 +304,8 @@ export const demoSkill = {
 		sendText,
 		updateProfile,
 		getProfile,
-		addObservation,
-		recall,
+		addObservationDemo,
+		recallDemo,
 		listProperties,
 		listVendors,
 		reactToMessage,

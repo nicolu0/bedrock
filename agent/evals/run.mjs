@@ -38,6 +38,12 @@ await fs.mkdir(STATE_DIR, { recursive: true });
 await fs.mkdir(DATA_DIR, { recursive: true });
 process.env.BEDROCK_STATE_DIR = STATE_DIR;
 process.env.BEDROCK_DATA_DIR = DATA_DIR;
+// Memory tools (add_observation, recall_beliefs, recall_observations) check
+// this and short-circuit instead of writing to live Supabase / firing the
+// belief-former. The eval suite asserts tool-call behavior, not memory side
+// effects. The dedicated memory scenarios still see the calls happen — they
+// just don't persist.
+process.env.BEDROCK_EVAL_MODE = '1';
 
 // Load .env from repo root + agent/.
 async function loadDotEnv(p) {
@@ -176,6 +182,22 @@ async function checkExpected(scenario, result, ctx) {
 	}
 	if (exp.no_tools === true && toolNames.length > 0) {
 		fails.push(`expected no tool calls, got ${JSON.stringify(toolNames)}`);
+	}
+	// tool_calls_set_includes: every name listed must appear; extras allowed.
+	if (exp.tool_calls_set_includes) {
+		const have = new Set(toolNames);
+		const missing = exp.tool_calls_set_includes.filter((n) => !have.has(n));
+		if (missing.length) {
+			fails.push(`tool_calls_set_includes missing ${JSON.stringify(missing)}, got ${JSON.stringify(toolNames)}`);
+		}
+	}
+	// tool_calls_excludes: none of the listed names may appear.
+	if (exp.tool_calls_excludes) {
+		const have = new Set(toolNames);
+		const present = exp.tool_calls_excludes.filter((n) => have.has(n));
+		if (present.length) {
+			fails.push(`tool_calls_excludes saw forbidden ${JSON.stringify(present)}, got ${JSON.stringify(toolNames)}`);
+		}
 	}
 
 	// drafts_count: combine ctx.drafts (F1 staged) + ctx.draftIds (F2 direct writes)

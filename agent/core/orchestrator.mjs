@@ -138,6 +138,10 @@ export async function runTurn(skill, ctx) {
 					messages,
 					...(toolDefs.length ? { tools: toolDefs, tool_choice: 'auto' } : {}),
 					stream: true,
+					// Eval-mode temperature: 0 so judge-based scenarios and tool-call
+					// assertions are reproducible. Prod stays on the OpenAI default
+					// for now — change cautiously, it affects every user-facing turn.
+					...(process.env.BEDROCK_EVAL_MODE === '1' ? { temperature: 0 } : {}),
 					...(skill.maxTokens ? { max_tokens: skill.maxTokens } : {})
 				})
 			});

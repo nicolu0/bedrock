@@ -1,9 +1,11 @@
-// recall — search past observations for relevant context. v1 is keyword/substring
-// match ranked by hit count. Replace with embeddings later.
+// Legacy demo-skill recall — handle-scoped, file-backed, keyword match.
+// Kept for the F1 demo flow. The canonical recall paths are recall_beliefs
+// and recall_observations (workspace-scoped, vector-backed) — use those in
+// new code.
 
 import * as memory from '../memory.mjs';
 
-export const recall = {
+export const recallDemo = {
 	name: 'recall',
 	description:
 		'Search past observations about the user for relevant context. Returns matching notes ranked by keyword overlap.',
@@ -15,7 +17,7 @@ export const recall = {
 		required: ['query']
 	},
 	async run({ query }, ctx) {
-		if (!ctx.handle) throw new Error('recall: ctx.handle required');
+		if (!ctx.handle) throw new Error('recall_demo: ctx.handle required');
 		const results = await memory.recall(ctx.handle, query);
 		return { results };
 	}

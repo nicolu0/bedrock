@@ -15,6 +15,9 @@
 //   expected — assertions on the run's result:
 //                tool_calls:        ordered list of tool names that should run
 //                tool_calls_set:    unordered set of tool names (allows any order)
+//                tool_calls_set_includes: subset assertion — every listed name must
+//                                   appear; extras are allowed.
+//                tool_calls_excludes: forbidden names — none may appear.
 //                no_tools:          true if no tool calls should fire
 //                drafts_count:      number of drafts created
 //                drafts_channels:   array of channels for created drafts (set, unordered)
@@ -237,14 +240,22 @@ export const scenarios = [
 	},
 
 	{
-		name: 'chat: vendor redirect ("no send Luigi") → no_match',
+		name: 'chat: vendor redirect ("no send Luigi") → no dispatch, record observation',
 		skill: 'chat',
 		setup: {
 			sent_log: sentBundle(ISSUE_FAUCET),
 			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET }
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'no send Luigi instead' },
-		expected: { no_tools: true, drafts_count: 0, outbox_count: 0 }
+		expected: {
+			// New: vendor redirects warrant an observation (the redirect is a
+			// learnable signal). recall_beliefs is optional — model may consult
+			// before deciding. No dispatch tools fire — v1 doesn't handle swaps.
+			tool_calls_set_includes: ['add_observation'],
+			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
+			drafts_count: 0,
+			outbox_count: 0
+		}
 	},
 
 	{
@@ -316,6 +327,64 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
 		expected: { no_tools: true, drafts_count: 0 }
+	},
+
+	// ─── Chat: learning behavior (new tools) ───────────────────────────────
+
+	{
+		name: 'chat: stated preference ("always use Yonic for plumbing") → add_observation, no dispatch',
+		skill: 'chat',
+		setup: { sent_log: [], supabase: {} },
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: 'btw always use Yonic for plumbing at the Hub Champaign building'
+		},
+		expected: {
+			tool_calls_set_includes: ['add_observation'],
+			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
+			drafts_count: 0,
+			outbox_count: 0
+		}
+	},
+
+	{
+		name: 'chat: per-property quirk (elevator vendor) → add_observation, no dispatch',
+		skill: 'chat',
+		setup: { sent_log: [], supabase: {} },
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: 'fyi the elevator vendor for 1234 Main St is Acme Elevators, they have a contract'
+		},
+		expected: {
+			tool_calls_set_includes: ['add_observation'],
+			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
+			drafts_count: 0,
+			outbox_count: 0
+		}
+	},
+
+	{
+		name: 'chat: dispatch + side-channel preference in one message → both fire',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_FAUCET),
+			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			// Confirms dispatch on the listed issue AND drops a generalizable
+			// preference. Both should fire: drafts for the confirmation, an
+			// observation for the rule.
+			text: 'yes go ahead. and just so you know we always use Yonic for plumbing here.'
+		},
+		expected: {
+			tool_calls_set_includes: ['acknowledge', 'draft_tenant', 'draft_vendor', 'add_observation'],
+			drafts_count: 2,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
+		}
 	},
 
 	// ─── Demo (5) ──────────────────────────────────────────────────────────

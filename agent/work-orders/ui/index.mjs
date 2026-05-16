@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import * as db from '../state/helpers.mjs';
 import { WORKSPACES } from '../workspaces.mjs';
 import { deleteIssuesByWorkspace } from '../../supabase.mjs';
+import * as memory from '../../core/memory.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAGE_PATH = path.join(__dirname, 'page.html');
@@ -56,6 +57,21 @@ function json(res, status, value) {
 function text(res, status, value) {
 	res.writeHead(status, { 'content-type': 'text/plain' });
 	res.end(value);
+}
+
+// Map ?workspace=prod|test (or a raw workspace_id) to a workspace uuid via
+// WORKSPACES. Memory endpoints reject 'all' — the graph is workspace-scoped
+// by design.
+function resolveWorkspaceId(value) {
+	if (!value || value === 'all') return null;
+	// If it already looks like a uuid, accept it.
+	if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+		return value;
+	}
+	for (const [id, w] of Object.entries(WORKSPACES)) {
+		if (w.label === value) return id;
+	}
+	return null;
 }
 
 function normalizeMessages(input, fallback) {
@@ -127,6 +143,86 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				});
 				if (!updated) return text(res, 404, 'response not found');
 				return json(res, 200, { ok: true });
+			}
+
+			// ── Memory graph endpoints ───────────────────────────────────────
+			// All workspace-scoped. ?workspace=prod|test resolves via WORKSPACES.
+
+			if (req.method === 'GET' && pathname === '/api/memory/graph') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const [observations, beliefs, edges] = await Promise.all([
+					memory.listObservations(workspace_id, { limit: 500 }),
+					memory.listBeliefs(workspace_id, { limit: 500 }),
+					memory.listEdges(workspace_id)
+				]);
+				return json(res, 200, { observations, beliefs, edges });
+			}
+
+			if (req.method === 'GET' && pathname === '/api/memory/search') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const q = (url.searchParams.get('q') ?? '').trim();
+				if (!q) return json(res, 200, { observations: [], beliefs: [] });
+				const [obsAll, beliefsAll] = await Promise.all([
+					memory.listObservations(workspace_id, { limit: 500 }),
+					memory.listBeliefs(workspace_id, { limit: 500 })
+				]);
+				const needle = q.toLowerCase();
+				const matchesObs = (o) =>
+					(o.summary ?? '').toLowerCase().includes(needle) ||
+					(o.raw_text ?? '').toLowerCase().includes(needle) ||
+					(o.tags ?? []).some((t) => t.toLowerCase().includes(needle));
+				const matchesBel = (b) =>
+					(b.claim ?? '').toLowerCase().includes(needle) ||
+					JSON.stringify(b.scope ?? {}).toLowerCase().includes(needle) ||
+					(b.tags ?? []).some((t) => t.toLowerCase().includes(needle));
+				return json(res, 200, {
+					observations: obsAll.filter(matchesObs).map((o) => o.id),
+					beliefs: beliefsAll.filter(matchesBel).map((b) => b.id)
+				});
+			}
+
+			if (req.method === 'POST' && pathname === '/api/memory/beliefs') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const payload = await readBody(req);
+				if (!payload.claim) return text(res, 400, 'claim required');
+				try {
+					const belief = await memory.createBelief(workspace_id, {
+						claim: payload.claim,
+						scope: payload.scope ?? {},
+						confidence: typeof payload.confidence === 'number' ? payload.confidence : 0.85,
+						explicitness: payload.explicitness ?? 'stated',
+						created_by: 'user',
+						tags: payload.tags ?? []
+					});
+					return json(res, 200, belief);
+				} catch (err) {
+					return text(res, 500, err.message);
+				}
+			}
+
+			const beliefPatchMatch = pathname.match(/^\/api\/memory\/beliefs\/([^/]+)$/);
+			if (req.method === 'PATCH' && beliefPatchMatch) {
+				const [, id] = beliefPatchMatch;
+				const payload = await readBody(req);
+				try {
+					const belief = await memory.updateBelief(id, payload);
+					return json(res, 200, belief);
+				} catch (err) {
+					return text(res, 500, err.message);
+				}
+			}
+
+			if (req.method === 'DELETE' && beliefPatchMatch) {
+				const [, id] = beliefPatchMatch;
+				try {
+					await memory.deleteBelief(id);
+					return json(res, 200, { ok: true });
+				} catch (err) {
+					return text(res, 500, err.message);
+				}
 			}
 
 			if (req.method === 'POST' && pathname === '/api/clear-test') {
