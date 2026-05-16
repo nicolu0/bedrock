@@ -1,16 +1,12 @@
 // @ts-nocheck
 // V2 vendor agent. Reads issues_v2.description + workspace vendors +
-// owner_notes for the property + RELEVANT BELIEFS from the memory graph, asks
-// OpenAI to pick a single best vendor, writes vendor_id.
+// RELEVANT BELIEFS from the memory graph, asks OpenAI to pick a single best
+// vendor, writes vendor_id.
 //
 // Beliefs are read via the match_beliefs RPC (vector similarity over the
 // claim text) and injected as a "Known preferences" block in the system
-// prompt. Owner notes still win on conflict — they're the human's most
-// recent direct expression of intent. PR #3 will migrate owner_notes (and
-// vendor.note free-form preferences) into beliefs and remove those reads.
-//
-// vendor.note is NOT shown to the model. It's legacy preference storage that
-// competes with beliefs; PR #3 backfills it. Trade is still shown.
+// prompt. They are now the single source of truth for PM preferences;
+// owner_notes, vendor.note, and workspace_policies were dropped in PR #3.
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
@@ -31,7 +27,6 @@ type Vendor = { id: string; name: string; trade: string | null };
 async function pickVendor(
 	description: string,
 	vendors: Vendor[],
-	ownerNotes: string[],
 	beliefs: BeliefRow[]
 ): Promise<{ vendorId: string | null; reason: string }> {
 	if (!vendors.length) return { vendorId: null, reason: 'no vendors in workspace' };
@@ -41,11 +36,7 @@ async function pickVendor(
 		.join('\n');
 
 	const beliefsBlock = beliefs.length
-		? `\n\nKnown preferences (the property manager has told us these — honor unless an owner note overrides):\n${formatBeliefsBlock(beliefs)}`
-		: '';
-
-	const notesBlock = ownerNotes.length
-		? `\n\nOwner/property notes (highest authority — follow strictly):\n${ownerNotes.map((n) => `- ${n}`).join('\n')}`
+		? `\n\nKnown preferences (the property manager has told us these — honor when scope matches):\n${formatBeliefsBlock(beliefs)}`
 		: '';
 
 	const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -65,14 +56,13 @@ async function pickVendor(
 						'Return JSON: { "vendor_name": "<exact name from the vendor list, copied verbatim>", "reason": "<brief>" }. ' +
 						'Copy the vendor name EXACTLY as it appears — character for character. Do not abbreviate, reorder, or add words.\n' +
 						'Apply these rules in STRICT priority order. A higher-priority rule always overrides a lower one.\n' +
-						'1. Owner/property notes are absolute. If a note names a vendor for this kind of work, pick that vendor.\n' +
-						'2. Known preferences (beliefs from the property manager): if a belief\'s scope matches the work order (same property and/or same trade/problem), pick the vendor the belief names. A more specific belief (property + trade) overrides a less specific one.\n' +
-						'3. Otherwise: match by trade. Prefer a handyman for simple repairs (battery swap, minor fixes, general maintenance); pick a specialist (plumber, electrician, HVAC, appliance) only when licensed trade work is required.\n' +
+						'1. Known preferences (beliefs from the property manager): if a belief\'s scope matches the work order (same property and/or same trade/problem), pick the vendor the belief names. A more specific belief (property + trade) overrides a less specific one.\n' +
+						'2. Otherwise: match by trade. Prefer a handyman for simple repairs (battery swap, minor fixes, general maintenance); pick a specialist (plumber, electrician, HVAC, appliance) only when licensed trade work is required.\n' +
 						'In the "reason" field, name the rule you applied (e.g. "belief: use Mario for dryers at Hub Champaign" or "trade match: appliance specialist for a leaking washing machine"). If you saw a matching belief and did NOT follow it, you must explain why.'
 				},
 				{
 					role: 'user',
-					content: `Work order:\n${description}\n\nAvailable vendors:\n${vendorList}${beliefsBlock}${notesBlock}`
+					content: `Work order:\n${description}\n\nAvailable vendors:\n${vendorList}${beliefsBlock}`
 				}
 			]
 		})
@@ -137,16 +127,6 @@ serve(async (req) => {
 			.order('preference_index', { ascending: true })
 			.limit(50);
 
-		const ownerNotes: string[] = [];
-		if (issue.property_id) {
-			const { data: noteRows } = await supabase
-				.from('owner_notes')
-				.select('content')
-				.eq('workspace_id', issue.workspace_id)
-				.eq('property_id', issue.property_id);
-			(noteRows ?? []).forEach((r: any) => ownerNotes.push(r.content));
-		}
-
 		// Query the belief graph. The query string mixes the work-order
 		// description with the property name when present, so property-scoped
 		// beliefs surface alongside generic-plumbing ones.
@@ -171,7 +151,6 @@ serve(async (req) => {
 		const { vendorId, reason, pickedName } = await pickVendor(
 			issue.description,
 			(vendors ?? []) as Vendor[],
-			ownerNotes,
 			beliefs
 		);
 
@@ -185,7 +164,7 @@ serve(async (req) => {
 
 		await completeAgentRun(supabase, issueId, 'vendor');
 		console.log(
-			`vendor-agent: ${issueId} done — vendor=${vendorId ?? 'none'} beliefs=${beliefs.length} owner_notes=${ownerNotes.length} reason="${reason}"`
+			`vendor-agent: ${issueId} done — vendor=${vendorId ?? 'none'} beliefs=${beliefs.length} reason="${reason}"`
 		);
 		return Response.json({ ok: true, issueId, vendorId, reason, beliefs_used: beliefs.length, picked_name: pickedName });
 	} catch (err) {
