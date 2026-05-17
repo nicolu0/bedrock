@@ -519,6 +519,17 @@
 				stroke: #d9a366;
 				stroke-width: 2;
 			}
+			/* Entity nodes — color-coded per kind. Larger than observations so
+			   they read as anchors in the graph. */
+			.node.entity circle { stroke: #2a2f37; stroke-width: 1.5; }
+			.node.entity.vendor   circle { fill: #74c99a; }
+			.node.entity.property circle { fill: #d4a855; }
+			.node.entity.owner    circle { fill: #7eb7f0; }
+			.link.entity { stroke: #3a4554; stroke-opacity: 0.55; stroke-dasharray: 4 3; }
+			/* Structural property↔owner edges from legacy owner_properties.
+			   Solid + brighter so they read as "load-bearing relationship,
+			   not a derived belief link." */
+			.link.structural { stroke: #6b7a8f; stroke-opacity: 0.7; }
 			.node.selected circle {
 				stroke: #2d6cdf;
 				stroke-width: 3;
@@ -722,6 +733,324 @@
 			/* Memory tab hides the Clear Test button — it's a Work Orders action */
 			body.memory-mode #clear-test-btn { display: none; }
 			body.memory-mode .memory-search { display: inline-block; }
+
+			/* ── Memory tab: list-view pane ─────────────────────────────── */
+			/* Memory section is a flex column when active so the graph or list
+			   pane fills the available height under the toolbar. */
+			.memory-view.active {
+				display: flex;
+				flex-direction: column;
+			}
+			#memory-graph-pane {
+				position: relative;
+				flex: 1 1 auto;
+				min-height: 0;
+				width: 100%;
+				height: 100%;
+			}
+			#memory-graph-pane svg { width: 100%; height: 100%; display: block; }
+			#memory-list-pane {
+				flex: 1 1 auto;
+				min-height: 0;
+				display: flex;
+				flex-direction: column;
+				padding: 14px 20px 60px;
+				width: 100%;
+				max-width: 1100px;
+				margin: 0 auto;
+				overflow-y: auto;
+				box-sizing: border-box;
+			}
+			#memory-list-pane[hidden] { display: none; }
+			#memory-list-controls {
+				display: flex;
+				gap: 10px;
+				align-items: center;
+				margin-bottom: 14px;
+			}
+			#memory-list-controls input,
+			#memory-list-controls select {
+				background: #14161b;
+				border: 1px solid #2a2f37;
+				color: #c0c5cc;
+				padding: 6px 10px;
+				border-radius: 6px;
+				font-size: 12.5px;
+			}
+			#memory-list-controls input { flex: 1 1 auto; }
+			#memory-list-controls input:focus,
+			#memory-list-controls select:focus { outline: none; border-color: #2d6cdf; }
+			.memory-list-count {
+				color: #6c727b;
+				font-size: 11.5px;
+				font-family: ui-monospace, Menlo, monospace;
+				margin-left: auto;
+			}
+			.belief-row {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-left-width: 3px;
+				border-radius: 8px;
+				padding: 10px 14px;
+				margin-bottom: 6px;
+				font-size: 13px;
+				display: grid;
+				grid-template-columns: 1fr auto;
+				gap: 4px 12px;
+			}
+			.belief-row.user { border-left-color: #d9a366; }
+			.belief-row.agent { border-left-color: #4a5560; }
+			.belief-row .claim { color: #e6e6e6; line-height: 1.4; }
+			.belief-row .right {
+				display: flex;
+				flex-direction: column;
+				align-items: flex-end;
+				gap: 2px;
+				font-size: 11px;
+				color: #8a9099;
+				font-family: ui-monospace, Menlo, monospace;
+				white-space: nowrap;
+			}
+			.belief-row .right .conf { color: #cfe2ff; }
+			.belief-row .right .ev { color: #74c99a; }
+			.belief-row .meta {
+				grid-column: 1 / -1;
+				display: flex;
+				flex-wrap: wrap;
+				gap: 4px;
+				font-size: 10.5px;
+				color: #6c727b;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.belief-row .pill {
+				background: #1a1f26;
+				border: 1px solid #232a33;
+				padding: 1px 7px;
+				border-radius: 9px;
+			}
+			.belief-row .pill.scope { color: #d4a855; background: #221c14; border-color: #36281c; }
+			.belief-row .pill.tag   { color: #7eb7f0; background: #15212d; border-color: #1d2d40; }
+
+			.memory-view-toggle { display: inline-flex; gap: 0; pointer-events: auto; }
+			.memory-view-toggle button {
+				background: #14161b;
+				border: 1px solid #2a2f37;
+				color: #8a9099;
+				padding: 5px 12px;
+				font-size: 11.5px;
+				cursor: pointer;
+			}
+			.memory-view-toggle button:first-child { border-radius: 6px 0 0 6px; }
+			.memory-view-toggle button:last-child  { border-radius: 0 6px 6px 0; border-left: 0; }
+			.memory-view-toggle button.active { background: #1f2329; color: #e6e6e6; }
+			.memory-view-toggle button:hover { color: #c0c5cc; }
+
+			/* When in list view, the graph filters / detail pane don't apply. */
+			body.memory-list-mode #memory-graph-pane { display: none; }
+			body.memory-list-mode .memory-filters,
+			body.memory-list-mode #new-belief-btn,
+			body.memory-list-mode .memory-search { display: none; }
+			body.memory-entities-mode #memory-graph-pane { display: none; }
+			body.memory-entities-mode .memory-filters,
+			body.memory-entities-mode #new-belief-btn,
+			body.memory-entities-mode .memory-search { display: none; }
+
+			/* Entities sub-view ─────────────────────────────────────────── */
+			#memory-entities-pane {
+				flex: 1 1 auto;
+				min-height: 0;
+				display: flex;
+				flex-direction: column;
+				padding: 14px 20px 60px;
+				width: 100%;
+				max-width: 1100px;
+				margin: 0 auto;
+				overflow-y: auto;
+				box-sizing: border-box;
+			}
+			#memory-entities-pane[hidden] { display: none; }
+			.entity-row {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-left-width: 3px;
+				border-radius: 8px;
+				padding: 10px 14px;
+				margin-bottom: 6px;
+				font-size: 13px;
+				display: grid;
+				grid-template-columns: auto 1fr auto;
+				gap: 4px 12px;
+				cursor: pointer;
+			}
+			.entity-row:hover { background: #1a1f26; }
+			.entity-row.vendor   { border-left-color: #74c99a; }
+			.entity-row.property { border-left-color: #d4a855; }
+			.entity-row.owner    { border-left-color: #7eb7f0; }
+			.entity-row .kind-pill {
+				font-family: ui-monospace, Menlo, monospace;
+				font-size: 10.5px;
+				padding: 2px 8px;
+				border-radius: 9px;
+				background: #1a1f26;
+				border: 1px solid #232a33;
+				color: #c0c5cc;
+				align-self: center;
+			}
+			.entity-row .name { color: #e6e6e6; align-self: center; }
+			.entity-row .right {
+				display: flex;
+				flex-direction: column;
+				align-items: flex-end;
+				gap: 2px;
+				font-size: 11px;
+				color: #8a9099;
+				font-family: ui-monospace, Menlo, monospace;
+				white-space: nowrap;
+			}
+			.entity-row .right .ev { color: #74c99a; }
+			.entity-row .right .legacy { color: #6c727b; }
+			#memory-entities-detail {
+				margin-top: 18px;
+				padding-top: 14px;
+				border-top: 1px solid #1f2329;
+			}
+			#memory-entities-detail[hidden] { display: none; }
+			#memory-entities-detail h3 {
+				margin: 0 0 10px;
+				font-size: 13.5px;
+				color: #e6e6e6;
+				display: flex;
+				align-items: center;
+				gap: 10px;
+			}
+			#memory-entities-detail .close-btn {
+				margin-left: auto;
+				background: transparent;
+				border: 1px solid #232a33;
+				color: #8a9099;
+				padding: 3px 9px;
+				border-radius: 5px;
+				font-size: 11px;
+				cursor: pointer;
+			}
+
+			/* ── Sessions tab ───────────────────────────────────────────── */
+			.sessions-view {
+				padding: 14px 20px 60px;
+				overflow-y: auto;
+				max-width: 980px;
+				margin: 0 auto;
+			}
+			.sessions-empty {
+				color: #6c727b;
+				text-align: center;
+				padding: 80px 20px;
+				font-size: 13px;
+			}
+			.session-card {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 14px 16px;
+				margin-bottom: 10px;
+			}
+			.session-card .head {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				font-size: 11.5px;
+				color: #8a9099;
+				margin-bottom: 8px;
+				flex-wrap: wrap;
+			}
+			.session-card .head .range { color: #c0c5cc; font-weight: 500; }
+			.session-card .head .count { color: #6c727b; }
+			.session-card .head .extracted {
+				font-size: 10.5px;
+				font-family: ui-monospace, Menlo, monospace;
+				background: rgba(60, 200, 120, 0.14);
+				color: #74c99a;
+				border: 1px solid rgba(60, 200, 120, 0.32);
+				padding: 1px 6px;
+				border-radius: 4px;
+			}
+			.session-card .head .extracted.pending {
+				background: rgba(126, 130, 140, 0.14);
+				color: #8a9099;
+				border-color: rgba(126, 130, 140, 0.32);
+			}
+			.session-card .summary {
+				color: #d6dadf;
+				font-size: 13.5px;
+				line-height: 1.5;
+				margin: 4px 0 10px;
+			}
+			.session-card .pills {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 5px;
+				margin-bottom: 8px;
+			}
+			.session-card .pill {
+				font-size: 10.5px;
+				padding: 2px 8px;
+				border-radius: 10px;
+				background: #1a1f26;
+				color: #8a9099;
+				border: 1px solid #232a33;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.session-card .pill.tag { color: #7eb7f0; background: #15212d; border-color: #1d2d40; }
+			.session-card .pill.entity { color: #d4a855; background: #221c14; border-color: #36281c; }
+			.session-card .expand-btn,
+			.session-card .delete-btn {
+				background: transparent;
+				border: 1px solid #232a33;
+				color: #8a9099;
+				padding: 4px 10px;
+				border-radius: 6px;
+				font-size: 11.5px;
+				cursor: pointer;
+			}
+			.session-card .expand-btn:hover { background: #1f2329; color: #c0c5cc; }
+			.session-card .delete-btn {
+				color: #6c727b;
+				border-color: #2a1f24;
+			}
+			.session-card .delete-btn:hover {
+				background: rgba(240, 128, 137, 0.14);
+				color: #f08089;
+				border-color: rgba(240, 128, 137, 0.32);
+			}
+			.session-card .transcript {
+				margin-top: 12px;
+				padding-top: 10px;
+				border-top: 1px solid #1f2329;
+				display: flex;
+				flex-direction: column;
+				gap: 4px;
+				max-height: 540px;
+				overflow-y: auto;
+			}
+			.session-card .transcript .msg {
+				display: flex;
+				flex-direction: column;
+				max-width: 80%;
+				padding: 6px 11px;
+				border-radius: 14px;
+				font-size: 13px;
+				line-height: 1.35;
+				white-space: pre-wrap;
+				word-wrap: break-word;
+			}
+			.session-card .transcript .msg .who {
+				font-size: 9.5px;
+				color: #6c727b;
+				margin-bottom: 1px;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.session-card .transcript .msg.them { align-self: flex-start; background: #1f2329; color: #e6e6e6; }
+			.session-card .transcript .msg.me { align-self: flex-end; background: #1f3a5a; color: #cfe2ff; }
 		</style>
 	</head>
 	<body>
@@ -730,6 +1059,7 @@
 			<nav class="tab-nav" id="tab-nav">
 				<button data-tab="work-orders" class="active">Work Orders</button>
 				<button data-tab="memory">Memory</button>
+				<button data-tab="sessions">Sessions</button>
 			</nav>
 			<div class="ws-toggle" id="ws-toggle">
 				<button data-ws="all">All</button>
@@ -755,18 +1085,56 @@
 		</main>
 
 		<section id="view-memory" class="view memory-view">
-			<svg id="memory-graph"></svg>
-			<aside id="memory-detail" class="memory-detail" hidden>
-				<button class="memory-detail-close" id="memory-detail-close" aria-label="close">×</button>
-				<div id="memory-detail-body"></div>
-			</aside>
+			<div id="memory-graph-pane">
+				<svg id="memory-graph"></svg>
+				<aside id="memory-detail" class="memory-detail" hidden>
+					<button class="memory-detail-close" id="memory-detail-close" aria-label="close">×</button>
+					<div id="memory-detail-body"></div>
+				</aside>
+			</div>
+			<div id="memory-list-pane" hidden>
+				<div id="memory-list-controls">
+					<input id="memory-list-search" class="memory-search" type="search" placeholder="filter beliefs…" />
+					<select id="memory-list-sort">
+						<option value="evidence">Sort: evidence ↓</option>
+						<option value="confidence">Sort: confidence ↓</option>
+						<option value="updated">Sort: most recent</option>
+						<option value="claim">Sort: claim A→Z</option>
+					</select>
+					<span id="memory-list-count" class="memory-list-count"></span>
+				</div>
+				<div id="memory-list"></div>
+			</div>
+			<div id="memory-entities-pane" hidden>
+				<div id="memory-list-controls">
+					<input id="memory-entities-search" class="memory-search" type="search" placeholder="filter entities…" />
+					<select id="memory-entities-filter">
+						<option value="">All kinds</option>
+						<option value="vendor">Vendor</option>
+						<option value="property">Property</option>
+						<option value="owner">Owner</option>
+					</select>
+					<span id="memory-entities-count" class="memory-list-count"></span>
+				</div>
+				<div id="memory-entities-list"></div>
+				<div id="memory-entities-detail" hidden></div>
+			</div>
 			<div class="memory-controls">
+				<div class="memory-view-toggle" id="memory-view-toggle">
+					<button data-view="graph" class="active">Graph</button>
+					<button data-view="list">Beliefs</button>
+					<button data-view="entities">Entities</button>
+				</div>
 				<button class="primary" id="new-belief-btn">+ new belief</button>
 				<div class="memory-filters">
 					<label><input type="checkbox" id="show-obs" checked /> observations</label>
 					<label><input type="checkbox" id="show-bel" checked /> beliefs</label>
 				</div>
 			</div>
+		</section>
+
+		<section id="view-sessions" class="view sessions-view">
+			<div id="sessions-list"></div>
 		</section>
 
 		<dialog id="new-belief-dialog" class="belief-dialog">
@@ -822,6 +1190,7 @@
 				renderedHistoryIds = '';
 				renderedChatIds = '';
 				refresh();
+				if (activeTab === 'sessions') loadSessions();
 			});
 			applyWsToggleStyle();
 
@@ -1370,6 +1739,8 @@
 				}
 				if (activeTab === 'memory') {
 					loadMemoryGraph();
+				} else if (activeTab === 'sessions') {
+					loadSessions();
 				}
 			}
 			document.getElementById('tab-nav').addEventListener('click', (e) => {
@@ -1380,6 +1751,151 @@
 				applyTab();
 			});
 			applyTab();
+
+			/* ─── Sessions tab ─────────────────────────────────────────── */
+
+			const sessionsList = document.getElementById('sessions-list');
+			let sessionsCache = []; // { id -> session row }
+			let sessionsLoading = false;
+
+			function sessionsWorkspace() {
+				return workspaceFilter === 'all' ? 'prod' : workspaceFilter;
+			}
+
+			async function loadSessions() {
+				if (sessionsLoading) return;
+				sessionsLoading = true;
+				sessionsList.innerHTML = '<div class="sessions-empty">Loading sessions…</div>';
+				try {
+					const res = await fetch('/api/sessions?workspace=' + sessionsWorkspace());
+					if (!res.ok) throw new Error(await res.text());
+					sessionsCache = await res.json();
+					renderSessions();
+				} catch (err) {
+					sessionsList.innerHTML =
+						'<div class="sessions-empty">Failed to load sessions: ' + escapeHtml(err.message) + '</div>';
+				} finally {
+					sessionsLoading = false;
+				}
+			}
+
+			function fmtRange(startISO, endISO) {
+				const s = new Date(startISO);
+				const e = endISO ? new Date(endISO) : null;
+				const opts = { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+				const same = e && s.toDateString() === e.toDateString();
+				if (!e) return s.toLocaleString(undefined, opts) + ' — open';
+				if (same) {
+					const endTime = e.toLocaleString(undefined, { hour: 'numeric', minute: '2-digit' });
+					return s.toLocaleString(undefined, opts) + ' – ' + endTime;
+				}
+				return s.toLocaleString(undefined, opts) + ' → ' + e.toLocaleString(undefined, opts);
+			}
+
+			function fmtEntities(entities) {
+				if (!entities || typeof entities !== 'object') return [];
+				const out = [];
+				for (const [k, v] of Object.entries(entities)) {
+					if (Array.isArray(v)) for (const item of v) out.push(`${k}:${item}`);
+					else if (v != null) out.push(`${k}:${v}`);
+				}
+				return out;
+			}
+
+			function escapeHtml(s) {
+				return String(s ?? '')
+					.replaceAll('&', '&amp;')
+					.replaceAll('<', '&lt;')
+					.replaceAll('>', '&gt;')
+					.replaceAll('"', '&quot;');
+			}
+
+			function renderSessions() {
+				if (!sessionsCache.length) {
+					sessionsList.innerHTML =
+						'<div class="sessions-empty">No sessions yet for ' +
+						escapeHtml(sessionsWorkspace()) +
+						'. Run <code>node agent/scripts/backfill-from-chat.mjs --workspace=' +
+						escapeHtml(sessionsWorkspace()) +
+						' --phase=1</code> to backfill.</div>';
+					return;
+				}
+				const html = sessionsCache
+					.map((s) => {
+						const tags = (s.tags ?? [])
+							.map((t) => `<span class="pill tag">${escapeHtml(t)}</span>`)
+							.join('');
+						const ents = fmtEntities(s.entities)
+							.slice(0, 12)
+							.map((e) => `<span class="pill entity">${escapeHtml(e)}</span>`)
+							.join('');
+						const extracted = s.observations_extracted_at
+							? '<span class="extracted">obs ✓</span>'
+							: '<span class="extracted pending">obs pending</span>';
+						const transcript = renderTranscript(s.messages ?? []);
+						return `
+							<div class="session-card" data-id="${s.id}">
+								<div class="head">
+									<span class="range">${escapeHtml(fmtRange(s.started_at, s.ended_at))}</span>
+									<span class="count">${s.message_count ?? 0} msgs</span>
+									${extracted}
+									<button class="delete-btn" data-action="delete" style="margin-left:auto" title="Delete this session and its messages">Delete</button>
+								</div>
+								<div class="summary">${escapeHtml(s.summary ?? '(no summary yet)')}</div>
+								<div class="pills">${tags}${ents}</div>
+								<div class="transcript">${transcript}</div>
+							</div>
+						`;
+					})
+					.join('');
+				sessionsList.innerHTML = html;
+			}
+
+			function renderTranscript(msgs) {
+				return msgs
+					.map((m) => {
+						const isAgent = m.is_agent ?? m.is_from_me;
+						const tail = m.handle ? ` (${m.handle.slice(-4)})` : '';
+						const who = isAgent ? `agent${tail}` : m.handle || 'unknown';
+						const ts = new Date(m.ts).toLocaleString(undefined, {
+							month: 'short',
+							day: 'numeric',
+							hour: 'numeric',
+							minute: '2-digit'
+						});
+						return `<div class="msg ${isAgent ? 'me' : 'them'}">
+							<span class="who">${escapeHtml(who)} · ${escapeHtml(ts)}</span>
+							${escapeHtml(m.body)}
+						</div>`;
+					})
+					.join('');
+			}
+
+			sessionsList.addEventListener('click', async (e) => {
+				const delBtn = e.target.closest('button[data-action="delete"]');
+				if (!delBtn) return;
+				const card = delBtn.closest('.session-card');
+				const id = card?.dataset.id;
+				if (!id) return;
+				const summary = card.querySelector('.summary')?.textContent?.slice(0, 80) ?? '';
+				if (!confirm(`Delete this session and its messages?\n\n${summary}…`)) return;
+				const orig = delBtn.textContent;
+				delBtn.textContent = 'Deleting…';
+				delBtn.disabled = true;
+				try {
+					const res = await fetch('/api/sessions/' + encodeURIComponent(id), {
+						method: 'DELETE'
+					});
+					if (!res.ok) throw new Error(await res.text());
+					sessionsCache = sessionsCache.filter((s) => s.id !== id);
+					card.remove();
+					if (!sessionsCache.length) renderSessions();
+				} catch (err) {
+					delBtn.disabled = false;
+					delBtn.textContent = orig;
+					alert('Delete failed: ' + err.message);
+				}
+			});
 
 			// Workspace for memory view: 'all' isn't meaningful here, default to prod.
 			function memoryWorkspace() {
@@ -1412,10 +1928,206 @@
 					if (!res.ok) throw new Error(await res.text());
 					memoryState = await res.json();
 					renderGraph();
+					renderBeliefList();
 				} catch (err) {
 					toast(`memory load failed: ${err.message}`, 'error');
 				}
 			}
+
+			/* ── Memory list view ──────────────────────────────────────── */
+
+			const MEMORY_VIEW_KEY = 'bedrock.memoryView';
+			let memoryView = localStorage.getItem(MEMORY_VIEW_KEY) || 'graph';
+			const memoryListPane = document.getElementById('memory-list-pane');
+			const memoryGraphPane = document.getElementById('memory-graph-pane');
+			const memoryListEl = document.getElementById('memory-list');
+			const memoryListSearch = document.getElementById('memory-list-search');
+			const memoryListSort = document.getElementById('memory-list-sort');
+			const memoryListCount = document.getElementById('memory-list-count');
+
+			function applyMemoryView() {
+				document.body.classList.toggle('memory-list-mode', memoryView === 'list');
+				document.body.classList.toggle('memory-entities-mode', memoryView === 'entities');
+				memoryListPane.hidden = memoryView !== 'list';
+				memoryGraphPane.hidden = memoryView !== 'graph';
+				const entitiesPane = document.getElementById('memory-entities-pane');
+				entitiesPane.hidden = memoryView !== 'entities';
+				for (const btn of document.querySelectorAll('#memory-view-toggle button')) {
+					btn.classList.toggle('active', btn.dataset.view === memoryView);
+				}
+				if (memoryView === 'list') renderBeliefList();
+				if (memoryView === 'entities') loadEntities();
+			}
+			document.getElementById('memory-view-toggle').addEventListener('click', (e) => {
+				const btn = e.target.closest('button[data-view]');
+				if (!btn) return;
+				memoryView = btn.dataset.view;
+				localStorage.setItem(MEMORY_VIEW_KEY, memoryView);
+				applyMemoryView();
+			});
+			memoryListSearch.addEventListener('input', renderBeliefList);
+			memoryListSort.addEventListener('change', renderBeliefList);
+			applyMemoryView();
+
+			function renderBeliefList() {
+				if (memoryView !== 'list') return;
+				const evidenceByBelief = {};
+				for (const e of memoryState.edges ?? []) {
+					evidenceByBelief[e.belief_id] = (evidenceByBelief[e.belief_id] || 0) + 1;
+				}
+				const q = memoryListSearch.value.trim().toLowerCase();
+				const sort = memoryListSort.value;
+				let rows = (memoryState.beliefs ?? []).map((b) => ({
+					...b,
+					evidence: evidenceByBelief[b.id] || 0
+				}));
+				if (q) {
+					rows = rows.filter((b) => {
+						const hay = `${b.claim} ${JSON.stringify(b.scope ?? {})} ${(b.tags ?? []).join(' ')}`.toLowerCase();
+						return hay.includes(q);
+					});
+				}
+				rows.sort((a, b) => {
+					if (sort === 'confidence') return b.confidence - a.confidence;
+					if (sort === 'updated') return new Date(b.updated_at) - new Date(a.updated_at) > 0 ? -1 : 1;
+					if (sort === 'claim') return a.claim.localeCompare(b.claim);
+					// default: evidence desc, then confidence desc
+					if (b.evidence !== a.evidence) return b.evidence - a.evidence;
+					return b.confidence - a.confidence;
+				});
+				memoryListCount.textContent = `${rows.length}/${memoryState.beliefs?.length ?? 0}`;
+				if (!rows.length) {
+					memoryListEl.innerHTML =
+						'<div class="memory-empty" style="position:static;padding:40px 0;text-align:center">No beliefs match.</div>';
+					return;
+				}
+				memoryListEl.innerHTML = rows
+					.map((b) => {
+						const scopePills = Object.entries(b.scope ?? {})
+							.map(([k, v]) => `<span class="pill scope">${escapeHtml(k)}=${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : v)}</span>`)
+							.join('');
+						const tagPills = (b.tags ?? [])
+							.map((t) => `<span class="pill tag">${escapeHtml(t)}</span>`)
+							.join('');
+						return `
+							<div class="belief-row ${b.created_by}" data-id="${b.id}">
+								<div class="claim">${escapeHtml(b.claim)}</div>
+								<div class="right">
+									<span class="conf">conf ${b.confidence.toFixed(2)}</span>
+									<span class="ev">ev ${b.evidence}</span>
+									<span>${escapeHtml(b.created_by)} / ${escapeHtml(b.explicitness)}</span>
+								</div>
+								<div class="meta">${scopePills}${tagPills}</div>
+							</div>
+						`;
+					})
+					.join('');
+			}
+
+			/* ── Entities sub-view ─────────────────────────────────────── */
+
+			const entitiesListEl = document.getElementById('memory-entities-list');
+			const entitiesDetailEl = document.getElementById('memory-entities-detail');
+			const entitiesSearchEl = document.getElementById('memory-entities-search');
+			const entitiesFilterEl = document.getElementById('memory-entities-filter');
+			const entitiesCountEl = document.getElementById('memory-entities-count');
+			let entitiesCache = [];
+			let entitiesLoading = false;
+
+			async function loadEntities() {
+				if (entitiesLoading) return;
+				entitiesLoading = true;
+				entitiesListEl.innerHTML = '<div class="memory-empty" style="position:static;padding:40px 0;text-align:center">Loading…</div>';
+				try {
+					const res = await fetch('/api/entities?workspace=' + memoryWorkspace());
+					if (!res.ok) throw new Error(await res.text());
+					entitiesCache = await res.json();
+					renderEntitiesList();
+				} catch (err) {
+					entitiesListEl.innerHTML = '<div class="memory-empty" style="position:static;padding:40px 0;text-align:center">Failed: ' + escapeHtml(err.message) + '</div>';
+				} finally {
+					entitiesLoading = false;
+				}
+			}
+
+			function renderEntitiesList() {
+				const q = entitiesSearchEl.value.trim().toLowerCase();
+				const kind = entitiesFilterEl.value;
+				let rows = entitiesCache.slice();
+				if (kind) rows = rows.filter((e) => e.kind === kind);
+				if (q) {
+					rows = rows.filter((e) => {
+						return (
+							(e.name || '').toLowerCase().includes(q) ||
+							(e.kind || '').toLowerCase().includes(q) ||
+							JSON.stringify(e.metadata ?? {}).toLowerCase().includes(q)
+						);
+					});
+				}
+				rows.sort((a, b) => {
+					if (b.belief_count !== a.belief_count) return b.belief_count - a.belief_count;
+					if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
+					return a.name.localeCompare(b.name);
+				});
+				entitiesCountEl.textContent = `${rows.length}/${entitiesCache.length}`;
+				if (!rows.length) {
+					entitiesListEl.innerHTML = '<div class="memory-empty" style="position:static;padding:40px 0;text-align:center">No entities match.</div>';
+					return;
+				}
+				entitiesListEl.innerHTML = rows
+					.map((e) => {
+						const legacy = e.ref_table ? `<span class="legacy">→ ${escapeHtml(e.ref_table)}</span>` : '';
+						return `
+							<div class="entity-row ${e.kind}" data-id="${e.id}">
+								<span class="kind-pill">${escapeHtml(e.kind)}</span>
+								<span class="name">${escapeHtml(e.name)}</span>
+								<div class="right">
+									<span class="ev">${e.belief_count} belief${e.belief_count === 1 ? '' : 's'}</span>
+									${legacy}
+								</div>
+							</div>
+						`;
+					})
+					.join('');
+			}
+
+			entitiesSearchEl.addEventListener('input', renderEntitiesList);
+			entitiesFilterEl.addEventListener('change', renderEntitiesList);
+
+			entitiesListEl.addEventListener('click', async (e) => {
+				const row = e.target.closest('.entity-row');
+				if (!row) return;
+				const id = row.dataset.id;
+				const entity = entitiesCache.find((x) => x.id === id);
+				if (!entity) return;
+				entitiesDetailEl.innerHTML = `<h3>${escapeHtml(entity.kind)}: ${escapeHtml(entity.name)} <button class="close-btn">close</button></h3><div style="color:#8a9099;font-size:11.5px">Loading beliefs…</div>`;
+				entitiesDetailEl.hidden = false;
+				try {
+					const r = await fetch('/api/entities/' + encodeURIComponent(id) + '/beliefs');
+					if (!r.ok) throw new Error(await r.text());
+					const beliefs = await r.json();
+					const body = beliefs.length
+						? beliefs
+								.map((b) => `<div class="belief-row ${b.created_by}" style="margin-top:6px">
+									<div class="claim">${escapeHtml(b.claim)}</div>
+									<div class="right">
+										<span class="conf">conf ${b.confidence.toFixed(2)}</span>
+										<span>${escapeHtml(b.created_by)}</span>
+									</div>
+								</div>`)
+								.join('')
+						: '<div style="color:#6c727b;font-size:12px">No beliefs reference this entity yet.</div>';
+					entitiesDetailEl.innerHTML = `<h3>${escapeHtml(entity.kind)}: ${escapeHtml(entity.name)} <button class="close-btn">close</button></h3>${body}`;
+					entitiesDetailEl.querySelector('.close-btn').addEventListener('click', () => {
+						entitiesDetailEl.hidden = true;
+					});
+				} catch (err) {
+					entitiesDetailEl.innerHTML = `<h3>${escapeHtml(entity.kind)}: ${escapeHtml(entity.name)} <button class="close-btn">close</button></h3><div style="color:#f08089">Failed: ${escapeHtml(err.message)}</div>`;
+					entitiesDetailEl.querySelector('.close-btn').addEventListener('click', () => {
+						entitiesDetailEl.hidden = true;
+					});
+				}
+			});
 
 			function renderGraph() {
 				const svg = d3.select(svgEl);
@@ -1423,8 +2135,10 @@
 
 				const obs = showObsEl.checked ? memoryState.observations : [];
 				const bel = showBelEl.checked ? memoryState.beliefs : [];
+				// Entities always show with beliefs — they're the anchors.
+				const ents = showBelEl.checked ? (memoryState.entities ?? []) : [];
 
-				if (!obs.length && !bel.length) {
+				if (!obs.length && !bel.length && !ents.length) {
 					const empty = document.createElement('div');
 					empty.className = 'memory-empty';
 					empty.innerHTML =
@@ -1446,12 +2160,35 @@
 
 				const nodes = [
 					...obs.map((o) => ({ ...o, _kind: 'observation' })),
-					...bel.map((b) => ({ ...b, _kind: 'belief' }))
+					...bel.map((b) => ({ ...b, _kind: 'belief' })),
+					...ents.map((e) => ({ ...e, _kind: 'entity' }))
 				];
 				const visibleIds = new Set(nodes.map((n) => n.id));
-				const links = memoryState.edges
+				const evidenceLinks = memoryState.edges
 					.filter((e) => visibleIds.has(e.belief_id) && visibleIds.has(e.observation_id))
-					.map((e) => ({ source: e.observation_id, target: e.belief_id, weight: e.weight }));
+					.map((e) => ({
+						source: e.observation_id,
+						target: e.belief_id,
+						weight: e.weight,
+						_type: 'evidence'
+					}));
+				const entityLinks = (memoryState.entity_edges ?? [])
+					.filter((e) => visibleIds.has(e.belief_id) && visibleIds.has(e.entity_id))
+					.map((e) => ({
+						source: e.entity_id,
+						target: e.belief_id,
+						weight: 0.6,
+						_type: 'entity'
+					}));
+				const structuralLinks = (memoryState.structural_edges ?? [])
+					.filter((e) => visibleIds.has(e.property_entity_id) && visibleIds.has(e.owner_entity_id))
+					.map((e) => ({
+						source: e.property_entity_id,
+						target: e.owner_entity_id,
+						weight: 0.8,
+						_type: 'structural'
+					}));
+				const links = [...evidenceLinks, ...entityLinks, ...structuralLinks];
 
 				const g = svg.append('g').attr('class', 'graph-root');
 
@@ -1465,18 +2202,31 @@
 					.selectAll('line')
 					.data(links)
 					.join('line')
-					.attr('class', 'link')
-					.attr('stroke-width', (d) => Math.max(0.5, Math.abs(d.weight) * 1.5))
-					.attr('stroke', (d) => (d.weight < 0 ? '#5a2a30' : '#2a2f37'));
+					.attr('class', (d) => {
+						if (d._type === 'entity') return 'link entity';
+						if (d._type === 'structural') return 'link structural';
+						return 'link';
+					})
+					.attr('stroke-width', (d) => {
+						if (d._type === 'entity') return 1;
+						if (d._type === 'structural') return 1.5;
+						return Math.max(0.5, Math.abs(d.weight) * 1.5);
+					})
+					.attr('stroke', (d) => {
+						if (d._type === 'entity' || d._type === 'structural') return null; // CSS controls
+						return d.weight < 0 ? '#5a2a30' : '#2a2f37';
+					});
 
 				const node = g
 					.append('g')
 					.selectAll('g')
 					.data(nodes, (d) => d.id)
 					.join('g')
-					.attr('class', (d) =>
-						`node ${d._kind}` + (d._kind === 'belief' && d.created_by === 'user' ? ' user-created' : '')
-					)
+					.attr('class', (d) => {
+						if (d._kind === 'entity') return `node entity ${d.kind}`;
+						const userTag = d._kind === 'belief' && d.created_by === 'user' ? ' user-created' : '';
+						return `node ${d._kind}${userTag}`;
+					})
 					.on('click', (ev, d) => {
 						ev.stopPropagation();
 						selectedNodeId = d.id;
@@ -1513,11 +2263,15 @@
 							})
 					);
 
+				function nodeRadius(d) {
+					if (d._kind === 'belief') return 6 + 14 * (d.confidence ?? 0.5);
+					if (d._kind === 'entity') return 8;
+					return 3.5;
+				}
+
 				node
 					.append('circle')
-					.attr('r', (d) =>
-						d._kind === 'belief' ? 6 + 14 * (d.confidence ?? 0.5) : 3.5
-					)
+					.attr('r', nodeRadius)
 					.attr('fill-opacity', (d) =>
 						d._kind === 'observation' ? 0.3 + 0.7 * (d.salience ?? 0.5) : 1
 					);
@@ -1525,10 +2279,13 @@
 				node
 					.append('text')
 					.attr('x', 0)
-					.attr('y', (d) => (d._kind === 'belief' ? 6 + 14 * (d.confidence ?? 0.5) + 4 : 8))
+					.attr('y', (d) => nodeRadius(d) + 4)
 					.attr('text-anchor', 'middle')
 					.text((d) => {
-						const txt = d._kind === 'belief' ? d.claim : d.summary;
+						let txt;
+						if (d._kind === 'belief') txt = d.claim;
+						else if (d._kind === 'entity') txt = `${d.kind}: ${d.name}`;
+						else txt = d.summary;
 						return (txt ?? '').length > 36 ? txt.slice(0, 33) + '…' : txt;
 					});
 
@@ -1556,7 +2313,14 @@
 					.force('charge', d3.forceManyBody().strength(-260).distanceMax(400))
 					.force('x', d3.forceX(w / 2).strength(0.05))
 					.force('y', d3.forceY(h / 2).strength(0.05))
-					.force('collide', d3.forceCollide().radius((d) => (d._kind === 'belief' ? 36 : 10)))
+					.force(
+						'collide',
+						d3.forceCollide().radius((d) => {
+							if (d._kind === 'belief') return 36;
+							if (d._kind === 'entity') return 24;
+							return 10;
+						})
+					)
 					.on('tick', () => {
 						link
 							.attr('x1', (d) => d.source.x)
@@ -1572,6 +2336,14 @@
 				for (const e of memoryState.edges) {
 					if (e.belief_id === id) neighbors.add(e.observation_id);
 					if (e.observation_id === id) neighbors.add(e.belief_id);
+				}
+				for (const e of memoryState.entity_edges ?? []) {
+					if (e.belief_id === id) neighbors.add(e.entity_id);
+					if (e.entity_id === id) neighbors.add(e.belief_id);
+				}
+				for (const e of memoryState.structural_edges ?? []) {
+					if (e.property_entity_id === id) neighbors.add(e.owner_entity_id);
+					if (e.owner_entity_id === id) neighbors.add(e.property_entity_id);
 				}
 				d3.selectAll('.node').classed('dimmed', (d) => !neighbors.has(d.id));
 				d3.selectAll('.node').classed('selected', (d) => d.id === id);
@@ -1589,7 +2361,92 @@
 			function showDetail(d) {
 				detailEl.hidden = false;
 				if (d._kind === 'belief') renderBeliefDetail(d);
+				else if (d._kind === 'entity') renderEntityDetail(d);
 				else renderObservationDetail(d);
+			}
+
+			function renderEntityDetail(e) {
+				const linkedBeliefs = (memoryState.entity_edges ?? [])
+					.filter((edge) => edge.entity_id === e.id)
+					.map((edge) => memoryState.beliefs.find((b) => b.id === edge.belief_id))
+					.filter(Boolean);
+
+				// Structural relations derived from legacy owner_properties:
+				// property → its owner(s); owner → its property/properties.
+				const relatedEntities = [];
+				const structural = memoryState.structural_edges ?? [];
+				if (e.kind === 'property') {
+					for (const se of structural) {
+						if (se.property_entity_id === e.id) {
+							const o = memoryState.entities.find((x) => x.id === se.owner_entity_id);
+							if (o) relatedEntities.push(o);
+						}
+					}
+				} else if (e.kind === 'owner') {
+					for (const se of structural) {
+						if (se.owner_entity_id === e.id) {
+							const p = memoryState.entities.find((x) => x.id === se.property_entity_id);
+							if (p) relatedEntities.push(p);
+						}
+					}
+				}
+				const relatedHeading =
+					e.kind === 'property' ? 'Owner' : e.kind === 'owner' ? 'Properties' : null;
+
+				detailBodyEl.innerHTML = `
+					<h3>Entity</h3>
+					<div class="claim">${escapeHtml(e.kind)}: ${escapeHtml(e.name)}</div>
+					<div class="kv"><span class="k">kind</span><span>${escapeHtml(e.kind)}</span></div>
+					<div class="kv"><span class="k">legacy ref</span><span>${e.ref_table ? `${escapeHtml(e.ref_table)} / ${(e.ref_id || '').slice(0, 8)}` : '<span style="color:#6c727b">none (informal)</span>'}</span></div>
+					<div class="kv"><span class="k">created</span><span>${e.created_at ? fmtAge(e.created_at) : '—'}</span></div>
+					${
+						relatedHeading
+							? `<h3 style="margin-top:18px">${relatedHeading} (${relatedEntities.length})</h3>
+								${
+									relatedEntities.length
+										? relatedEntities
+												.map(
+													(r) => `<div class="evidence-row entity-link" data-ent-id="${r.id}">
+											<span class="weight" style="color:#6c727b">${escapeHtml(r.kind)}</span>
+											${escapeHtml(r.name)}
+										</div>`
+												)
+												.join('')
+										: '<div style="color:#6c727b;font-size:12px">' +
+											(e.kind === 'property'
+												? 'No owner found (informal property or missing owner_properties row).'
+												: 'No properties found for this owner.') +
+											'</div>'
+								}`
+							: ''
+					}
+					<h3 style="margin-top:18px">Beliefs (${linkedBeliefs.length})</h3>
+					${
+						linkedBeliefs.length
+							? linkedBeliefs
+									.map(
+										(b) => `<div class="evidence-row" data-bel-id="${b.id}">
+								<span class="weight">${(b.confidence ?? 0).toFixed(2)}</span>
+								${escapeHtml(b.claim)}
+							</div>`
+									)
+									.join('')
+							: '<div style="color:#6c727b;font-size:12px">No beliefs reference this entity yet.</div>'
+					}
+				`;
+
+				// Wire click-through on related-entity rows.
+				detailBodyEl.querySelectorAll('.entity-link').forEach((row) => {
+					row.addEventListener('click', () => {
+						const entId = row.dataset.entId;
+						const ent = memoryState.entities.find((x) => x.id === entId);
+						if (ent) {
+							selectedNodeId = entId;
+							highlightNeighborhood(entId);
+							renderEntityDetail(ent);
+						}
+					});
+				});
 			}
 			function hideDetail() {
 				detailEl.hidden = true;

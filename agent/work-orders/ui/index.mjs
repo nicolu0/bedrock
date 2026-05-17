@@ -19,8 +19,175 @@ import { fileURLToPath } from 'node:url';
 
 import * as db from '../state/helpers.mjs';
 import { WORKSPACES } from '../workspaces.mjs';
-import { deleteIssuesByWorkspace } from '../../supabase.mjs';
+import { deleteIssuesByWorkspace, supabaseEnv } from '../../supabase.mjs';
 import * as memory from '../../core/memory.mjs';
+
+// Cofounder phone numbers that act as the agent post-pivot. The chat_messages
+// table stores is_from_me as the raw chat.db value (true only for messages
+// sent from this Mac mini). For UI rendering and downstream LLM prompts we
+// want "agent" to include the cofounders' personas too — this helper does
+// that overlay using WORKSPACES.agent_handles. The DB row is unchanged.
+function isAgentHandleForWorkspace(workspace_id, handle) {
+	if (!handle) return false;
+	return (WORKSPACES[workspace_id]?.agent_handles ?? []).includes(handle);
+}
+
+// ── chat_sessions / chat_messages REST helpers (read-only) ────────────────
+
+async function listChatSessions(workspace_id) {
+	const { url, key } = supabaseEnv();
+	// Nested select via PostgREST: sessions with their chat_messages embedded.
+	// Saves the N+1 per-session-transcript round trip the UI used to do.
+	const params = new URLSearchParams({
+		select:
+			'id,chat_guid,started_at,ended_at,message_count,participants,issue_ids,entities,tags,summary,observations_extracted_at,messages:chat_messages(id,workspace_id,ts,is_from_me,handle,body,issue_id,source_rowid)',
+		workspace_id: `eq.${workspace_id}`,
+		order: 'started_at.desc',
+		'messages.order': 'ts.asc'
+	});
+	const res = await fetch(`${url}/rest/v1/chat_sessions?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listChatSessions: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	// Apply the is_agent overlay (raw is_from_me OR a configured agent_handle)
+	// to every embedded message so the UI doesn't need to know workspace config.
+	return rows.map((s) => ({
+		...s,
+		messages: (s.messages ?? []).map((m) => ({
+			...m,
+			is_agent: m.is_from_me || isAgentHandleForWorkspace(m.workspace_id, m.handle)
+		}))
+	}));
+}
+
+// ── entities REST helpers (read-only) ─────────────────────────────────────
+
+async function listEntitiesForWorkspace(workspace_id) {
+	const { url, key } = supabaseEnv();
+	// Pull entities with their belief and observation reference counts in one
+	// PostgREST query via embedded count selectors.
+	const params = new URLSearchParams({
+		select:
+			'id,kind,name,ref_table,ref_id,metadata,created_at,updated_at,belief_count:belief_entities(count)',
+		workspace_id: `eq.${workspace_id}`,
+		order: 'kind.asc,name.asc'
+	});
+	const res = await fetch(`${url}/rest/v1/entities?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listEntitiesForWorkspace: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	// PostgREST returns belief_count as [{ count: N }] — flatten.
+	return rows.map((r) => ({
+		...r,
+		belief_count: Array.isArray(r.belief_count) ? r.belief_count[0]?.count ?? 0 : 0
+	}));
+}
+
+async function listBeliefEntityEdges(workspace_id) {
+	const { url, key } = supabaseEnv();
+	// Scope edges to this workspace by joining through beliefs.
+	const params = new URLSearchParams({
+		select: 'belief_id,entity_id,belief:beliefs!inner(workspace_id)',
+		'belief.workspace_id': `eq.${workspace_id}`
+	});
+	const res = await fetch(`${url}/rest/v1/belief_entities?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listBeliefEntityEdges: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	return rows.map((r) => ({ belief_id: r.belief_id, entity_id: r.entity_id }));
+}
+
+// Property↔owner structural edges. Derived from the legacy `owner_properties`
+// join table by mapping legacy property/owner row IDs to their entity rows
+// (via entity.ref_id). Returned as [{ property_entity_id, owner_entity_id }].
+async function listStructuralEdges(workspace_id) {
+	const { url, key } = supabaseEnv();
+	const eRes = await fetch(
+		`${url}/rest/v1/entities?select=id,kind,ref_id&workspace_id=eq.${workspace_id}&kind=in.(property,owner)&ref_id=not.is.null`,
+		{ headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' } }
+	);
+	if (!eRes.ok) throw new Error(`listStructuralEdges(entities): ${eRes.status} ${await eRes.text()}`);
+	const entities = await eRes.json();
+	const propByRef = new Map();
+	const ownerByRef = new Map();
+	for (const e of entities) {
+		if (e.kind === 'property') propByRef.set(e.ref_id, e.id);
+		else if (e.kind === 'owner') ownerByRef.set(e.ref_id, e.id);
+	}
+
+	const opRes = await fetch(
+		`${url}/rest/v1/owner_properties?select=property_id,owner_id&workspace_id=eq.${workspace_id}`,
+		{ headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' } }
+	);
+	if (!opRes.ok) throw new Error(`listStructuralEdges(owner_properties): ${opRes.status} ${await opRes.text()}`);
+	const ops = await opRes.json();
+
+	const edges = [];
+	for (const op of ops) {
+		const pId = propByRef.get(op.property_id);
+		const oId = ownerByRef.get(op.owner_id);
+		if (pId && oId) edges.push({ property_entity_id: pId, owner_entity_id: oId });
+	}
+	return edges;
+}
+
+async function listBeliefsForEntity(entity_id) {
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select:
+			'belief:beliefs(id,claim,scope,confidence,explicitness,created_by,created_at,updated_at,tags)',
+		entity_id: `eq.${entity_id}`
+	});
+	const res = await fetch(`${url}/rest/v1/belief_entities?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listBeliefsForEntity: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	return rows.map((r) => r.belief).filter(Boolean);
+}
+
+async function deleteChatSession(session_id) {
+	const { url, key } = supabaseEnv();
+	const h = { apikey: key, Authorization: `Bearer ${key}` };
+	// Drop messages first. chat_messages.session_id is ON DELETE SET NULL, so
+	// not strictly required for FK, but we want a full purge — orphaned rows
+	// would never be re-sessionized (UNIQUE constraint blocks re-insert) and
+	// would just take up space.
+	const mres = await fetch(
+		`${url}/rest/v1/chat_messages?session_id=eq.${session_id}`,
+		{ method: 'DELETE', headers: h }
+	);
+	if (!mres.ok) throw new Error(`deleteChatSession(messages): ${mres.status} ${await mres.text()}`);
+	const sres = await fetch(`${url}/rest/v1/chat_sessions?id=eq.${session_id}`, {
+		method: 'DELETE',
+		headers: h
+	});
+	if (!sres.ok) throw new Error(`deleteChatSession(session): ${sres.status} ${await sres.text()}`);
+}
+
+async function listChatMessagesForSession(session_id) {
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'id,workspace_id,ts,is_from_me,handle,body,issue_id,source_rowid',
+		session_id: `eq.${session_id}`,
+		order: 'ts.asc'
+	});
+	const res = await fetch(`${url}/rest/v1/chat_messages?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok)
+		throw new Error(`listChatMessagesForSession: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	// Overlay: is_agent is the effective sender role (raw is_from_me OR a
+	// configured agent_handle). UI uses this for me/them bubble alignment.
+	return rows.map((m) => ({
+		...m,
+		is_agent: m.is_from_me || isAgentHandleForWorkspace(m.workspace_id, m.handle)
+	}));
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAGE_PATH = path.join(__dirname, 'page.html');
@@ -151,12 +318,22 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 			if (req.method === 'GET' && pathname === '/api/memory/graph') {
 				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
 				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
-				const [observations, beliefs, edges] = await Promise.all([
+				const [observations, beliefs, edges, entities, entity_edges, structural_edges] = await Promise.all([
 					memory.listObservations(workspace_id, { limit: 500 }),
 					memory.listBeliefs(workspace_id, { limit: 500 }),
-					memory.listEdges(workspace_id)
+					memory.listEdges(workspace_id),
+					listEntitiesForWorkspace(workspace_id),
+					listBeliefEntityEdges(workspace_id),
+					listStructuralEdges(workspace_id)
 				]);
-				return json(res, 200, { observations, beliefs, edges });
+				return json(res, 200, {
+					observations,
+					beliefs,
+					edges,
+					entities,
+					entity_edges,
+					structural_edges
+				});
 			}
 
 			if (req.method === 'GET' && pathname === '/api/memory/search') {
@@ -223,6 +400,48 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				} catch (err) {
 					return text(res, 500, err.message);
 				}
+			}
+
+			// ── Chat sessions endpoints ──────────────────────────────────────
+			// Read-only views over chat_sessions + chat_messages. The Sessions
+			// tab uses these to render the persisted iMessage transcript broken
+			// into conversational sessions.
+
+			if (req.method === 'GET' && pathname === '/api/sessions') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const sessions = await listChatSessions(workspace_id);
+				return json(res, 200, sessions);
+			}
+
+			const sessionMsgsMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+			if (req.method === 'GET' && sessionMsgsMatch) {
+				const [, session_id] = sessionMsgsMatch;
+				const messages = await listChatMessagesForSession(session_id);
+				return json(res, 200, messages);
+			}
+
+			const sessionItemMatch = pathname.match(/^\/api\/sessions\/([^/]+)$/);
+			if (req.method === 'DELETE' && sessionItemMatch) {
+				const [, session_id] = sessionItemMatch;
+				await deleteChatSession(session_id);
+				return json(res, 200, { ok: true });
+			}
+
+			// ── Entities endpoints ───────────────────────────────────────────
+
+			if (req.method === 'GET' && pathname === '/api/entities') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const rows = await listEntitiesForWorkspace(workspace_id);
+				return json(res, 200, rows);
+			}
+
+			const entityBeliefsMatch = pathname.match(/^\/api\/entities\/([^/]+)\/beliefs$/);
+			if (req.method === 'GET' && entityBeliefsMatch) {
+				const [, entity_id] = entityBeliefsMatch;
+				const beliefs = await listBeliefsForEntity(entity_id);
+				return json(res, 200, beliefs);
 			}
 
 			if (req.method === 'POST' && pathname === '/api/clear-test') {

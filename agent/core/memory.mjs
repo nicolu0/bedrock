@@ -44,7 +44,15 @@ export async function embed(text) {
 
 export async function addObservation(
 	workspace_id,
-	{ summary, raw_text = null, entities = {}, salience, tags = [], source_message_id = null }
+	{
+		summary,
+		raw_text = null,
+		entities = {},
+		salience,
+		tags = [],
+		source_message_id = null,
+		session_id = null
+	}
 ) {
 	if (!workspace_id) throw new Error('addObservation: workspace_id required');
 	if (!summary) throw new Error('addObservation: summary required');
@@ -60,6 +68,7 @@ export async function addObservation(
 		salience,
 		tags,
 		source_message_id,
+		session_id,
 		embedding
 	};
 	const res = await fetch(`${url}/rest/v1/observations`, {

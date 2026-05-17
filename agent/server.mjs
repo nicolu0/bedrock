@@ -25,6 +25,7 @@ import { startUi } from './work-orders/ui/index.mjs';
 import { startIssuePoller } from './work-orders/issue-poller.mjs';
 import { buildChatGuidIndex } from './work-orders/workspaces.mjs';
 import { appendChatMessage, updateChatMessage } from './work-orders/state/helpers.mjs';
+import * as sessionizer from './core/sessionizer.mjs';
 
 const POLL_INTERVAL_MS = 1000;
 const HELPER_ENABLED = process.env.HELPER_DISABLED !== '1';
@@ -152,33 +153,72 @@ function getDb() {
 }
 
 // macOS Ventura+ stores message text in attributedBody (NSAttributedString
-// streamtyped binary). Lift the plain UTF-8 string out.
+// streamtyped binary). Scan for the longest printable UTF-8 run between the
+// "NSString" class marker and the next attribute-class marker. Kept in sync
+// with agent/scripts/backfill-from-chat.mjs.
 function extractText(row) {
 	if (row.text) return row.text;
 	const blob = row.attributedBody;
 	if (!blob || !Buffer.isBuffer(blob)) return null;
-	let i = 0;
-	while (i < blob.length) {
-		if (blob[i] === 0x2b) {
-			i++;
-			if (i >= blob.length) break;
-			let len;
-			if (blob[i] === 0x84 && i + 2 < blob.length) {
-				len = (blob[i + 1] << 8) | blob[i + 2];
-				i += 3;
-			} else {
-				len = blob[i];
-				i++;
-			}
-			if (len > 0 && i + len <= blob.length) {
-				const candidate = blob.slice(i, i + len).toString('utf8');
-				if (!candidate.includes('\x00') && !/^NS[A-Z]/.test(candidate)) return candidate;
+
+	const stringMarker = Buffer.from('NSString');
+	const stringIdx = blob.indexOf(stringMarker);
+	if (stringIdx < 0) return null;
+
+	const endMarkers = ['NSDictionary', 'NSNumber', 'NSValue', '__kIM', '_kIM'];
+	let endIdx = blob.length;
+	for (const m of endMarkers) {
+		const idx = blob.indexOf(Buffer.from(m), stringIdx + stringMarker.length);
+		if (idx >= 0 && idx < endIdx) endIdx = idx;
+	}
+
+	let bestStart = -1;
+	let bestLen = 0;
+	let curStart = -1;
+	let curLen = 0;
+	for (let i = stringIdx + stringMarker.length; i < endIdx; i++) {
+		const b = blob[i];
+		const isPrintable =
+			b === 0x09 || b === 0x0a || b === 0x0d || (b >= 0x20 && b <= 0x7e) || b >= 0x80;
+		if (isPrintable) {
+			if (curStart === -1) curStart = i;
+			curLen++;
+			if (curLen > bestLen) {
+				bestLen = curLen;
+				bestStart = curStart;
 			}
 		} else {
-			i++;
+			curStart = -1;
+			curLen = 0;
 		}
 	}
-	return null;
+
+	if (bestLen < 2) return null;
+	let text = blob.slice(bestStart, bestStart + bestLen).toString('utf8');
+	// Apple short-string encoding leaks through as "+ [len-byte] [string]" when
+	// the length byte is printable ASCII (lengths 32–126). Detect & strip.
+	if (text.length >= 2 && text.charCodeAt(0) === 0x2b) {
+		const lenByte = text.charCodeAt(1);
+		if (lenByte >= 1 && lenByte <= 127 && lenByte <= text.length - 2) {
+			text = text.slice(2, 2 + lenByte);
+		}
+	}
+	text = text
+		.replace(/^[\x01-\x1f\x7f]+/, '')
+		.replace(/[�\x01-\x1f\x7f]+$/, '')
+		.trim();
+	return text || null;
+}
+
+// 978307200000 = ms since unix epoch for 2001-01-01 UTC. Apple stores
+// message.date as nanoseconds since 2001 on Sierra+. Older schemas used
+// seconds; the magnitude check handles both.
+const APPLE_EPOCH_MS = 978307200000;
+function appleDateToISO(date) {
+	const n = Number(date);
+	if (!Number.isFinite(n) || n <= 0) return null;
+	const ms = n > 1e10 ? APPLE_EPOCH_MS + n / 1e6 : APPLE_EPOCH_MS + n * 1000;
+	return new Date(ms).toISOString();
 }
 
 function fetchLatestRowId() {
@@ -432,19 +472,68 @@ async function handleGroupchatMessage(row, ws) {
 let polling = false;
 const inflight = new Map(); // handle/chat_guid -> Promise; serializes turns
 
+// Sessionizer ingest queue: per-chat Promise chain so boundary calls land in
+// chronological order without blocking the poll loop. Only the prod groupchat
+// is sessionized today — see shouldSessionize().
+const sessionizerInflight = new Map();
+
+function shouldSessionize(ws) {
+	return ws?.label === 'prod';
+}
+
+function queueSessionize(workItem, ws) {
+	if (!shouldSessionize(ws)) return;
+	const key = workItem.chat_guid;
+	const prev = sessionizerInflight.get(key) ?? Promise.resolve();
+	const next = prev
+		.then(() => sessionizer.ingestMessage(workItem))
+		.catch((err) => log(`sessionizer error: ${err.message}`));
+	sessionizerInflight.set(key, next);
+	next.finally(() => {
+		if (sessionizerInflight.get(key) === next) sessionizerInflight.delete(key);
+	});
+}
+
 async function pollOnce() {
 	const rows = fetchNewMessages(state.lastSeenRowId, groupchatGuids);
 	if (!rows.length) return;
 
 	for (const row of rows) {
 		state.lastSeenRowId = Math.max(state.lastSeenRowId, Number(row.rowid) || 0);
-		if (Number(row.is_from_me) === 1) continue;
 		if (state.processed[row.guid]) continue;
 		state.processed[row.guid] = Date.now();
 
 		const handle = normalizeHandle(row.handle);
 		const chatGuid = row.chat_guid || '';
 		const ws = chatGuidIndex.get(chatGuid);
+		const isFromMe = Number(row.is_from_me) === 1;
+
+		// Sessionize first — runs in a per-chat queue, doesn't block the rest of
+		// the loop. Captures BOTH directions and all senders in scope (not just
+		// PM handles) so the persisted transcript matches chat.db faithfully.
+		if (ws && shouldSessionize(ws)) {
+			const text = String(row.text || '').trim();
+			const ts = appleDateToISO(row.date);
+			if (text && ts) {
+				queueSessionize(
+					{
+						workspace_id: ws.workspace_id,
+						chat_guid: chatGuid,
+						handle,
+						is_from_me: isFromMe,
+						body: text,
+						ts,
+						source_rowid: Number(row.rowid),
+						source_guid: row.guid,
+						issue_id: null
+					},
+					ws
+				);
+			}
+		}
+
+		// Outgoing messages stop here — they were sent by us, no skill to run.
+		if (isFromMe) continue;
 
 		if (ws) {
 			// Mapped groupchat. Only store messages from the PM; ignore tenant/
