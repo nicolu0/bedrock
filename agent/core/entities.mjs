@@ -20,18 +20,104 @@
 import { embed } from './memory.mjs';
 import { supabaseEnv } from '../supabase.mjs';
 
-// Threshold for "this name is the same entity as the existing one." Short
-// name embeddings are noisier than full-document embeddings, so 0.85 was too
-// strict — variants like "Waadt" / "Waad appliance" and "JL" / "JL Unlimited
-// Services" stayed split. 0.72 collapses those without folding genuinely
-// distinct names.
-const SIMILARITY_FLOOR = 0.72;
+// Per-kind vector-match thresholds. Properties need a higher floor because
+// short numbered street names ("15th street", "17th street", "828 11th",
+// "918 12th") produce near-identical embeddings — at 0.72 the matcher merges
+// genuinely distinct properties. Vendors stay at 0.72 because vendor-name
+// dedup (Waad/Waadt) leans on the Levenshtein fallback in findLegacyRow.
+const SIMILARITY_FLOORS = {
+	vendor: 0.72,
+	property: 0.88,
+	owner: 0.82
+};
+function similarityFloor(kind) {
+	return SIMILARITY_FLOORS[kind] ?? 0.72;
+}
 
 const REF_TABLES = {
 	vendor: 'vendors',
 	property: 'properties',
 	owner: 'owners'
 };
+
+// ── normalization helpers (PR1.5) ────────────────────────────────────────────
+
+// Canonical street-type abbreviations. Used so chat's "908 15th street" and
+// legacy's "908 15th St" compare equal.
+const STREET_TYPE_CANONICAL = {
+	street: 'st',
+	st: 'st',
+	drive: 'dr',
+	dr: 'dr',
+	place: 'pl',
+	pl: 'pl',
+	lane: 'ln',
+	ln: 'ln',
+	avenue: 'ave',
+	ave: 'ave',
+	boulevard: 'blvd',
+	blvd: 'blvd',
+	court: 'ct',
+	ct: 'ct',
+	road: 'rd',
+	rd: 'rd'
+};
+
+function normalizePropertyName(name) {
+	if (!name) return '';
+	let s = String(name).toLowerCase();
+	s = s.replace(/[.,]/g, ''); // strip periods, commas
+	s = s.replace(/\s+/g, ' ').trim();
+	const tokens = s.split(' ');
+	const out = tokens.map((t) => STREET_TYPE_CANONICAL[t] ?? t);
+	return out.join(' ');
+}
+
+// Vendor names sometimes have wild punctuation in legacy ("L.A.HYDRO-JET &
+// ROOTER SERVICE, INC.") vs chat shorthand ("LA HydroJet"). Strip ALL non-
+// alphanumerics (including spaces) so the two collapse to "lahydrojet" and
+// "lahydrojetrooterserviceinc" — substring match works regardless of how the
+// chat tokenized things.
+function normalizeVendorName(name) {
+	if (!name) return '';
+	return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+// Owner names are usually long enough that simple lowercase comparison works.
+function normalizeOwnerName(name) {
+	if (!name) return '';
+	return String(name).toLowerCase().replace(/[.,]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeByKind(kind, name) {
+	if (kind === 'vendor') return normalizeVendorName(name);
+	if (kind === 'property') return normalizePropertyName(name);
+	if (kind === 'owner') return normalizeOwnerName(name);
+	return String(name ?? '').toLowerCase().trim();
+}
+
+// Standard Levenshtein distance. Used to merge vendor typos like
+// "Waad appliance" / "Waadt Appliance" (distance = 1) at the legacy-lookup
+// step before they get vector-merged into separate informal entities.
+function levenshtein(a, b) {
+	if (a === b) return 0;
+	if (!a) return b.length;
+	if (!b) return a.length;
+	let prev = new Array(b.length + 1);
+	let curr = new Array(b.length + 1);
+	for (let j = 0; j <= b.length; j++) prev[j] = j;
+	for (let i = 1; i <= a.length; i++) {
+		curr[0] = i;
+		for (let j = 1; j <= b.length; j++) {
+			const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+			curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+		}
+		const tmp = prev;
+		prev = curr;
+		curr = tmp;
+	}
+	return prev[b.length];
+}
 
 function headers(key, extra = {}) {
 	return {
@@ -52,25 +138,115 @@ function normalizeName(name) {
 async function findLegacyRow(workspace_id, kind, name) {
 	const refTable = REF_TABLES[kind];
 	if (!refTable) return null;
+	const nm = String(name ?? '').trim();
+	if (!nm) return null;
 	const { url, key } = supabaseEnv();
-	// Two-pass lookup: exact ILIKE first, then ILIKE %name% so a chat mention
-	// "Yonic" finds a legacy vendor named "Yonic Plumbing".
-	const exact = await fetch(
-		`${url}/rest/v1/${refTable}?select=id,name&workspace_id=eq.${workspace_id}&name=ilike.${encodeURIComponent(name)}&limit=1`,
+
+	// Pull all rows of this workspace+kind once. Property/owner counts are
+	// usually <100 per workspace; vendor counts are a few hundred. Fetching
+	// the set is cheaper than two ILIKE round-trips and lets us do
+	// normalized comparison + Levenshtein in JS, both impossible with raw
+	// PostgREST.
+	const cols =
+		kind === 'property' ? 'id,name,appfolio_property_id,appfolio_property_number' : 'id,name';
+	const res = await fetch(
+		`${url}/rest/v1/${refTable}?select=${cols}&workspace_id=eq.${workspace_id}&limit=500`,
 		{ headers: headers(key) }
 	);
-	if (exact.ok) {
-		const rows = await exact.json();
-		if (rows[0]) return rows[0];
+	if (!res.ok) return null;
+	const rows = await res.json();
+	if (!rows.length) return null;
+
+	// PASS 1 (property only): Resolve numeric-prefixed property references.
+	// Chat uses two patterns we need to handle:
+	//
+	//   (a) "294 Ozone" — AppFolio property NUMBER shorthand. The "294" is
+	//       not part of any address; it's the AppFolio internal property
+	//       number for 15 Ozone Ave. Resolved via appfolio_property_number.
+	//   (b) "221-229 Union Pl" or "4641 1/2 Pickford" — real address
+	//       (possibly with a sub-unit). The leading number IS part of the
+	//       legacy property name itself.
+	//
+	// Distinguishing: if any legacy property NAME starts with the chat's
+	// leading number followed by space or hyphen, that's case (b) and we
+	// use leading-number address match. Otherwise we treat the first token
+	// as an AppFolio number (case a).
+	//
+	// Without this split, "221-229 Union Pl" would falsely match the property
+	// whose appfolio_property_number happens to be "221" (= 1234 11th St).
+	if (kind === 'property') {
+		const firstToken = nm.split(/\s+/)[0];
+		if (firstToken) {
+			const leadingNumMatch = firstToken.match(/^\d+/);
+			const leadingNum = leadingNumMatch ? leadingNumMatch[0] : null;
+			const looksLikeAddress =
+				leadingNum &&
+				rows.some((r) => {
+					const rn = String(r.name);
+					return rn.startsWith(leadingNum + ' ') || rn.startsWith(leadingNum + '-');
+				});
+
+			if (looksLikeAddress) {
+				// (b) Leading-number address match — chat "4641 1/2 Pickford"
+				// → legacy "4641-4643 Pickford St".
+				const rangeMatch = rows.find((r) => {
+					const rn = String(r.name);
+					return (
+						rn.startsWith(leadingNum + ' ') || rn.startsWith(leadingNum + '-')
+					);
+				});
+				if (rangeMatch) return rangeMatch;
+			} else {
+				// (a) AppFolio property number/id — chat "294 Ozone" or
+				// "180-10 11th St".
+				const propNum = firstToken.split('-')[0];
+				const appfMatch = rows.find(
+					(r) =>
+						r.appfolio_property_number === propNum ||
+						r.appfolio_property_id === propNum
+				);
+				if (appfMatch) return appfMatch;
+			}
+		}
 	}
-	const fuzzy = await fetch(
-		`${url}/rest/v1/${refTable}?select=id,name&workspace_id=eq.${workspace_id}&name=ilike.${encodeURIComponent('%' + name + '%')}&limit=1`,
-		{ headers: headers(key) }
-	);
-	if (fuzzy.ok) {
-		const rows = await fuzzy.json();
-		if (rows[0]) return rows[0];
+
+	// PASS 2: normalized exact + substring match.
+	const target = normalizeByKind(kind, nm);
+	if (!target) return null;
+
+	// 2a. Exact normalized match.
+	let best = rows.find((r) => normalizeByKind(kind, r.name) === target);
+	if (best) return best;
+
+	// 2b. Substring containment in either direction (handles "Yonic" matching
+	// legacy "Yonic Herrera"; also "908 15th street" matching "908 15th St"
+	// after street-type canonicalization).
+	best = rows.find((r) => {
+		const rn = normalizeByKind(kind, r.name);
+		return rn && (rn.includes(target) || target.includes(rn));
+	});
+	if (best) return best;
+
+	// PASS 3 (vendor only): Levenshtein fallback for typos like Waad/Waadt
+	// (distance = 1). Threshold scales with the shorter name length so short
+	// names don't get over-merged.
+	if (kind === 'vendor') {
+		let bestLev = null;
+		let bestDist = Infinity;
+		for (const r of rows) {
+			const rn = normalizeByKind(kind, r.name);
+			if (!rn) continue;
+			const dist = levenshtein(rn, target);
+			const len = Math.min(rn.length, target.length);
+			const threshold = Math.max(2, Math.floor(len * 0.25));
+			if (dist <= threshold && dist < bestDist) {
+				bestLev = r;
+				bestDist = dist;
+			}
+		}
+		if (bestLev) return bestLev;
 	}
+
 	return null;
 }
 
@@ -96,6 +272,7 @@ async function vectorMatchEntity(workspace_id, kind, name) {
 	// Inline cosine search via PostgREST raw filter is awkward; use a simple
 	// RPC-free path: pull top-3 by vector then filter in Node. The HNSW index
 	// keeps this fast enough for any reasonable entity count.
+	const floor = similarityFloor(kind);
 	const res = await fetch(`${url}/rest/v1/rpc/match_entities`, {
 		method: 'POST',
 		headers: headers(key),
@@ -104,7 +281,7 @@ async function vectorMatchEntity(workspace_id, kind, name) {
 			workspace_id_in: workspace_id,
 			kind_in: kind,
 			match_count: 3,
-			similarity_floor: SIMILARITY_FLOOR
+			similarity_floor: floor
 		})
 	}).catch(() => null);
 	if (res && res.ok) {
@@ -123,7 +300,7 @@ async function vectorMatchEntity(workspace_id, kind, name) {
 	if (!fbRes.ok) return null;
 	const rows = await fbRes.json();
 	let best = null;
-	let bestSim = SIMILARITY_FLOOR;
+	let bestSim = floor;
 	for (const row of rows) {
 		if (!row.name_embedding) continue;
 		// name_embedding from PostgREST is "[0.1,0.2,...]" string

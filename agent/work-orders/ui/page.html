@@ -2302,23 +2302,22 @@
 						d3
 							.forceLink(links)
 							.id((d) => d.id)
-							.distance((l) => 60 + 40 * (1 - Math.abs(l.weight)))
-							.strength((l) => Math.abs(l.weight) * 0.8)
+							.distance((l) => 80 + 50 * (1 - Math.abs(l.weight)))
+							.strength((l) => Math.abs(l.weight) * 0.7)
 					)
 					// Charge falls off with distance (1/r-ish); forceX/Y is constant.
-					// At equilibrium they balance. Increase charge → wider spread.
-					// Increase forceX/Y strength → tighter cluster. Tuned together so
-					// 5 disconnected nodes spread comfortably and don't drift when one
-					// is held during a drag.
-					.force('charge', d3.forceManyBody().strength(-260).distanceMax(400))
-					.force('x', d3.forceX(w / 2).strength(0.05))
-					.force('y', d3.forceY(h / 2).strength(0.05))
+					// At equilibrium they balance. Tuned for ~80+ entity nodes with
+					// labels — slightly more breathing room than the original, but
+					// not so much that the cluster scatters.
+					.force('charge', d3.forceManyBody().strength(-400).distanceMax(500))
+					.force('x', d3.forceX(w / 2).strength(0.04))
+					.force('y', d3.forceY(h / 2).strength(0.04))
 					.force(
 						'collide',
 						d3.forceCollide().radius((d) => {
-							if (d._kind === 'belief') return 36;
-							if (d._kind === 'entity') return 24;
-							return 10;
+							if (d._kind === 'belief') return 42;
+							if (d._kind === 'entity') return 42;
+							return 12;
 						})
 					)
 					.on('tick', () => {
