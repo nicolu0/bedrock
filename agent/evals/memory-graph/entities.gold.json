@@ -546,8 +546,7 @@
 		],
 		"expected_cascaded_owners": [
 			{ "kind": "owner", "name": "221 Union Place LLC", "from_property": "221-229 Union Pl" },
-			{ "kind": "owner", "name": "Reitz, Jason", "from_property": "1517 W. 12th Pl" },
-			{ "kind": "owner", "name": "12th Place LLC", "from_property": "1517 W. 12th Pl", "legacy_gap": "Not in AppFolio owner_properties for this workspace — user-confirmed real owner entity that should be associated with Jason Reitz." }
+			{ "kind": "owner", "name": "Twelfth Place LLC", "from_property": "1517 W. 12th Pl" }
 		],
 		"expected_issues": [
 			{
@@ -586,9 +585,10 @@
 				"reason": "Legacy property exists but extractor couldn't fuzzy-match 'W 12th Place' to '1517 W. 12th Pl'."
 			},
 			{
-				"correction": "Missing owner: 12th Place LLC",
+				"correction": "Missing owner: Twelfth Place LLC",
 				"extractor_picked": "(not in owner_properties join)",
-				"reason": "AppFolio data gap: owner table only has 'Reitz, Jason' for this property but the user notes Jason owns through a '12th Place LLC' entity. Needs a one-off legacy data fix OR informal-owner addition."
+				"reason": "AppFolio data gap: owner table only has 'Reitz, Jason' for this property but the user notes Jason owns through a 'Twelfth Place LLC' entity.",
+				"resolved": "Fixed 2026-05-18 via legacy correction — added Twelfth Place LLC to owners + owner_properties for 1517 W. 12th Pl."
 			}
 		],
 		"procedural_signals": [
@@ -1154,9 +1154,7 @@
 			{ "kind": "vendor", "name": "JL Unlimited Services LLC" }
 		],
 		"expected_cascaded_owners": [
-			{ "kind": "owner", "name": "Reitz, Jason", "from_property": "1517 W. 12th Pl" },
-			{ "kind": "owner", "name": "12th Place LLC", "from_property": "1517 W. 12th Pl", "legacy_gap": "Not in AppFolio owner_properties — user-confirmed real owner per S11." },
-			{ "kind": "owner", "name": "Lionrock Partners LLC 2ND Account", "from_property": "5455 Inglewood Blvd" },
+			{ "kind": "owner", "name": "Twelfth Place LLC", "from_property": "1517 W. 12th Pl" },
 			{ "kind": "owner", "name": "White 5455 Inglewood LLC", "from_property": "5455 Inglewood Blvd" },
 			{ "kind": "owner", "name": "Grauzinis ME Trust", "from_property": "828 11th St" },
 			{ "kind": "owner", "name": "Solomon Grauzinis Trust", "from_property": "828 11th St" }
@@ -1394,7 +1392,6 @@
 			{ "kind": "vendor", "name": "Osalpa Electric, INC." }
 		],
 		"expected_cascaded_owners": [
-			{ "kind": "owner", "name": "Lionrock Partners LLC 2ND Account", "from_property": "5455 Inglewood Blvd" },
 			{ "kind": "owner", "name": "White 5455 Inglewood LLC", "from_property": "5455 Inglewood Blvd" },
 			{ "kind": "owner", "name": "829 Oceanpark, LLC", "from_property": "829 Ocean Park Blvd." },
 			{ "kind": "owner", "name": "Nineteen Fifty Cloverfield HOA", "from_property": "1950 Cloverfield Blvd" }
