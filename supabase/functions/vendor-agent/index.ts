@@ -7,6 +7,13 @@
 // claim text) and injected as a "Known preferences" block in the system
 // prompt. They are now the single source of truth for PM preferences;
 // owner_notes, vendor.note, and workspace_policies were dropped in PR #3.
+//
+// Auth: verify_jwt is disabled (see ./config.json). vendor-agent is
+// internal-only, invoked by intake-agent over the supabase URL. The old
+// internal_agent_key gate was removed in b8f00fa; we accept that this URL is
+// effectively public and rely on the fact that an attacker would need a valid
+// issueId UUID to do anything (and the worst-case is a vendor reassignment,
+// no data exposure).
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
