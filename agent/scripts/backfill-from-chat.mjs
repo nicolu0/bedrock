@@ -507,41 +507,97 @@ async function patchSessionExtractedAt(session_id) {
 	if (!res.ok) throw new Error(`patchSessionExtractedAt: ${res.status} ${await res.text()}`);
 }
 
-const OBS_EXTRACT_SYSTEM = `You read a chat-session transcript between a property manager (PM, "Jose") and an AI agent (which may be the cofounders Andrew/Nico typing manually) coordinating maintenance work orders. You extract observations — and you are STRICT about what counts.
+const OBS_EXTRACT_SYSTEM = `You read a chat-session transcript between a property manager ("Jose", the PM) and an AI agent (which may be the cofounders Andrew/Nico typing manually) coordinating maintenance work orders. You extract OBSERVATIONS — past-tense, specific events grounded in Jose's responses that TEACH THE AGENT something for future work orders.
 
-DEFAULT: emit nothing. Most sessions produce 0 observations. Some produce 1. A few produce 2. Almost none produce 3+. If you find yourself emitting more than 2 observations from one session, you are too generous.
+# THE VALUE TEST (apply BEFORE emitting any observation)
 
-An observation must be a GENERALIZABLE SIGNAL that would change how the agent handles a FUTURE, UNRELATED work order. Things like:
-  ✓ Stated vendor preferences ("for plumbing we use Yonic", "always send Kori for Harrison").
-  ✓ Stated policies ("Solomon Grauzinis Trust requires owner approval before dispatch").
-  ✓ Vendor-property-trade routing patterns the PM is explicit about.
-  ✓ Vendor removals or replacements ("don't use Darwin anymore").
-  ✓ Property-specific quirks the PM names ("Glencoe's elevator servicer is X").
-  ✓ Capabilities a vendor demonstrably handles or doesn't handle.
+An observation must be WORTH REMEMBERING — it teaches future routing OR captures a specific event the agent should be able to recall later. If Jose's response is just acknowledgment or generic "I'll handle it" with no named vendor/property/owner and no rule, the agent has nothing to use later — SKIP.
 
-DO NOT emit observations for:
-  ✗ A single work order being dispatched. "Jose approved sending Cross Appliance for the fridge at Unit 7" is just one routine assignment — not a generalizable rule. Skip it.
-  ✗ Tenant-specific situations ("Ben said the issue was already solved", "Irene reported X"). Skip.
-  ✗ Scheduling, meeting times, "ok thanks", acknowledgments. Skip.
-  ✗ Conversational fluff or status updates with no rule embedded.
-  ✗ Inferred patterns from a single dispatch. Two or more matching dispatches CAN be inferred — but be conservative.
-  ✗ Anything that names a unit/tenant but expresses no preference about which vendor or how to handle the work.
+Example SKIP: tenant question forwarded → Jose "I'm on it and will be getting a tree trimmer onsite soon. No need to do anything." → no named vendor, no named property in Jose's reply, no rule, no recallable event. SKIP.
 
-Quality bar: when extracting an observation, ask yourself "would the agent CITE this when deciding a future work order?" If the answer is "maybe", skip it. Only emit when the answer is "yes, clearly".
+# HARD REQUIREMENT: at least one named entity
 
-For each observation emit:
-- summary: ONE short sentence, the rule. Be specific — name vendor, property, owner. Don't include tenant names or dates unless they're part of the rule itself.
-- raw_text: the verbatim line(s) that triggered the signal. Null if inferred.
-- entities: object. Keys: vendor, property, owner (preferred), plus person, unit, trade, problem_subtype as needed. Use the names that appear in the transcript.
-- tags: 1–4 short labels (e.g. "vendor-pref", "owner-approval", "policy", "vendor-removal").
-- salience: 0..1. Direct stated preference = 0.85–0.95. Inferred from clear behavior = 0.4–0.6.
-- source_message_id: the source_guid of the message that most directly triggered it. Null if synthesized.
+Every observation MUST include at least one entity (vendor or property; owner only if owner-specific). If you cannot identify a specific named vendor or property tied to the event, the obs has nothing to anchor to and CANNOT support future retrieval — SKIP.
+
+# What IS an observation
+
+An observation captures a SPECIFIC EVENT triggered by Jose's response — a decision, dispatch, override, refusal, status update, retirement, or stated rule — and PASSES the teachability test above. The signal lives in JOSE'S WORDS. Agent questions/suggestions are the elicitation; Jose's reply is the obs trigger.
+
+Be HIGH-RECALL where teachability is satisfied: weekend-batch sessions often produce 3–5 observations; some produce more. Most agent–Jose exchanges with a named-vendor / named-property decision yield an observation. The downstream belief-former generalizes these — your job is to faithfully capture the events.
+
+# What is NOT an observation
+
+- Agent messages with no Jose reply — NO obs (the chat may extend outside this session; don't fabricate).
+- Jose responses that fail the teachability test (generic "I'll handle it" with no entity named).
+- Pure scheduling / acknowledgments / likes / "got it" / "thanks" with no decision content.
+- Coordination chat about logistics (in-office hours, "I'll be there in 10 min") with no maintenance signal.
+- Tenant-only situations with no Jose decision attached.
+- **MISSING-CONTEXT RULE (STRICT)**: If Jose names a vendor or makes a directive but you CANNOT find the SPECIFIC ISSUE in the immediately preceding 1–3 agent messages, SKIP. Don't fabricate a generic "X dispatched" obs without an issue. Examples of must-skip:
+   - Jose: "I sent it to Abraham" — when no recent agent question describes a specific issue being addressed → SKIP.
+   - Jose: "Send it to Yonic since he replaced the shower valve" — when no shower-valve question precedes → SKIP.
+   - In general: an obs without a specific issue (or a stated rule) has nothing for the agent to retrieve later.
+- When chat context is otherwise unclear, DEFAULT to no obs. Skip rather than fabricate.
+
+# Required fields per observation
+
+- **title**: ≤10 words. Shape: \`subject → outcome\`. Examples: \`Glencoe fire alarm → JL\`, \`Primrose garage → Jose self-handled\`, \`Darwin → retired\`. NO parentheticals. Used as a scannable headline.
+- **summary**: 12–18 words, max 20. TELEGRAPHIC, not narrative. Past-tense, subject-verb-object. Drop articles. Drop surnames when first name is clear. Use \`+\` for "and". Use \`over\` / \`declined\` instead of "instead of". Examples:
+   ✓ "Kori fixed closet door at 17 Ozone Ave unit 7; Jose overrode Guox suggestion."
+   ✓ "Jose self-handled stuck garage door at 6337 Primrose Ave."
+   ✗ "Kori Anderson was dispatched and ended up fixing the broken closet door at 17 Ozone Avenue unit 7, after Jose decided to override Andrew's earlier suggestion of using Guox..."
+- **source_quote**: VERBATIM Jose response that triggered the obs. Most decisive line. Required (don't infer/synthesize from agent messages).
+- **entities**: ARRAY of \`{kind, name, weight}\` objects covering EVERY vendor and property relevant to the event — including REJECTED candidates (the agent suggested Y, Jose picked X — both Y and X go in, with different weights).
+   - kind ∈ {"vendor", "property", "owner"}
+   - name = string as referenced in the chat (or canonical when obvious); resolveEntity does fuzzy match downstream
+   - weight ∈ [-1, 1]: signed strength of the entity's role in this observation:
+     • **+1.0** — chosen / dispatched vendor, subject property where event happened, explicit preference rule ("we always use Kori for Harrison")
+     • **+0.5** — supporting context ("Kori has worked here before, consider Kori")
+     • **0** — neutral mention (rare; usually skip)
+     • **−0.5** — alternative not picked, no strong rejection language ("Dever was the closer option, Jose picked Primex")
+     • **−1.0** — explicit rejection or exclusion ("don't send Darwin", "we never handle the washing machines here")
+   - **DO NOT add owners by default.** Owners are reachable from properties via the legacy join. ONLY include an owner when the obs is OWNER-SPECIFIC: a stated rule about that owner ("Solomon Grauzinis Trust requires approval for all issues"), an owner-approval gate, or the owner is the SUBJECT.
+- **tags**: 2–6 normalized labels. Examples: \`vendor-dispatch\`, \`vendor-override\`, \`pm-self-handle\`, \`owner-approval-required\`, \`recurring-treatment\`, \`pm-declined-self-handle\`, \`status-resolved\`, \`vendor-retirement\`, \`tenant-resolved\`, \`escalation-from-self-handle\`, \`pm-tenant-coordination\`, \`vendor-overloaded\`, \`pm-stated-rule\`, \`pm-asked-to-remember\`, \`multi-issue-single-vendor\`, \`tenant-acts-as-manager\`, \`no-dispatch\`. Plus trade tags: \`plumbing\`, \`electrical\`, \`pest\`, \`appliance\`, \`fire-alarm\`, \`fridge\`, \`garage-door\`, \`elevator\`, \`drain\`, \`gates\`, etc. Use \`+\` or include multiple.
+- **salience**: 0..1. Stated rule / explicit preference = 0.85–0.95. Routine dispatch = 0.4–0.6. Default 0.5.
+- **source_message_id**: source_guid of the Jose message. Optional if unclear; null OK.
+
+# Critical extraction rules
+
+1. **Jose's response is the trigger.** When Jose says nothing about a question, no obs for that question — even if you know the dispatch happened elsewhere. The chat is the source of truth.
+
+2. **JL IS JOSE.** "JL" / "JL Unlimited Services LLC" is Jose's OWN company — when Jose says "assign to JL" or "send it to JL", he IS dispatching HIMSELF. They are the SAME ENTITY and INTERCHANGEABLE. Pick ONE name (prefer "Jose") and don't combine them. NEVER write "Jose assigned JL", "Jose dispatched JL", "Jose self-handled X via JL" — these all redundantly mention the same entity twice. Just write "Jose self-handled X" or equivalently "JL handled X" — pick one.
+
+   This applies ONLY for PHYSICAL WORK. Three Jose-handles-it patterns:
+   - **Pattern A (JL dispatch = self-handle)**: Jose commits to physical work — "I'll fix it", "I'll stop by", "assign it to JL", "I'll be there", "I'll take care of it". → **MUST add JL Unlimited Services LLC as a vendor entity with weight +1**, tag \`pm-self-handle\`. This is non-optional: every Pattern A obs needs JL on it. Summary: *"Jose self-handled X at Y"* (preferred) — DO NOT add "via JL" or "by assigning to JL" since Jose=JL already.
+   - **Pattern B (owner coordination)**: Jose communicates with the owner — "I'll discuss with the owner", "I'll send to the owners for approval", "I'm coordinating directly". → DO NOT add JL. Tag \`owner-approval-required\` or \`pm-owner-coordination\`.
+   - **Pattern C (tenant coordination)**: Jose calls/talks to tenant — "I'll call them to discuss", "I'll talk to them tomorrow". → DO NOT add JL. Tag \`pm-tenant-coordination\` or \`tenant-behavior-suspected\`.
+
+3. **Vendor-without-issue mapping.** If Jose's reply names a vendor without specifying the issue (e.g. "send cross appliance and yonic for disposal"), map each vendor to the issue it was paired with in the agent's preceding question. Split into separate obs per issue.
+
+4. **Keep rejected vendors as entities.** When the agent suggests X and Jose picks Y (override case), put BOTH X and Y in the entities array. Tag \`vendor-override\`. This preserves the negative-preference signal for future retrieval.
+
+5. **Owner cascade.** When you emit a property entity, also emit its known owner(s) when you can derive them from context (or include the property's owner pattern from the chat). If unknown, leave to the downstream cascade.
+
+6. **Multi-issue weekend bundles.** One agent message may pose 3+ separate work-order questions; Jose's reply may answer them concisely. Produce ONE obs per DISTINCT work-order/decision pair, not one mega-obs. Use the same source_quote across all obs derived from the same Jose response.
+
+   BUT: if Jose dispatches ONE vendor for MULTIPLE issues at the SAME property in a single response ("Send both to Abraham" for doorknob + drains at unit 4), emit ONE merged obs listing the issues — NOT separate obs per issue. Same dispatch event = one obs.
+
+6b. **Within-session deduplication.** Before emitting each obs, verify it captures a DISTINCT EVENT from any other obs you're emitting for this session. Two extractions that describe the same underlying decision (e.g. one captures the action, another captures the same action's rationale) should be merged into a single richer obs.
+
+6c. **Vendor declines scope X, accepts scope Y.** When a vendor declines one type of work but accepts another (e.g. "Waadt doesn't do repairs but will quote the replacement") and Jose dispatches them for the accepted scope, the vendor's weight is **+1** (chosen for the work done). The declined scope is contextual, NOT a rejection of the vendor.
+
+7. **Status updates count.** Jose confirming "yes" to "was X fixed?" is an obs (tag \`status-resolved\`). Tenant-side resolution is an obs (tag \`tenant-resolved\`, \`no-dispatch\`). Vendor retirement is an obs (tag \`vendor-retirement\`).
+
+8. **Stated rules.** When Jose articulates a general rule ("Yonic is more experienced plumber", "Jimenez is our gate vendor", "Solomon Grauzinis requires approval for everything"), tag \`pm-stated-rule\` and use high salience (0.9+). These are gold for the belief former.
+
+9. **Owner-only or vendor-only obs are fine.** A Darwin-retirement obs has only the vendor. A "Solomon Grauzinis requires approval for all issues" obs has only the owner. Don't force a property if none applies.
+
+10. **Default to no obs when unclear.** Better to miss than fabricate.
 
 Output strict JSON matching the schema. No prose.`;
 
 const OBS_EXTRACT_SCHEMA = {
 	name: 'session_observations',
-	strict: false, // entities is free-form
+	strict: false,
 	schema: {
 		type: 'object',
 		additionalProperties: false,
@@ -552,11 +608,24 @@ const OBS_EXTRACT_SCHEMA = {
 				items: {
 					type: 'object',
 					additionalProperties: false,
-					required: ['summary', 'salience'],
+					required: ['title', 'summary', 'source_quote', 'entities', 'tags'],
 					properties: {
+						title: { type: 'string' },
 						summary: { type: 'string' },
-						raw_text: { type: ['string', 'null'] },
-						entities: { type: 'object', additionalProperties: true },
+						source_quote: { type: 'string' },
+						entities: {
+							type: 'array',
+							items: {
+								type: 'object',
+								additionalProperties: false,
+								required: ['kind', 'name', 'weight'],
+								properties: {
+									kind: { type: 'string', enum: ['vendor', 'property', 'owner'] },
+									name: { type: 'string' },
+									weight: { type: 'number', minimum: -1, maximum: 1 }
+								}
+							}
+						},
 						tags: { type: 'array', items: { type: 'string' } },
 						salience: { type: 'number' },
 						source_message_id: { type: ['string', 'null'] }
@@ -601,6 +670,10 @@ async function llmExtractObservations(messages) {
 			const parsed = JSON.parse(content);
 			if (Array.isArray(parsed?.observations)) {
 				for (const o of parsed.observations) all.push(o);
+			}
+			if (process.env.OBS_DEBUG) {
+				console.log(`    [debug] LLM returned ${parsed?.observations?.length ?? 0} obs:`);
+				console.log(JSON.stringify(parsed, null, 2));
 			}
 		} catch (err) {
 			console.error('phase2: failed to parse LLM JSON:', err);
@@ -660,14 +733,15 @@ async function phase2() {
 		try {
 			const obs = await llmExtractObservations(msgs);
 			for (const o of obs) {
-				if (typeof o.salience !== 'number') continue;
-				if (!o.summary) continue;
+				if (!o.title || !o.summary || !o.source_quote) continue;
+				const salience = typeof o.salience === 'number' ? clamp01(o.salience) : 0.5;
 				await memory.addObservation(workspace_id, {
+					title: o.title,
 					summary: o.summary,
-					raw_text: o.raw_text ?? null,
-					entities: o.entities ?? {},
+					raw_text: o.source_quote,
+					entities: Array.isArray(o.entities) ? o.entities : [],
 					tags: Array.isArray(o.tags) ? o.tags : [],
-					salience: clamp01(o.salience),
+					salience,
 					source_message_id: o.source_message_id ?? null,
 					session_id: s.id
 				});

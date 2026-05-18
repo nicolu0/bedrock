@@ -177,7 +177,12 @@ async function findLegacyRow(workspace_id, kind, name) {
 	if (kind === 'property') {
 		const firstToken = nm.split(/\s+/)[0];
 		if (firstToken) {
-			const leadingNumMatch = firstToken.match(/^\d+/);
+			// Only treat as a numeric prefix if firstToken is PURE digits or a
+			// digit range like "180-10" / "4641-4643". Ordinal-style tokens like
+			// "15th" or "11th" must NOT match — those are part of a street name
+			// (15th Street, 11th St) and should fall through to normalized match.
+			const isNumericToken = /^\d+(-\d+)?$/.test(firstToken);
+			const leadingNumMatch = isNumericToken ? firstToken.match(/^\d+/) : null;
 			const leadingNum = leadingNumMatch ? leadingNumMatch[0] : null;
 			const looksLikeAddress =
 				leadingNum &&

@@ -546,6 +546,13 @@
 				pointer-events: none;
 				dominant-baseline: hanging;
 			}
+			.node.observation text {
+				display: none;
+			}
+			.node.observation:hover text {
+				display: block;
+				font-size: 9.5px;
+			}
 			.link {
 				stroke: #2a2f37;
 				stroke-opacity: 0.6;
@@ -965,6 +972,15 @@
 			}
 			.session-card .head .range { color: #c0c5cc; font-weight: 500; }
 			.session-card .head .count { color: #6c727b; }
+			.session-card .head .num {
+				font-family: ui-monospace, Menlo, monospace;
+				font-size: 11px;
+				color: #c0c5cc;
+				background: #1f2329;
+				border: 1px solid #2a2f37;
+				padding: 1px 6px;
+				border-radius: 4px;
+			}
 			.session-card .head .extracted {
 				font-size: 10.5px;
 				font-family: ui-monospace, Menlo, monospace;
@@ -1820,8 +1836,12 @@
 						' --phase=1</code> to backfill.</div>';
 					return;
 				}
+				const total = sessionsCache.length;
 				const html = sessionsCache
-					.map((s) => {
+					.map((s, i) => {
+						// Sessions arrive newest-first; number chronologically so
+						// the oldest session is #1 and the newest is #N.
+						const num = total - i;
 						const tags = (s.tags ?? [])
 							.map((t) => `<span class="pill tag">${escapeHtml(t)}</span>`)
 							.join('');
@@ -1836,6 +1856,7 @@
 						return `
 							<div class="session-card" data-id="${s.id}">
 								<div class="head">
+									<span class="num">#${num}</span>
 									<span class="range">${escapeHtml(fmtRange(s.started_at, s.ended_at))}</span>
 									<span class="count">${s.message_count ?? 0} msgs</span>
 									${extracted}
@@ -2188,7 +2209,49 @@
 						weight: 0.8,
 						_type: 'structural'
 					}));
-				const links = [...evidenceLinks, ...entityLinks, ...structuralLinks];
+				const obsEntityLinks = (memoryState.observation_entity_edges ?? [])
+					.filter((e) => visibleIds.has(e.observation_id) && visibleIds.has(e.entity_id))
+					// Negative weights = entity was REJECTED in this obs; no visible link
+					// or gravity pull. The data is preserved (the obs detail panel shows
+					// the entity as a rejected chip).
+					.filter((e) => (e.weight ?? 1.0) > 0)
+					.map((e) => ({
+						source: e.observation_id,
+						target: e.entity_id,
+						weight: e.weight ?? 1.0,
+						_type: 'obs-entity'
+					}));
+				const links = [...evidenceLinks, ...entityLinks, ...structuralLinks, ...obsEntityLinks];
+
+				// Icon symbols (bootstrap-icons) reused per entity node.
+				// 16x16 viewBox; `<use>` per node sets width/height to scale.
+				const defs = svg.append('defs');
+				defs
+					.append('symbol')
+					.attr('id', 'icon-property')
+					.attr('viewBox', '0 0 16 16')
+					.append('path')
+					.attr(
+						'd',
+						'M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5'
+					);
+				defs
+					.append('symbol')
+					.attr('id', 'icon-vendor')
+					.attr('viewBox', '0 0 16 16')
+					.append('g')
+					.html(
+						'<path d="M16 4.5a4.5 4.5 0 0 1-1.703 3.526L13 5l2.959-1.11q.04.3.041.61"/><path d="M11.5 9c.653 0 1.273-.139 1.833-.39L12 5.5 11 3l3.826-1.53A4.5 4.5 0 0 0 7.29 6.092l-6.116 5.096a2.583 2.583 0 1 0 3.638 3.638L9.908 8.71A4.5 4.5 0 0 0 11.5 9m-1.292-4.361-.596.893.809-.27a.25.25 0 0 1 .287.377l-.596.893.809-.27.158.475-1.5.5a.25.25 0 0 1-.287-.376l.596-.893-.809.27a.25.25 0 0 1-.287-.377l.596-.893-.809.27-.158-.475 1.5-.5a.25.25 0 0 1 .287.376M3 14a1 1 0 1 1 0-2 1 1 0 0 1 0 2"/>'
+					);
+				defs
+					.append('symbol')
+					.attr('id', 'icon-owner')
+					.attr('viewBox', '0 0 16 16')
+					.append('path')
+					.attr(
+						'd',
+						'M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6'
+					);
 
 				const g = svg.append('g').attr('class', 'graph-root');
 
@@ -2229,6 +2292,7 @@
 					})
 					.on('click', (ev, d) => {
 						ev.stopPropagation();
+						console.log('[memory-graph] node click:', d._kind, d.id, d.name || d.title || d.summary);
 						selectedNodeId = d.id;
 						highlightNeighborhood(d.id);
 						showDetail(d);
@@ -2265,7 +2329,10 @@
 
 				function nodeRadius(d) {
 					if (d._kind === 'belief') return 6 + 14 * (d.confidence ?? 0.5);
-					if (d._kind === 'entity') return 8;
+					if (d._kind === 'entity') {
+						const total = (d.belief_count ?? 0) + (d.observation_count ?? 0);
+						return Math.min(26, 8 + total * 1.5);
+					}
 					return 3.5;
 				}
 
@@ -2276,6 +2343,18 @@
 						d._kind === 'observation' ? 0.3 + 0.7 * (d.salience ?? 0.5) : 1
 					);
 
+				// Icons: only entity nodes get them. Sized to ~70% of diameter.
+				node
+					.filter((d) => d._kind === 'entity')
+					.append('use')
+					.attr('href', (d) => `#icon-${d.kind}`)
+					.attr('width', (d) => nodeRadius(d) * 1.2)
+					.attr('height', (d) => nodeRadius(d) * 1.2)
+					.attr('x', (d) => -nodeRadius(d) * 0.6)
+					.attr('y', (d) => -nodeRadius(d) * 0.6)
+					.attr('fill', '#0d0f12')
+					.attr('pointer-events', 'none');
+
 				node
 					.append('text')
 					.attr('x', 0)
@@ -2284,8 +2363,8 @@
 					.text((d) => {
 						let txt;
 						if (d._kind === 'belief') txt = d.claim;
-						else if (d._kind === 'entity') txt = `${d.kind}: ${d.name}`;
-						else txt = d.summary;
+						else if (d._kind === 'entity') txt = d.name; // kind is encoded in color
+						else txt = d.title || d.summary;
 						return (txt ?? '').length > 36 ? txt.slice(0, 33) + '…' : txt;
 					});
 
@@ -2295,6 +2374,7 @@
 					hideDetail();
 				});
 
+				const radialOuter = Math.min(w, h) * 0.45;
 				simulation = d3
 					.forceSimulation(nodes)
 					.force(
@@ -2302,22 +2382,41 @@
 						d3
 							.forceLink(links)
 							.id((d) => d.id)
-							.distance((l) => 80 + 50 * (1 - Math.abs(l.weight)))
-							.strength((l) => Math.abs(l.weight) * 0.7)
+							.distance((l) => {
+								if (l._type === 'obs-entity') return 55;
+								if (l._type === 'structural') return 60;
+								return 100 + 60 * (1 - Math.abs(l.weight));
+							})
+							.strength((l) => {
+								if (l._type === 'obs-entity') return 0.45;
+								if (l._type === 'structural') return 0.55;
+								return Math.abs(l.weight) * 0.6;
+							})
 					)
-					// Charge falls off with distance (1/r-ish); forceX/Y is constant.
-					// At equilibrium they balance. Tuned for ~80+ entity nodes with
-					// labels — slightly more breathing room than the original, but
-					// not so much that the cluster scatters.
-					.force('charge', d3.forceManyBody().strength(-400).distanceMax(500))
-					.force('x', d3.forceX(w / 2).strength(0.04))
-					.force('y', d3.forceY(h / 2).strength(0.04))
+					// Stronger entity repulsion so the ~70-entity cluster spreads out
+					// readably. Observations get mild repulsion so they don't pile on
+					// top of each other near their parent entity.
+					.force(
+						'charge',
+						d3.forceManyBody().strength((d) => (d._kind === 'observation' ? -40 : -600)).distanceMax(700)
+					)
+					.force('x', d3.forceX(w / 2).strength(0.03))
+					.force('y', d3.forceY(h / 2).strength(0.03))
+					// Radial: only observations get pushed outward. Entities free-float
+					// within the cluster — their layout comes from charge + structural
+					// + obs-entity links.
+					.force(
+						'radial',
+						d3
+							.forceRadial(radialOuter, w / 2, h / 2)
+							.strength((d) => (d._kind === 'observation' ? 0.05 : 0))
+					)
 					.force(
 						'collide',
 						d3.forceCollide().radius((d) => {
 							if (d._kind === 'belief') return 42;
-							if (d._kind === 'entity') return 42;
-							return 12;
+							if (d._kind === 'entity') return nodeRadius(d) + 50;
+							return 14;
 						})
 					)
 					.on('tick', () => {
@@ -2344,20 +2443,28 @@
 					if (e.property_entity_id === id) neighbors.add(e.owner_entity_id);
 					if (e.owner_entity_id === id) neighbors.add(e.property_entity_id);
 				}
-				d3.selectAll('.node').classed('dimmed', (d) => !neighbors.has(d.id));
-				d3.selectAll('.node').classed('selected', (d) => d.id === id);
-				d3.selectAll('.link').classed(
+				// Scope selectors to the graph SVG so we don't accidentally pick up
+				// HTML elements with the same class name (e.g. .scope-pill.link in
+				// the detail panel, which would throw when read as a d3 datum).
+				const gsvg = d3.select(svgEl);
+				gsvg.selectAll('.node').classed('dimmed', (d) => !neighbors.has(d.id));
+				gsvg.selectAll('.node').classed('selected', (d) => d.id === id);
+				gsvg.selectAll('.link').classed(
 					'dimmed',
-					(l) => !(neighbors.has(l.source.id) && neighbors.has(l.target.id))
+					(l) => l && l.source && !(neighbors.has(l.source.id) && neighbors.has(l.target.id))
 				);
 			}
 
 			function clearHighlight() {
-				d3.selectAll('.node').classed('dimmed', false).classed('selected', false).classed('match', false);
-				d3.selectAll('.link').classed('dimmed', false);
+				const gsvg = d3.select(svgEl);
+				gsvg.selectAll('.node').classed('dimmed', false).classed('selected', false).classed('match', false);
+				gsvg.selectAll('.link').classed('dimmed', false);
 			}
 
 			function showDetail(d) {
+				// Defensive: clear any inline display style that could keep the
+				// panel invisible after a previous hideDetail.
+				detailEl.style.display = '';
 				detailEl.hidden = false;
 				if (d._kind === 'belief') renderBeliefDetail(d);
 				else if (d._kind === 'entity') renderEntityDetail(d);
@@ -2452,13 +2559,26 @@
 			}
 			detailCloseEl.addEventListener('click', (e) => {
 				e.stopPropagation();
+				e.stopImmediatePropagation();
 				selectedNodeId = null;
 				clearHighlight();
 				hideDetail();
 			});
 
 			function scopePills(scope) {
-				if (!scope || !Object.keys(scope).length) return '<span style="color:#6c727b">unscoped</span>';
+				if (!scope) return '<span style="color:#6c727b">unscoped</span>';
+				// New shape: array of {kind, name} (observations, post-PR2).
+				if (Array.isArray(scope)) {
+					if (scope.length === 0) return '<span style="color:#6c727b">unscoped</span>';
+					return scope
+						.map(
+							(e) =>
+								`<span class="scope-pill">${escapeHtml(e.kind ?? '')}: ${escapeHtml(e.name ?? '')}</span>`
+						)
+						.join('');
+				}
+				// Legacy shape: object {key: value} (beliefs scope).
+				if (!Object.keys(scope).length) return '<span style="color:#6c727b">unscoped</span>';
 				return Object.entries(scope)
 					.map(
 						([k, v]) =>
@@ -2526,12 +2646,33 @@
 						return { ...e, belief: b };
 					})
 					.filter((e) => e.belief);
+				// Resolve linked entities from the observation_entity_edges join so
+				// the panel shows canonical entity names + can navigate on click.
+				const linkedEntities = (memoryState.observation_entity_edges ?? [])
+					.filter((e) => e.observation_id === o.id)
+					.map((edge) => {
+						const ent = memoryState.entities.find((x) => x.id === edge.entity_id);
+						return ent ? { ...ent, weight: edge.weight ?? 1.0 } : null;
+					})
+					.filter(Boolean);
+				const entityChips = linkedEntities.length
+					? linkedEntities
+							.map((e) => {
+								const isNeg = e.weight < 0;
+								const style = isNeg
+									? 'cursor:pointer;opacity:0.55;text-decoration:line-through'
+									: 'cursor:pointer';
+								const weightLabel = e.weight === 1 ? '' : ` <span style="opacity:0.6">(${e.weight.toFixed(1)})</span>`;
+								return `<span class="scope-pill link" data-entity-id="${e.id}" style="${style}">${escapeHtml(e.kind)}: ${escapeHtml(e.name)}${weightLabel}</span>`;
+							})
+							.join(' ')
+					: '<span style="color:#6c727b">unscoped</span>';
 				detailBodyEl.innerHTML = `
 					<h3>Observation</h3>
 					<div class="claim">${escapeHtml(o.summary)}</div>
 					<div class="kv"><span class="k">ts</span><span>${o.ts ? fmtAge(o.ts) : '—'}</span></div>
 					<div class="kv"><span class="k">salience</span><span>${(o.salience ?? 0).toFixed(2)}</span></div>
-					<div class="kv"><span class="k">entities</span><span>${scopePills(o.entities)}</span></div>
+					<div class="kv"><span class="k">entities</span><span>${entityChips}</span></div>
 					<div class="kv"><span class="k">tags</span><span>${(o.tags ?? []).map((t) => `<span class="scope-pill">${escapeHtml(t)}</span>`).join('') || '<span style="color:#6c727b">none</span>'}</span></div>
 					${o.raw_text ? `<div class="kv"><span class="k">raw text</span><span style="font-style:italic">"${escapeHtml(o.raw_text)}"</span></div>` : ''}
 					<h3 style="margin-top:18px">Connected beliefs (${beliefs.length})</h3>
@@ -2549,6 +2690,19 @@
 							: '<div style="color:#6c727b;font-size:12px">Not yet connected to any belief.</div>'
 					}
 				`;
+				// Wire click-through on entity chips in the entities row.
+				detailBodyEl.querySelectorAll('.scope-pill.link[data-entity-id]').forEach((chip) => {
+					chip.addEventListener('click', (e) => {
+						e.stopPropagation();
+						const entId = chip.dataset.entityId;
+						const ent = memoryState.entities.find((x) => x.id === entId);
+						if (ent) {
+							selectedNodeId = entId;
+							highlightNeighborhood(entId);
+							renderEntityDetail(ent);
+						}
+					});
+				});
 				detailBodyEl.querySelectorAll('.evidence-row').forEach((row) => {
 					row.addEventListener('click', () => {
 						const belId = row.dataset.belId;

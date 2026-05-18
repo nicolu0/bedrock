@@ -69,7 +69,7 @@ async function listEntitiesForWorkspace(workspace_id) {
 	// PostgREST query via embedded count selectors.
 	const params = new URLSearchParams({
 		select:
-			'id,kind,name,ref_table,ref_id,metadata,created_at,updated_at,belief_count:belief_entities(count)',
+			'id,kind,name,ref_table,ref_id,metadata,created_at,updated_at,belief_count:belief_entities(count),observation_count:observation_entities(count)',
 		workspace_id: `eq.${workspace_id}`,
 		order: 'kind.asc,name.asc'
 	});
@@ -78,10 +78,11 @@ async function listEntitiesForWorkspace(workspace_id) {
 	});
 	if (!res.ok) throw new Error(`listEntitiesForWorkspace: ${res.status} ${await res.text()}`);
 	const rows = await res.json();
-	// PostgREST returns belief_count as [{ count: N }] — flatten.
+	// PostgREST returns counts as [{ count: N }] — flatten.
 	return rows.map((r) => ({
 		...r,
-		belief_count: Array.isArray(r.belief_count) ? r.belief_count[0]?.count ?? 0 : 0
+		belief_count: Array.isArray(r.belief_count) ? r.belief_count[0]?.count ?? 0 : 0,
+		observation_count: Array.isArray(r.observation_count) ? r.observation_count[0]?.count ?? 0 : 0
 	}));
 }
 
@@ -98,6 +99,25 @@ async function listBeliefEntityEdges(workspace_id) {
 	if (!res.ok) throw new Error(`listBeliefEntityEdges: ${res.status} ${await res.text()}`);
 	const rows = await res.json();
 	return rows.map((r) => ({ belief_id: r.belief_id, entity_id: r.entity_id }));
+}
+
+async function listObservationEntityEdges(workspace_id) {
+	const { url, key } = supabaseEnv();
+	// Scope edges via the observation's workspace_id.
+	const params = new URLSearchParams({
+		select: 'observation_id,entity_id,weight,observation:observations!inner(workspace_id)',
+		'observation.workspace_id': `eq.${workspace_id}`
+	});
+	const res = await fetch(`${url}/rest/v1/observation_entities?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listObservationEntityEdges: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	return rows.map((r) => ({
+		observation_id: r.observation_id,
+		entity_id: r.entity_id,
+		weight: r.weight ?? 1.0
+	}));
 }
 
 // Property↔owner structural edges. Derived from the legacy `owner_properties`
@@ -318,13 +338,22 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 			if (req.method === 'GET' && pathname === '/api/memory/graph') {
 				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
 				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
-				const [observations, beliefs, edges, entities, entity_edges, structural_edges] = await Promise.all([
+				const [
+					observations,
+					beliefs,
+					edges,
+					entities,
+					entity_edges,
+					structural_edges,
+					observation_entity_edges
+				] = await Promise.all([
 					memory.listObservations(workspace_id, { limit: 500 }),
 					memory.listBeliefs(workspace_id, { limit: 500 }),
 					memory.listEdges(workspace_id),
 					listEntitiesForWorkspace(workspace_id),
 					listBeliefEntityEdges(workspace_id),
-					listStructuralEdges(workspace_id)
+					listStructuralEdges(workspace_id),
+					listObservationEntityEdges(workspace_id)
 				]);
 				return json(res, 200, {
 					observations,
@@ -332,7 +361,8 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 					edges,
 					entities,
 					entity_edges,
-					structural_edges
+					structural_edges,
+					observation_entity_edges
 				});
 			}
 

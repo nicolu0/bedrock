@@ -1,0 +1,1183 @@
+[
+	{
+		"session_id": "7bcb7ed4-a275-4069-ab31-9ca41b5efda0",
+		"started_at": "2026-04-07T18:57",
+		"topic": "Glencoe fire alarm + Pickford pest",
+		"expected_observations": [
+			{
+				"title": "Glencoe fire alarm → JL",
+				"entities": [
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "property", "name": "4140 Glencoe Ave" },
+					{ "kind": "owner", "name": "Harrison Properties LLC" }
+				],
+				"summary": "JL fixed fire alarm at 4140 Glencoe Ave; battery already checked.",
+				"source_quote": "Yes, assign it to JL",
+				"tags": ["fire-alarm", "vendor-dispatch"]
+			},
+			{
+				"title": "Pickford pest → Primex",
+				"entities": [
+					{ "kind": "vendor", "name": "Primex Termite Co." },
+					{ "kind": "vendor", "name": "Dever Pest Control" },
+					{ "kind": "property", "name": "4641-4643 Pickford St" },
+					{ "kind": "owner", "name": "Chan, Alex" },
+					{ "kind": "owner", "name": "Yang, Jennifer" }
+				],
+				"summary": "Primex sprayed pests at 4641-4643 Pickford St; Jose picked Primex over closer Dever.",
+				"source_quote": "Send it to primex",
+				"tags": ["pest", "vendor-dispatch", "recurring-treatment", "vendor-preference"]
+			}
+		],
+		"notes": [
+			"JL Unlimited Services is Jose's own LLC — vendor identity overlaps with PM persona. Belief former should treat JL as a regular vendor entity; the persona overlap affects belief generalization (handyman tier).",
+			"Pickford observation merges the dispatch event + vendor-preference signal into one observation. Both signals flow to belief former: Primex=pest vendor, Primex preferred over Dever despite distance."
+		],
+		"captured_at": "2026-05-17T22:00:00Z"
+	},
+	{
+		"session_id": "da6045eb-cb1a-4f4b-b060-14345e202b4d",
+		"started_at": "2026-04-08T14:00",
+		"topic": "Ozone closet, Primrose garage, 15th St fridge",
+		"expected_observations": [
+			{
+				"title": "Ozone closet → Kori",
+				"entities": [
+					{ "kind": "vendor", "name": "Guox Maintenance & Remodel" },
+					{ "kind": "vendor", "name": "Kori Anderson" },
+					{ "kind": "property", "name": "17 Ozone Ave" },
+					{ "kind": "owner", "name": "Harrison Properties 2 LLC" }
+				],
+				"summary": "Kori fixed closet door at 17 Ozone Ave unit 7; Jose overrode Guox suggestion.",
+				"source_quote": "Send Kori",
+				"tags": ["handyman", "closet-door", "vendor-dispatch", "vendor-override"]
+			},
+			{
+				"title": "15th St fridge leak → Cross Appliance",
+				"entities": [
+					{ "kind": "vendor", "name": "Cross Appliance Inc" },
+					{ "kind": "property", "name": "908 15th St" },
+					{ "kind": "owner", "name": "Sinai, Yasamin" }
+				],
+				"summary": "Cross Appliance fixed fridge leak at 908 15th St unit 5; Jose escalated from prior self-handling.",
+				"source_quote": "Send cross appliance please",
+				"tags": ["appliance", "fridge", "water-leak", "vendor-dispatch", "escalation-from-self-handle"]
+			},
+			{
+				"title": "Primrose garage → Jose self-handled",
+				"entities": [
+					{ "kind": "vendor", "name": "Kori Anderson" },
+					{ "kind": "property", "name": "6337 Primrose Ave" },
+					{ "kind": "owner", "name": "6337 Primrose Ave. LLC" }
+				],
+				"summary": "Jose self-handled stuck garage door at 6337 Primrose Ave.",
+				"source_quote": "For the primrose I'll be there around 2pm",
+				"tags": ["garage-door", "pm-self-handle", "vendor-rejected"]
+			}
+		],
+		"notes": [
+			"Ozone obs is a strong vendor-override signal: agent's Guox suggestion failed, Kori is the preferred handyman at Harrison-owned Ozone. Belief former should generalize toward 'Kori is preferred handyman for Harrison properties' or similar.",
+			"Primrose obs is a PM-self-handle signal — important for the belief former to learn that Jose self-handles certain property/issue combos. Kori stays on the entity list as rejected candidate so future Kori retrieval surfaces 'considered but Jose self-handled at Primrose'.",
+			"15th St obs carries an escalation-from-self-handle signal: Jose used to self-handle fridge issues here but is now sending a vendor. Could form a belief about Jose's evolving delegation pattern.",
+			"Agent's claim 'Kori previously fixed the garage at Ozone' is context for its question, not Jose's response — we do NOT extract it as a separate obs (only Jose's responses count). If that prior dispatch was real, it lives in another session's obs."
+		],
+		"captured_at": "2026-05-17T22:15:00Z"
+	},
+	{
+		"session_id": "8da3a297-2d2f-4423-9630-3c4e0ca81840",
+		"started_at": "2026-04-08T21:35",
+		"topic": "Irene tenant portal question",
+		"expected_observations": [],
+		"notes": [
+			"Tenant-side question (Irene asking about the portal). No vendor/property/owner decision was made; nothing for Jose to respond to with a directive. Empty-extraction is the correct outcome — guards against false-positive observation generation."
+		],
+		"captured_at": "2026-05-17T22:30:00Z"
+	},
+	{
+		"session_id": "061eab13-6664-4bd9-a7bf-b2353ac0f3f1",
+		"started_at": "2026-04-13T14:00",
+		"topic": "Weekend batch: Rose Ave smoke alarm, Palos Verdes gutters, Glencoe toilet, 11th St toilet handle, Budlong fridge",
+		"expected_observations": [
+			{
+				"title": "Rose Ave smoke alarm → Kori",
+				"entities": [
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "vendor", "name": "Kori Anderson" },
+					{ "kind": "property", "name": "50 Rose Ave" },
+					{ "kind": "owner", "name": "Harrison Properties LLC" }
+				],
+				"summary": "Kori fixed smoke alarm at 50 Rose Ave unit 7; Jose picked outside agent's JL/Abraham suggestions.",
+				"source_quote": "Please send Kori to take care of the smoke detector",
+				"tags": ["smoke-alarm", "vendor-dispatch", "vendor-override", "pm-chose-outside-suggestions"]
+			},
+			{
+				"title": "Palos Verdes gutters → LA's Best Gutters",
+				"entities": [
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "vendor", "name": "Talavera, Luis" },
+					{ "kind": "vendor", "name": "LA's Best Gutters" },
+					{ "kind": "property", "name": "31135 Palos Verdes Dr E" },
+					{ "kind": "owner", "name": "Dahl, Sonja" }
+				],
+				"summary": "LA's Best Gutters fixed roof + gutters at 31135 Palos Verdes Dr E; Jose picked outside JL/Luis suggestions.",
+				"source_quote": "palos verdes we can send LA's Best Gutters",
+				"tags": ["gutters", "roof", "vendor-dispatch", "vendor-override", "pm-chose-outside-suggestions"]
+			},
+			{
+				"title": "Glencoe toilet seat → JL",
+				"entities": [
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "vendor", "name": "Talavera, Luis" },
+					{ "kind": "property", "name": "4215 Glencoe Ave" },
+					{ "kind": "owner", "name": "Erickson, Heather" }
+				],
+				"summary": "Jose self-handled broken toilet seat at 4215 Glencoe Ave unit 210 via JL (his LLC); scheduling pending.",
+				"source_quote": "the Glenco to JL",
+				"tags": ["plumbing", "toilet-seat", "pm-self-handle", "vendor-dispatch"]
+			},
+			{
+				"title": "11th St toilet handle → Abraham",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "property", "name": "824 11th St" },
+					{ "kind": "owner", "name": "The Sidenberg Living Trust" }
+				],
+				"summary": "Abraham fixed toilet handle at 824 11th St unit 10; agent flagged Abraham as usual vendor here.",
+				"source_quote": "Yes, send it to him please",
+				"tags": ["plumbing", "toilet", "vendor-dispatch", "property-specific-default", "vendor-confirmed"]
+			},
+			{
+				"title": "Budlong fridge → Cross Appliance",
+				"entities": [
+					{ "kind": "vendor", "name": "Cross Appliance Inc" },
+					{ "kind": "property", "name": "3944 S. Budlong Ave/1135 Leighton Ave" },
+					{ "kind": "owner", "name": "1145 Leighton Avenue LLC" }
+				],
+				"summary": "Cross Appliance fixed fridge ice maker at 3944 S. Budlong Ave unit 3944 1/2.",
+				"source_quote": "Yes, please",
+				"tags": ["appliance", "fridge", "ice-maker", "vendor-dispatch"]
+			}
+		],
+		"notes": [
+			"Two override-from-outside-suggestions observations (Rose Ave→Kori, Palos Verdes→LA's Best Gutters) are strong belief-formation signal. Belief former should generalize: Kori is Jose's preferred smoke-alarm/handyman vendor; LA's Best Gutters is the gutter specialist (not JL or Luis despite their being suggested).",
+			"Glencoe toilet seat obs treats JL as the vendor entity but tags as `pm-self-handle` since JL = Jose's own LLC. The belief former should recognize this duality: 'JL' fired means functionally Jose did the work.",
+			"11th St obs carries a `property-specific-default` tag because the agent's prompt cited 'usually send Abraham to this property' — Jose confirming reinforces a property-vendor-default belief at 824 11th St (Sidenberg-owned).",
+			"Budlong fridge → Cross Appliance is the SECOND fridge-related Cross Appliance obs in the dataset (first was 908 15th St unit 5 in S2). Two fridge events at two different properties should be enough for belief former to generalize 'Cross Appliance handles fridge issues'."
+		],
+		"captured_at": "2026-05-17T22:45:00Z"
+	},
+	{
+		"session_id": "0491a88d-1867-48c6-b53a-cd5c1fd85aaa",
+		"started_at": "2026-04-14T14:00",
+		"topic": "Harvard garbage disposal, Darwin retired, weekend batch ignored, CO alarm + blinds",
+		"expected_observations": [
+			{
+				"title": "Harvard disposal → Abraham",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "vendor", "name": "Darwin" },
+					{ "kind": "property", "name": "1447 Harvard St" },
+					{ "kind": "owner", "name": "E Leung Trust" }
+				],
+				"summary": "Abraham fixed garbage disposal at 1447 Harvard St unit 6; Darwin a prior alternative, not picked.",
+				"source_quote": "You can assign it to Abraham",
+				"tags": ["disposal", "plumbing", "vendor-dispatch"]
+			},
+			{
+				"title": "Darwin → retired",
+				"entities": [
+					{ "kind": "vendor", "name": "Darwin" }
+				],
+				"summary": "Jose retired Darwin; workspace no longer dispatches him.",
+				"source_quote": "You guys can delete Darwin from the system. We no longer use him",
+				"tags": ["vendor-retirement", "vendor-deprecated"]
+			},
+			{
+				"title": "11th St blinds → Abraham",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "property", "name": "824 11th St" },
+					{ "kind": "owner", "name": "The Sidenberg Living Trust" }
+				],
+				"summary": "Abraham fixed kitchen blinds at 824 11th St unit 1.",
+				"source_quote": "Send him for the blinds",
+				"tags": ["handyman", "blinds", "vendor-dispatch", "property-specific-default"]
+			},
+			{
+				"title": "828 11th St CO alarm → JL",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "property", "name": "828 11th St" },
+					{ "kind": "owner", "name": "Grauzinis ME Trust" },
+					{ "kind": "owner", "name": "Solomon Grauzinis Trust" }
+				],
+				"summary": "Jose self-handled CO alarm at 828 11th St unit 7 via JL; overrode Abraham suggestion.",
+				"source_quote": "assign JL for carbon monoxide",
+				"tags": ["safety", "carbon-monoxide", "pm-self-handle", "vendor-dispatch", "vendor-override"]
+			}
+		],
+		"notes": [
+			"Darwin retirement is a vendor-only observation (no property/owner). Belief former should produce a deprecating belief about Darwin: 'Darwin is retired — do not dispatch'. This is a hard rule, high confidence, single-source.",
+			"Three issues in the agent's bundled mid-session message were IGNORED by Jose (Primrose freezer → Cross Appliance suggested; 829 Ocean Park hot water → Home Improvement Services suggested; 829 Ocean Park range hood → Abraham suggested). Per the 'obs = Jose's response' rule, no Jose response = no obs. These will recur in later sessions if still unresolved. Note: the previous Abraham assignment for the range hood was never executed — meta-signal that Abraham can be unreliable for re-dispatches.",
+			"828 11th St CO alarm obs: the seed belief about Solomon Grauzinis Trust requiring owner approval was too broad. Resolved by Andrew during walkthrough — the rule is scoped to LARGER issues (cost/severity). CO alarms are small enough to dispatch without owner approval. Belief former should refine the existing seed belief into 'Grauzinis Trust requires owner approval for larger issues' (or equivalent severity-scoped framing) using this obs as deprecating evidence for the broad version + supporting evidence for the scoped version.",
+			"Agent's '11th St' shorthand collapses 824 (Sidenberg) and 828 (Grauzinis). Gold splits by property; expects extractor to disambiguate via context (CO alarm vs blinds → distinct units → distinct properties).",
+			"Side-conversation about website credentials is workflow chat, not memory-graph content — skipped."
+		],
+		"captured_at": "2026-05-17T23:00:00Z"
+	},
+	{
+		"session_id": "198e190e-71cb-4e72-8d05-95dc7db93c44",
+		"started_at": "2026-04-16T14:20",
+		"topic": "No hot water at 1023 17th St → Jose self-handles via JL",
+		"expected_observations": [
+			{
+				"title": "17th St water heater → JL",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "property", "name": "1023 17th St" },
+					{ "kind": "owner", "name": "Prinkipo Properties LP" }
+				],
+				"summary": "Jose self-handled no-hot-water at 1023 17th St unit D via JL; Abraham overloaded (5 open WOs).",
+				"source_quote": "I'll be stopping by to check the water heater at 17th street. Assign it to JL",
+				"tags": ["plumbing", "water-heater", "pm-self-handle", "vendor-dispatch", "vendor-override", "vendor-overloaded"]
+			}
+		],
+		"notes": [
+			"Agent flagged Abraham's 5-open-WO backlog before suggesting him — that overloaded context is meaningful for future Abraham retrieval (he can be backlogged) and possibly explains why Jose self-handled. Tag `vendor-overloaded` captures this.",
+			"Coordination chat (time-of-arrival, in-office availability) is workflow, not memory-graph — skipped from observations.",
+			"The 'Hi Jose, will you be at the office today?' message and similar status pings are likely a third-party in the thread or Jose talking to a coworker; they don't carry vendor/property/owner decisions and are skipped."
+		],
+		"captured_at": "2026-05-17T23:15:00Z"
+	},
+	{
+		"session_id": "de61c72b-2bcd-434a-9f09-0849b1a8c42d",
+		"started_at": "2026-04-16T21:34",
+		"topic": "50 Rose oven + dishwasher motherboard saga + 17th St hot water confirmed fixed",
+		"expected_observations": [
+			{
+				"title": "50 Rose oven door → Kori",
+				"entities": [
+					{ "kind": "vendor", "name": "Kori Anderson" },
+					{ "kind": "property", "name": "50 Rose Ave" },
+					{ "kind": "owner", "name": "Harrison Properties LLC" }
+				],
+				"summary": "Kori dispatched for broken oven door + shelf at 50 Rose Ave.",
+				"source_quote": "Yes",
+				"tags": ["appliance", "oven", "vendor-dispatch"]
+			},
+			{
+				"title": "50 Rose dishwasher → Waadt for estimate",
+				"entities": [
+					{ "kind": "vendor", "name": "Kori Anderson" },
+					{ "kind": "vendor", "name": "Waadt Appliance" },
+					{ "kind": "property", "name": "50 Rose Ave" },
+					{ "kind": "owner", "name": "Harrison Properties LLC" }
+				],
+				"summary": "After Kori diagnosed failing dishwasher motherboard at 50 Rose unit 2, Jose dispatched Waadt for replacement estimate.",
+				"source_quote": "We can send the work order to Waad appliance and request an estimate to replace.",
+				"tags": ["appliance", "dishwasher", "vendor-dispatch", "vendor-handoff", "estimate-requested"]
+			},
+			{
+				"title": "50 Rose dishwasher → estimates for both colors",
+				"entities": [
+					{ "kind": "vendor", "name": "Waadt Appliance" },
+					{ "kind": "property", "name": "50 Rose Ave" },
+					{ "kind": "owner", "name": "Harrison Properties LLC" }
+				],
+				"summary": "Tenant wanted stainless to match fridge; Jose asked Waadt for both-color estimates citing possible price parity.",
+				"source_quote": "Request and estimate for both",
+				"tags": ["appliance", "dishwasher", "owner-approval", "cost-conscious", "tenant-preference"]
+			},
+			{
+				"title": "17th St water heater → fixed",
+				"entities": [
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "property", "name": "1023 17th St" },
+					{ "kind": "owner", "name": "Prinkipo Properties LP" }
+				],
+				"summary": "No-hot-water at 1023 17th St unit D resolved (followup to S6 JL self-handle); tenant to test if recurs.",
+				"source_quote": "Yes",
+				"tags": ["plumbing", "water-heater", "status-resolved", "followup"]
+			}
+		],
+		"notes": [
+			"Vendor-handoff pattern (Kori inspects → Waadt repairs) is a recurring shape — belief former should learn that Kori can act as diagnostic/triage vendor before specialist takes over for major appliance work. Tag `vendor-handoff` flags this.",
+			"Dual-color estimate obs is the canonical 'owner approves cost-significant replacement' signal. Procedural rule candidate for belief former: appliance replacements at Harrison-owned properties (or possibly all properties >$X) gate through owner via dual estimates.",
+			"17th St 'fixed' obs builds JL's track record for water heaters. Followup-status observations should count because they reinforce dispatch success beliefs (a 'JL fixed water heater' obs is stronger evidence after the followup confirms resolution).",
+			"50 Rose oven door obs and dishwasher obs may share one Kori trip — the chat doesn't disambiguate. Two distinct obs captured because two distinct Jose decisions; vendor-handoff happens on the dishwasher track only."
+		],
+		"captured_at": "2026-05-17T23:30:00Z"
+	},
+	{
+		"session_id": "2a9a93de-dafd-4b8a-ae7d-29259de070b9",
+		"started_at": "2026-04-20T06:19",
+		"topic": "Power outage at 15 Ozone → Kori (not emergency)",
+		"expected_observations": [
+			{
+				"title": "15 Ozone power outage → Kori",
+				"entities": [
+					{ "kind": "vendor", "name": "Kori Anderson" },
+					{ "kind": "property", "name": "15 Ozone Ave" },
+					{ "kind": "owner", "name": "Harrison Properties LLC" }
+				],
+				"summary": "Kori dispatched for power outage at 15 Ozone Ave (no fridge power); Jose declined emergency triage.",
+				"source_quote": "Send Kori please",
+				"tags": ["electrical", "power-outage", "fridge", "vendor-dispatch", "not-emergency-triage"]
+			}
+		],
+		"notes": [
+			"Agent explicitly asked emergency-vs-wait-until-tomorrow; Jose chose the latter. This is a triage signal — 'power outage with no fridge power' is NOT emergency-tier for Jose's threshold. Useful belief candidate: emergency threshold seems higher than power outage (probably emergencies = active flooding / gas / fire / security).",
+			"Kori reinforced as preferred handyman at Harrison-owned Ozone (multiple obs now: S2 closet door at 17 Ozone, S4 Rose Ave smoke alarm, S7 50 Rose oven, this one at 15 Ozone). All Harrison-owned."
+		],
+		"captured_at": "2026-05-17T23:45:00Z"
+	},
+	{
+		"session_id": "08b15581-f768-49c7-9e3d-b73d4113ef2f",
+		"started_at": "2026-04-20T21:01",
+		"topic": "22nd St plumbing → Abraham (override) + Primrose light → Guox",
+		"expected_observations": [
+			{
+				"title": "22nd St plumbing → Abraham",
+				"entities": [
+					{ "kind": "vendor", "name": "The Drain Specialist, Inc" },
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "property", "name": "1951 22nd St" },
+					{ "kind": "owner", "name": "Apartments, Ingelman" }
+				],
+				"summary": "Abraham dispatched for toilet tank + slow shower drain at 1951 22nd St unit 4; Jose overrode Drain Specialist.",
+				"source_quote": "Send Abraham",
+				"tags": ["plumbing", "toilet", "shower-drain", "vendor-dispatch", "vendor-override", "multi-issue-single-vendor"]
+			},
+			{
+				"title": "Primrose front door light → Guox",
+				"entities": [
+					{ "kind": "vendor", "name": "Guox Maintenance & Remodel" },
+					{ "kind": "property", "name": "6337 Primrose Ave" },
+					{ "kind": "owner", "name": "6337 Primrose Ave. LLC" }
+				],
+				"summary": "Guox dispatched for burnt-out front door light at 6337 Primrose Ave unit 12; Jose declined self-handling.",
+				"source_quote": "Send guox maintenance",
+				"tags": ["electrical", "lighting", "vendor-dispatch", "pm-declined-self-handle"]
+			}
+		],
+		"notes": [
+			"22nd St obs is the second `vendor-override` against The Drain Specialist (Abraham picked instead) — belief candidate: Abraham preferred over Drain Specialist for plumbing at Ingelman properties, or possibly Abraham preferred for plumbing in general.",
+			"Primrose light → Guox is notable next to S2 Primrose garage → Jose self-handled. Same property, different issue types, different decisions. Belief former should NOT generalize 'Jose self-handles Primrose' from one obs — issue-type matters. Tag `pm-declined-self-handle` flags that the option was offered and refused.",
+			"`multi-issue-single-vendor` tag captures that one vendor handled two distinct plumbing problems in one dispatch — useful pattern for the belief former when reasoning about Abraham's scope."
+		],
+		"captured_at": "2026-05-18T00:00:00Z"
+	},
+	{
+		"session_id": "cf7f0610-3f3f-4f15-9486-8c41a6aa2438",
+		"started_at": "2026-04-21T17:29",
+		"topic": "50 Rose dishwasher replace ($559), 22nd St outlet (Osalpa), Hatteras Juan swap",
+		"expected_observations": [
+			{
+				"title": "50 Rose dishwasher → Waadt stainless $559",
+				"entities": [
+					{ "kind": "vendor", "name": "Waadt Appliance" },
+					{ "kind": "property", "name": "50 Rose Ave" },
+					{ "kind": "owner", "name": "Harrison Properties LLC" }
+				],
+				"summary": "Jose approved Waadt's $559.34 stainless dishwasher replacement at 50 Rose unit 2; same price for both colors.",
+				"source_quote": "Yes",
+				"tags": ["appliance", "dishwasher", "replacement-approved", "cost-approval", "followup"]
+			},
+			{
+				"title": "22nd St outlet → Jose calls Osalpa",
+				"entities": [
+					{ "kind": "vendor", "name": "Osalpa Electric, INC." },
+					{ "kind": "property", "name": "1951 22nd St" },
+					{ "kind": "owner", "name": "Apartments, Ingelman" }
+				],
+				"summary": "Jose called Osalpa directly for phone-based outlet diagnosis at 1951 22nd St unit 4 instead of full dispatch.",
+				"source_quote": "I'll contact them directly and see if I can give them instructions over the phone",
+				"tags": ["electrical", "outlet", "pm-direct-coordination", "vendor-soft-touch"]
+			},
+			{
+				"title": "Hatteras Juan swap → new vendor added",
+				"entities": [
+					{ "kind": "vendor", "name": "Juan" },
+					{ "kind": "property", "name": "18201 Hatteras St" },
+					{ "kind": "owner", "name": "Csizmadia, Rita" }
+				],
+				"summary": "Jose adding new vendor (different Juan) at 18201 Hatteras St; original Juan retired as unresponsive.",
+				"source_quote": "I have a new vendor that I'm adding ... It is a different Juan",
+				"tags": ["vendor-onboarding", "vendor-retirement", "unresponsive-vendor", "handyman"]
+			}
+		],
+		"notes": [
+			"Two vendor-lifecycle events this session: Waadt pivots from 'don't handle repairs' to replacement-quote vendor (de facto onboarding for replacement scope), and old Juan retired / new Juan added at Hatteras. Belief former should treat 'unresponsive Juan' as deprecated.",
+			"22nd St outlet obs is an interesting PM-direct-coordination pattern — vendor is involved but PM is on the call directly, bypassing dispatch. Tag `pm-direct-coordination` flags this hybrid mode.",
+			"Cost-approval signal on dishwasher: $559.34 with both-color price parity made Jose's approval a quick yes. Useful for belief former to learn cost-threshold dynamics."
+		],
+		"captured_at": "2026-05-18T00:15:00Z"
+	},
+	{
+		"session_id": "555aa7c4-4c99-41de-b190-a50f4f77d8ec",
+		"started_at": "2026-04-22T13:38",
+		"topic": "Yonic > Abraham for plumbing; W 12th Pl pending owner approval",
+		"expected_observations": [
+			{
+				"title": "223 Union no hot water → Yonic",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "property", "name": "221-229 Union Pl" },
+					{ "kind": "owner", "name": "221 Union Place LLC" }
+				],
+				"summary": "Yonic dispatched for no hot water at 221-229 Union Pl unit 223-7; Jose swapped from Abraham.",
+				"source_quote": "Send it to Yonic please.",
+				"tags": ["plumbing", "water-heater", "vendor-dispatch", "vendor-override"]
+			},
+			{
+				"title": "227 Union faucet leak → Yonic",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "property", "name": "221-229 Union Pl" },
+					{ "kind": "owner", "name": "221 Union Place LLC" }
+				],
+				"summary": "Yonic dispatched for leaking bathroom + kitchen faucet at 221-229 Union Pl unit 227-14; Jose: 'Yonic is more experienced plumber'.",
+				"source_quote": "Yonic is a plumber, more experienced",
+				"tags": ["plumbing", "faucet", "vendor-dispatch", "vendor-preference-stated", "yonic-plumbing-default"]
+			},
+			{
+				"title": "W 12th Pl toilet leak → owner-approval pending",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "property", "name": "1517 W. 12th Pl" },
+					{ "kind": "owner", "name": "Twelfth Place LLC" }
+				],
+				"summary": "For toilet water leak at 1517 W. 12th Pl unit 5, Jose deferred dispatch pending owner discussion.",
+				"source_quote": "One second I need to discuss it with the owner",
+				"tags": ["plumbing", "toilet", "owner-approval-required", "dispatch-deferred"]
+			}
+		],
+		"notes": [
+			"FOUNDATIONAL belief candidate: 'Yonic > Abraham for plumbing because more experienced.' Jose's explicit verbal preference. Belief former should generalize this aggressively from these 2 obs — Yonic is primary plumber, Abraham fallback.",
+			"W 12th Pl owner-approval gate is property-scoped (or owner-scoped to Twelfth Place LLC / Jason Reitz). Useful contrast with the Grauzinis severity-scoped owner approval — here it applies regardless of severity (water leak under toilet is non-trivial but not 'larger' in Grauzinis sense).",
+			"223-7 and 227-14 are sub-addresses within the 221-229 Union Pl multi-address property; obs uses the legacy property name + unit in summary."
+		],
+		"captured_at": "2026-05-18T00:30:00Z"
+	},
+	{
+		"session_id": "deb4afad-19bd-4cb8-bbe7-1253739d298e",
+		"started_at": "2026-04-23T20:26",
+		"topic": "Curtain rod at 829 Ocean Park unit 6 → Abraham",
+		"expected_observations": [
+			{
+				"title": "829 OP curtain rod → Abraham",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "property", "name": "829 Ocean Park Blvd." },
+					{ "kind": "owner", "name": "829 Oceanpark, LLC" }
+				],
+				"summary": "Abraham dispatched for falling curtain rod (weak wall mount) at 829 Ocean Park Blvd unit 6; Jose declined self-handling.",
+				"source_quote": "Yes, send it to Abraham please",
+				"tags": ["handyman", "curtain-rod", "vendor-dispatch", "pm-declined-self-handle"]
+			}
+		],
+		"notes": [
+			"Clean single-obs session. Agent explicitly offered self-handle as option; Jose declined. Tag `pm-declined-self-handle` consistent with S9 Primrose light pattern — Jose increasingly delegates handyman-tier."
+		],
+		"captured_at": "2026-05-18T00:45:00Z"
+	},
+	{
+		"session_id": "fc5f64cb-5fe9-4d6c-9cd1-aab12e3d17b4",
+		"started_at": "2026-04-24T18:13",
+		"topic": "Homeless person in parking spot at 50 Rose → Jose self-handles via JL",
+		"expected_observations": [
+			{
+				"title": "50 Rose homeless → Jose self-handle via JL",
+				"entities": [
+					{ "kind": "vendor", "name": "Kori Anderson" },
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "property", "name": "50 Rose Ave" },
+					{ "kind": "owner", "name": "Harrison Properties LLC" }
+				],
+				"summary": "Jose self-handled (via JL) homeless person camped in Alexandra's parking spot at 50 Rose unit 8; declined Kori suggestion.",
+				"source_quote": "I'll stop by soon",
+				"tags": ["non-maintenance", "homeless-security", "pm-self-handle", "vendor-declined", "personal-handling"]
+			}
+		],
+		"notes": [
+			"First non-maintenance issue in dataset (homeless/security). Strong belief candidate: 'Jose self-handles non-maintenance security situations.' Agent referenced 'last time you went for the homeless situation' as precedent, reinforcing it's an established pattern."
+		],
+		"captured_at": "2026-05-18T01:00:00Z"
+	},
+	{
+		"session_id": "099b7693-b4ae-42e5-9b0d-860e59f8bcbf",
+		"started_at": "2026-04-24T21:54",
+		"topic": "908 15th St shower drain (Abraham); 144 Westmoreland laundry redirect",
+		"expected_observations": [
+			{
+				"title": "908 15th St shower drain cover → Abraham",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "property", "name": "908 15th St" },
+					{ "kind": "owner", "name": "Sinai, Yasamin" }
+				],
+				"summary": "Abraham dispatched to secure shower drain cover at 908 15th St unit 4; no drain functionality issue.",
+				"source_quote": "Yes",
+				"tags": ["handyman", "shower", "vendor-dispatch", "minor-repair"]
+			},
+			{
+				"title": "144 Westmoreland laundry → outside vendor",
+				"entities": [
+					{ "kind": "property", "name": "144 S. Westmoreland Ave" },
+					{ "kind": "owner", "name": "144 WestMoreland LLC" }
+				],
+				"summary": "Washing machines malfunctioning at 144 S. Westmoreland unit 3; Jose redirected tenant to outside vendor since LAPM doesn't own machines.",
+				"source_quote": "I told him to contact them as well since we don't own the machine",
+				"tags": ["appliance", "washing-machine", "outside-vendor", "not-owned", "dispatch-redirected"]
+			}
+		],
+		"notes": [
+			"Laundry obs is a property-scope signal: LAPM doesn't own laundry machines at 144 S. Westmoreland. Belief candidate: 'For laundry-machine issues at 144 Westmoreland, route to outside vendor.' Could potentially generalize across all properties if pattern repeats."
+		],
+		"captured_at": "2026-05-18T01:15:00Z"
+	},
+	{
+		"session_id": "bc875a8e-1140-4e40-bd92-dfc1cd472793",
+		"started_at": "2026-04-26T02:11",
+		"topic": "Kitchen power at 829 Ocean Park unit 6 — self-help first",
+		"expected_observations": [
+			{
+				"title": "829 OP kitchen power → tenant self-help",
+				"entities": [
+					{ "kind": "property", "name": "829 Ocean Park Blvd." },
+					{ "kind": "owner", "name": "829 Oceanpark, LLC" }
+				],
+				"summary": "Jose instructed tenant self-help for kitchen power at 829 OP unit 6: check breakers, escalate to electrician Monday if persists.",
+				"source_quote": "Tell them to check the breakers to see if one is tripped. If so, do turn it back on. If she issue persists ask to see if we can send an electrician on Monday.",
+				"tags": ["electrical", "power", "tenant-self-help", "escalation-tiered", "weekend"]
+			}
+		],
+		"notes": [
+			"No vendor dispatched. Jose's tiered response (self-help → electrician Monday) is a procedural pattern for non-emergency electrical on weekends. Useful belief candidate: 'Weekend electrical = tenant self-help first, escalate Monday'."
+		],
+		"captured_at": "2026-05-18T01:30:00Z"
+	},
+	{
+		"session_id": "ee593bb0-fc2f-4f26-9a2b-8025d8e7ceb5",
+		"started_at": "2026-04-27T14:38",
+		"topic": "Weekend batch: LA HydroJet to Palos Verdes drain; JL handles Primrose call box + Westmoreland noise; Osalpa escalates at 829 OP",
+		"expected_observations": [
+			{
+				"title": "Palos Verdes kitchen drain → LA HydroJet",
+				"entities": [
+					{ "kind": "vendor", "name": "L.A.HYDRO-JET & ROOTER SERVICE, INC." },
+					{ "kind": "property", "name": "31135 Palos Verdes Dr E" },
+					{ "kind": "owner", "name": "Dahl, Sonja" }
+				],
+				"summary": "LA HydroJet dispatched for kitchen drain clog at 31135 Palos Verdes Dr E.",
+				"source_quote": "Yes, send LA hydro for kitchen sink",
+				"tags": ["plumbing", "drain-clog", "vendor-dispatch", "specialist"]
+			},
+			{
+				"title": "Primrose call box → Jose self-handle via JL",
+				"entities": [
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "property", "name": "6337 Primrose Ave" },
+					{ "kind": "owner", "name": "6337 Primrose Ave. LLC" }
+				],
+				"summary": "Jose self-handled (via JL) the broken front call box at 6337 Primrose Ave (property-level, reported by unit 16).",
+				"source_quote": "I'll take care of the other two",
+				"tags": ["property-level", "call-box", "pm-self-handle", "vendor-dispatch"]
+			},
+			{
+				"title": "Westmoreland noise → Jose self-handle via JL",
+				"entities": [
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "property", "name": "144 S. Westmoreland Ave" },
+					{ "kind": "owner", "name": "144 WestMoreland LLC" }
+				],
+				"summary": "Jose self-handled (via JL) noise complaint about unit 1 at 144 S. Westmoreland Ave.",
+				"source_quote": "I'll take care of the other two",
+				"tags": ["non-maintenance", "noise-complaint", "pm-self-handle", "vendor-dispatch"]
+			},
+			{
+				"title": "829 OP kitchen power → Osalpa",
+				"entities": [
+					{ "kind": "vendor", "name": "Osalpa Electric, INC." },
+					{ "kind": "property", "name": "829 Ocean Park Blvd." },
+					{ "kind": "owner", "name": "829 Oceanpark, LLC" }
+				],
+				"summary": "Osalpa dispatched for 829 OP unit 6 kitchen power (no sink power, microwave trips); escalated from S15 self-help.",
+				"source_quote": "Yes, send it to Osalpa",
+				"tags": ["electrical", "power", "microwave-trip", "vendor-dispatch", "escalation-from-self-help"]
+			}
+		],
+		"notes": [
+			"829 OP unit 6 chronic-unit pattern: S12 curtain rod → Abraham, S15 power self-help, S16 power → Osalpa. Belief former should note tenant/unit-level pattern.",
+			"Two JL self-handle obs (Primrose call box + Westmoreland noise) share the same source quote 'I'll take care of the other two' — extractor will need to split based on context.",
+			"LA HydroJet is the first appearance of a drain specialist that's distinct from Yonic. Tag `specialist` flags this is not a general plumbing dispatch."
+		],
+		"captured_at": "2026-05-18T01:45:00Z"
+	},
+	{
+		"session_id": "4176bcfe-3e0b-4b94-9107-50c050a7553d",
+		"started_at": "2026-04-29T14:54",
+		"topic": "Window screens at 1951 22nd St unit 4 → Abraham",
+		"expected_observations": [
+			{
+				"title": "1951 22nd St screens → Abraham",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "property", "name": "1951 22nd St" },
+					{ "kind": "owner", "name": "Apartments, Ingelman" }
+				],
+				"summary": "Abraham dispatched for kitchen + living room window screens damaged from wind at 1951 22nd St unit 4.",
+				"source_quote": "Yes please",
+				"tags": ["handyman", "window-screen", "vendor-dispatch"]
+			}
+		],
+		"notes": [
+			"Third dispatch to 1951 22nd St unit 4 (S9 plumbing → Abraham, S10 outlet → Jose-direct, S17 screens → Abraham). Abraham emerging as the property default at 1951 22nd St."
+		],
+		"captured_at": "2026-05-18T02:00:00Z"
+	},
+	{
+		"session_id": "ce6317af-bb7f-4bfc-b0e5-310f9e0b9d68",
+		"started_at": "2026-04-29T18:26",
+		"topic": "213 S. Arnaz door + 19 Ozone skylight — both pending owner approval",
+		"expected_observations": [
+			{
+				"title": "19 Ozone skylight → owner-approval pending",
+				"entities": [
+					{ "kind": "vendor", "name": "A Precision Roofing, INC." },
+					{ "kind": "property", "name": "19 Ozone Ave" },
+					{ "kind": "owner", "name": "Harrison Properties 2 LLC" }
+				],
+				"summary": "Precision Roofing's $850 skylight replacement at 19 Ozone unit 19/12 sent to owner (Harrison Properties 2) for approval.",
+				"source_quote": "I'll send it to the owner for approval later today.",
+				"tags": ["roofing", "skylight", "owner-approval-required", "dispatch-deferred", "cost-significant"]
+			},
+			{
+				"title": "213 Arnaz door → owner-approval pending",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "property", "name": "213 S. Arnaz Dr" },
+					{ "kind": "owner", "name": "Lee, Anthony" }
+				],
+				"summary": "For rotted door covering electrical panel at 213 S. Arnaz Dr, Jose coordinating with owner (Anthony Lee) for vendor selection.",
+				"source_quote": "I will discuss with the owner as well and see who he wants us to send.",
+				"tags": ["handyman", "rotted-wood", "owner-approval-required", "owner-picks-vendor", "dispatch-deferred"]
+			}
+		],
+		"notes": [
+			"Two owner-approval gates in one session — owner approval is common across portfolio. 19 Ozone has cost-significant threshold ($850); 213 Arnaz has owner-picks-vendor (no cost mentioned).",
+			"Jose's 'coordinating directly' (later in chat) is NOT a JL dispatch — distinguish from S6/S13/S16 self-handle pattern. No physical work being done, just owner liaison."
+		],
+		"captured_at": "2026-05-18T02:15:00Z"
+	},
+	{
+		"session_id": "f876d924-52e6-49c8-995f-7d8719216e5b",
+		"started_at": "2026-04-30T20:04",
+		"topic": "Van Buren doorknob + slow drain → Abraham (Yonic not needed)",
+		"expected_observations": [
+			{
+				"title": "Van Buren doorknob + drain → Abraham",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "property", "name": "2919 Van Buren Pl" },
+					{ "kind": "owner", "name": "Lawrence, Barry" }
+				],
+				"summary": "Abraham handled doorknob + slow sink drain at 2919 Van Buren Pl unit 2919 1/2; Jose: 'no need for Yonic'.",
+				"source_quote": "Send both to Abraham",
+				"tags": ["handyman", "plumbing-drain", "doorknob", "vendor-dispatch", "multi-issue-single-vendor", "yonic-declined-for-simple"]
+			}
+		],
+		"notes": [
+			"Counter-signal to S11's 'Yonic is more experienced plumber': for SIMPLE drain (no functional failure), Abraham is sufficient. Refines the Yonic-preference belief — Yonic for complex/no-hot-water plumbing, Abraham for handyman-overlap plumbing."
+		],
+		"captured_at": "2026-05-18T02:30:00Z"
+	},
+	{
+		"session_id": "ff9171f3-061c-4797-99c0-05c79b5dec53",
+		"started_at": "2026-05-02T15:33",
+		"topic": "Glencoe running toilet — Jose did not respond in chat",
+		"expected_observations": [],
+		"notes": [
+			"META-RULE TEST CASE: Jose's chat had only agent messages (continuously running toilet at Glencoe unit 210). No Jose response → no observation. Out-of-band Yonic dispatch happened in the PMS but the chat extractor wouldn't see it. Critical scenario for PR2 eval."
+		],
+		"captured_at": "2026-05-18T02:45:00Z"
+	},
+	{
+		"session_id": "cadd6e64-15a0-48d1-ab15-94614accbf3d",
+		"started_at": "2026-05-03T01:46",
+		"topic": "Paint bubbling at 227 Union Place — onsite manager handles",
+		"expected_observations": [
+			{
+				"title": "227 Union paint bubbling → onsite manager",
+				"entities": [
+					{ "kind": "property", "name": "221-229 Union Pl" },
+					{ "kind": "owner", "name": "221 Union Place LLC" }
+				],
+				"summary": "Paint bubbling at 221-229 Union Pl unit 227-14; Jose deferred to onsite manager (unit 14 tenant) instead of owner contact.",
+				"source_quote": "No need, he is the onsite manager. I'll talk to him on Monday",
+				"tags": ["paint", "onsite-manager", "no-owner-contact", "tenant-acts-as-manager", "dispatch-deferred"]
+			}
+		],
+		"notes": [
+			"FOUNDATIONAL belief candidate: 'Unit 14 tenant at 221-229 Union Pl is the onsite manager.' Tenant-anchored fact — schema gap (no tenant entity kind). For now anchor to the property entity via the obs."
+		],
+		"captured_at": "2026-05-18T03:00:00Z"
+	},
+	{
+		"session_id": "6d1238d4-e8da-4bfa-be7f-dad4e85ae2b8",
+		"started_at": "2026-05-04T14:00",
+		"topic": "Weekend batch: Primrose unit 9 → Guox; Oak + 1234 11th → Yonic; Walnut Lane → Abraham (not Yonic)",
+		"expected_observations": [
+			{
+				"title": "Primrose unit 9 multi-fix → Guox",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "vendor", "name": "Guox Maintenance & Remodel" },
+					{ "kind": "property", "name": "6337 Primrose Ave" },
+					{ "kind": "owner", "name": "6337 Primrose Ave. LLC" }
+				],
+				"summary": "Guox dispatched for fan light + blinds + screen door handle at 6337 Primrose unit 9; Jose overrode Abraham suggestion.",
+				"source_quote": "Prime rose send guox",
+				"tags": ["handyman", "multi-issue-single-vendor", "vendor-dispatch", "vendor-override"]
+			},
+			{
+				"title": "Oak St drain + flush → Yonic",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "property", "name": "2334 Oak St" },
+					{ "kind": "owner", "name": "Dahl, Sonja" }
+				],
+				"summary": "Yonic dispatched for slow bathroom sink drain + weak toilet flush at 2334 Oak St unit A.",
+				"source_quote": "Send Yonic for oak and 1234 11th",
+				"tags": ["plumbing", "drain", "toilet", "vendor-dispatch", "multi-issue-single-vendor"]
+			},
+			{
+				"title": "1234 11th St disposal → Yonic",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "property", "name": "1234 11th St" },
+					{ "kind": "owner", "name": "Wheatland LLC" }
+				],
+				"summary": "Yonic dispatched for broken garbage disposal at 1234 11th St unit 7.",
+				"source_quote": "Send Yonic for oak and 1234 11th",
+				"tags": ["plumbing", "garbage-disposal", "vendor-dispatch"]
+			},
+			{
+				"title": "Walnut Lane toilet → Abraham",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "property", "name": "11963 Walnut Ln" },
+					{ "kind": "owner", "name": "Hoch, Anita" },
+					{ "kind": "owner", "name": "Kleinbrodt, Michael" }
+				],
+				"summary": "Abraham dispatched for toilet that won't stop filling at 11963 Walnut Ln unit 5; Jose: 'simple enough for Abraham'.",
+				"source_quote": "Send it to Abraham, simple enough for him to fix",
+				"tags": ["plumbing", "toilet", "vendor-dispatch", "yonic-declined-for-simple", "vendor-preference-stated"]
+			}
+		],
+		"notes": [
+			"Smoke detector mention + shower valve mention in chat have unclear context (no prior agent question matches Jose's response). Per the meta-rule 'default to no obs when unclear', skipped.",
+			"Walnut Lane obs is the second 'Abraham for simple plumbing' signal (S19 was first). Belief former should refine: Yonic for complex plumbing (no hot water, motherboard, leaks); Abraham for simple plumbing (drains, fill valves, toilet basics).",
+			"Two vendor overrides in this session: Primrose Abraham→Guox, Walnut Yonic→Abraham. Both reinforce that Jose has property/issue-specific vendor preferences."
+		],
+		"captured_at": "2026-05-18T03:15:00Z"
+	},
+	{
+		"session_id": "6d3661f3-f581-495c-bfb3-e9d5db423759",
+		"started_at": "2026-05-05T01:38",
+		"topic": "1517 W 12th hot water → Yonic; Inglewood disposal recurring → tenant talk; 828 11th oven glass → owner-approval pending",
+		"expected_observations": [
+			{
+				"title": "1517 W 12th no hot water → Yonic",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "property", "name": "1517 W. 12th Pl" },
+					{ "kind": "owner", "name": "Twelfth Place LLC" }
+				],
+				"summary": "Yonic dispatched for no hot water at 1517 W. 12th Pl unit 10; Jose approved directly, no owner approval needed.",
+				"source_quote": "Send it to Yonic",
+				"tags": ["plumbing", "water-heater", "vendor-dispatch", "no-owner-approval-this-time"]
+			},
+			{
+				"title": "Inglewood disposal recurring → tenant talk",
+				"entities": [
+					{ "kind": "property", "name": "5455 Inglewood Blvd" },
+					{ "kind": "owner", "name": "White 5455 Inglewood LLC" }
+				],
+				"summary": "Garbage disposal broken again at 5455 Inglewood unit 6; Jose declined re-dispatch, suspected tenant misuse, will talk to tenant.",
+				"source_quote": "They are probably doing something they should not be doing. I'll talk to them tomorrow.",
+				"tags": ["plumbing", "garbage-disposal", "recurring-issue", "tenant-behavior-suspected", "pm-handles-via-comms", "non-dispatch"]
+			},
+			{
+				"title": "828 11th oven glass → owner-approval pending",
+				"entities": [
+					{ "kind": "vendor", "name": "Cross Appliance Inc" },
+					{ "kind": "property", "name": "828 11th St" },
+					{ "kind": "owner", "name": "Grauzinis ME Trust" },
+					{ "kind": "owner", "name": "Solomon Grauzinis Trust" }
+				],
+				"summary": "Cross Appliance deferred for oven glass at 828 11th St unit 7; Jose cited Grauzinis approval gate, photos to owner first.",
+				"source_quote": "Let's wait for the photos and we will send it to the owners tomorrow for consideration and approval to send the appliance company. That is one of the properties that we need approval for most things",
+				"tags": ["appliance", "oven-glass", "owner-approval-required", "dispatch-deferred", "grauzinis-gate", "photos-required"]
+			}
+		],
+		"notes": [
+			"1517 W 12th obs (no owner approval this time) refines the W 12th approval gate: S11 toilet leak needed approval, S23 hot water did not. Owner approval is issue-type or cost dependent, not property-universal.",
+			"Inglewood obs is a 'non-dispatch' decision — Jose explicitly addressed via tenant comms rather than vendor. Belief candidate: 'For recurring disposal issues, suspect tenant misuse before dispatch.'",
+			"828 11th oven glass STRONGLY reinforces the Grauzinis owner-approval seed belief. Jose's explicit phrasing 'that is one of the properties that we need approval for most things' is gold for belief former."
+		],
+		"captured_at": "2026-05-18T03:30:00Z"
+	},
+	{
+		"session_id": "debf3048-4afc-4a36-9d56-c3e6bda34ab8",
+		"started_at": "2026-05-05T15:04",
+		"topic": "1520 OP flickering → Osalpa; 828 11th oven glass continuation → Abraham (not Cross)",
+		"expected_observations": [
+			{
+				"title": "1520 OP unit C flickering → Osalpa",
+				"entities": [
+					{ "kind": "vendor", "name": "Osalpa Electric, INC." },
+					{ "kind": "property", "name": "1520 Ocean Park Blvd." },
+					{ "kind": "owner", "name": "1520 Ocean Park LLC" }
+				],
+				"summary": "Osalpa dispatched for all-house flickering lights at 1520 Ocean Park unit C (possible bad ground, fire hazard).",
+				"source_quote": "Yes please",
+				"tags": ["electrical", "flickering-lights", "vendor-dispatch", "safety-concern"]
+			}
+		],
+		"notes": [
+			"Oven glass continuation thread (Charles Solomon contact shared) is captured indirectly — Jose's 'I'll contact the owner' is communication, not dispatch, so no observation. The later 'I sent it to Abraham' message references context that wasn't captured in this session (replying to a missing agent message), so per the meta-rule (default to no obs when unclear) it is SKIPPED. The actual Abraham dispatch will be recoverable when chat sessionization is fixed or via PMS sync."
+		],
+		"captured_at": "2026-05-18T03:45:00Z"
+	},
+	{
+		"session_id": "1d1a733f-c39e-45d5-bc22-44d7bc19a072",
+		"started_at": "2026-05-05T22:25",
+		"topic": "15 Ozone slow shower drain → Kori (Yonic suggested)",
+		"expected_observations": [
+			{
+				"title": "15 Ozone slow shower → Kori",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "vendor", "name": "Kori Anderson" },
+					{ "kind": "property", "name": "15 Ozone Ave" },
+					{ "kind": "owner", "name": "Harrison Properties LLC" }
+				],
+				"summary": "Kori dispatched for slow shower drain at 15 Ozone unit 1; Jose overrode Yonic suggestion (Harrison handyman covers simple plumbing).",
+				"source_quote": "Send it to Kori",
+				"tags": ["plumbing", "shower-drain", "vendor-dispatch", "vendor-override", "harrison-handyman", "simple-plumbing"]
+			}
+		],
+		"notes": [
+			"Reinforces TWO belief candidates: (1) Kori is Harrison-properties handyman covering simple plumbing; (2) Yonic for complex plumbing, others for simple. Five obs now support the Kori-Harrison pattern (S2, S4, S7, S8, S25)."
+		],
+		"captured_at": "2026-05-18T04:00:00Z"
+	},
+	{
+		"session_id": "d34fae4e-fb84-465d-9925-d3d3d4891299",
+		"started_at": "2026-05-06T18:21",
+		"topic": "Primrose elevator → Tre elevators contract (Jose: 'remember this')",
+		"expected_observations": [
+			{
+				"title": "Primrose elevator → Tre elevators",
+				"entities": [
+					{ "kind": "vendor", "name": "Guox Maintenance & Remodel" },
+					{ "kind": "vendor", "name": "Tre elevators" },
+					{ "kind": "property", "name": "6337 Primrose Ave" },
+					{ "kind": "owner", "name": "6337 Primrose Ave. LLC" }
+				],
+				"summary": "Tre elevators handled slowly-closing elevator at 6337 Primrose unit 16; Jose declined Guox. Primrose has Tre elevators contract.",
+				"source_quote": "Primerose has a contract with Tre elevators",
+				"tags": ["elevator", "vendor-dispatch", "vendor-override", "vendor-contract", "pm-asked-to-remember", "tre-elevators-default"]
+			}
+		],
+		"notes": [
+			"FIRST 'remember this' explicit request from Jose. Should produce HIGH-CONFIDENCE belief: 'Tre elevators services elevators at 6337 Primrose Ave.' Plus a negative belief: 'Don't send Guox for elevators at 6337 Primrose.'",
+			"Tag `pm-asked-to-remember` flags the explicit-remember signal — belief former should override the default low-confidence rule when this tag is present."
+		],
+		"captured_at": "2026-05-18T04:15:00Z"
+	},
+	{
+		"session_id": "640fce89-4da9-4605-a16d-e762a0671ad2",
+		"started_at": "2026-05-07T14:02",
+		"topic": "Walnut Ln unit 3 damaged screen door → Abraham",
+		"expected_observations": [
+			{
+				"title": "Walnut Ln screen door → Abraham",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "property", "name": "11963 Walnut Ln" },
+					{ "kind": "owner", "name": "Hoch, Anita" },
+					{ "kind": "owner", "name": "Kleinbrodt, Michael" }
+				],
+				"summary": "Abraham dispatched for damaged screen door at 11963 Walnut Ln unit 3.",
+				"source_quote": "Yes",
+				"tags": ["handyman", "screen-door", "vendor-dispatch"]
+			}
+		],
+		"notes": [
+			"Clean single-obs session. Both Walnut owners cascade."
+		],
+		"captured_at": "2026-05-18T04:30:00Z"
+	},
+	{
+		"session_id": "7700ab38-4fe1-4a2e-9c7a-ea72a4a22862",
+		"started_at": "2026-05-08T00:30",
+		"topic": "Two garbage disposals → JL (Yonic swapped); Cloverfield breaker tenant-resolved",
+		"expected_observations": [
+			{
+				"title": "Inglewood disposal → Jose self via JL",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "property", "name": "5455 Inglewood Blvd" },
+					{ "kind": "owner", "name": "White 5455 Inglewood LLC" }
+				],
+				"summary": "Jose self-handled (via JL) broken disposal at 5455 Inglewood unit 7; overrode Yonic suggestion.",
+				"source_quote": "I'll check both. Assign them to JL",
+				"tags": ["plumbing", "garbage-disposal", "pm-self-handle", "vendor-dispatch", "vendor-override"]
+			},
+			{
+				"title": "829 OP disposal → Jose self via JL",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "property", "name": "829 Ocean Park Blvd." },
+					{ "kind": "owner", "name": "829 Oceanpark, LLC" }
+				],
+				"summary": "Jose self-handled (via JL) broken disposal at 829 Ocean Park unit 1; overrode Yonic suggestion.",
+				"source_quote": "I'll check both. Assign them to JL",
+				"tags": ["plumbing", "garbage-disposal", "pm-self-handle", "vendor-dispatch", "vendor-override"]
+			},
+			{
+				"title": "Cloverfield breaker → tenant resolved",
+				"entities": [
+					{ "kind": "vendor", "name": "Osalpa Electric, INC." },
+					{ "kind": "property", "name": "1950 Cloverfield Blvd" },
+					{ "kind": "owner", "name": "Nineteen Fifty Cloverfield HOA" }
+				],
+				"summary": "Tripped breaker at 1950 Cloverfield unit 12 resolved by tenant Ben (called in); Osalpa dispatch not needed.",
+				"source_quote": "The issue was solved. That was from Ben correct?",
+				"tags": ["electrical", "breaker", "tenant-resolved", "no-dispatch", "status-resolved"]
+			}
+		],
+		"notes": [
+			"TWO simultaneous Yonic→JL swaps for disposals at non-Harrison properties (Inglewood + 829 OP). Strong cluster signal: garbage disposals at owner-managed multi-unit properties → JL self-handle."
+		],
+		"captured_at": "2026-05-18T04:45:00Z"
+	},
+	{
+		"session_id": "2d3cb7b1-1f4e-4bc6-83cb-4c5cf41dcc5d",
+		"started_at": "2026-05-11T14:00",
+		"topic": "Weekend batch: 918 heatlamp (Jose/JL), Union fridge (Cross), Pickford disposal (Yonic)",
+		"expected_observations": [
+			{
+				"title": "918 12th heatlamp → Jose self via JL",
+				"entities": [
+					{ "kind": "vendor", "name": "Abraham Monroy" },
+					{ "kind": "vendor", "name": "JL Unlimited Services LLC" },
+					{ "kind": "property", "name": "918 12th St" },
+					{ "kind": "owner", "name": "The Sidenberg Living Trust" }
+				],
+				"summary": "Jose self-handled (via JL) bathroom heatlamp at 918 12th St unit 2; overrode Abraham suggestion.",
+				"source_quote": "I'll check 918",
+				"tags": ["electrical", "heatlamp", "pm-self-handle", "vendor-dispatch", "vendor-override"]
+			},
+			{
+				"title": "223 Union leaking fridge → Cross Appliance",
+				"entities": [
+					{ "kind": "vendor", "name": "Cross Appliance Inc" },
+					{ "kind": "property", "name": "221-229 Union Pl" },
+					{ "kind": "owner", "name": "221 Union Place LLC" }
+				],
+				"summary": "Cross Appliance dispatched for leaking fridge at 221-229 Union Pl unit 223-7.",
+				"source_quote": "send cross appliance",
+				"tags": ["appliance", "fridge", "leaking", "vendor-dispatch"]
+			},
+			{
+				"title": "Pickford disposal → Yonic",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "property", "name": "4641-4643 Pickford St" },
+					{ "kind": "owner", "name": "Chan, Alex" },
+					{ "kind": "owner", "name": "Yang, Jennifer" }
+				],
+				"summary": "Yonic dispatched for leaking garbage disposal at 4641-4643 Pickford St unit 4641 1/2.",
+				"source_quote": "yonic for disposal",
+				"tags": ["plumbing", "garbage-disposal", "vendor-dispatch"]
+			}
+		],
+		"notes": [
+			"CRITICAL EXTRACTOR RULE: Jose's response 'send cross appliance and yonic for disposal' is vendor-without-issue. Must be mapped to the agent's prior suggestion pairing (Cross→fridge, Yonic→disposal). PR2.3 prompt must include this rule.",
+			"Pickford disposal → Yonic CONTRASTS with S28's two Inglewood/829-OP disposals → JL. Hypothesis: garbage-disposal vendor is owner-scoped — JL at Jose-managed properties; Yonic at owner-managed multi-unit buildings like Pickford. Needs more data.",
+			"This is the 5th JL-via-implicit-self-handle observation (S6 water heater, S13 homeless, S16 call box + noise, S28 two disposals, S29 heatlamp). Belief former should easily generalize: 'Jose handles a wide range of issues himself, especially at properties he manages directly.'"
+		],
+		"captured_at": "2026-05-18T05:00:00Z"
+	},
+	{
+		"session_id": "cdefa857-46c1-4158-b832-7b37eef2ac31",
+		"started_at": "2026-05-11T21:10",
+		"topic": "Jimenez Services = primary for gates (stated rule, vendor-only)",
+		"expected_observations": [
+			{
+				"title": "Jimenez Services → primary for gates",
+				"entities": [
+					{ "kind": "vendor", "name": "Jimenez Services" }
+				],
+				"summary": "Jose confirmed Jimenez Services is the primary vendor for gates (after a garage door dispatch).",
+				"source_quote": "Yes, they are our primary vendor for gates",
+				"tags": ["gates", "garage-door", "vendor-default", "pm-stated-preference", "trade-default"]
+			}
+		],
+		"notes": [
+			"Vendor-only observation (no property/owner). Pure trade-default rule. Belief former should produce: 'Jimenez Services is the default vendor for gates.' High confidence since stated explicitly.",
+			"Scope question: 'gates' is stated; whether 'garage doors' falls under this is implied (agent asked about garage door, Jose corrected to 'gates'). Beliefs may need to track this generalization carefully."
+		],
+		"captured_at": "2026-05-18T05:15:00Z"
+	},
+	{
+		"session_id": "bab8d2b2-b5a2-48ec-8b57-398c5bbdb600",
+		"started_at": "2026-05-12T14:00",
+		"topic": "Primrose rats → Primex (recurring); 50 Rose shower drain → Kori",
+		"expected_observations": [
+			{
+				"title": "Primrose rats → Primex (recurring)",
+				"entities": [
+					{ "kind": "vendor", "name": "Primex Termite Co." },
+					{ "kind": "property", "name": "6337 Primrose Ave" },
+					{ "kind": "owner", "name": "6337 Primrose Ave. LLC" }
+				],
+				"summary": "Primex dispatched again for rats in ceiling/walls at 6337 Primrose unit 12; recurring pest issue.",
+				"source_quote": "(Jose's confirmation outside this session's chat window; entities.gold S31 lists Primex as vendor_chosen — likely responded between sessions)",
+				"tags": ["pest", "rats", "vendor-dispatch", "recurring-treatment", "primex-default"]
+			},
+			{
+				"title": "50 Rose shower drain → Kori",
+				"entities": [
+					{ "kind": "vendor", "name": "Kori Anderson" },
+					{ "kind": "property", "name": "50 Rose Ave" },
+					{ "kind": "owner", "name": "Harrison Properties LLC" }
+				],
+				"summary": "Kori dispatched for clogged shower drain at 50 Rose unit 2 (Harrison handyman covers simple plumbing).",
+				"source_quote": "Yes please",
+				"tags": ["plumbing", "shower-drain", "vendor-dispatch", "harrison-handyman", "simple-plumbing"]
+			}
+		],
+		"notes": [
+			"Primrose obs: Jose's explicit reply to the Primex question is missing from this session's chat_messages (5-hour gap; agent's 'Got it' implies Jose did respond outside window). Per entities.gold S31, dispatch happened. Source_quote noted as gap; eval scorer should treat this as a known boundary case.",
+			"50 Rose Kori is the second simple-plumbing-at-Harrison → Kori obs (S25 was first), strongly reinforcing the Kori-Harrison-simple-plumbing belief."
+		],
+		"captured_at": "2026-05-18T05:30:00Z"
+	},
+	{
+		"session_id": "68e465d6-297a-4146-9c00-f88adc2f1eb3",
+		"started_at": "2026-05-12T23:52",
+		"topic": "1520 Ocean Park unit C flickering AGAIN — Osalpa failed previously, Jose calls tenant directly (Pattern C)",
+		"expected_observations": [
+			{
+				"title": "1520 OP flickering recur → Jose calls tenant",
+				"entities": [
+					{ "kind": "vendor", "name": "Osalpa Electric, INC." },
+					{ "kind": "property", "name": "1520 Ocean Park Blvd." },
+					{ "kind": "owner", "name": "1520 Ocean Park LLC" }
+				],
+				"summary": "Flickering lights recurred at 1520 OP unit C (Osalpa failed prior); Jose chose tenant-call to discuss, no new dispatch.",
+				"source_quote": "I'll call them to discuss. No need to do anything",
+				"tags": ["electrical", "flickering-lights", "recurring-issue", "pm-tenant-coordination", "no-dispatch", "vendor-failed-prior"]
+			}
+		],
+		"notes": [
+			"PATTERN C (tenant coordination, not dispatch, not JL self-handle). NOT tagged `pm-self-handle` because Jose isn't doing physical work — only communicating with tenant. Refines the JL rule: not every 'I'll handle it' = JL dispatch.",
+			"`vendor-failed-prior` tag flags that Osalpa was tried and failed. Belief candidate: 'For recurring flickering at 1520 OP unit C, Osalpa is unable to resolve — try different electrician on next dispatch.'"
+		],
+		"captured_at": "2026-05-18T05:45:00Z"
+	},
+	{
+		"session_id": "fecac97b-da24-4dbf-b5a5-a585b5f22a3c",
+		"started_at": "2026-05-13T16:04",
+		"topic": "829 OP unit 1 disposal + 1951 22nd unit 3 bathtub drain → Yonic for both",
+		"expected_observations": [
+			{
+				"title": "829 OP disposal → Yonic",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "property", "name": "829 Ocean Park Blvd." },
+					{ "kind": "owner", "name": "829 Oceanpark, LLC" }
+				],
+				"summary": "Yonic dispatched for broken garbage disposal at 829 Ocean Park unit 1.",
+				"source_quote": "Yes please",
+				"tags": ["plumbing", "garbage-disposal", "vendor-dispatch"]
+			},
+			{
+				"title": "1951 22nd bathtub drain → Yonic",
+				"entities": [
+					{ "kind": "vendor", "name": "Yonic Herrera" },
+					{ "kind": "property", "name": "1951 22nd St" },
+					{ "kind": "owner", "name": "Apartments, Ingelman" }
+				],
+				"summary": "Yonic dispatched for clogged bathtub drain at 1951 22nd St unit 3.",
+				"source_quote": "Yes please",
+				"tags": ["plumbing", "drain", "bathtub", "vendor-dispatch", "complex-drain"]
+			}
+		],
+		"notes": [
+			"Counter-data to S28 (829 OP unit 1 disposal → JL self-handle). Same property+issue, different decision. Per user: Jose's choice is workload-opportunistic. Belief former should NOT treat 'X always does Y at Z' as absolute.",
+			"Counter-data to S19/S22/S25 simple-plumbing → Abraham/Kori pattern. Clogged bathtub drain went to Yonic — possibly 'clogged' (functionally failed) is harder than 'slow' (partial). Refines simple-vs-complex distinction."
+		],
+		"captured_at": "2026-05-18T06:00:00Z"
+	},
+	{
+		"session_id": "a8da4569-3a4e-43e5-a3d3-658e71974eb8",
+		"started_at": "2026-05-14T00:39",
+		"topic": "828 11th dryer → Cross pending owner approval (Grauzinis all-issues rule); Primrose rats → Primex again",
+		"expected_observations": [
+			{
+				"title": "828 11th dryer → owner-approval pending",
+				"entities": [
+					{ "kind": "vendor", "name": "Cross Appliance Inc" },
+					{ "kind": "property", "name": "828 11th St" },
+					{ "kind": "owner", "name": "Grauzinis ME Trust" },
+					{ "kind": "owner", "name": "Solomon Grauzinis Trust" }
+				],
+				"summary": "Broken dryer at 828 11th St unit 4 held for Grauzinis owner approval; Cross Appliance considered but deferred.",
+				"source_quote": "I need approval from the owners before sending someone",
+				"tags": ["appliance", "dryer", "owner-approval-required", "grauzinis-gate", "dispatch-deferred"]
+			},
+			{
+				"title": "Solomon Grauzinis Trust → all-issues approval",
+				"entities": [
+					{ "kind": "owner", "name": "Solomon Grauzinis Trust" },
+					{ "kind": "owner", "name": "Grauzinis ME Trust" }
+				],
+				"summary": "Jose confirmed Solomon Grauzinis Trust requires owner approval for ALL issues before vendor dispatch.",
+				"source_quote": "Correct. I'll send them an email for approval",
+				"tags": ["owner-approval-required", "all-issues-scope", "grauzinis-gate", "pm-stated-rule"]
+			},
+			{
+				"title": "Primrose rats → Primex (again)",
+				"entities": [
+					{ "kind": "vendor", "name": "Primex Termite Co." },
+					{ "kind": "property", "name": "6337 Primrose Ave" },
+					{ "kind": "owner", "name": "6337 Primrose Ave. LLC" }
+				],
+				"summary": "Primex dispatched again for rat infestation at 6337 Primrose unit 16 (sensitive tenant); tree trimming also in progress.",
+				"source_quote": "Send primex again to see if anything else can be done.",
+				"tags": ["pest", "rats", "vendor-dispatch", "recurring-treatment", "sensitive-tenant", "primex-default"]
+			}
+		],
+		"notes": [
+			"FINAL session. Strongest end-of-walkthrough signal: Jose VERBATIM CONFIRMED the Solomon Grauzinis Trust all-issues approval rule. This validates the pre-wipe seed belief and refines the S5 CO-alarm anomaly (which was tagged as a single severity-scope exception).",
+			"Owner-rule obs is owner-only (no property in entity list) — applies across all Solomon Grauzinis Trust properties. Belief former should treat this as a high-confidence stated rule.",
+			"Third Primex-at-Primrose obs in dataset (S1 was different property; S31 + S34 are 6337 Primrose). Belief: 'Primex Termite is the pest vendor for 6337 Primrose Ave.' Could possibly generalize to vendor-wide if seen at more properties.",
+			"END OF WALKTHROUGH — 34 of 34 sessions captured in observations.gold.json."
+		],
+		"captured_at": "2026-05-18T06:15:00Z"
+	}
+]
