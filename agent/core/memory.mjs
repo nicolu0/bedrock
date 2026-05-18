@@ -5,6 +5,7 @@
 // pass workspace_id.
 
 import { supabaseEnv } from '../supabase.mjs';
+import { resolveEntity, cascadeOwners } from './entities.mjs';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const EMBEDDING_DIMS = 1536;
@@ -44,22 +45,32 @@ export async function embed(text) {
 
 export async function addObservation(
 	workspace_id,
-	{ summary, raw_text = null, entities = {}, salience, tags = [], source_message_id = null }
+	{
+		title = null,
+		summary,
+		raw_text = null,
+		entities = {},
+		salience = 0.5,
+		tags = [],
+		source_message_id = null,
+		session_id = null
+	}
 ) {
 	if (!workspace_id) throw new Error('addObservation: workspace_id required');
 	if (!summary) throw new Error('addObservation: summary required');
-	if (typeof salience !== 'number') throw new Error('addObservation: salience (0..1) required');
 
 	const { url, key } = supabaseEnv();
 	const embedding = await embed(summary);
 	const row = {
 		workspace_id,
+		title,
 		summary,
 		raw_text,
 		entities,
 		salience,
 		tags,
 		source_message_id,
+		session_id,
 		embedding
 	};
 	const res = await fetch(`${url}/rest/v1/observations`, {
@@ -69,6 +80,46 @@ export async function addObservation(
 	});
 	if (!res.ok) throw new Error(`addObservation: ${res.status} ${await res.text()}`);
 	const [inserted] = await res.json();
+
+	// Resolve entity references and write observation_entities join rows.
+	// Each ref may carry a signed weight in [-1, 1] indicating chosen/rejected
+	// role in this observation. Default 1.0 for refs without explicit weight.
+	if (Array.isArray(entities) && entities.length > 0) {
+		const byEntityId = new Map();
+		for (const ref of entities) {
+			if (!ref || typeof ref !== 'object') continue;
+			if (!ref.kind || !ref.name) continue;
+			try {
+				const ent = await resolveEntity({ workspace_id, kind: ref.kind, name: ref.name });
+				if (!ent?.id) continue;
+				const w = typeof ref.weight === 'number' ? Math.max(-1, Math.min(1, ref.weight)) : 1.0;
+				// Keep the strongest |weight| if the same entity appears twice.
+				const prev = byEntityId.get(ent.id);
+				if (prev === undefined || Math.abs(w) > Math.abs(prev)) byEntityId.set(ent.id, w);
+			} catch (err) {
+				console.error(
+					`addObservation: resolveEntity failed for ${ref.kind}:${ref.name}: ${err.message}`
+				);
+			}
+		}
+		if (byEntityId.size > 0) {
+			const joinRows = Array.from(byEntityId.entries()).map(([entity_id, weight]) => ({
+				observation_id: inserted.id,
+				entity_id,
+				weight
+			}));
+			const jRes = await fetch(`${url}/rest/v1/observation_entities`, {
+				method: 'POST',
+				headers: headers(key, { Prefer: 'return=minimal' }),
+				body: JSON.stringify(joinRows)
+			});
+			if (!jRes.ok) {
+				console.error(
+					`addObservation: observation_entities insert failed: ${jRes.status} ${await jRes.text()}`
+				);
+			}
+		}
+	}
 	return inserted;
 }
 
@@ -183,14 +234,19 @@ export async function listBeliefs(workspace_id, { limit = 500 } = {}) {
 	const { url, key } = supabaseEnv();
 	const params = new URLSearchParams({
 		select:
-			'id,claim,scope,confidence,explicitness,created_by,created_at,updated_at,tags',
+			'id,claim,scope,confidence,explicitness,created_by,created_at,updated_at,tags,status,evidence_count:belief_evidence(count)',
 		workspace_id: `eq.${workspace_id}`,
 		order: 'updated_at.desc',
 		limit: String(limit)
 	});
 	const res = await fetch(`${url}/rest/v1/beliefs?${params}`, { headers: headers(key) });
 	if (!res.ok) throw new Error(`listBeliefs: ${res.status} ${await res.text()}`);
-	return res.json();
+	const rows = await res.json();
+	// PostgREST returns evidence_count as [{ count: N }] — flatten.
+	return rows.map((b) => ({
+		...b,
+		evidence_count: Array.isArray(b.evidence_count) ? b.evidence_count[0]?.count ?? 0 : 0
+	}));
 }
 
 export async function recallBeliefs(
