@@ -300,6 +300,10 @@ export const demoSkill = {
 	name: 'demo',
 	model: process.env.OPENAI_MODEL || 'gpt-5.4-2026-03-05',
 	maxIterations: 8,
+	// Transitional: demo prompt occasionally drifts and emits plain content
+	// instead of a send_text call. Keep the orchestrator's fallback as a
+	// safety net until the prompt is tightened. See orchestrator.mjs.
+	allowPlainContentSend: true,
 	tools: [
 		sendText,
 		updateProfile,

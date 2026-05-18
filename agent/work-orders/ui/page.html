@@ -1406,6 +1406,45 @@
 			let simulation = null;
 			let selectedNodeId = null;
 
+			// AABB separation force. Each node carries `_bbox` (the rendered
+			// bounding box of its circle + label, relative to its center).
+			// On every tick we resolve overlaps along the shorter axis,
+			// which keeps wide-but-short label rectangles from spacing
+			// nodes apart vertically.
+			function rectCollide(pad = 4) {
+				let nodes;
+				function force() {
+					for (let i = 0; i < nodes.length; i++) {
+						const a = nodes[i];
+						const ab = a._bbox;
+						if (!ab) continue;
+						const ax1 = a.x + ab.x - pad, ax2 = ax1 + ab.w + 2 * pad;
+						const ay1 = a.y + ab.y - pad, ay2 = ay1 + ab.h + 2 * pad;
+						for (let j = i + 1; j < nodes.length; j++) {
+							const b = nodes[j];
+							const bb = b._bbox;
+							if (!bb) continue;
+							const bx1 = b.x + bb.x - pad, bx2 = bx1 + bb.w + 2 * pad;
+							const by1 = b.y + bb.y - pad, by2 = by1 + bb.h + 2 * pad;
+							if (ax2 <= bx1 || bx2 <= ax1 || ay2 <= by1 || by2 <= ay1) continue;
+							const overlapX = Math.min(ax2, bx2) - Math.max(ax1, bx1);
+							const overlapY = Math.min(ay2, by2) - Math.max(ay1, by1);
+							if (overlapX < overlapY) {
+								const shift = overlapX / 2;
+								if (a.x < b.x) { a.x -= shift; b.x += shift; }
+								else { a.x += shift; b.x -= shift; }
+							} else {
+								const shift = overlapY / 2;
+								if (a.y < b.y) { a.y -= shift; b.y += shift; }
+								else { a.y += shift; b.y -= shift; }
+							}
+						}
+					}
+				}
+				force.initialize = (n) => { nodes = n; };
+				return force;
+			}
+
 			async function loadMemoryGraph() {
 				try {
 					const res = await fetch(`/api/memory/graph?workspace=${memoryWorkspace()}`);
@@ -1444,10 +1483,16 @@
 				const w = rect.width;
 				const h = rect.height;
 
+				// Seed positions near the center so nodes don't visibly drift in
+				// from (0,0) — D3's default phyllotaxis spawn point.
 				const nodes = [
 					...obs.map((o) => ({ ...o, _kind: 'observation' })),
 					...bel.map((b) => ({ ...b, _kind: 'belief' }))
-				];
+				].map((n) => ({
+					...n,
+					x: w / 2 + (Math.random() - 0.5) * 40,
+					y: h / 2 + (Math.random() - 0.5) * 40
+				}));
 				const visibleIds = new Set(nodes.map((n) => n.id));
 				const links = memoryState.edges
 					.filter((e) => visibleIds.has(e.belief_id) && visibleIds.has(e.observation_id))
@@ -1532,6 +1577,19 @@
 						return (txt ?? '').length > 36 ? txt.slice(0, 33) + '…' : txt;
 					});
 
+				// Measure each node's full bounding box (circle + label) so the
+				// collision force can separate by actual rectangle, not by an
+				// inscribed circle — labels are wide but short, so circular
+				// collision over-spaces vertically stacked nodes.
+				node.each(function (d) {
+					try {
+						const b = this.getBBox();
+						d._bbox = { x: b.x, y: b.y, w: b.width, h: b.height };
+					} catch {
+						d._bbox = { x: 0, y: 0, w: 0, h: 0 };
+					}
+				});
+
 				svg.on('click', () => {
 					selectedNodeId = null;
 					clearHighlight();
@@ -1556,15 +1614,28 @@
 					.force('charge', d3.forceManyBody().strength(-260).distanceMax(400))
 					.force('x', d3.forceX(w / 2).strength(0.05))
 					.force('y', d3.forceY(h / 2).strength(0.05))
-					.force('collide', d3.forceCollide().radius((d) => (d._kind === 'belief' ? 36 : 10)))
-					.on('tick', () => {
-						link
-							.attr('x1', (d) => d.source.x)
-							.attr('y1', (d) => d.source.y)
-							.attr('x2', (d) => d.target.x)
-							.attr('y2', (d) => d.target.y);
-						node.attr('transform', (d) => `translate(${d.x},${d.y})`);
-					});
+					.force('collide', rectCollide(6))
+					.stop();
+
+				// Settle the layout off-screen, then paint once. Without this the
+				// nodes visibly drift from their seed positions to equilibrium.
+				const settleTicks = Math.ceil(
+					Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay())
+				);
+				for (let i = 0; i < settleTicks; i++) simulation.tick();
+
+				function paintTick() {
+					link
+						.attr('x1', (d) => d.source.x)
+						.attr('y1', (d) => d.source.y)
+						.attr('x2', (d) => d.target.x)
+						.attr('y2', (d) => d.target.y);
+					node.attr('transform', (d) => `translate(${d.x},${d.y})`);
+				}
+				paintTick();
+
+				// Re-attach tick handler so drags still animate.
+				simulation.on('tick', paintTick);
 			}
 
 			function highlightNeighborhood(id) {

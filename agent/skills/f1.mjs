@@ -84,10 +84,14 @@ function formatIssue(issue) {
 
 export const f1Skill = {
 	name: 'f1',
-	model: process.env.WORK_ORDERS_MODEL || 'gpt-4.1-mini',
+	model: process.env.WORK_ORDERS_MODEL || 'gpt-5.4-2026-03-05',
 	maxIterations: 3,
 	maxTokens: 300,
 	tools: [sendText],
+	// Transitional: f1 prompt occasionally drifts and emits a draft as plain
+	// content instead of a send_text call. Keep the orchestrator's fallback
+	// as a safety net until the prompt is tightened. See orchestrator.mjs.
+	allowPlainContentSend: true,
 	taskPrompt: F1_TASK_PROMPT,
 	buildContext(ctx) {
 		if (!ctx.issue) throw new Error('f1 skill: ctx.issue required');
