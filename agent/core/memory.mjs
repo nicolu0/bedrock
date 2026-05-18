@@ -1,117 +1,272 @@
-// Memory primitives for the agent.
-// Per-handle JSON-file storage:
-//   data/<handle>/profile.json       — canonical slug → value
-//   data/<handle>/observations.jsonl — append-only fuzzy notes
+// Memory graph — Supabase-backed episodic (observations) + semantic (beliefs)
+// store. Replaces the file-based agent/memory.mjs over time. All access goes
+// through the REST API with the service-role key, so RLS is bypassed and
+// workspace scoping is the caller's responsibility — every read/write must
+// pass workspace_id.
 
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { supabaseEnv } from '../supabase.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const EMBEDDING_MODEL = 'text-embedding-3-small';
+const EMBEDDING_DIMS = 1536;
 
-function handleDir(handle) {
-	return path.join(DATA_DIR, handle.replace(/[^\w@+.-]/g, '_'));
+function headers(key, extra = {}) {
+	return {
+		apikey: key,
+		Authorization: `Bearer ${key}`,
+		'Content-Type': 'application/json',
+		Accept: 'application/json',
+		...extra
+	};
 }
 
-async function ensureDir(p) {
-	await fs.mkdir(p, { recursive: true });
-}
+// ── embeddings ───────────────────────────────────────────────────────────────
 
-export async function getProfile(handle, slug) {
-	const file = path.join(handleDir(handle), 'profile.json');
-	let profile = {};
-	try {
-		profile = JSON.parse(await fs.readFile(file, 'utf8'));
-	} catch { /* no file yet */ }
-	if (slug !== undefined) return profile[slug] ?? null;
-	return profile;
-}
-
-export async function updateProfile(handle, slug, value) {
-	const dir = handleDir(handle);
-	await ensureDir(dir);
-	const file = path.join(dir, 'profile.json');
-	let profile = {};
-	try {
-		profile = JSON.parse(await fs.readFile(file, 'utf8'));
-	} catch { /* new file */ }
-	if (value === null || value === undefined || value === '') {
-		delete profile[slug];
-	} else {
-		profile[slug] = value;
+export async function embed(text) {
+	const apiKey = process.env.OPENAI_API_KEY;
+	if (!apiKey) throw new Error('embed: OPENAI_API_KEY not set');
+	const input = String(text ?? '').trim();
+	if (!input) return null;
+	const res = await fetch('https://api.openai.com/v1/embeddings', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+		body: JSON.stringify({ model: EMBEDDING_MODEL, input })
+	});
+	if (!res.ok) throw new Error(`embed: ${res.status} ${await res.text()}`);
+	const body = await res.json();
+	const vec = body?.data?.[0]?.embedding;
+	if (!Array.isArray(vec) || vec.length !== EMBEDDING_DIMS) {
+		throw new Error(`embed: unexpected vector shape (${vec?.length})`);
 	}
-	await fs.writeFile(file, JSON.stringify(profile, null, 2), 'utf8');
-	return profile;
+	return vec;
 }
 
-export async function addObservation(handle, content, tags = []) {
-	const dir = handleDir(handle);
-	await ensureDir(dir);
-	const file = path.join(dir, 'observations.jsonl');
-	const entry = { ts: new Date().toISOString(), content, tags };
-	await fs.appendFile(file, JSON.stringify(entry) + '\n', 'utf8');
-	return entry;
+// ── observations ─────────────────────────────────────────────────────────────
+
+export async function addObservation(
+	workspace_id,
+	{ summary, raw_text = null, entities = {}, salience, tags = [], source_message_id = null }
+) {
+	if (!workspace_id) throw new Error('addObservation: workspace_id required');
+	if (!summary) throw new Error('addObservation: summary required');
+	if (typeof salience !== 'number') throw new Error('addObservation: salience (0..1) required');
+
+	const { url, key } = supabaseEnv();
+	const embedding = await embed(summary);
+	const row = {
+		workspace_id,
+		summary,
+		raw_text,
+		entities,
+		salience,
+		tags,
+		source_message_id,
+		embedding
+	};
+	const res = await fetch(`${url}/rest/v1/observations`, {
+		method: 'POST',
+		headers: headers(key, { Prefer: 'return=representation' }),
+		body: JSON.stringify(row)
+	});
+	if (!res.ok) throw new Error(`addObservation: ${res.status} ${await res.text()}`);
+	const [inserted] = await res.json();
+	return inserted;
 }
 
-export async function listObservations(handle, limit = 50) {
-	const file = path.join(handleDir(handle), 'observations.jsonl');
-	let raw;
-	try {
-		raw = await fs.readFile(file, 'utf8');
-	} catch {
-		return [];
+export async function listObservations(workspace_id, { limit = 100 } = {}) {
+	if (!workspace_id) throw new Error('listObservations: workspace_id required');
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'id,ts,summary,raw_text,entities,salience,tags,source_message_id',
+		workspace_id: `eq.${workspace_id}`,
+		order: 'ts.desc',
+		limit: String(limit)
+	});
+	const res = await fetch(`${url}/rest/v1/observations?${params}`, { headers: headers(key) });
+	if (!res.ok) throw new Error(`listObservations: ${res.status} ${await res.text()}`);
+	return res.json();
+}
+
+export async function recallObservations(
+	workspace_id,
+	{ query = null, top_k = 5, similarity_floor = 0.0 } = {}
+) {
+	if (!workspace_id) throw new Error('recallObservations: workspace_id required');
+	if (!query) return listObservations(workspace_id, { limit: top_k });
+	const { url, key } = supabaseEnv();
+	const embedding = await embed(query);
+	const res = await fetch(`${url}/rest/v1/rpc/match_observations`, {
+		method: 'POST',
+		headers: headers(key),
+		body: JSON.stringify({
+			query_embedding: embedding,
+			workspace_id_in: workspace_id,
+			match_count: top_k,
+			similarity_floor
+		})
+	});
+	if (!res.ok) throw new Error(`recallObservations: ${res.status} ${await res.text()}`);
+	return res.json();
+}
+
+// ── beliefs ──────────────────────────────────────────────────────────────────
+
+export async function createBelief(
+	workspace_id,
+	{
+		claim,
+		scope = {},
+		confidence,
+		explicitness,
+		created_by,
+		tags = []
 	}
-	const lines = raw.split('\n').filter(Boolean);
-	return lines.slice(-limit).map(l => {
-		try { return JSON.parse(l); } catch { return null; }
-	}).filter(Boolean);
+) {
+	if (!workspace_id) throw new Error('createBelief: workspace_id required');
+	if (!claim) throw new Error('createBelief: claim required');
+	if (typeof confidence !== 'number') throw new Error('createBelief: confidence required');
+	if (!explicitness) throw new Error('createBelief: explicitness required');
+	if (!created_by) throw new Error('createBelief: created_by required');
+
+	const { url, key } = supabaseEnv();
+	const embedding = await embed(embeddingTextForBelief(claim, scope));
+	const row = {
+		workspace_id,
+		claim,
+		scope,
+		confidence,
+		explicitness,
+		created_by,
+		tags,
+		embedding
+	};
+	const res = await fetch(`${url}/rest/v1/beliefs`, {
+		method: 'POST',
+		headers: headers(key, { Prefer: 'return=representation' }),
+		body: JSON.stringify(row)
+	});
+	if (!res.ok) throw new Error(`createBelief: ${res.status} ${await res.text()}`);
+	const [inserted] = await res.json();
+	return inserted;
 }
 
-// Naive keyword recall — substring match, ranked by hit count.
-// Swap for embeddings later.
-export async function recall(handle, query, limit = 5) {
-	const obs = await listObservations(handle, 500);
-	const terms = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
-	if (terms.length === 0) return obs.slice(-limit);
-	const scored = obs.map(o => {
-		const text = (o.content + ' ' + (o.tags || []).join(' ')).toLowerCase();
-		let score = 0;
-		for (const t of terms) if (text.includes(t)) score++;
-		return { o, score };
-	}).filter(x => x.score > 0);
-	scored.sort((a, b) => b.score - a.score);
-	return scored.slice(0, limit).map(x => x.o);
-}
-
-// List all properties recorded for this handle (from profile slugs `property/<slug>`).
-export async function listProperties(handle) {
-	const profile = await getProfile(handle);
-	return Object.keys(profile)
-		.filter(k => k.startsWith('property/'))
-		.map(k => k.slice('property/'.length))
-		.filter(Boolean);
-}
-
-// List all vendors recorded for this handle, optionally filtered by property and/or trade.
-// Slugs are `vendor/<trade>/<property-slug>` → vendor name.
-export async function listVendors(handle, filters = {}) {
-	const profile = await getProfile(handle);
-	const out = [];
-	for (const [k, v] of Object.entries(profile)) {
-		if (!k.startsWith('vendor/')) continue;
-		const parts = k.slice('vendor/'.length).split('/');
-		if (parts.length !== 2) continue;
-		const [trade, property] = parts;
-		if (filters.trade && filters.trade !== trade) continue;
-		if (filters.property && filters.property !== property) continue;
-		out.push({ trade, property, name: v });
+export async function updateBelief(id, patch) {
+	if (!id) throw new Error('updateBelief: id required');
+	const { url, key } = supabaseEnv();
+	const body = { ...patch };
+	if (body.claim !== undefined || body.scope !== undefined) {
+		body.embedding = await embed(
+			embeddingTextForBelief(body.claim ?? '', body.scope ?? {})
+		);
 	}
-	return out;
+	const res = await fetch(`${url}/rest/v1/beliefs?id=eq.${id}`, {
+		method: 'PATCH',
+		headers: headers(key, { Prefer: 'return=representation' }),
+		body: JSON.stringify(body)
+	});
+	if (!res.ok) throw new Error(`updateBelief: ${res.status} ${await res.text()}`);
+	const [updated] = await res.json();
+	return updated;
 }
 
-export async function resetHandle(handle) {
-	try {
-		await fs.rm(handleDir(handle), { recursive: true });
-	} catch { /* nothing to remove */ }
+export async function deleteBelief(id) {
+	if (!id) throw new Error('deleteBelief: id required');
+	const { url, key } = supabaseEnv();
+	const res = await fetch(`${url}/rest/v1/beliefs?id=eq.${id}`, {
+		method: 'DELETE',
+		headers: headers(key)
+	});
+	if (!res.ok) throw new Error(`deleteBelief: ${res.status} ${await res.text()}`);
+}
+
+export async function listBeliefs(workspace_id, { limit = 500 } = {}) {
+	if (!workspace_id) throw new Error('listBeliefs: workspace_id required');
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select:
+			'id,claim,scope,confidence,explicitness,created_by,created_at,updated_at,tags',
+		workspace_id: `eq.${workspace_id}`,
+		order: 'updated_at.desc',
+		limit: String(limit)
+	});
+	const res = await fetch(`${url}/rest/v1/beliefs?${params}`, { headers: headers(key) });
+	if (!res.ok) throw new Error(`listBeliefs: ${res.status} ${await res.text()}`);
+	return res.json();
+}
+
+export async function recallBeliefs(
+	workspace_id,
+	{ query = null, top_k = 5, similarity_floor = 0.0 } = {}
+) {
+	if (!workspace_id) throw new Error('recallBeliefs: workspace_id required');
+	if (!query) return listBeliefs(workspace_id, { limit: top_k });
+	const { url, key } = supabaseEnv();
+	const embedding = await embed(query);
+	const res = await fetch(`${url}/rest/v1/rpc/match_beliefs`, {
+		method: 'POST',
+		headers: headers(key),
+		body: JSON.stringify({
+			query_embedding: embedding,
+			workspace_id_in: workspace_id,
+			match_count: top_k,
+			similarity_floor
+		})
+	});
+	if (!res.ok) throw new Error(`recallBeliefs: ${res.status} ${await res.text()}`);
+	return res.json();
+}
+
+// ── belief_evidence ──────────────────────────────────────────────────────────
+
+export async function attachEvidence(belief_id, observation_id, weight = 1.0) {
+	if (!belief_id || !observation_id) {
+		throw new Error('attachEvidence: belief_id and observation_id required');
+	}
+	const { url, key } = supabaseEnv();
+	const res = await fetch(`${url}/rest/v1/belief_evidence`, {
+		method: 'POST',
+		headers: headers(key, { Prefer: 'resolution=merge-duplicates,return=representation' }),
+		body: JSON.stringify({ belief_id, observation_id, weight })
+	});
+	if (!res.ok) throw new Error(`attachEvidence: ${res.status} ${await res.text()}`);
+	const [row] = await res.json();
+	return row;
+}
+
+export async function evidenceFor(belief_id) {
+	if (!belief_id) throw new Error('evidenceFor: belief_id required');
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'belief_id,observation_id,weight,created_at,observation:observations(*)',
+		belief_id: `eq.${belief_id}`
+	});
+	const res = await fetch(`${url}/rest/v1/belief_evidence?${params}`, { headers: headers(key) });
+	if (!res.ok) throw new Error(`evidenceFor: ${res.status} ${await res.text()}`);
+	return res.json();
+}
+
+export async function listEdges(workspace_id) {
+	// Edges scoped to a workspace via the belief side.
+	if (!workspace_id) throw new Error('listEdges: workspace_id required');
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'belief_id,observation_id,weight,belief:beliefs!inner(workspace_id)',
+		'belief.workspace_id': `eq.${workspace_id}`
+	});
+	const res = await fetch(`${url}/rest/v1/belief_evidence?${params}`, { headers: headers(key) });
+	if (!res.ok) throw new Error(`listEdges: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	return rows.map((r) => ({
+		belief_id: r.belief_id,
+		observation_id: r.observation_id,
+		weight: r.weight
+	}));
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function embeddingTextForBelief(claim, scope) {
+	const scopeStr = Object.entries(scope || {})
+		.map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`)
+		.join(' ');
+	return scopeStr ? `${claim}  [scope: ${scopeStr}]` : claim;
 }

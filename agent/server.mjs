@@ -19,6 +19,12 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { helper } from './imessage/helper.mjs';
 import { runTurn } from './core/orchestrator.mjs';
+import { demoSkill } from './skills/demo.mjs';
+import { chatSkill } from './skills/chat.mjs';
+import { startUi } from './work-orders/ui/index.mjs';
+import { startIssuePoller } from './work-orders/issue-poller.mjs';
+import { buildChatGuidIndex } from './work-orders/workspaces.mjs';
+import { appendChatMessage, updateChatMessage } from './work-orders/state/helpers.mjs';
 
 const POLL_INTERVAL_MS = 1000;
 const HELPER_ENABLED = process.env.HELPER_DISABLED !== '1';
@@ -47,7 +53,7 @@ const STATE_PATH = path.join(SCRIPT_DIR, '.imessage-state.json');
 // Real customer/vendor handles — incoming messages from these are ignored so
 // testing doesn't hijack real conversations. E.164 phone numbers or email.
 const KNOWN_NUMBERS = [
-	'+13106690643', // Jose / property manager
+	'+13106990643', // Jose / property manager
 	'+13102663152', // Jose (other number)
 ];
 const knownSet = new Set(KNOWN_NUMBERS.map(normalizeHandle));
@@ -77,6 +83,15 @@ if (!process.env.OPENAI_API_KEY) {
 	console.log('OPENAI_API_KEY not set — checked .env in repo root and agent/');
 	process.exit(1);
 }
+
+// ── Workspace routing ──────────────────────────────────────────────────────────
+//
+// chatGuidIndex maps mapped chat guids (TEST_CHAT_GUID, JOSE_CHAT_GUID) to
+// { workspace_id, label, pm_handles }. Built once after env load. Any incoming
+// chat.db row whose chat_guid is in this index is treated as a work-orders
+// groupchat message (not demo), and we only store messages from pm_handles.
+let chatGuidIndex = new Map();
+let groupchatGuids = [];
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
@@ -108,6 +123,8 @@ function log(msg) {
 }
 
 function shortHandle(h) {
+	if (!h) return h;
+	if (h.includes('@')) return h; // emails: leave intact, letters and all
 	return h.replace(/^\+1/, '').replace(/[^\d@.]/g, '') || h;
 }
 
@@ -174,9 +191,16 @@ function fetchLatestRowId() {
 	}
 }
 
-function fetchNewMessages(afterRowId) {
+// SQL accepts two kinds of rows:
+//   1) 1:1 direct messages (style 45, no room_name) — demo path.
+//   2) Any chat whose guid is in `groupchatGuids` — F2 work-orders path.
+// The IN-list is built from the chatGuidIndex so it picks up TEST_CHAT_GUID
+// and JOSE_CHAT_GUID without having to special-case style 43 vs 45.
+function fetchNewMessages(afterRowId, groupchatGuids) {
 	try {
-		const rows = getDb().prepare(`
+		const placeholders = groupchatGuids.map(() => '?').join(',');
+		const groupBranch = placeholders ? `OR c.guid IN (${placeholders})` : '';
+		const sql = `
 			SELECT
 			  m.ROWID AS rowid,
 			  m.guid,
@@ -197,11 +221,14 @@ function fetchNewMessages(afterRowId) {
 			WHERE m.ROWID > ?
 			  AND m.service = 'iMessage'
 			  AND COALESCE(m.cache_has_attachments, 0) = 0
-			  AND c.style = 45
-			  AND c.room_name IS NULL
+			  AND (
+			    (c.style = 45 AND c.room_name IS NULL)
+			    ${groupBranch}
+			  )
 			ORDER BY m.ROWID ASC
 			LIMIT 100
-		`).all(Number(afterRowId) || 0);
+		`;
+		const rows = getDb().prepare(sql).all(Number(afterRowId) || 0, ...groupchatGuids);
 		return rows.map(r => ({ ...r, text: extractText(r) }));
 	} catch (err) {
 		log(`db error: ${err.message}`);
@@ -243,6 +270,12 @@ async function handleIncoming(row) {
 
 	log(`← ${shortHandle(handle)}: "${text}"`);
 
+	// Fire the read receipt the moment we observe the message — before any
+	// agent work happens. This is independent of whatever skill runs and
+	// whether the orchestrator emits a 'read' event. The user sees "Read"
+	// immediately on every incoming message.
+	await markRead(chatGuid);
+
 	// Dots come on ONLY immediately before a real message ships — never on
 	// the orchestrator's `typing` event itself. The orchestrator emits a
 	// typing event at the start of every iteration including the final
@@ -279,7 +312,18 @@ async function handleIncoming(row) {
 	};
 
 	try {
-		await runTurn(handle, text, { onEvent, ctx: { chatGuid, react } });
+		await runTurn(demoSkill, {
+			handle,
+			text,
+			chatGuid,
+			onEvent,
+			react,
+			sendMode: 'live',
+			// Demo path is unknown 1:1 handles only. knownSet filtered above
+			// rejects PM numbers before we get here. Belt-and-suspenders flag
+			// for the send_text safety guard.
+			isPmHandle: false
+		});
 	} catch (err) {
 		log(`turn error: ${err.message}`);
 	} finally {
@@ -289,25 +333,139 @@ async function handleIncoming(row) {
 	}
 }
 
+// ── Groupchat (work-orders) message capture ────────────────────────────────────
+//
+// For F2 step 1 we just append PM-handle messages to chat-log.json. The
+// correlator (later step) reads from this log + sent-log to figure out which
+// open issue a PM reply is about. Tenant/owner replies in the same chat are
+// silently dropped — pm_handles is the gate.
+async function handleGroupchatMessage(row, ws) {
+	const handle = normalizeHandle(row.handle);
+	const chatGuid = row.chat_guid;
+	const text = String(row.text || '').trim();
+	if (!text) return;
+
+	// Step 1: append the raw inbound to chat-log (permanent record). The
+	// agent_action field will be patched after the chat skill runs.
+	await appendChatMessage({
+		message_guid: row.guid,
+		chat_guid: chatGuid,
+		workspace_id: ws.workspace_id,
+		workspace_label: ws.label,
+		handle,
+		text,
+		is_from_me: false,
+		db_date: Number(row.date) || null
+	});
+	const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
+	log(`◉ ${ws.label} ← ${shortHandle(handle)}: "${preview}"`);
+
+	// Step 2: fire read receipt immediately — same as the demo path.
+	await markRead(chatGuid);
+
+	// Step 3: run the chat skill. acknowledge emits live to the groupchat;
+	// draft_tenant / draft_vendor write to drafts.json for human review.
+	const onEvent = async (ev) => {
+		if (ev.type === 'read') {
+			await markRead(chatGuid);
+		} else if (ev.type === 'message') {
+			await setTyping(chatGuid, true);
+			await sleep(typingDwellMs(ev.content));
+			await setTyping(chatGuid, false);
+			const ok = await sendPart(chatGuid, handle, ev.content);
+			if (ok) log(`→ ${ws.label}: "${ev.content}"`);
+		} else if (ev.type === 'tool_call') {
+			const args = JSON.stringify(ev.args ?? {});
+			log(`  · ${ev.name}(${args.length > 80 ? args.slice(0, 77) + '...' : args})`);
+		}
+	};
+
+	const ctx = {
+		handle,
+		text,
+		chat_guid: chatGuid,
+		workspace_id: ws.workspace_id,
+		workspace_label: ws.label,
+		onEvent,
+		sendMode: 'live', // for acknowledge — the only live-send tool in this skill
+		// Groupchat with a PM is NOT a 1:1 with a PM. The send_text safety
+		// guard (refuse live + isPmHandle) is about preventing direct DMs;
+		// the chat skill doesn't expose send_text anyway.
+		isPmHandle: false
+	};
+
+	let result;
+	let runError = null;
+	try {
+		result = await runTurn(chatSkill, ctx);
+	} catch (err) {
+		runError = err;
+		log(`chat skill error: ${err.message}`);
+	} finally {
+		await setTyping(chatGuid, false);
+	}
+
+	const draftIds = ctx.draftIds ?? [];
+	const draftsCreated = draftIds.length;
+	const action = runError
+		? 'failure'
+		: result?.failure
+			? 'failure'
+			: draftsCreated > 0
+				? 'drafted'
+				: 'no_match';
+
+	await updateChatMessage(row.guid, {
+		agent_action: action,
+		agent_runs_at: new Date().toISOString(),
+		agent_drafts_count: draftsCreated,
+		agent_draft_ids: draftIds,
+		agent_error: runError?.message ?? result?.failure?.error ?? null
+	});
+	log(
+		`◉ ${ws.label} agent: ${action}${draftsCreated ? ` (${draftsCreated} drafts)` : ''}`
+	);
+}
+
 // ── Poll loop ──────────────────────────────────────────────────────────────────
 
 let polling = false;
-const inflight = new Map(); // handle -> Promise; serializes turns per chat
+const inflight = new Map(); // handle/chat_guid -> Promise; serializes turns
 
 async function pollOnce() {
-	const rows = fetchNewMessages(state.lastSeenRowId);
+	const rows = fetchNewMessages(state.lastSeenRowId, groupchatGuids);
 	if (!rows.length) return;
 
 	for (const row of rows) {
 		state.lastSeenRowId = Math.max(state.lastSeenRowId, Number(row.rowid) || 0);
 		if (Number(row.is_from_me) === 1) continue;
-		if (row.room_name) continue;
 		if (state.processed[row.guid]) continue;
 		state.processed[row.guid] = Date.now();
 
 		const handle = normalizeHandle(row.handle);
-		// Serialize per-handle so a fast follow-up doesn't race the in-flight turn,
-		// but different chats stay parallel (no global focus state to fight over).
+		const chatGuid = row.chat_guid || '';
+		const ws = chatGuidIndex.get(chatGuid);
+
+		if (ws) {
+			// Mapped groupchat. Only store messages from the PM; ignore tenant/
+			// owner replies for now (correlator design only triggers on PM).
+			if (!ws.pm_handles.has(handle)) continue;
+			const key = chatGuid;
+			const prev = inflight.get(key) ?? Promise.resolve();
+			const next = prev
+				.then(() => handleGroupchatMessage(row, ws))
+				.catch((err) => log(`groupchat handle error: ${err.message}`));
+			inflight.set(key, next);
+			next.finally(() => { if (inflight.get(key) === next) inflight.delete(key); });
+			continue;
+		}
+
+		// Groupchat we don't recognize — drop. (Demo path is 1:1 only.)
+		if (row.room_name) continue;
+		// Demo path. Real customer/vendor numbers (knownSet) are dropped so
+		// testing doesn't hijack real conversations.
+		if (knownSet.has(handle)) continue;
+
 		const prev = inflight.get(handle) ?? Promise.resolve();
 		const next = prev.then(() => handleIncoming(row)).catch((err) => log(`handle error: ${err.message}`));
 		inflight.set(handle, next);
@@ -320,6 +478,15 @@ async function pollOnce() {
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 async function main() {
+	// Build the work-orders chat-guid index from env (set above by loadDotEnv).
+	// Used by the poll loop to route mapped groupchat rows to chat-log capture
+	// instead of the demo subagent.
+	chatGuidIndex = buildChatGuidIndex();
+	groupchatGuids = [...chatGuidIndex.keys()];
+	for (const [guid, w] of chatGuidIndex.entries()) {
+		log(`listening on ${w.label}: ${guid} (pm: ${[...w.pm_handles].join(', ') || '(none)'})`);
+	}
+
 	await loadState();
 
 	if (HELPER_ENABLED) {
@@ -334,6 +501,30 @@ async function main() {
 		log('helper disabled via HELPER_DISABLED=1');
 	}
 	if (DEMO_HANDLE) log(`scoped to DEMO_HANDLE=${DEMO_HANDLE}`);
+
+	// Drafts UI. Send button calls the dylib via helper.send.
+	await startUi({
+		port: Number(process.env.WORK_ORDERS_PORT ?? 7878),
+		log,
+		sendIMessage: async ({ chatGuid, body }) => {
+			if (!HELPER_ENABLED) {
+				return { ok: false, error: 'helper disabled (HELPER_DISABLED=1)' };
+			}
+			if (!chatGuid) {
+				return { ok: false, error: 'draft has no chat guid' };
+			}
+			const r = await helper.send(chatGuid, body);
+			if (!r.ok) {
+				log(`work-order send failed: ${r.error}`);
+				return { ok: false, error: r.error };
+			}
+			log(`work-order sent to ${chatGuid}: "${body.slice(0, 60)}${body.length > 60 ? '…' : ''}"`);
+			return { ok: true, guid: r.guid ?? null };
+		}
+	});
+
+	// F1: poll issues_v2 for new work orders and create groupchat drafts.
+	await startIssuePoller();
 
 	log(`agent server started (poll=${POLL_INTERVAL_MS}ms, lastRow=${state.lastSeenRowId})`);
 

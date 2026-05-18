@@ -1,5 +1,6 @@
 {
   "system/stage": "followup",
   "property/mariposa": "true",
-  "vendor/plumbing/mariposa": "mario"
+  "vendor/plumbing/mariposa": "mario",
+  "vendor/plumbing/mariposa/licensed_insured": "yes"
 }

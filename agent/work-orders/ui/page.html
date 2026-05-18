@@ -1,0 +1,1899 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Bedrock · Work-order drafts</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+		<style>
+			* { box-sizing: border-box; }
+			html, body {
+				margin: 0;
+				background: #0e0f12;
+				color: #e6e6e6;
+				font: 14px/1.5 -apple-system, ui-sans-serif, system-ui, sans-serif;
+			}
+			header {
+				padding: 18px 24px;
+				border-bottom: 1px solid #1f2329;
+				display: flex;
+				align-items: baseline;
+				gap: 16px;
+			}
+			header h1 {
+				margin: 0;
+				font-size: 16px;
+				font-weight: 600;
+				letter-spacing: 0.2px;
+			}
+			header .sub { color: #6c727b; font-size: 12px; }
+			header .status { margin-left: 16px; font-size: 12px; color: #6c727b; }
+			.ws-toggle {
+				margin-left: auto;
+				display: flex;
+				gap: 2px;
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 6px;
+				padding: 2px;
+			}
+			.ws-toggle button {
+				background: transparent;
+				border: none;
+				color: #8a9099;
+				padding: 4px 12px;
+				font-size: 11.5px;
+				letter-spacing: 0.04em;
+				border-radius: 4px;
+				cursor: pointer;
+				text-transform: uppercase;
+				font-weight: 500;
+			}
+			.ws-toggle button:hover { color: #c0c5cc; }
+			.ws-toggle button.active { background: #2a2f37; color: #e6e6e6; }
+			.ws-toggle button.active.prod { background: #3a1a1f; color: #f08089; }
+			.ws-toggle button.active.test { background: #1a2a3a; color: #7eb7f0; }
+
+			.clear-test-btn {
+				margin-left: 10px;
+				background: transparent;
+				border: 1px solid #3a2025;
+				color: #c48088;
+				padding: 6px 12px;
+				font-size: 11.5px;
+				letter-spacing: 0.04em;
+				text-transform: uppercase;
+				border-radius: 6px;
+				font-weight: 500;
+				cursor: pointer;
+			}
+			.clear-test-btn:hover { background: #2a1518; color: #f08089; border-color: #5a2a30; }
+			.clear-test-btn:disabled { opacity: 0.5; cursor: wait; }
+			main {
+				padding: 24px;
+				max-width: 1480px;
+				margin: 0 auto;
+				display: grid;
+				grid-template-columns: minmax(380px, 1.1fr) minmax(340px, 1fr) minmax(300px, 0.85fr);
+				gap: 22px;
+				align-items: start;
+			}
+			@media (max-width: 1200px) {
+				main { grid-template-columns: minmax(420px, 1.1fr) minmax(360px, 1fr); }
+				#chat-col { grid-column: 1 / -1; }
+			}
+			@media (max-width: 900px) {
+				main { grid-template-columns: 1fr; }
+				#chat-col { grid-column: auto; }
+			}
+			.col-header {
+				font-size: 11px;
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+				color: #6c727b;
+				margin: 0 0 10px;
+				display: flex;
+				align-items: baseline;
+				gap: 8px;
+			}
+			.col-header .count {
+				color: #4a5058;
+				font-family: ui-monospace, Menlo, monospace;
+				letter-spacing: 0;
+				text-transform: none;
+				font-size: 11px;
+			}
+			.empty {
+				color: #6c727b;
+				text-align: center;
+				padding: 60px 0;
+				font-size: 13px;
+			}
+			.draft {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 16px 18px;
+				margin-bottom: 14px;
+			}
+			.meta {
+				display: flex;
+				gap: 8px;
+				font-size: 11px;
+				color: #8a9099;
+				margin-bottom: 10px;
+				flex-wrap: wrap;
+				align-items: center;
+			}
+			.meta .tag {
+				background: #1f2329;
+				color: #c0c5cc;
+				padding: 2px 8px;
+				border-radius: 4px;
+				letter-spacing: 0.2px;
+			}
+			.meta .tag.workspace { background: #1a2a3a; color: #7eb7f0; }
+			.meta .tag.workspace.prod { background: #3a1a1f; color: #f08089; }
+			.meta .tag.urgent { background: #3a1a1f; color: #f08089; }
+			.meta .tag.hold { background: #2a221a; color: #d9a366; }
+			.meta .edited {
+				margin-left: auto;
+				color: #d9a366;
+				font-size: 11px;
+			}
+			.recipients {
+				font-size: 11px;
+				color: #8a9099;
+				margin: -4px 0 12px;
+				font-family: ui-monospace, SF Mono, Menlo, monospace;
+				display: flex;
+				flex-direction: column;
+				gap: 2px;
+			}
+			.recipients .handles {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 4px 8px;
+				align-items: baseline;
+			}
+			.recipients .label { color: #6c727b; }
+			.recipients .handle { color: #c0c5cc; }
+			.recipients .guid {
+				color: #4a5058;
+				font-size: 10px;
+				word-break: break-all;
+			}
+
+			.bubbles {
+				display: flex;
+				flex-direction: column;
+				gap: 3px;
+				margin: 6px 0 14px;
+				align-items: flex-end;
+			}
+			.bubble {
+				max-width: 78%;
+				background: #1d6ee2;
+				color: #ffffff;
+				border-radius: 18px;
+				padding: 9px 14px;
+				font-size: 14px;
+				line-height: 1.35;
+				transition: background 0.12s;
+				position: relative;
+				min-width: 60px;
+			}
+			.bubble:has(textarea:focus) { background: #2a82f0; box-shadow: 0 0 0 1px #4a9cff inset; }
+			.bubble textarea {
+				background: transparent;
+				border: none;
+				color: inherit;
+				font: inherit;
+				width: 100%;
+				resize: none;
+				outline: none;
+				padding: 0;
+				margin: 0;
+				display: block;
+				overflow: hidden;
+				min-height: 18px;
+			}
+			.bubble.edited::after {
+				content: 'edited';
+				position: absolute;
+				top: 50%;
+				right: calc(100% + 8px);
+				transform: translateY(-50%);
+				font-size: 10px;
+				color: #d9a366;
+				letter-spacing: 0.05em;
+				white-space: nowrap;
+			}
+
+			.actions {
+				display: flex;
+				gap: 8px;
+				margin-top: 4px;
+			}
+			button {
+				background: #1f2329;
+				color: #e6e6e6;
+				border: 1px solid #2a2f37;
+				padding: 7px 14px;
+				border-radius: 6px;
+				font: inherit;
+				font-size: 13px;
+				cursor: pointer;
+			}
+			button:hover { background: #262b32; }
+			button.primary { background: #2d6cdf; border-color: #2d6cdf; color: white; }
+			button.primary:hover { background: #3b78ea; }
+			button.danger { color: #f08089; }
+			button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+			.kpi {
+				display: flex;
+				gap: 18px;
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 14px 18px;
+				margin-bottom: 18px;
+				font-size: 12.5px;
+				flex-wrap: wrap;
+			}
+			.kpi .stat { display: flex; flex-direction: column; gap: 2px; }
+			.kpi .stat .label { color: #6c727b; font-size: 11px; letter-spacing: 0.05em; }
+			.kpi .stat .value { color: #e6e6e6; font-size: 18px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
+			.kpi .stat .value .pct { color: #74c99a; }
+			.kpi .stat .sub { color: #6c727b; font-size: 11px; }
+
+			.history-item {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 14px 16px;
+				margin-bottom: 10px;
+			}
+			.history-item .top {
+				display: flex;
+				gap: 8px;
+				align-items: center;
+				font-size: 11px;
+				color: #8a9099;
+				margin-bottom: 8px;
+				flex-wrap: wrap;
+			}
+			.action-tag {
+				font-size: 11px;
+				font-weight: 600;
+				letter-spacing: 0.08em;
+				padding: 2px 8px;
+				border-radius: 4px;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.action-tag.send { background: rgba(60, 200, 120, 0.14); color: #74c99a; border: 1px solid rgba(60, 200, 120, 0.32); }
+			.action-tag.copy { background: rgba(126, 183, 240, 0.14); color: #7eb7f0; border: 1px solid rgba(126, 183, 240, 0.32); }
+			.action-tag.dismiss { background: rgba(240, 128, 137, 0.14); color: #f08089; border: 1px solid rgba(240, 128, 137, 0.32); }
+			.history-item .when { color: #6c727b; font-size: 11px; margin-left: auto; }
+			.history-item .recipients {
+				margin: -2px 0 8px;
+			}
+			.history-item .bubbles {
+				display: flex;
+				flex-direction: column;
+				gap: 3px;
+				align-items: flex-end;
+			}
+			.history-item .bubble {
+				max-width: 78%;
+				background: #1d6ee2;
+				color: #ffffff;
+				border-radius: 18px;
+				padding: 8px 13px;
+				font-size: 13.5px;
+				line-height: 1.35;
+				white-space: pre-wrap;
+				word-wrap: break-word;
+			}
+			.history-item.dismiss .bubble { background: #2a2d33; color: #c0c5cc; text-decoration: line-through; opacity: 0.7; }
+			.history-item .bubble .strike {
+				display: block;
+				color: rgba(255, 255, 255, 0.62);
+				text-decoration: line-through;
+				font-size: 12.5px;
+				margin-bottom: 3px;
+			}
+			.history-item .edited-pill {
+				font-size: 10px;
+				color: #d9a366;
+				letter-spacing: 0.06em;
+				background: rgba(217, 163, 102, 0.12);
+				border: 1px solid rgba(217, 163, 102, 0.32);
+				padding: 1px 6px;
+				border-radius: 3px;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.notes {
+				margin-top: 10px;
+				border-top: 1px dashed #2a2f37;
+				padding-top: 8px;
+			}
+			.notes .note-empty {
+				color: #5a6068;
+				font-size: 11px;
+				cursor: pointer;
+				font-style: italic;
+				user-select: none;
+			}
+			.notes .note-empty:hover { color: #8a9099; }
+			.notes textarea {
+				width: 100%;
+				background: #0e0f12;
+				color: #e6e6e6;
+				border: 1px solid #2a2f37;
+				border-radius: 6px;
+				padding: 8px 10px;
+				font: inherit;
+				font-size: 12.5px;
+				line-height: 1.4;
+				resize: none;
+				outline: none;
+				overflow: hidden;
+				min-height: 32px;
+			}
+			.notes textarea:focus { border-color: #4a8de0; }
+			.notes textarea::placeholder { color: #5a6068; font-style: italic; }
+			.notes .saved {
+				font-size: 10px;
+				color: #74c99a;
+				margin-left: 6px;
+				opacity: 0;
+				transition: opacity 0.15s;
+			}
+			.notes .saved.show { opacity: 1; }
+
+			.chat-item {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 12px 14px;
+				margin-bottom: 8px;
+			}
+			.chat-item .top {
+				display: flex;
+				gap: 6px;
+				align-items: center;
+				font-size: 11px;
+				color: #8a9099;
+				margin-bottom: 6px;
+				flex-wrap: wrap;
+			}
+			.chat-item .top .when { margin-left: auto; color: #6c727b; }
+			.chat-item .handle-row {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				font-size: 11.5px;
+				margin: 4px 0 8px;
+			}
+			.chat-item .handle-row .handle-text {
+				font-family: ui-monospace, Menlo, monospace;
+				color: #c0c5cc;
+			}
+			.chat-item .in-bubble {
+				background: #1f2329;
+				color: #e6e6e6;
+				border-radius: 16px;
+				padding: 8px 13px;
+				font-size: 13.5px;
+				line-height: 1.35;
+				display: inline-block;
+				max-width: 92%;
+				white-space: pre-wrap;
+				word-wrap: break-word;
+			}
+			.chat-item .agent-action {
+				font-size: 10.5px;
+				font-family: ui-monospace, Menlo, monospace;
+				letter-spacing: 0.06em;
+				padding: 2px 8px;
+				border-radius: 4px;
+			}
+			.chat-item .agent-action.drafted {
+				background: rgba(60, 200, 120, 0.14);
+				color: #74c99a;
+				border: 1px solid rgba(60, 200, 120, 0.32);
+			}
+			.chat-item .agent-action.no_match,
+			.chat-item .agent-action.no_action {
+				background: rgba(126, 130, 140, 0.14);
+				color: #8a9099;
+				border: 1px solid rgba(126, 130, 140, 0.32);
+			}
+			.chat-item .agent-action.failure {
+				background: rgba(240, 128, 137, 0.14);
+				color: #f08089;
+				border: 1px solid rgba(240, 128, 137, 0.32);
+			}
+			.chat-item .agent-action.pending {
+				background: rgba(217, 163, 102, 0.14);
+				color: #d4a855;
+				border: 1px solid rgba(217, 163, 102, 0.32);
+			}
+
+			.meta .tag.channel.tenant_appfolio {
+				background: #2a2538;
+				color: #a8a4d8;
+			}
+			.meta .tag.channel.vendor_appfolio {
+				background: #2a2520;
+				color: #d4a855;
+			}
+
+			.toast {
+				position: fixed;
+				bottom: 24px;
+				right: 24px;
+				background: #14161b;
+				border: 1px solid #2a2f37;
+				color: #e6e6e6;
+				padding: 10px 16px;
+				border-radius: 6px;
+				font-size: 13px;
+				opacity: 0;
+				transform: translateY(8px);
+				transition: opacity 0.15s, transform 0.15s;
+				pointer-events: none;
+				max-width: 360px;
+			}
+			.toast.show { opacity: 1; transform: translateY(0); }
+			.toast.error { border-color: #5a2a30; color: #f08089; }
+
+			/* ── Tab nav + view switching ───────────────────────────────── */
+			.tab-nav { display: flex; gap: 4px; margin-left: 8px; }
+			.tab-nav button {
+				background: transparent;
+				border: none;
+				color: #8a9099;
+				padding: 6px 14px;
+				font-size: 12px;
+				letter-spacing: 0.04em;
+				border-radius: 6px;
+				cursor: pointer;
+				text-transform: uppercase;
+				font-weight: 500;
+			}
+			.tab-nav button:hover { color: #c0c5cc; }
+			.tab-nav button.active { background: #1f2329; color: #e6e6e6; }
+
+			.memory-search {
+				margin-left: 10px;
+				background: #14161b;
+				border: 1px solid #1f2329;
+				color: #e6e6e6;
+				padding: 6px 10px;
+				border-radius: 6px;
+				font: inherit;
+				font-size: 12px;
+				width: 200px;
+				display: none;
+			}
+			.memory-search:focus { outline: none; border-color: #2d6cdf; }
+
+			.view { display: none; }
+			.view.active { display: block; }
+			main.view.active { display: grid; }
+
+			/* ── Memory graph view ──────────────────────────────────────── */
+			.memory-view {
+				position: relative;
+				height: calc(100vh - 73px); /* header height */
+				overflow: hidden;
+			}
+			.memory-view svg {
+				width: 100%;
+				height: 100%;
+				background: #0e0f12;
+				display: block;
+				cursor: grab;
+			}
+			.memory-view svg:active { cursor: grabbing; }
+
+			/* Node styling — all info via size/opacity, near-monochrome */
+			.node { cursor: pointer; }
+			.node circle {
+				transition: stroke 0.12s, stroke-width 0.12s;
+			}
+			.node.observation circle {
+				fill: #5a6470;
+				stroke: #2a2f37;
+				stroke-width: 1;
+			}
+			.node.belief circle {
+				fill: #c0c5cc;
+				stroke: #2a2f37;
+				stroke-width: 1.5;
+			}
+			.node.belief.user-created circle {
+				stroke: #d9a366;
+				stroke-width: 2;
+			}
+			.node.selected circle {
+				stroke: #2d6cdf;
+				stroke-width: 3;
+			}
+			.node.dimmed { opacity: 0.18; }
+			.node.match circle {
+				stroke: #d9a366;
+				stroke-width: 2.5;
+			}
+			.node text {
+				fill: #8a9099;
+				font-size: 10px;
+				font-family: ui-sans-serif, system-ui, sans-serif;
+				pointer-events: none;
+				dominant-baseline: hanging;
+			}
+			.link {
+				stroke: #2a2f37;
+				stroke-opacity: 0.6;
+			}
+			.link.dimmed { stroke-opacity: 0.08; }
+
+			/* Detail panel slides in from the right */
+			.memory-detail {
+				position: absolute;
+				top: 0;
+				right: 0;
+				width: 380px;
+				height: 100%;
+				background: #14161b;
+				border-left: 1px solid #1f2329;
+				overflow-y: auto;
+				padding: 24px 22px 80px;
+				box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
+				z-index: 5;
+			}
+			.memory-detail[hidden] { display: none; }
+			.memory-detail-close {
+				position: absolute;
+				top: 12px;
+				right: 14px;
+				background: transparent;
+				border: none;
+				color: #6c727b;
+				font-size: 22px;
+				cursor: pointer;
+				padding: 2px 8px;
+				line-height: 1;
+			}
+			.memory-detail-close:hover { color: #e6e6e6; }
+			.memory-detail h3 {
+				margin: 0 0 14px;
+				font-size: 14px;
+				color: #e6e6e6;
+			}
+			.memory-detail .kv {
+				font-size: 12px;
+				margin: 8px 0;
+				display: flex;
+				gap: 10px;
+				color: #c0c5cc;
+			}
+			.memory-detail .kv .k {
+				color: #6c727b;
+				min-width: 90px;
+				text-transform: uppercase;
+				letter-spacing: 0.05em;
+				font-size: 11px;
+			}
+			.memory-detail .claim {
+				font-size: 14px;
+				color: #e6e6e6;
+				line-height: 1.5;
+				margin: 0 0 14px;
+				padding: 12px;
+				background: #1a1d22;
+				border-radius: 6px;
+				border-left: 3px solid #c0c5cc;
+			}
+			.memory-detail .claim.user { border-left-color: #d9a366; }
+			.memory-detail .scope-pill {
+				display: inline-block;
+				background: #1f2329;
+				color: #c0c5cc;
+				padding: 2px 8px;
+				border-radius: 4px;
+				font-size: 11px;
+				margin: 2px 4px 2px 0;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.memory-detail .evidence-row {
+				font-size: 12px;
+				padding: 8px 10px;
+				background: #1a1d22;
+				border-radius: 6px;
+				margin: 6px 0;
+				cursor: pointer;
+				border-left: 2px solid transparent;
+			}
+			.memory-detail .evidence-row:hover { background: #1f2329; }
+			.memory-detail .evidence-row.contradicts { border-left-color: #f08089; }
+			.memory-detail .evidence-row.supports { border-left-color: #74c99a; }
+			.memory-detail .evidence-row .weight {
+				font-family: ui-monospace, Menlo, monospace;
+				color: #6c727b;
+				font-size: 10px;
+				float: right;
+			}
+			.memory-detail .actions {
+				margin-top: 18px;
+				display: flex;
+				gap: 8px;
+			}
+
+			/* Bottom controls */
+			.memory-controls {
+				position: absolute;
+				bottom: 16px;
+				left: 16px;
+				right: 16px;
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				pointer-events: none;
+				z-index: 4;
+			}
+			.memory-controls > * { pointer-events: auto; }
+			.memory-filters {
+				margin-left: auto;
+				display: flex;
+				gap: 14px;
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 6px;
+				padding: 6px 12px;
+				font-size: 12px;
+				color: #c0c5cc;
+			}
+			.memory-filters label { cursor: pointer; user-select: none; display: flex; gap: 6px; align-items: center; }
+
+			/* Empty state */
+			.memory-empty {
+				position: absolute;
+				top: 50%; left: 50%;
+				transform: translate(-50%, -50%);
+				color: #6c727b;
+				font-size: 14px;
+				text-align: center;
+				pointer-events: none;
+			}
+			.memory-empty .hint { color: #4a5058; font-size: 12px; margin-top: 6px; }
+
+			/* + new belief dialog */
+			.belief-dialog {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 24px;
+				color: #e6e6e6;
+				width: 440px;
+				max-width: 90vw;
+			}
+			.belief-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+			.belief-dialog h3 { margin: 0 0 16px; font-size: 14px; }
+			.belief-dialog .field {
+				display: flex;
+				flex-direction: column;
+				gap: 4px;
+				margin-bottom: 14px;
+			}
+			.belief-dialog .field > span {
+				color: #6c727b;
+				font-size: 11px;
+				text-transform: uppercase;
+				letter-spacing: 0.05em;
+			}
+			.belief-dialog textarea, .belief-dialog input[type=text] {
+				background: #0e0f12;
+				border: 1px solid #1f2329;
+				color: #e6e6e6;
+				padding: 8px 10px;
+				border-radius: 6px;
+				font: inherit;
+				font-size: 13px;
+				resize: vertical;
+			}
+			.belief-dialog textarea:focus, .belief-dialog input[type=text]:focus { outline: none; border-color: #2d6cdf; }
+			.belief-dialog input[type=range] { width: 100%; }
+			.belief-dialog #conf-out {
+				font-family: ui-monospace, Menlo, monospace;
+				color: #c0c5cc;
+				margin-left: 6px;
+			}
+			.belief-dialog-actions {
+				display: flex;
+				gap: 8px;
+				justify-content: flex-end;
+				margin-top: 8px;
+			}
+
+			/* Memory tab hides the Clear Test button — it's a Work Orders action */
+			body.memory-mode #clear-test-btn { display: none; }
+			body.memory-mode .memory-search { display: inline-block; }
+		</style>
+	</head>
+	<body>
+		<header>
+			<h1>Bedrock</h1>
+			<nav class="tab-nav" id="tab-nav">
+				<button data-tab="work-orders" class="active">Work Orders</button>
+				<button data-tab="memory">Memory</button>
+			</nav>
+			<div class="ws-toggle" id="ws-toggle">
+				<button data-ws="all">All</button>
+				<button data-ws="prod">Prod</button>
+				<button data-ws="test">Test</button>
+			</div>
+			<input id="memory-search" class="memory-search" type="search" placeholder="search memory…" />
+			<button class="clear-test-btn" id="clear-test-btn" title="Wipe test workspace drafts, logs, and Supabase issues">Clear Test</button>
+		</header>
+		<main id="view-work-orders" class="view active">
+			<section id="drafts-col">
+				<h2 class="col-header">Drafts <span class="count" id="drafts-count"></span></h2>
+				<div id="drafts-list"></div>
+			</section>
+			<section id="history-col">
+				<h2 class="col-header">History <span class="count" id="history-count"></span></h2>
+				<div id="history-list"></div>
+			</section>
+			<section id="chat-col">
+				<h2 class="col-header">Chat <span class="count" id="chat-count"></span></h2>
+				<div id="chat-list"></div>
+			</section>
+		</main>
+
+		<section id="view-memory" class="view memory-view">
+			<svg id="memory-graph"></svg>
+			<aside id="memory-detail" class="memory-detail" hidden>
+				<button class="memory-detail-close" id="memory-detail-close" aria-label="close">×</button>
+				<div id="memory-detail-body"></div>
+			</aside>
+			<div class="memory-controls">
+				<button class="primary" id="new-belief-btn">+ new belief</button>
+				<div class="memory-filters">
+					<label><input type="checkbox" id="show-obs" checked /> observations</label>
+					<label><input type="checkbox" id="show-bel" checked /> beliefs</label>
+				</div>
+			</div>
+		</section>
+
+		<dialog id="new-belief-dialog" class="belief-dialog">
+			<form id="new-belief-form" method="dialog">
+				<h3 id="belief-dialog-title">New belief</h3>
+				<label class="field">
+					<span>Claim</span>
+					<textarea name="claim" rows="3" required placeholder="What rule do we want to capture?"></textarea>
+				</label>
+				<label class="field">
+					<span>Scope (one key=value per line — e.g. trade=plumbing)</span>
+					<textarea name="scope" rows="3" placeholder="trade=plumbing&#10;portfolio=Harrison Properties"></textarea>
+				</label>
+				<label class="field">
+					<span>Confidence <output id="conf-out">0.85</output></span>
+					<input type="range" name="confidence" min="0" max="1" step="0.01" value="0.85" />
+				</label>
+				<label class="field">
+					<span>Tags (comma-separated)</span>
+					<input type="text" name="tags" placeholder="vendor-preference, default" />
+				</label>
+				<div class="belief-dialog-actions">
+					<button type="button" id="cancel-belief">Cancel</button>
+					<button type="submit" class="primary" id="submit-belief">Create</button>
+				</div>
+			</form>
+		</dialog>
+
+		<div class="toast" id="toast"></div>
+
+		<script>
+			// Workspace filter — global, persists across reloads. Filters drafts,
+			// history, and chat by workspace_label client-side.
+			const WS_KEY = 'bedrock.workspaceFilter';
+			let workspaceFilter = localStorage.getItem(WS_KEY) || 'all';
+			const wsToggle = document.getElementById('ws-toggle');
+			function applyWsToggleStyle() {
+				for (const btn of wsToggle.querySelectorAll('button')) {
+					const ws = btn.dataset.ws;
+					btn.classList.toggle('active', ws === workspaceFilter);
+					btn.classList.toggle('prod', ws === 'prod' && ws === workspaceFilter);
+					btn.classList.toggle('test', ws === 'test' && ws === workspaceFilter);
+				}
+			}
+			wsToggle.addEventListener('click', (e) => {
+				const btn = e.target.closest('button[data-ws]');
+				if (!btn) return;
+				workspaceFilter = btn.dataset.ws;
+				localStorage.setItem(WS_KEY, workspaceFilter);
+				applyWsToggleStyle();
+				// Bust the id-set guards so render actually rebuilds.
+				renderedDraftIds = '';
+				renderedHistoryIds = '';
+				renderedChatIds = '';
+				refresh();
+			});
+			applyWsToggleStyle();
+
+			function passesFilter(label) {
+				return workspaceFilter === 'all' || label === workspaceFilter;
+			}
+
+			// "Clear Test" button: wipes test-workspace drafts/logs/Supabase rows.
+			document.getElementById('clear-test-btn').addEventListener('click', async (e) => {
+				if (!confirm('Wipe all test-workspace data?\n\n• Drops test drafts, sent-log, response-log, chat-log entries\n• Resets the issues cursor\n• Deletes test issues + agent_runs from Supabase\n\nProd data is untouched.')) return;
+				const btn = e.currentTarget;
+				btn.disabled = true;
+				btn.textContent = 'Clearing…';
+				try {
+					const res = await fetch('/api/clear-test', { method: 'POST' });
+					if (!res.ok) throw new Error(await res.text());
+					const data = await res.json();
+					toast(`cleared (Supabase: ${data.supabase?.issues_deleted ?? 0} issues)`);
+					renderedDraftIds = '';
+					renderedHistoryIds = '';
+					renderedChatIds = '';
+					await refresh();
+				} catch (err) {
+					toast(`clear failed: ${err.message}`, 'error');
+				} finally {
+					btn.disabled = false;
+					btn.textContent = 'Clear Test';
+				}
+			});
+
+			const draftsList = document.getElementById('drafts-list');
+			const historyList = document.getElementById('history-list');
+			const chatList = document.getElementById('chat-list');
+			const draftsCount = document.getElementById('drafts-count');
+			const historyCount = document.getElementById('history-count');
+			const chatCount = document.getElementById('chat-count');
+			const toastEl = document.getElementById('toast');
+
+			// draftId -> { age: HTMLElement, createdAt: string } so we can refresh
+			// the "Xm ago" text without re-rendering the textareas (which would
+			// stomp on edits the user is currently making).
+			const cardRefs = new Map();
+			let renderedDraftIds = '';
+			let renderedHistoryIds = '';
+			let renderedChatIds = '';
+			const chatRefs = new Map();
+			// Pending save timer per draft id, for debounced auto-save on input.
+			const saveTimers = new Map();
+			const SAVE_DEBOUNCE_MS = 500;
+
+			let toastTimer = null;
+			function toast(msg, kind = 'info') {
+				toastEl.textContent = msg;
+				toastEl.classList.toggle('error', kind === 'error');
+				toastEl.classList.add('show');
+				clearTimeout(toastTimer);
+				toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+			}
+
+			function escapeHtml(s) {
+				return String(s).replace(/[&<>"']/g, (c) => ({
+					'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+				})[c]);
+			}
+
+			function fmtAge(iso) {
+				const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+				if (s < 60) return s + 's ago';
+				if (s < 3600) return Math.floor(s / 60) + 'm ago';
+				return Math.floor(s / 3600) + 'h ago';
+			}
+
+			function shortIssue(id) {
+				if (!id) return '—';
+				return id.length > 12 ? id.slice(0, 8) : id;
+			}
+
+			function autoSize(ta) {
+				ta.style.height = 'auto';
+				ta.style.height = ta.scrollHeight + 'px';
+			}
+
+			function render(drafts) {
+				// Only do a full re-render when the set of draft ids changes
+				// (something added or dismissed). Otherwise just refresh the
+				// age text — preserves in-flight textarea edits across polls.
+				const idsKey = drafts.map((d) => d.id).join('|');
+				if (idsKey === renderedDraftIds && drafts.length > 0) {
+					for (const d of drafts) {
+						const ref = cardRefs.get(d.id);
+						if (ref?.ageEl) ref.ageEl.textContent = fmtAge(d.created_at);
+					}
+					return;
+				}
+				renderedDraftIds = idsKey;
+				cardRefs.clear();
+				draftsList.innerHTML = '';
+				if (!drafts.length) {
+					const e = document.createElement('div');
+					e.className = 'empty';
+					e.textContent = 'no pending drafts';
+					draftsList.appendChild(e);
+					return;
+				}
+				for (const d of drafts) {
+					const messages = Array.isArray(d.messages) ? d.messages : [{ body: d.body ?? '' }];
+					// Server-truth originals: what the agent first produced, frozen
+					// at draft creation. Used for the "edited" badge.
+					const origs = (Array.isArray(d.original_messages) ? d.original_messages : messages).map(
+						(m) => m.body
+					);
+
+					const card = document.createElement('div');
+					card.className = 'draft';
+					card.dataset.id = d.id;
+
+					const wsLabel = d.workspace_label ?? 'unknown';
+					const wsClass = wsLabel === 'prod' ? 'workspace prod' : 'workspace';
+
+					const meta = document.createElement('div');
+					meta.className = 'meta';
+					meta.innerHTML =
+						`<span class="tag ${wsClass}">${escapeHtml(wsLabel)}</span>` +
+						`<span class="tag channel ${escapeHtml(d.channel ?? '')}">${escapeHtml(d.channel)}</span>` +
+						`<span class="tag" title="${escapeHtml(d.issue_id ?? '')}">issue ${escapeHtml(shortIssue(d.issue_id))}</span>` +
+						`<span class="age">${fmtAge(d.created_at)}</span>` +
+						(d.hold_until ? `<span class="tag hold">hold</span>` : '');
+					card.appendChild(meta);
+					const ageEl = meta.querySelector('.age');
+					cardRefs.set(d.id, { ageEl });
+
+					const recipients = d.to_participants?.length ? d.to_participants : d.to ? [d.to] : [];
+					const recip = document.createElement('div');
+					recip.className = 'recipients';
+					recip.innerHTML =
+						`<div class="handles"><span class="label">to</span>` +
+						recipients.map((r) => `<span class="handle">${escapeHtml(r)}</span>`).join('') +
+						`</div>` +
+						(d.to ? `<div class="guid">${escapeHtml(d.to)}</div>` : '');
+					card.appendChild(recip);
+
+					const bubbles = document.createElement('div');
+					bubbles.className = 'bubbles';
+					const tas = [];
+					messages.forEach((m, i) => {
+						const b = document.createElement('div');
+						b.className = 'bubble';
+						const ta = document.createElement('textarea');
+						ta.value = m.body;
+						ta.rows = 1;
+						if (ta.value !== origs[i]) b.classList.add('edited');
+						ta.addEventListener('input', () => {
+							autoSize(ta);
+							b.classList.toggle('edited', ta.value !== origs[i]);
+							scheduleSave(d.id, tas);
+						});
+						ta.addEventListener('blur', () => flushSave(d.id, tas));
+						b.appendChild(ta);
+						bubbles.appendChild(b);
+						tas.push(ta);
+						// Defer sizing until in DOM
+						requestAnimationFrame(() => autoSize(ta));
+					});
+					card.appendChild(bubbles);
+
+					const actions = document.createElement('div');
+					actions.className = 'actions';
+
+					// Only groupchat drafts get a Send button (live dylib send). For
+					// tenant_appfolio / vendor_appfolio drafts there's no automated
+					// channel yet — the PM copies into AppFolio manually. Copy is
+					// the primary action on those.
+					const canSend = d.channel === 'groupchat';
+
+					const copyBtn = document.createElement('button');
+					copyBtn.className = canSend ? '' : 'primary';
+					copyBtn.textContent = 'Copy';
+					copyBtn.onclick = async () => {
+						const joined = tas.map((t) => t.value).join('\n\n');
+						try {
+							await navigator.clipboard.writeText(joined);
+						} catch {}
+						act(d.id, 'copy', tas, origs, copyBtn);
+					};
+
+					if (canSend) {
+						const sendBtn = document.createElement('button');
+						sendBtn.className = 'primary';
+						sendBtn.textContent = messages.length > 1 ? `Send (${messages.length})` : 'Send';
+						sendBtn.onclick = () => act(d.id, 'send', tas, origs, sendBtn);
+						actions.appendChild(sendBtn);
+					}
+					actions.appendChild(copyBtn);
+
+					const dismissBtn = document.createElement('button');
+					dismissBtn.className = 'danger';
+					dismissBtn.textContent = 'Dismiss';
+					dismissBtn.onclick = () => act(d.id, 'dismiss', tas, origs, dismissBtn);
+					actions.appendChild(dismissBtn);
+					card.appendChild(actions);
+
+					draftsList.appendChild(card);
+				}
+			}
+
+			async function saveDraft(id, tas) {
+				const messages = tas.map((t) => ({ body: t.value }));
+				try {
+					const res = await fetch(`/api/drafts/${id}`, {
+						method: 'PATCH',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ messages })
+					});
+					if (!res.ok) throw new Error(await res.text());
+				} catch (err) {
+					toast(`save failed: ${err.message}`, 'error');
+				}
+			}
+
+			function scheduleSave(id, tas) {
+				clearTimeout(saveTimers.get(id));
+				const t = setTimeout(() => {
+					saveTimers.delete(id);
+					saveDraft(id, tas);
+				}, SAVE_DEBOUNCE_MS);
+				saveTimers.set(id, t);
+			}
+
+			function flushSave(id, tas) {
+				if (!saveTimers.has(id)) return;
+				clearTimeout(saveTimers.get(id));
+				saveTimers.delete(id);
+				saveDraft(id, tas);
+			}
+
+			async function act(id, action, tas, origs, btn) {
+				btn.disabled = true;
+				// Flush any pending edits so the server has the final body
+				// before we tell it to send/copy/dismiss.
+				flushSave(id, tas);
+				const messages = tas.map((t) => ({ body: t.value }));
+				try {
+					const res = await fetch(`/api/drafts/${id}/${action}`, {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ messages })
+					});
+					if (!res.ok) {
+						const err = await res.text();
+						toast(`${action} failed: ${err}`, 'error');
+						btn.disabled = false;
+						return;
+					}
+					toast(action === 'send' ? 'sent' : action === 'copy' ? 'copied' : 'dismissed');
+					await refresh();
+				} catch (err) {
+					toast(`${action} failed: ${err.message}`, 'error');
+					btn.disabled = false;
+				}
+			}
+
+			// ─── history rendering ──────────────────────────────────────────────
+
+			function updateKpiStrip(kpi) {
+				const k = historyList.querySelector('.kpi');
+				if (!k) return;
+				const rate = kpi.send_without_edit_rate;
+				const pct = rate == null ? '—' : `${Math.round(rate * 100)}%`;
+				k.innerHTML =
+					`<div class="stat"><span class="label">send-without-edit</span><span class="value"><span class="pct">${pct}</span></span><span class="sub">last ${kpi.window_days}d</span></div>` +
+					`<div class="stat"><span class="label">sent</span><span class="value">${kpi.sent_total}</span><span class="sub">total messages shipped</span></div>` +
+					`<div class="stat"><span class="label">actions</span><span class="value">${kpi.recent_responses}</span><span class="sub">last ${kpi.window_days}d</span></div>`;
+			}
+
+			function fmtAbsolute(iso) {
+				const d = new Date(iso);
+				const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+				const day = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+				return `${day} ${t}`;
+			}
+
+			function renderHistory(items, kpi) {
+				// Same guard as drafts: only re-render when the set of items
+				// changes, so notes/textarea edits in progress aren't stomped.
+				const idsKey = items.map((r) => r.draft_id).join('|');
+				if (idsKey === renderedHistoryIds && historyList.querySelector('.kpi')) {
+					updateKpiStrip(kpi);
+					return;
+				}
+				renderedHistoryIds = idsKey;
+				historyList.innerHTML = '';
+
+				const k = document.createElement('div');
+				k.className = 'kpi';
+				const rate = kpi.send_without_edit_rate;
+				const pct = rate == null ? '—' : `${Math.round(rate * 100)}%`;
+				k.innerHTML =
+					`<div class="stat"><span class="label">send-without-edit</span><span class="value"><span class="pct">${pct}</span></span><span class="sub">last ${kpi.window_days}d</span></div>` +
+					`<div class="stat"><span class="label">sent</span><span class="value">${kpi.sent_total}</span><span class="sub">total messages shipped</span></div>` +
+					`<div class="stat"><span class="label">actions</span><span class="value">${kpi.recent_responses}</span><span class="sub">last ${kpi.window_days}d</span></div>`;
+				historyList.appendChild(k);
+
+				if (!items.length) {
+					const e = document.createElement('div');
+					e.className = 'empty';
+					e.textContent = 'no actions yet';
+					historyList.appendChild(e);
+					return;
+				}
+
+				for (const r of items) {
+					const card = document.createElement('div');
+					card.className = 'history-item ' + r.action;
+
+					const wsLabel = r.workspace_label ?? null;
+					const wsClass = wsLabel === 'prod' ? 'tag workspace prod' : 'tag workspace';
+
+					const top = document.createElement('div');
+					top.className = 'top';
+					top.innerHTML =
+						`<span class="action-tag ${r.action}">${escapeHtml(r.action)}</span>` +
+						(wsLabel ? `<span class="${wsClass}">${escapeHtml(wsLabel)}</span>` : '') +
+						`<span class="tag channel">${escapeHtml(r.channel ?? '')}</span>` +
+						`<span class="tag" title="${escapeHtml(r.issue_id ?? '')}">issue ${escapeHtml(shortIssue(r.issue_id))}</span>` +
+						(r.edited ? `<span class="edited-pill">edited</span>` : '') +
+						(r.forced_send ? `<span class="edited-pill" style="color:#f08089;border-color:rgba(240,128,137,0.32);background:rgba(240,128,137,0.12)">forced</span>` : '') +
+						`<span class="when">${fmtAbsolute(r.timestamp)}</span>`;
+					card.appendChild(top);
+
+					if (r.to_participants?.length || r.to) {
+						const recipients = r.to_participants?.length ? r.to_participants : [r.to];
+						const recip = document.createElement('div');
+						recip.className = 'recipients';
+						recip.innerHTML =
+							`<div class="handles"><span class="label">to</span>` +
+							recipients.map((h) => `<span class="handle">${escapeHtml(h)}</span>`).join('') +
+							`</div>`;
+						card.appendChild(recip);
+					}
+
+					const finals = Array.isArray(r.messages_final) ? r.messages_final : [];
+					const origs = Array.isArray(r.messages_original) ? r.messages_original : [];
+					const bubbles = document.createElement('div');
+					bubbles.className = 'bubbles';
+					const count = Math.max(finals.length, origs.length);
+					for (let i = 0; i < count; i++) {
+						const b = document.createElement('div');
+						b.className = 'bubble';
+						const o = origs[i] ?? '';
+						const f = finals[i] ?? '';
+						if (o && f && o !== f) {
+							const s = document.createElement('span');
+							s.className = 'strike';
+							s.textContent = o;
+							b.appendChild(s);
+							b.appendChild(document.createTextNode(f));
+						} else {
+							b.textContent = f || o;
+						}
+						bubbles.appendChild(b);
+					}
+					card.appendChild(bubbles);
+
+					const notesWrap = document.createElement('div');
+					notesWrap.className = 'notes';
+					renderNotes(notesWrap, r);
+					card.appendChild(notesWrap);
+
+					historyList.appendChild(card);
+				}
+			}
+
+			function renderNotes(wrap, r) {
+				wrap.innerHTML = '';
+				const existing = (r.notes ?? '').trim();
+				if (!existing) {
+					const empty = document.createElement('div');
+					empty.className = 'note-empty';
+					empty.textContent = '+ add note';
+					empty.onclick = () => openNoteEditor(wrap, r, '');
+					wrap.appendChild(empty);
+					return;
+				}
+				openNoteEditor(wrap, r, existing);
+			}
+
+			function openNoteEditor(wrap, r, initial) {
+				wrap.innerHTML = '';
+				const ta = document.createElement('textarea');
+				ta.value = initial;
+				ta.placeholder = 'why did you edit / dismiss / send? (saved on blur)';
+				ta.rows = 1;
+				wrap.appendChild(ta);
+				const saved = document.createElement('span');
+				saved.className = 'saved';
+				saved.textContent = 'saved';
+				wrap.appendChild(saved);
+
+				const autosize = () => {
+					ta.style.height = 'auto';
+					ta.style.height = ta.scrollHeight + 'px';
+				};
+				ta.addEventListener('input', autosize);
+				requestAnimationFrame(autosize);
+
+				let lastSent = initial;
+				ta.addEventListener('blur', async () => {
+					const val = ta.value.trim();
+					if (val === lastSent.trim()) return;
+					try {
+						const res = await fetch(`/api/history/${r.draft_id}`, {
+							method: 'PATCH',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({ notes: val })
+						});
+						if (!res.ok) throw new Error(await res.text());
+						r.notes = val;
+						lastSent = val;
+						saved.classList.add('show');
+						setTimeout(() => saved.classList.remove('show'), 1400);
+					} catch (err) {
+						toast(`note save failed: ${err.message}`, 'error');
+					}
+				});
+
+				ta.focus();
+				if (initial) {
+					ta.setSelectionRange(initial.length, initial.length);
+				}
+			}
+
+			function agentActionLabel(m) {
+				const action = m.agent_action;
+				if (!action) return 'no action'; // pre-F2 captures / agent never ran
+				if (action === 'drafted') {
+					const n = m.agent_drafts_count ?? 0;
+					return n ? `✓ drafted (${n})` : '✓ drafted';
+				}
+				if (action === 'no_match') return 'no match';
+				if (action === 'failure') {
+					return m.agent_error ? `✗ failure: ${m.agent_error}` : '✗ failure';
+				}
+				return action;
+			}
+
+			function renderChat(items) {
+				// Key includes agent_action so the cache invalidates when the chat
+				// poller patches the row after running the chat skill.
+				const idsKey = items.map((m) => `${m.message_guid}:${m.agent_action ?? ''}`).join('|');
+				if (idsKey === renderedChatIds && items.length > 0) {
+					for (const m of items) {
+						const ref = chatRefs.get(m.message_guid);
+						if (ref?.whenEl) ref.whenEl.textContent = fmtAge(m.received_at);
+					}
+					return;
+				}
+				renderedChatIds = idsKey;
+				chatRefs.clear();
+				chatList.innerHTML = '';
+
+				if (!items.length) {
+					const e = document.createElement('div');
+					e.className = 'empty';
+					e.textContent = 'no inbound messages yet';
+					chatList.appendChild(e);
+					return;
+				}
+
+				for (const m of items) {
+					const card = document.createElement('div');
+					card.className = 'chat-item';
+
+					const wsLabel = m.workspace_label ?? 'unknown';
+					const wsClass = wsLabel === 'prod' ? 'tag workspace prod' : 'tag workspace';
+
+					const label = agentActionLabel(m);
+					// When agent_action is missing (pre-F2 row or agent never ran),
+					// label = 'no action'. Style it with the no_action class.
+					const actionClass = m.agent_action || 'no_action';
+					const actionChip = label
+						? `<span class="agent-action ${actionClass}">${escapeHtml(label)}</span>`
+						: '';
+
+					const top = document.createElement('div');
+					top.className = 'top';
+					top.innerHTML =
+						actionChip +
+						`<span class="when">${fmtAge(m.received_at)}</span>`;
+					card.appendChild(top);
+
+					const handleRow = document.createElement('div');
+					handleRow.className = 'handle-row';
+					handleRow.innerHTML =
+						`<span class="${wsClass}">${escapeHtml(wsLabel)}</span>` +
+						`<span class="handle-text">${escapeHtml(m.handle ?? '')}</span>`;
+					card.appendChild(handleRow);
+
+					const b = document.createElement('div');
+					b.className = 'in-bubble';
+					b.textContent = m.text ?? '';
+					card.appendChild(b);
+
+					chatList.appendChild(card);
+					chatRefs.set(m.message_guid, { whenEl: top.querySelector('.when') });
+				}
+			}
+
+			async function refresh() {
+				try {
+					const [dRes, hRes, kRes, cRes] = await Promise.all([
+						fetch('/api/drafts'),
+						fetch('/api/history'),
+						fetch('/kpi'),
+						fetch('/api/chat-log')
+					]);
+					const drafts = (await dRes.json()).filter((d) => passesFilter(d.workspace_label));
+					const items = (await hRes.json()).filter((r) => passesFilter(r.workspace_label));
+					const kpi = await kRes.json();
+					const chats = (await cRes.json()).filter((m) => passesFilter(m.workspace_label));
+					render(drafts);
+					renderHistory(items, kpi);
+					renderChat(chats);
+					draftsCount.textContent = drafts.length ? `${drafts.length}` : '';
+					historyCount.textContent = items.length ? `${items.length}` : '';
+					chatCount.textContent = chats.length ? `${chats.length}` : '';
+				} catch {
+					// network or server error — silently skip this poll
+				}
+			}
+
+			refresh();
+			const workOrdersPoller = setInterval(refresh, 2000);
+
+			/* ─── Memory tab: D3 force-directed graph + CRUD ──────────────── */
+
+			const TAB_KEY = 'bedrock.activeTab';
+			let activeTab = localStorage.getItem(TAB_KEY) || 'work-orders';
+
+			function applyTab() {
+				document.body.classList.toggle('memory-mode', activeTab === 'memory');
+				for (const btn of document.querySelectorAll('#tab-nav button')) {
+					btn.classList.toggle('active', btn.dataset.tab === activeTab);
+				}
+				for (const v of document.querySelectorAll('.view')) {
+					v.classList.toggle('active', v.id === `view-${activeTab}`);
+				}
+				if (activeTab === 'memory') {
+					loadMemoryGraph();
+				}
+			}
+			document.getElementById('tab-nav').addEventListener('click', (e) => {
+				const btn = e.target.closest('button[data-tab]');
+				if (!btn) return;
+				activeTab = btn.dataset.tab;
+				localStorage.setItem(TAB_KEY, activeTab);
+				applyTab();
+			});
+			applyTab();
+
+			// Workspace for memory view: 'all' isn't meaningful here, default to prod.
+			function memoryWorkspace() {
+				return workspaceFilter === 'all' ? 'prod' : workspaceFilter;
+			}
+
+			const svgEl = document.getElementById('memory-graph');
+			const detailEl = document.getElementById('memory-detail');
+			const detailBodyEl = document.getElementById('memory-detail-body');
+			const detailCloseEl = document.getElementById('memory-detail-close');
+			const showObsEl = document.getElementById('show-obs');
+			const showBelEl = document.getElementById('show-bel');
+			const searchEl = document.getElementById('memory-search');
+			const newBeliefBtn = document.getElementById('new-belief-btn');
+			const dialogEl = document.getElementById('new-belief-dialog');
+			const formEl = document.getElementById('new-belief-form');
+			const cancelBeliefBtn = document.getElementById('cancel-belief');
+			const submitBeliefBtn = document.getElementById('submit-belief');
+			const dialogTitleEl = document.getElementById('belief-dialog-title');
+			const confOut = document.getElementById('conf-out');
+
+			let memoryState = { observations: [], beliefs: [], edges: [] };
+			let editingBeliefId = null; // null when creating new
+			let simulation = null;
+			let selectedNodeId = null;
+
+			// AABB separation force. Each node carries `_bbox` (the rendered
+			// bounding box of its circle + label, relative to its center).
+			// On every tick we resolve overlaps along the shorter axis,
+			// which keeps wide-but-short label rectangles from spacing
+			// nodes apart vertically.
+			function rectCollide(pad = 4) {
+				let nodes;
+				function force() {
+					for (let i = 0; i < nodes.length; i++) {
+						const a = nodes[i];
+						const ab = a._bbox;
+						if (!ab) continue;
+						const ax1 = a.x + ab.x - pad, ax2 = ax1 + ab.w + 2 * pad;
+						const ay1 = a.y + ab.y - pad, ay2 = ay1 + ab.h + 2 * pad;
+						for (let j = i + 1; j < nodes.length; j++) {
+							const b = nodes[j];
+							const bb = b._bbox;
+							if (!bb) continue;
+							const bx1 = b.x + bb.x - pad, bx2 = bx1 + bb.w + 2 * pad;
+							const by1 = b.y + bb.y - pad, by2 = by1 + bb.h + 2 * pad;
+							if (ax2 <= bx1 || bx2 <= ax1 || ay2 <= by1 || by2 <= ay1) continue;
+							const overlapX = Math.min(ax2, bx2) - Math.max(ax1, bx1);
+							const overlapY = Math.min(ay2, by2) - Math.max(ay1, by1);
+							if (overlapX < overlapY) {
+								const shift = overlapX / 2;
+								if (a.x < b.x) { a.x -= shift; b.x += shift; }
+								else { a.x += shift; b.x -= shift; }
+							} else {
+								const shift = overlapY / 2;
+								if (a.y < b.y) { a.y -= shift; b.y += shift; }
+								else { a.y += shift; b.y -= shift; }
+							}
+						}
+					}
+				}
+				force.initialize = (n) => { nodes = n; };
+				return force;
+			}
+
+			async function loadMemoryGraph() {
+				try {
+					const res = await fetch(`/api/memory/graph?workspace=${memoryWorkspace()}`);
+					if (!res.ok) throw new Error(await res.text());
+					memoryState = await res.json();
+					renderGraph();
+				} catch (err) {
+					toast(`memory load failed: ${err.message}`, 'error');
+				}
+			}
+
+			function renderGraph() {
+				const svg = d3.select(svgEl);
+				svg.selectAll('*').remove();
+
+				const obs = showObsEl.checked ? memoryState.observations : [];
+				const bel = showBelEl.checked ? memoryState.beliefs : [];
+
+				if (!obs.length && !bel.length) {
+					const empty = document.createElement('div');
+					empty.className = 'memory-empty';
+					empty.innerHTML =
+						'<div>No memory yet for this workspace.</div>' +
+						'<div class="hint">Click <b>+ new belief</b> to seed one, or wait for the agent to observe something.</div>';
+					if (svgEl.parentNode.querySelector('.memory-empty')) {
+						svgEl.parentNode.querySelector('.memory-empty').remove();
+					}
+					svgEl.parentNode.appendChild(empty);
+					return;
+				} else {
+					const ex = svgEl.parentNode.querySelector('.memory-empty');
+					if (ex) ex.remove();
+				}
+
+				const rect = svgEl.getBoundingClientRect();
+				const w = rect.width;
+				const h = rect.height;
+
+				// Seed positions near the center so nodes don't visibly drift in
+				// from (0,0) — D3's default phyllotaxis spawn point.
+				const nodes = [
+					...obs.map((o) => ({ ...o, _kind: 'observation' })),
+					...bel.map((b) => ({ ...b, _kind: 'belief' }))
+				].map((n) => ({
+					...n,
+					x: w / 2 + (Math.random() - 0.5) * 40,
+					y: h / 2 + (Math.random() - 0.5) * 40
+				}));
+				const visibleIds = new Set(nodes.map((n) => n.id));
+				const links = memoryState.edges
+					.filter((e) => visibleIds.has(e.belief_id) && visibleIds.has(e.observation_id))
+					.map((e) => ({ source: e.observation_id, target: e.belief_id, weight: e.weight }));
+
+				const g = svg.append('g').attr('class', 'graph-root');
+
+				// Zoom + pan
+				svg.call(
+					d3.zoom().scaleExtent([0.2, 4]).on('zoom', (ev) => g.attr('transform', ev.transform))
+				);
+
+				const link = g
+					.append('g')
+					.selectAll('line')
+					.data(links)
+					.join('line')
+					.attr('class', 'link')
+					.attr('stroke-width', (d) => Math.max(0.5, Math.abs(d.weight) * 1.5))
+					.attr('stroke', (d) => (d.weight < 0 ? '#5a2a30' : '#2a2f37'));
+
+				const node = g
+					.append('g')
+					.selectAll('g')
+					.data(nodes, (d) => d.id)
+					.join('g')
+					.attr('class', (d) =>
+						`node ${d._kind}` + (d._kind === 'belief' && d.created_by === 'user' ? ' user-created' : '')
+					)
+					.on('click', (ev, d) => {
+						ev.stopPropagation();
+						selectedNodeId = d.id;
+						highlightNeighborhood(d.id);
+						showDetail(d);
+					})
+					.on('dblclick', (ev, d) => {
+						// Double-click releases a pinned node back to the layout.
+						ev.stopPropagation();
+						d.fx = null;
+						d.fy = null;
+						simulation.alpha(0.3).restart();
+					})
+					.call(
+						d3
+							.drag()
+							.on('start', (ev, d) => {
+								// Bare minimum heat so ticks fire during the drag.
+								// Cool back to 0 on release. Higher alphaTarget here
+								// (e.g. 0.3) causes charge to push other nodes away
+								// while the user holds — the original bug.
+								if (!ev.active) simulation.alphaTarget(0.05).restart();
+								d.fx = d.x;
+								d.fy = d.y;
+							})
+							.on('drag', (ev, d) => {
+								d.fx = ev.x;
+								d.fy = ev.y;
+							})
+							.on('end', (ev, d) => {
+								// Cool the simulation, but KEEP the node pinned where
+								// the user dropped it. Double-click to release.
+								if (!ev.active) simulation.alphaTarget(0);
+							})
+					);
+
+				node
+					.append('circle')
+					.attr('r', (d) =>
+						d._kind === 'belief' ? 6 + 14 * (d.confidence ?? 0.5) : 3.5
+					)
+					.attr('fill-opacity', (d) =>
+						d._kind === 'observation' ? 0.3 + 0.7 * (d.salience ?? 0.5) : 1
+					);
+
+				node
+					.append('text')
+					.attr('x', 0)
+					.attr('y', (d) => (d._kind === 'belief' ? 6 + 14 * (d.confidence ?? 0.5) + 4 : 8))
+					.attr('text-anchor', 'middle')
+					.text((d) => {
+						const txt = d._kind === 'belief' ? d.claim : d.summary;
+						return (txt ?? '').length > 36 ? txt.slice(0, 33) + '…' : txt;
+					});
+
+				// Measure each node's full bounding box (circle + label) so the
+				// collision force can separate by actual rectangle, not by an
+				// inscribed circle — labels are wide but short, so circular
+				// collision over-spaces vertically stacked nodes.
+				node.each(function (d) {
+					try {
+						const b = this.getBBox();
+						d._bbox = { x: b.x, y: b.y, w: b.width, h: b.height };
+					} catch {
+						d._bbox = { x: 0, y: 0, w: 0, h: 0 };
+					}
+				});
+
+				svg.on('click', () => {
+					selectedNodeId = null;
+					clearHighlight();
+					hideDetail();
+				});
+
+				simulation = d3
+					.forceSimulation(nodes)
+					.force(
+						'link',
+						d3
+							.forceLink(links)
+							.id((d) => d.id)
+							.distance((l) => 60 + 40 * (1 - Math.abs(l.weight)))
+							.strength((l) => Math.abs(l.weight) * 0.8)
+					)
+					// Charge falls off with distance (1/r-ish); forceX/Y is constant.
+					// At equilibrium they balance. Increase charge → wider spread.
+					// Increase forceX/Y strength → tighter cluster. Tuned together so
+					// 5 disconnected nodes spread comfortably and don't drift when one
+					// is held during a drag.
+					.force('charge', d3.forceManyBody().strength(-260).distanceMax(400))
+					.force('x', d3.forceX(w / 2).strength(0.05))
+					.force('y', d3.forceY(h / 2).strength(0.05))
+					.force('collide', rectCollide(6))
+					.stop();
+
+				// Settle the layout off-screen, then paint once. Without this the
+				// nodes visibly drift from their seed positions to equilibrium.
+				const settleTicks = Math.ceil(
+					Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay())
+				);
+				for (let i = 0; i < settleTicks; i++) simulation.tick();
+
+				function paintTick() {
+					link
+						.attr('x1', (d) => d.source.x)
+						.attr('y1', (d) => d.source.y)
+						.attr('x2', (d) => d.target.x)
+						.attr('y2', (d) => d.target.y);
+					node.attr('transform', (d) => `translate(${d.x},${d.y})`);
+				}
+				paintTick();
+
+				// Re-attach tick handler so drags still animate.
+				simulation.on('tick', paintTick);
+			}
+
+			function highlightNeighborhood(id) {
+				const neighbors = new Set([id]);
+				for (const e of memoryState.edges) {
+					if (e.belief_id === id) neighbors.add(e.observation_id);
+					if (e.observation_id === id) neighbors.add(e.belief_id);
+				}
+				d3.selectAll('.node').classed('dimmed', (d) => !neighbors.has(d.id));
+				d3.selectAll('.node').classed('selected', (d) => d.id === id);
+				d3.selectAll('.link').classed(
+					'dimmed',
+					(l) => !(neighbors.has(l.source.id) && neighbors.has(l.target.id))
+				);
+			}
+
+			function clearHighlight() {
+				d3.selectAll('.node').classed('dimmed', false).classed('selected', false).classed('match', false);
+				d3.selectAll('.link').classed('dimmed', false);
+			}
+
+			function showDetail(d) {
+				detailEl.hidden = false;
+				if (d._kind === 'belief') renderBeliefDetail(d);
+				else renderObservationDetail(d);
+			}
+			function hideDetail() {
+				detailEl.hidden = true;
+			}
+			detailCloseEl.addEventListener('click', (e) => {
+				e.stopPropagation();
+				selectedNodeId = null;
+				clearHighlight();
+				hideDetail();
+			});
+
+			function scopePills(scope) {
+				if (!scope || !Object.keys(scope).length) return '<span style="color:#6c727b">unscoped</span>';
+				return Object.entries(scope)
+					.map(
+						([k, v]) =>
+							`<span class="scope-pill">${escapeHtml(k)}=${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}</span>`
+					)
+					.join('');
+			}
+
+			function renderBeliefDetail(b) {
+				const evidence = memoryState.edges
+					.filter((e) => e.belief_id === b.id)
+					.map((e) => {
+						const o = memoryState.observations.find((x) => x.id === e.observation_id);
+						return { ...e, observation: o };
+					})
+					.filter((e) => e.observation);
+				detailBodyEl.innerHTML = `
+					<h3>Belief</h3>
+					<div class="claim ${b.created_by === 'user' ? 'user' : ''}">${escapeHtml(b.claim)}</div>
+					<div class="kv"><span class="k">scope</span><span>${scopePills(b.scope)}</span></div>
+					<div class="kv"><span class="k">confidence</span><span>${(b.confidence ?? 0).toFixed(2)}</span></div>
+					<div class="kv"><span class="k">explicitness</span><span>${escapeHtml(b.explicitness ?? '')}</span></div>
+					<div class="kv"><span class="k">created by</span><span>${escapeHtml(b.created_by ?? '')}</span></div>
+					<div class="kv"><span class="k">tags</span><span>${(b.tags ?? []).map((t) => `<span class="scope-pill">${escapeHtml(t)}</span>`).join('') || '<span style="color:#6c727b">none</span>'}</span></div>
+					<div class="kv"><span class="k">updated</span><span>${b.updated_at ? fmtAge(b.updated_at) : '—'}</span></div>
+					<h3 style="margin-top:18px">Evidence (${evidence.length})</h3>
+					${
+						evidence.length
+							? evidence
+									.map(
+										(e) => `
+								<div class="evidence-row ${e.weight < 0 ? 'contradicts' : 'supports'}" data-obs-id="${e.observation.id}">
+									<span class="weight">${e.weight.toFixed(2)}</span>
+									${escapeHtml(e.observation.summary)}
+								</div>`
+									)
+									.join('')
+							: '<div style="color:#6c727b;font-size:12px">No evidence yet.</div>'
+					}
+					<div class="actions">
+						<button id="edit-belief-btn">Edit</button>
+						<button class="danger" id="delete-belief-btn">Delete</button>
+					</div>
+				`;
+				detailBodyEl.querySelectorAll('.evidence-row').forEach((row) => {
+					row.addEventListener('click', () => {
+						const obsId = row.dataset.obsId;
+						const obs = memoryState.observations.find((o) => o.id === obsId);
+						if (obs) {
+							selectedNodeId = obsId;
+							highlightNeighborhood(obsId);
+							renderObservationDetail(obs);
+						}
+					});
+				});
+				document.getElementById('edit-belief-btn').onclick = () => openBeliefDialog(b);
+				document.getElementById('delete-belief-btn').onclick = () => deleteBelief(b);
+			}
+
+			function renderObservationDetail(o) {
+				const beliefs = memoryState.edges
+					.filter((e) => e.observation_id === o.id)
+					.map((e) => {
+						const b = memoryState.beliefs.find((x) => x.id === e.belief_id);
+						return { ...e, belief: b };
+					})
+					.filter((e) => e.belief);
+				detailBodyEl.innerHTML = `
+					<h3>Observation</h3>
+					<div class="claim">${escapeHtml(o.summary)}</div>
+					<div class="kv"><span class="k">ts</span><span>${o.ts ? fmtAge(o.ts) : '—'}</span></div>
+					<div class="kv"><span class="k">salience</span><span>${(o.salience ?? 0).toFixed(2)}</span></div>
+					<div class="kv"><span class="k">entities</span><span>${scopePills(o.entities)}</span></div>
+					<div class="kv"><span class="k">tags</span><span>${(o.tags ?? []).map((t) => `<span class="scope-pill">${escapeHtml(t)}</span>`).join('') || '<span style="color:#6c727b">none</span>'}</span></div>
+					${o.raw_text ? `<div class="kv"><span class="k">raw text</span><span style="font-style:italic">"${escapeHtml(o.raw_text)}"</span></div>` : ''}
+					<h3 style="margin-top:18px">Connected beliefs (${beliefs.length})</h3>
+					${
+						beliefs.length
+							? beliefs
+									.map(
+										(e) => `
+								<div class="evidence-row ${e.weight < 0 ? 'contradicts' : 'supports'}" data-bel-id="${e.belief.id}">
+									<span class="weight">${e.weight.toFixed(2)}</span>
+									${escapeHtml(e.belief.claim)}
+								</div>`
+									)
+									.join('')
+							: '<div style="color:#6c727b;font-size:12px">Not yet connected to any belief.</div>'
+					}
+				`;
+				detailBodyEl.querySelectorAll('.evidence-row').forEach((row) => {
+					row.addEventListener('click', () => {
+						const belId = row.dataset.belId;
+						const b = memoryState.beliefs.find((x) => x.id === belId);
+						if (b) {
+							selectedNodeId = belId;
+							highlightNeighborhood(belId);
+							renderBeliefDetail(b);
+						}
+					});
+				});
+			}
+
+			// ─ New / Edit belief dialog ────────────────────────────────────
+			function openBeliefDialog(existing) {
+				editingBeliefId = existing?.id ?? null;
+				dialogTitleEl.textContent = editingBeliefId ? 'Edit belief' : 'New belief';
+				submitBeliefBtn.textContent = editingBeliefId ? 'Save' : 'Create';
+				formEl.elements.claim.value = existing?.claim ?? '';
+				formEl.elements.scope.value = existing
+					? Object.entries(existing.scope ?? {})
+							.map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`)
+							.join('\n')
+					: '';
+				const conf = typeof existing?.confidence === 'number' ? existing.confidence : 0.85;
+				formEl.elements.confidence.value = conf;
+				confOut.textContent = conf.toFixed(2);
+				formEl.elements.tags.value = (existing?.tags ?? []).join(', ');
+				dialogEl.showModal();
+			}
+			newBeliefBtn.addEventListener('click', () => openBeliefDialog(null));
+			cancelBeliefBtn.addEventListener('click', () => dialogEl.close());
+			formEl.elements.confidence.addEventListener('input', (e) => {
+				confOut.textContent = Number(e.target.value).toFixed(2);
+			});
+
+			function parseScope(raw) {
+				const scope = {};
+				for (const line of raw.split('\n')) {
+					const i = line.indexOf('=');
+					if (i <= 0) continue;
+					const k = line.slice(0, i).trim();
+					const v = line.slice(i + 1).trim();
+					if (k) scope[k] = v;
+				}
+				return scope;
+			}
+
+			formEl.addEventListener('submit', async (e) => {
+				e.preventDefault();
+				const fd = new FormData(formEl);
+				const payload = {
+					claim: fd.get('claim'),
+					scope: parseScope(fd.get('scope') ?? ''),
+					confidence: Number(fd.get('confidence')),
+					explicitness: 'stated',
+					tags: String(fd.get('tags') ?? '')
+						.split(',')
+						.map((t) => t.trim())
+						.filter(Boolean)
+				};
+				try {
+					const url = editingBeliefId
+						? `/api/memory/beliefs/${editingBeliefId}`
+						: `/api/memory/beliefs?workspace=${memoryWorkspace()}`;
+					const res = await fetch(url, {
+						method: editingBeliefId ? 'PATCH' : 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify(payload)
+					});
+					if (!res.ok) throw new Error(await res.text());
+					dialogEl.close();
+					toast(editingBeliefId ? 'belief updated' : 'belief created');
+					await loadMemoryGraph();
+				} catch (err) {
+					toast(`save failed: ${err.message}`, 'error');
+				}
+			});
+
+			async function deleteBelief(b) {
+				if (!confirm(`Delete belief?\n\n"${b.claim}"\n\nIts evidence rows are removed too; the underlying observations are kept.`)) return;
+				try {
+					const res = await fetch(`/api/memory/beliefs/${b.id}`, { method: 'DELETE' });
+					if (!res.ok) throw new Error(await res.text());
+					toast('belief deleted');
+					hideDetail();
+					await loadMemoryGraph();
+				} catch (err) {
+					toast(`delete failed: ${err.message}`, 'error');
+				}
+			}
+
+			// ─ Filter toggles + search ─────────────────────────────────────
+			showObsEl.addEventListener('change', () => renderGraph());
+			showBelEl.addEventListener('change', () => renderGraph());
+
+			let searchTimer = null;
+			searchEl.addEventListener('input', () => {
+				clearTimeout(searchTimer);
+				searchTimer = setTimeout(runSearch, 200);
+			});
+			async function runSearch() {
+				const q = searchEl.value.trim();
+				if (!q) {
+					clearHighlight();
+					return;
+				}
+				try {
+					const res = await fetch(
+						`/api/memory/search?workspace=${memoryWorkspace()}&q=${encodeURIComponent(q)}`
+					);
+					if (!res.ok) throw new Error(await res.text());
+					const hits = await res.json();
+					const matched = new Set([...(hits.observations ?? []), ...(hits.beliefs ?? [])]);
+					d3.selectAll('.node')
+						.classed('match', (d) => matched.has(d.id))
+						.classed('dimmed', (d) => matched.size > 0 && !matched.has(d.id));
+					d3.selectAll('.link').classed(
+						'dimmed',
+						(l) => matched.size > 0 && !(matched.has(l.source.id) || matched.has(l.target.id))
+					);
+				} catch (err) {
+					toast(`search failed: ${err.message}`, 'error');
+				}
+			}
+
+			// Reload graph when workspace toggle changes (memory view only).
+			wsToggle.addEventListener('click', () => {
+				if (activeTab === 'memory') loadMemoryGraph();
+			});
+		</script>
+	</body>
+</html>

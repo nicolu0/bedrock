@@ -1,0 +1,7 @@
+{
+  "system/stage": "setup",
+  "property/dean-campustown": "true",
+  "vendor/plumbing/dean-campustown": "radha",
+  "property/dean": "true",
+  "vendor/plumbing/dean": "mario"
+}

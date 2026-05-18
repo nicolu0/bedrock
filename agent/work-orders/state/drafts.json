@@ -1,0 +1,32 @@
+[
+  {
+    "id": "drf_17359a78feea7727",
+    "created_at": "2026-05-16T07:00:47.040Z",
+    "hold_until": "2026-05-18T16:00:00.000Z",
+    "trigger": "new_issue",
+    "channel": "groupchat",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "issue_id": "d5c09298-3998-4271-b76c-0fd462bf9975",
+    "to": "iMessage;-;andrew51@illinois.edu",
+    "to_participants": [
+      "andrew51@illinois.edu"
+    ],
+    "messages": [
+      {
+        "body": "Unit 8 at Hub Champaign's washing machine is making a loud grinding noise."
+      },
+      {
+        "body": "Should we send Mario?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Unit 8 at Hub Champaign's washing machine is making a loud grinding noise."
+      },
+      {
+        "body": "Should we send Mario?"
+      }
+    ]
+  }
+]

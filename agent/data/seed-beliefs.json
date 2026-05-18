@@ -1,0 +1,47 @@
+[
+	{
+		"claim": "Use Primex termites for pest control.",
+		"scope": { "trade": "pest control" },
+		"confidence": 0.85,
+		"explicitness": "stated",
+		"created_by": "user",
+		"tags": ["vendor-preference", "default"],
+		"_source_note": "Jose, 2026-05-15: 'almost always use Primex termites for any pest control.'"
+	},
+	{
+		"claim": "Use Abraham for small handyman work.",
+		"scope": { "trade": "handyman" },
+		"confidence": 0.85,
+		"explicitness": "stated",
+		"created_by": "user",
+		"tags": ["vendor-preference", "default"],
+		"_source_note": "Jose, 2026-05-15: 'pretty much always use Abraham for small handyman stuff.' Default when no portfolio pin matches."
+	},
+	{
+		"claim": "Use Kori for handyman work at Harrison Properties (Rose, Glencoe, Ozone).",
+		"scope": { "trade": "handyman", "portfolio": "Harrison Properties" },
+		"confidence": 0.92,
+		"explicitness": "stated",
+		"created_by": "user",
+		"tags": ["vendor-preference", "portfolio-override"],
+		"_source_note": "Jose, 2026-05-15: 'always send Kori for handyman stuff to Harrison Properties: Rose, Glencoe, and Ozone.' Overrides the default Abraham belief when portfolio=Harrison Properties."
+	},
+	{
+		"claim": "Use Yonic for plumbing.",
+		"scope": { "trade": "plumbing" },
+		"confidence": 0.85,
+		"explicitness": "stated",
+		"created_by": "user",
+		"tags": ["vendor-preference", "default"],
+		"_source_note": "Jose, 2026-05-15: 'for plumbing we pretty much always send Yonic.'"
+	},
+	{
+		"claim": "For elevator issues, contact the property's designated elevator servicer — do not pick from the general vendor list; the servicer is per-property and recorded on the property record.",
+		"scope": { "trade": "elevator" },
+		"confidence": 0.92,
+		"explicitness": "stated",
+		"created_by": "user",
+		"tags": ["policy", "per-property-routing"],
+		"_source_note": "Jose, 2026-05-15: 'for elevator problems we always have to contact the elevator servicer for that specific property.' Meta-rule, not a vendor pick — the consumer must look up the property's elevator servicer rather than pattern-matching by trade."
+	}
+]

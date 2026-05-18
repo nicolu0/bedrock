@@ -1,173 +1,206 @@
-// Orchestrator: streaming, one runTurn per user message.
-// Emits events as they happen so the transport can show live UI:
-//   {type:'read'}                                 user message acknowledged
-//   {type:'typing'}                               about to call the model
-//   {type:'message', content}                     a send_text result, in order
-//   {type:'tool_call', name, args, result}        any non-send_text tool fired
+// THE orchestrator — the only place OpenAI is called.
 //
-// Tool calls are dispatched inline as the stream produces them. send_text
-// results are emitted as 'message' events as soon as their args parse.
+//   runTurn(skill, ctx)
+//
+// Skill shape (see agent/skills/*.mjs):
+//   {
+//     name, model, maxIterations, maxTokens?,
+//     tools: [{ name, description, parameters, run(args, ctx) }, ...],
+//     taskPrompt: string | (ctx) => string,
+//     buildContext: (ctx) => OpenAI messages array,
+//     preCheck?:  (ctx) => result | null,    // short-circuit before LLM
+//     commit?:    (ctx) => void              // post-LLM hook
+//   }
+//
+// Tool result conventions (generic — orchestrator never names a tool):
+//   { ...result, assistantContent?: string, endTurn?: boolean }
+//     assistantContent — concatenated into the assistant content of the
+//       working messages so the model reads its own speech as text on the
+//       next iteration. (send_text uses this; other tools normally don't.)
+//     endTurn — break the loop after this tool runs. Used by tools that
+//       speak the final word of a turn (e.g., set_demo_stage's closer).
+//
+// Grep-test invariant: this file must contain zero references to specific
+// skill names (f1, demo, chat) or specific tool names (send_text, etc.).
 
-import { buildSystemPrompt, OPENER_MESSAGES, FOLLOWUP_COMPLETE_CLOSER } from './prompts.mjs';
-import { TOOL_DEFS, executeTool } from './tools.mjs';
-import * as memory from './memory.mjs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { identityPrompt } from '../identity.mjs';
 
-const OPENER_TYPING_DELAY_MS = 600;
-const OPENER_BETWEEN_MS = 700;
-const MESSAGE_GAP_MS = 700;       // pause between consecutive bot messages within one iteration
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Honors BEDROCK_STATE_DIR so the eval harness redirects writes to a temp dir.
+const STATE_DIR =
+	process.env.BEDROCK_STATE_DIR || path.join(__dirname, '..', 'work-orders', 'state');
+const TURNS_LOG_PATH = path.join(STATE_DIR, 'turns.jsonl');
 
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const DEFAULT_MAX_ITERATIONS = 8;
+const decoder = new TextDecoder();
 
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4-2026-03-05';
-const MAX_TOOL_LOOPS = 8;
-
-// In-memory conversation log per handle: [{role: 'user'|'assistant', content}]
-const conversations = new Map();
-
-export function getConversation(handle) {
-	return conversations.get(handle) ?? [];
+async function appendTurnLog(entry) {
+	try {
+		await fs.appendFile(TURNS_LOG_PATH, JSON.stringify(entry) + '\n', 'utf8');
+	} catch {
+		// Never fail a turn because observability logging failed.
+	}
 }
 
-export function resetConversation(handle) {
-	conversations.delete(handle);
+function toOpenAIToolDefs(tools) {
+	return (tools ?? []).map((t) => ({
+		type: 'function',
+		function: {
+			name: t.name,
+			description: t.description,
+			parameters: t.parameters
+		}
+	}));
 }
 
-export async function runTurn(handle, userMessage, opts = {}) {
-	const onEvent = opts.onEvent ?? (() => {});
+async function* parseSSEStream(response) {
+	let buffer = '';
+	for await (const chunk of response.body) {
+		buffer += decoder.decode(chunk, { stream: true });
+		const lines = buffer.split('\n');
+		buffer = lines.pop() ?? '';
+		for (const raw of lines) {
+			const line = raw.trim();
+			if (!line.startsWith('data:')) continue;
+			const payload = line.slice(5).trim();
+			if (!payload || payload === '[DONE]') continue;
+			try {
+				yield JSON.parse(payload);
+			} catch {
+				// skip malformed event
+			}
+		}
+	}
+}
+
+export async function runTurn(skill, ctx) {
+	const startTime = Date.now();
+	ctx.outbox = ctx.outbox ?? [];
+	ctx.drafts = ctx.drafts ?? [];
+
+	// preCheck — optional skill-defined short-circuit before any LLM call.
+	if (typeof skill.preCheck === 'function') {
+		const early = await skill.preCheck(ctx);
+		if (early) {
+			await appendTurnLog({
+				ts: new Date().toISOString(),
+				skill: skill.name,
+				kind: 'precheck_short_circuit',
+				outbox_count: ctx.outbox.length,
+				drafts_count: ctx.drafts.length,
+				duration_ms: Date.now() - startTime
+			});
+			return early;
+		}
+	}
+
 	const apiKey = process.env.OPENAI_API_KEY;
 	if (!apiKey) throw new Error('OPENAI_API_KEY not set');
 
-	await onEvent({ type: 'read' });
+	const userMessages = await skill.buildContext(ctx);
+	const toolDefs = toOpenAIToolDefs(skill.tools);
+	const toolByName = new Map((skill.tools ?? []).map((t) => [t.name, t]));
 
-	const existing = conversations.get(handle) ?? [];
-	const isFirstTurn = existing.length === 0;
-	const history = existing;
-	history.push({ role: 'user', content: userMessage });
-
-	if (isFirstTurn) {
-		// Canned opener — consistent intro + cta, no model call.
-		for (let i = 0; i < OPENER_MESSAGES.length; i++) {
-			await onEvent({ type: 'typing' });
-			await sleep(OPENER_TYPING_DELAY_MS);
-			await onEvent({ type: 'message', content: OPENER_MESSAGES[i] });
-			if (i < OPENER_MESSAGES.length - 1) await sleep(OPENER_BETWEEN_MS);
-		}
-		const finalText = OPENER_MESSAGES.join('\n');
-		history.push({ role: 'assistant', content: finalText });
-		conversations.set(handle, history);
-		return { messages: [...OPENER_MESSAGES], toolCalls: [] };
-	}
-
-	const working = [
-		{ role: 'system', content: '' }, // filled in per loop iteration
-		...history.map(({ role, content }) => ({ role, content })),
-	];
-
-	const outbox = [];
+	const working = [...userMessages];
 	const toolCallsLog = [];
-	// opts.ctx is merged in so callers (e.g. imessage.mjs) can attach
-	// per-turn capabilities like a `react` callback bound to the incoming
-	// message GUID, without the orchestrator needing to know about iMessage.
-	const ctx = { handle, outbox, ...(opts.ctx || {}) };
-	// Set when a hardcoded closer fires (e.g. followup → complete) and the
-	// turn is genuinely over — we skip the next model iteration so the model
-	// never enters the new stage's prompt mid-turn.
-	let endTurnAfterDispatch = false;
+	const maxIterations = skill.maxIterations ?? DEFAULT_MAX_ITERATIONS;
+	let failure = null;
+	let endTurn = false;
+	let lastIter = 0;
 
-	for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
-		// Refresh the system prompt each iteration so a mid-turn set_demo_stage applies right away.
-		const stage = (await memory.getProfile(handle, 'system/stage')) || 'intro';
-		working[0] = { role: 'system', content: buildSystemPrompt(stage) };
+	iter: for (let loop = 0; loop < maxIterations; loop++) {
+		lastIter = loop + 1;
 
-		await onEvent({ type: 'typing' });
+		// Recompute system prompt each iteration — skill.taskPrompt may be
+		// dynamic (e.g., stage-aware). identityPrompt is invariant.
+		const taskPromptValue =
+			typeof skill.taskPrompt === 'function'
+				? await skill.taskPrompt(ctx)
+				: (skill.taskPrompt ?? '');
+		const systemContent = taskPromptValue
+			? `${identityPrompt}\n\n${taskPromptValue}`
+			: identityPrompt;
+		const messages = [{ role: 'system', content: systemContent }, ...working];
 
-		const response = await fetch('https://api.openai.com/v1/chat/completions', {
-			method: 'POST',
-			headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				model: OPENAI_MODEL,
-				messages: working,
-				tools: TOOL_DEFS,
-				tool_choice: 'auto',
-				stream: true,
-			}),
-		});
+		let response;
+		try {
+			response = await fetch('https://api.openai.com/v1/chat/completions', {
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${apiKey}`,
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					model: skill.model,
+					messages,
+					...(toolDefs.length ? { tools: toolDefs, tool_choice: 'auto' } : {}),
+					stream: true,
+					// Eval-mode temperature: 0 so judge-based scenarios and tool-call
+					// assertions are reproducible. Prod stays on the OpenAI default
+					// for now — change cautiously, it affects every user-facing turn.
+					...(process.env.BEDROCK_EVAL_MODE === '1' ? { temperature: 0 } : {}),
+					...(skill.maxTokens ? { max_completion_tokens: skill.maxTokens } : {})
+				})
+			});
+		} catch (err) {
+			failure = { stage: 'openai_request', error: err.message };
+			break iter;
+		}
 
 		if (!response.ok) {
-			const errText = await response.text();
-			throw new Error(`OpenAI ${response.status}: ${errText}`);
+			const errText = await response.text().catch(() => '');
+			failure = { stage: 'openai_response', status: response.status, error: errText };
+			break iter;
 		}
-		if (!response.body) throw new Error('OpenAI returned no body');
+		if (!response.body) {
+			failure = { stage: 'openai_response', error: 'empty body' };
+			break iter;
+		}
 
-		const decoder = new TextDecoder();
-		let buffer = '';
-		const calls = {};            // index -> {id, name, args, parsedArgs, result}
-		let dispatchedThrough = -1;
+		// Streamed parse + inline tool dispatch as args complete.
+		const calls = {};
 		let plainContent = '';
-		let messagesThisIter = 0;    // counts bot messages emitted in this iteration
+		let dispatchedThrough = -1;
 
 		const dispatchUpTo = async (maxIdx) => {
 			for (let i = dispatchedThrough + 1; i <= maxIdx; i++) {
 				const c = calls[i];
 				if (!c || !c.name) continue;
 				let parsed = {};
-				try { parsed = JSON.parse(c.args || '{}'); } catch { /* keep empty */ }
+				try {
+					parsed = JSON.parse(c.args || '{}');
+				} catch {
+					// keep empty
+				}
 				c.parsedArgs = parsed;
-				// Snapshot prior stage so we can detect the followup → complete
-				// transition and fire the hardcoded closer.
-				const priorStage = c.name === 'set_demo_stage'
-					? ((await memory.getProfile(handle, 'system/stage')) || 'intro')
-					: null;
-				c.result = await executeTool(c.name, parsed, ctx);
-				toolCallsLog.push({ name: c.name, args: parsed, result: c.result });
-				if (c.name === 'send_text') {
-					const text = String(parsed.content ?? '').trim();
-					for (const part of text.split(/\n+/).map(s => s.trim()).filter(Boolean)) {
-						// Pace consecutive messages: typing indicator + gap before each
-						// non-first message in this iteration. Between iterations the
-						// API call latency itself provides the pause, so first message
-						// of an iteration goes through immediately.
-						if (messagesThisIter > 0) {
-							await onEvent({ type: 'typing' });
-							await sleep(MESSAGE_GAP_MS);
-						}
-						await onEvent({ type: 'message', content: part });
-						messagesThisIter++;
-					}
+				const tool = toolByName.get(c.name);
+				let result;
+				if (!tool) {
+					result = { error: `unknown tool: ${c.name}` };
 				} else {
-					await onEvent({ type: 'tool_call', name: c.name, args: parsed, result: c.result });
-				}
-				// Fire the hardcoded closer on the in-order followup → complete
-				// transition only. Out-of-order transitions are intentionally silent
-				// (see SPEC.html T2).
-				if (c.name === 'set_demo_stage' && priorStage === 'followup' && parsed.stage === 'complete') {
-					for (const line of FOLLOWUP_COMPLETE_CLOSER) {
-						await onEvent({ type: 'typing' });
-						await sleep(MESSAGE_GAP_MS);
-						outbox.push(line);
-						await onEvent({ type: 'message', content: line });
-						messagesThisIter++;
+					try {
+						result = await tool.run(parsed, ctx);
+					} catch (err) {
+						result = { error: err.message };
+						failure = failure ?? { stage: 'tool', tool: c.name, error: err.message };
 					}
-					// The closer is the last word of this turn. Don't run another
-					// model iteration — the model would enter the complete-stage
-					// prompt mid-turn and feel obligated to greet/re-introduce.
-					endTurnAfterDispatch = true;
 				}
+				c.result = result ?? {};
+				toolCallsLog.push({ name: c.name, args: parsed, result: c.result });
+				if (typeof ctx.onEvent === 'function') {
+					// Generic tool_call event for logs. Transports may ignore it.
+					await ctx.onEvent({ type: 'tool_call', name: c.name, args: parsed, result: c.result });
+				}
+				if (c.result?.endTurn) endTurn = true;
 				dispatchedThrough = i;
 			}
 		};
 
-		for await (const chunk of response.body) {
-			buffer += decoder.decode(chunk, { stream: true });
-			const lines = buffer.split('\n');
-			buffer = lines.pop() ?? '';
-			for (const rawLine of lines) {
-				const line = rawLine.trim();
-				if (!line.startsWith('data:')) continue;
-				const payload = line.slice(5).trim();
-				if (!payload || payload === '[DONE]') continue;
-				let event;
-				try { event = JSON.parse(payload); } catch { continue; }
+		try {
+			for await (const event of parseSSEStream(response)) {
 				const choice = event.choices?.[0];
 				if (!choice) continue;
 				const delta = choice.delta ?? {};
@@ -180,64 +213,131 @@ export async function runTurn(handle, userMessage, opts = {}) {
 						if (tc.id) calls[idx].id = tc.id;
 						if (tc.function?.name) calls[idx].name = tc.function.name;
 						if (tc.function?.arguments) calls[idx].args += tc.function.arguments;
-						// A new index appearing means the previous one is done.
+						// New index = previous index's args are complete → dispatch now,
+						// so the transport (live mode) can act on each call as it arrives
+						// rather than waiting for the whole response.
 						if (idx - 1 > dispatchedThrough) await dispatchUpTo(idx - 1);
 					}
 				}
 			}
+		} catch (err) {
+			failure = failure ?? { stage: 'openai_stream', error: err.message };
+			break iter;
 		}
 
-		// Stream done — flush any remaining tool calls.
-		const indices = Object.keys(calls).map(Number).sort((a, b) => a - b);
+		// Flush any remaining tool calls after stream completes.
+		const indices = Object.keys(calls)
+			.map(Number)
+			.sort((a, b) => a - b);
 		const maxIdx = indices.length ? indices[indices.length - 1] : -1;
 		if (maxIdx >= 0) await dispatchUpTo(maxIdx);
 
-		const orderedCalls = indices.map(i => calls[i]).filter(c => c.name);
+		const orderedCalls = indices.map((i) => calls[i]).filter((c) => c.name);
 
 		if (orderedCalls.length > 0) {
-			// Mirror send_text contents into assistant.content so the model reads
-			// its own prior speech as text, not just as opaque tool invocations.
+			// Build the assistant content from plain content + any tool results
+			// that opted into assistantContent (generic mechanism — orchestrator
+			// never names a specific tool).
 			const spoken = orderedCalls
-				.filter(c => c.name === 'send_text')
-				.map(c => String(c.parsedArgs?.content ?? '').trim())
-				.filter(Boolean)
+				.map((c) => c.result?.assistantContent)
+				.filter((s) => typeof s === 'string' && s.length > 0)
 				.join('\n');
 			const merged = [plainContent.trim(), spoken].filter(Boolean).join('\n');
-			// Feed assistant + tool results back so the model can continue.
+
 			working.push({
 				role: 'assistant',
 				content: merged || null,
-				tool_calls: orderedCalls.map(c => ({
+				tool_calls: orderedCalls.map((c) => ({
 					id: c.id,
 					type: 'function',
-					function: { name: c.name, arguments: c.args || '{}' },
-				})),
+					function: { name: c.name, arguments: c.args || '{}' }
+				}))
 			});
 			for (const c of orderedCalls) {
+				// Strip orchestration-only fields before showing the model.
+				const { assistantContent: _ac, endTurn: _et, ...modelVisibleResult } = c.result ?? {};
 				working.push({
 					tool_call_id: c.id,
 					role: 'tool',
-					content: JSON.stringify(c.result ?? {}),
+					content: JSON.stringify(modelVisibleResult)
 				});
 			}
-			// A hardcoded closer fired this iteration — turn is over.
-			if (endTurnAfterDispatch) break;
-			// Loop back for another model call.
-			continue;
+
+			if (endTurn) break iter;
+			if (failure) break iter;
+			continue iter;
 		}
 
-		// No tool calls this iteration — model produced final content (or nothing).
-		if (plainContent.trim() && outbox.length === 0) {
+		// No tool calls — model returned plain content (or nothing). Default
+		// behavior: drop it and warn. The only path to a real outbound message
+		// should be through a tool (send_text, acknowledge, etc.) so tool-level
+		// safety guards stay the single chokepoint.
+		//
+		// Opt-in: a skill may set `allowPlainContentSend: true` to keep a
+		// safety-net fallback that emits plain content as a message event
+		// (demo, f1 — their prompts haven't been tightened to always route
+		// through send_text). New skills should NOT opt in; tighten the prompt
+		// instead. This flag is a transitional crutch, not a feature.
+		//
+		// TODO(agent-turns): once the Agent Turns feature lands, route this
+		// drop/warn signal there so it surfaces in the UI rather than just
+		// console output.
+		if (plainContent.trim()) {
 			const text = plainContent.trim();
-			outbox.push(text);
-			await onEvent({ type: 'message', content: text });
+			if (skill.allowPlainContentSend && ctx.outbox.length === 0 && typeof ctx.onEvent === 'function') {
+				await ctx.onEvent({ type: 'message', content: text });
+				ctx.outbox.push(text);
+			} else {
+				const preview = text.slice(0, 120);
+				console.warn(
+					`[orchestrator] dropped plain content from skill="${skill.name}" (no tool call): "${preview}${text.length > 120 ? '…' : ''}"`
+				);
+			}
 		}
-		break;
+		break iter;
 	}
 
-	const finalText = outbox.join('\n');
-	history.push({ role: 'assistant', content: finalText });
-	conversations.set(handle, history);
+	if (!endTurn && lastIter === maxIterations && !failure) {
+		// Hit the iteration cap. Only flag as a failure if the loop didn't
+		// produce anything — otherwise we got drafts/messages and the model
+		// just kept going for no useful reason. The bundle is still usable.
+		if (ctx.outbox.length === 0 && ctx.drafts.length === 0) {
+			failure = { stage: 'max_iterations', maxIterations };
+		}
+	}
 
-	return { messages: outbox, toolCalls: toolCallsLog };
+	// Post-loop commit hook (e.g., demo persists assistant turn to history).
+	if (typeof skill.commit === 'function') {
+		try {
+			await skill.commit(ctx);
+		} catch (err) {
+			failure = failure ?? { stage: 'commit', error: err.message };
+		}
+	}
+
+	const result = {
+		messages: [...ctx.outbox],
+		drafts: [...ctx.drafts],
+		toolCalls: toolCallsLog,
+		failure
+	};
+
+	await appendTurnLog({
+		ts: new Date().toISOString(),
+		skill: skill.name,
+		model: skill.model,
+		kind: failure ? 'failure' : 'completed',
+		iterations: lastIter,
+		tool_calls: toolCallsLog.map((t) => ({
+			name: t.name,
+			ok: !t.result?.error,
+			error: t.result?.error
+		})),
+		outbox_count: ctx.outbox.length,
+		drafts_count: ctx.drafts.length,
+		failure,
+		duration_ms: Date.now() - startTime
+	});
+
+	return result;
 }

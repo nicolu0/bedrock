@@ -14,6 +14,10 @@ scripts/
 .DS_Store
 Thumbs.db
 
+# Claude Code session state + worktrees (worktrees are separate checkouts,
+# never tracked as embedded git repos in the parent branch)
+.claude/
+
 # Env
 .env
 .env.*
