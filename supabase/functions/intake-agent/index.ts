@@ -14,7 +14,7 @@ const APPFOLIO_CLIENT_ID = Deno.env.get('APPFOLIO_CLIENT_ID')!;
 const APPFOLIO_CLIENT_SECRET = Deno.env.get('APPFOLIO_CLIENT_SECRET')!;
 const APPFOLIO_VHOST = Deno.env.get('APPFOLIO_VHOST')!;
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
-const OPENAI_MODEL = 'gpt-4.1-mini';
+const OPENAI_MODEL = 'gpt-5.4-mini-2026-03-17';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 	auth: { persistSession: false, autoRefreshToken: false }

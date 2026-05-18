@@ -142,7 +142,7 @@ export async function runTurn(skill, ctx) {
 					// assertions are reproducible. Prod stays on the OpenAI default
 					// for now — change cautiously, it affects every user-facing turn.
 					...(process.env.BEDROCK_EVAL_MODE === '1' ? { temperature: 0 } : {}),
-					...(skill.maxTokens ? { max_tokens: skill.maxTokens } : {})
+					...(skill.maxTokens ? { max_completion_tokens: skill.maxTokens } : {})
 				})
 			});
 		} catch (err) {
@@ -268,15 +268,30 @@ export async function runTurn(skill, ctx) {
 			continue iter;
 		}
 
-		// No tool calls — model returned plain content (or nothing). For live
-		// transports (ctx.onEvent set), emit it as a message so the user still
-		// sees something. For draft transports, it's dropped — drafts must
-		// come through send_text.
+		// No tool calls — model returned plain content (or nothing). Default
+		// behavior: drop it and warn. The only path to a real outbound message
+		// should be through a tool (send_text, acknowledge, etc.) so tool-level
+		// safety guards stay the single chokepoint.
+		//
+		// Opt-in: a skill may set `allowPlainContentSend: true` to keep a
+		// safety-net fallback that emits plain content as a message event
+		// (demo, f1 — their prompts haven't been tightened to always route
+		// through send_text). New skills should NOT opt in; tighten the prompt
+		// instead. This flag is a transitional crutch, not a feature.
+		//
+		// TODO(agent-turns): once the Agent Turns feature lands, route this
+		// drop/warn signal there so it surfaces in the UI rather than just
+		// console output.
 		if (plainContent.trim()) {
 			const text = plainContent.trim();
-			if (ctx.outbox.length === 0 && typeof ctx.onEvent === 'function') {
+			if (skill.allowPlainContentSend && ctx.outbox.length === 0 && typeof ctx.onEvent === 'function') {
 				await ctx.onEvent({ type: 'message', content: text });
 				ctx.outbox.push(text);
+			} else {
+				const preview = text.slice(0, 120);
+				console.warn(
+					`[orchestrator] dropped plain content from skill="${skill.name}" (no tool call): "${preview}${text.length > 120 ? '…' : ''}"`
+				);
 			}
 		}
 		break iter;

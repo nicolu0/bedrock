@@ -256,5 +256,92 @@
     "forced_send": false,
     "notes": "Wrong vendor + special case, checking complex not specific unit.",
     "notes_updated_at": "2026-05-14T01:04:14.978Z"
+  },
+  {
+    "timestamp": "2026-05-16T05:23:42.339Z",
+    "draft_id": "drf_44cbbe7992a9a64b",
+    "issue_id": "f74a266b-7a1d-430c-9dd6-a98753406eda",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "to": "iMessage;-;andrew51@illinois.edu",
+    "to_participants": [
+      "andrew51@illinois.edu"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 701 at Hub Champaign has a kitchen sink leaking and water collecting on the floor.",
+      "Should we send Yonic Herrera?"
+    ],
+    "messages_final": [
+      "Unit 701 at Hub Champaign has a kitchen sink leaking and water collecting on the floor.",
+      "Should we send Yonic Herrera?"
+    ],
+    "edited": false,
+    "diffs": [
+      null,
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-16T06:39:16.937Z",
+    "draft_id": "drf_de1233e4a809bc81",
+    "issue_id": "c75e1379-92f3-41a3-a41e-901bfd0b3305",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "to": "iMessage;-;andrew51@illinois.edu",
+    "to_participants": [
+      "andrew51@illinois.edu"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 5 at Hub Champaign's dryer is not heating.",
+      "Should we send Cross Appliance Inc?",
+      "Should we send Cross Appliance Inc?"
+    ],
+    "messages_final": [
+      "Unit 5 at Hub Champaign's dryer is not heating.",
+      "Should we send Cross Appliance Inc?",
+      "Should we send Cross Appliance Inc?"
+    ],
+    "edited": false,
+    "diffs": [
+      null,
+      null,
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-16T06:58:47.486Z",
+    "draft_id": "drf_2ee3cf9348620a27",
+    "issue_id": "48d694ba-ef25-4c40-a3ef-ab906630f360",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "to": "iMessage;-;andrew51@illinois.edu",
+    "to_participants": [
+      "andrew51@illinois.edu"
+    ],
+    "action": "dismiss",
+    "messages_original": [
+      "Unit 12 at Hub Champaign's washing machine is leaking water.",
+      "Should we send Cross Appliance Inc?"
+    ],
+    "messages_final": [
+      "Unit 12 at Hub Champaign's washing machine is leaking water.",
+      "Should we send Cross Appliance Inc?"
+    ],
+    "edited": false,
+    "diffs": [
+      null,
+      null
+    ],
+    "forced_send": false
   }
 ]

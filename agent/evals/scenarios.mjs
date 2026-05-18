@@ -305,6 +305,32 @@ export const scenarios = [
 	},
 
 	{
+		// Regression for the 2026-05-18 incident: PM said "Assigned plumbing to
+		// guox and I'll talk to them about the filter tomorrow" — the chat
+		// skill model returned no tool calls but emitted "No action taken." as
+		// plain assistant content, and the orchestrator's fallback auto-sent
+		// that to the prod groupchat. Fix removes the fallback entirely; this
+		// scenario asserts the outbox stays empty for a substantive
+		// status-update reply that should produce zero physical messages.
+		name: 'chat: PM self-handles issue ("assigned to guox, will talk tomorrow") → silent no_match',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_FAUCET),
+			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: "Assigned plumbing to guox and I'll talk to them about the filter tomorrow"
+		},
+		expected: {
+			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
+			drafts_count: 0,
+			outbox_count: 0
+		}
+	},
+
+	{
 		name: 'chat: prod-chat sends do not leak into test-chat candidates',
 		skill: 'chat',
 		setup: {
