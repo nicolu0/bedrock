@@ -761,11 +761,11 @@
 				min-height: 0;
 				display: flex;
 				flex-direction: column;
-				padding: 14px 20px 60px;
+				padding: 0;
 				width: 100%;
-				max-width: 1100px;
-				margin: 0 auto;
-				overflow-y: auto;
+				max-width: none;
+				margin: 0;
+				overflow: hidden;
 				box-sizing: border-box;
 			}
 			#memory-list-pane[hidden] { display: none; }
@@ -854,13 +854,30 @@
 
 			/* When in list view, the graph filters / detail pane don't apply. */
 			body.memory-list-mode #memory-graph-pane { display: none; }
-			body.memory-list-mode .memory-filters,
-			body.memory-list-mode #new-belief-btn,
-			body.memory-list-mode .memory-search { display: none; }
-			body.memory-entities-mode #memory-graph-pane { display: none; }
-			body.memory-entities-mode .memory-filters,
-			body.memory-entities-mode #new-belief-btn,
-			body.memory-entities-mode .memory-search { display: none; }
+			body.memory-list-mode #memory-entities-pane { display: none; }
+			body.memory-list-mode .memory-filters { display: none; }
+			body.memory-list-mode #memory-list-pane { display: grid; }
+			#memory-list-pane.three-col {
+				grid-template-columns: 1fr 1fr 1fr;
+				gap: 0;
+				padding: 0;
+			}
+			.list-col { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #1f2329; }
+			.list-col:last-child { border-right: none; }
+			.list-col-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #1f2329; background: #0d0f12; position: sticky; top: 0; z-index: 5; }
+			.list-col-header h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: #c0c4cc; }
+			.list-col-header .count { color: #8a9099; font-size: 11.5px; }
+			.list-col-body { flex: 1 1 auto; overflow-y: auto; padding: 8px 12px 24px; }
+			.list-item { padding: 8px 10px; margin-bottom: 6px; border-radius: 4px; background: #1a1d23; border-left: 3px solid #2a2f37; cursor: pointer; transition: background 0.1s; }
+			.list-item:hover { background: #21262d; }
+			.list-item.kind-observation { border-left-color: #74c99a; }
+			.list-item.kind-belief { border-left-color: #d9a366; }
+			.list-item.kind-entity-vendor { border-left-color: #5fa676; }
+			.list-item.kind-entity-property { border-left-color: #d9a366; }
+			.list-item.kind-entity-owner { border-left-color: #7aaae0; }
+			.list-item .li-title { font-weight: 600; font-size: 12.5px; color: #e6e6e6; }
+			.list-item .li-meta { font-size: 11px; color: #8a9099; margin-top: 3px; }
+			.list-item .li-pill { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 3px; background: #2a2f37; color: #c0c4cc; font-size: 10px; }
 
 			/* Entities sub-view ─────────────────────────────────────────── */
 			#memory-entities-pane {
@@ -1108,43 +1125,34 @@
 					<div id="memory-detail-body"></div>
 				</aside>
 			</div>
-			<div id="memory-list-pane" hidden>
-				<div id="memory-list-controls">
-					<input id="memory-list-search" class="memory-search" type="search" placeholder="filter beliefs…" />
-					<select id="memory-list-sort">
-						<option value="evidence">Sort: evidence ↓</option>
-						<option value="confidence">Sort: confidence ↓</option>
-						<option value="updated">Sort: most recent</option>
-						<option value="claim">Sort: claim A→Z</option>
-					</select>
-					<span id="memory-list-count" class="memory-list-count"></span>
+			<div id="memory-list-pane" class="three-col" hidden>
+				<div class="list-col">
+					<div class="list-col-header"><h3>Observations</h3><span class="count" id="memory-obs-count"></span></div>
+					<div class="list-col-body" id="memory-obs-list"></div>
 				</div>
-				<div id="memory-list"></div>
-			</div>
-			<div id="memory-entities-pane" hidden>
-				<div id="memory-list-controls">
-					<input id="memory-entities-search" class="memory-search" type="search" placeholder="filter entities…" />
-					<select id="memory-entities-filter">
-						<option value="">All kinds</option>
-						<option value="vendor">Vendor</option>
-						<option value="property">Property</option>
-						<option value="owner">Owner</option>
-					</select>
-					<span id="memory-entities-count" class="memory-list-count"></span>
+				<div class="list-col">
+					<div class="list-col-header"><h3>Beliefs</h3><span class="count" id="memory-list-count"></span></div>
+					<div class="list-col-body" id="memory-list"></div>
 				</div>
-				<div id="memory-entities-list"></div>
-				<div id="memory-entities-detail" hidden></div>
+				<div class="list-col">
+					<div class="list-col-header"><h3>Entities</h3><span class="count" id="memory-entities-count"></span></div>
+					<div class="list-col-body" id="memory-entities-list"></div>
+				</div>
 			</div>
+			<!-- Legacy entities-pane removed; entity click in list mode reuses
+			     the graph's detail panel via renderEntityDetail. -->
+			<div id="memory-entities-detail" hidden style="display:none"></div>
 			<div class="memory-controls">
 				<div class="memory-view-toggle" id="memory-view-toggle">
 					<button data-view="graph" class="active">Graph</button>
-					<button data-view="list">Beliefs</button>
-					<button data-view="entities">Entities</button>
+					<button data-view="list">List</button>
 				</div>
-				<button class="primary" id="new-belief-btn">+ new belief</button>
 				<div class="memory-filters">
 					<label><input type="checkbox" id="show-obs" checked /> observations</label>
 					<label><input type="checkbox" id="show-bel" checked /> beliefs</label>
+					<label><input type="checkbox" id="show-vendors" checked /> vendors</label>
+					<label><input type="checkbox" id="show-properties" checked /> properties</label>
+					<label><input type="checkbox" id="show-owners" checked /> owners</label>
 				</div>
 			</div>
 		</section>
@@ -1929,6 +1937,9 @@
 			const detailCloseEl = document.getElementById('memory-detail-close');
 			const showObsEl = document.getElementById('show-obs');
 			const showBelEl = document.getElementById('show-bel');
+			const showVendorsEl = document.getElementById('show-vendors');
+			const showPropertiesEl = document.getElementById('show-properties');
+			const showOwnersEl = document.getElementById('show-owners');
 			const searchEl = document.getElementById('memory-search');
 			const newBeliefBtn = document.getElementById('new-belief-btn');
 			const dialogEl = document.getElementById('new-belief-dialog');
@@ -1942,6 +1953,7 @@
 			let editingBeliefId = null; // null when creating new
 			let simulation = null;
 			let selectedNodeId = null;
+			let hoveredNodeId = null;
 
 			async function loadMemoryGraph() {
 				try {
@@ -1962,22 +1974,23 @@
 			const memoryListPane = document.getElementById('memory-list-pane');
 			const memoryGraphPane = document.getElementById('memory-graph-pane');
 			const memoryListEl = document.getElementById('memory-list');
+			// Search + sort inputs removed in the 3-column list; keep null-safe refs.
 			const memoryListSearch = document.getElementById('memory-list-search');
 			const memoryListSort = document.getElementById('memory-list-sort');
 			const memoryListCount = document.getElementById('memory-list-count');
 
 			function applyMemoryView() {
 				document.body.classList.toggle('memory-list-mode', memoryView === 'list');
-				document.body.classList.toggle('memory-entities-mode', memoryView === 'entities');
 				memoryListPane.hidden = memoryView !== 'list';
 				memoryGraphPane.hidden = memoryView !== 'graph';
-				const entitiesPane = document.getElementById('memory-entities-pane');
-				entitiesPane.hidden = memoryView !== 'entities';
 				for (const btn of document.querySelectorAll('#memory-view-toggle button')) {
 					btn.classList.toggle('active', btn.dataset.view === memoryView);
 				}
-				if (memoryView === 'list') renderBeliefList();
-				if (memoryView === 'entities') loadEntities();
+				if (memoryView === 'list') {
+					renderBeliefList();
+					renderObsList();
+					loadEntities();
+				}
 			}
 			document.getElementById('memory-view-toggle').addEventListener('click', (e) => {
 				const btn = e.target.closest('button[data-view]');
@@ -1986,8 +1999,6 @@
 				localStorage.setItem(MEMORY_VIEW_KEY, memoryView);
 				applyMemoryView();
 			});
-			memoryListSearch.addEventListener('input', renderBeliefList);
-			memoryListSort.addEventListener('change', renderBeliefList);
 			applyMemoryView();
 
 			function renderBeliefList() {
@@ -1996,8 +2007,8 @@
 				for (const e of memoryState.edges ?? []) {
 					evidenceByBelief[e.belief_id] = (evidenceByBelief[e.belief_id] || 0) + 1;
 				}
-				const q = memoryListSearch.value.trim().toLowerCase();
-				const sort = memoryListSort.value;
+				const q = memoryListSearch ? memoryListSearch.value.trim().toLowerCase() : '';
+				const sort = memoryListSort ? memoryListSort.value : 'evidence';
 				let rows = (memoryState.beliefs ?? []).map((b) => ({
 					...b,
 					evidence: evidenceByBelief[b.id] || 0
@@ -2072,8 +2083,8 @@
 			}
 
 			function renderEntitiesList() {
-				const q = entitiesSearchEl.value.trim().toLowerCase();
-				const kind = entitiesFilterEl.value;
+				const q = entitiesSearchEl ? entitiesSearchEl.value.trim().toLowerCase() : '';
+				const kind = entitiesFilterEl ? entitiesFilterEl.value : '';
 				let rows = entitiesCache.slice();
 				if (kind) rows = rows.filter((e) => e.kind === kind);
 				if (q) {
@@ -2112,42 +2123,61 @@
 					.join('');
 			}
 
-			entitiesSearchEl.addEventListener('input', renderEntitiesList);
-			entitiesFilterEl.addEventListener('change', renderEntitiesList);
+			if (entitiesSearchEl) entitiesSearchEl.addEventListener('input', renderEntitiesList);
+			if (entitiesFilterEl) entitiesFilterEl.addEventListener('change', renderEntitiesList);
 
-			entitiesListEl.addEventListener('click', async (e) => {
-				const row = e.target.closest('.entity-row');
+			// Entity row click in list mode → reuse the graph's detail panel
+			// (renderEntityDetail) so the same panel works in both modes.
+			entitiesListEl.addEventListener('click', (e) => {
+				const row = e.target.closest('.entity-row, .list-item');
 				if (!row) return;
 				const id = row.dataset.id;
-				const entity = entitiesCache.find((x) => x.id === id);
+				const entity = (memoryState.entities || []).find((x) => x.id === id);
 				if (!entity) return;
-				entitiesDetailEl.innerHTML = `<h3>${escapeHtml(entity.kind)}: ${escapeHtml(entity.name)} <button class="close-btn">close</button></h3><div style="color:#8a9099;font-size:11.5px">Loading beliefs…</div>`;
-				entitiesDetailEl.hidden = false;
-				try {
-					const r = await fetch('/api/entities/' + encodeURIComponent(id) + '/beliefs');
-					if (!r.ok) throw new Error(await r.text());
-					const beliefs = await r.json();
-					const body = beliefs.length
-						? beliefs
-								.map((b) => `<div class="belief-row ${b.created_by}" style="margin-top:6px">
-									<div class="claim">${escapeHtml(b.claim)}</div>
-									<div class="right">
-										<span class="conf">conf ${b.confidence.toFixed(2)}</span>
-										<span>${escapeHtml(b.created_by)}</span>
-									</div>
-								</div>`)
-								.join('')
-						: '<div style="color:#6c727b;font-size:12px">No beliefs reference this entity yet.</div>';
-					entitiesDetailEl.innerHTML = `<h3>${escapeHtml(entity.kind)}: ${escapeHtml(entity.name)} <button class="close-btn">close</button></h3>${body}`;
-					entitiesDetailEl.querySelector('.close-btn').addEventListener('click', () => {
-						entitiesDetailEl.hidden = true;
-					});
-				} catch (err) {
-					entitiesDetailEl.innerHTML = `<h3>${escapeHtml(entity.kind)}: ${escapeHtml(entity.name)} <button class="close-btn">close</button></h3><div style="color:#f08089">Failed: ${escapeHtml(err.message)}</div>`;
-					entitiesDetailEl.querySelector('.close-btn').addEventListener('click', () => {
-						entitiesDetailEl.hidden = true;
-					});
-				}
+				selectedNodeId = id;
+				detailEl.style.display = '';
+				detailEl.hidden = false;
+				renderEntityDetail(entity);
+			});
+
+			// New: observation list (left column in list mode)
+			const memoryObsListEl = document.getElementById('memory-obs-list');
+			const memoryObsCount = document.getElementById('memory-obs-count');
+			function renderObsList() {
+				const all = memoryState.observations ?? [];
+				memoryObsCount.textContent = all.length;
+				memoryObsListEl.innerHTML = all
+					.map((o) => `
+						<div class="list-item kind-observation" data-id="${o.id}">
+							<div class="li-title">${escapeHtml(o.title || '(no title)')}</div>
+							<div class="li-meta">${escapeHtml((o.summary || '').slice(0, 90))}${(o.summary || '').length > 90 ? '…' : ''}</div>
+						</div>
+					`)
+					.join('');
+			}
+			memoryObsListEl.addEventListener('click', (e) => {
+				const row = e.target.closest('.list-item');
+				if (!row) return;
+				const id = row.dataset.id;
+				const obs = (memoryState.observations || []).find((x) => x.id === id);
+				if (!obs) return;
+				selectedNodeId = id;
+				detailEl.style.display = '';
+				detailEl.hidden = false;
+				renderObservationDetail(obs);
+			});
+
+			// Belief row click in list mode → also open the graph detail panel.
+			memoryListEl.addEventListener('click', (e) => {
+				const row = e.target.closest('.belief-row, .list-item');
+				if (!row) return;
+				const id = row.dataset.id;
+				const belief = (memoryState.beliefs || []).find((x) => x.id === id);
+				if (!belief) return;
+				selectedNodeId = id;
+				detailEl.style.display = '';
+				detailEl.hidden = false;
+				renderBeliefDetail(belief);
 			});
 
 			function renderGraph() {
@@ -2156,15 +2186,22 @@
 
 				const obs = showObsEl.checked ? memoryState.observations : [];
 				const bel = showBelEl.checked ? memoryState.beliefs : [];
-				// Entities always show with beliefs — they're the anchors.
-				const ents = showBelEl.checked ? (memoryState.entities ?? []) : [];
+				// Entity-kind filters
+				const allEnts = memoryState.entities ?? [];
+				const visibleEnts = allEnts.filter((e) =>
+					(e.kind === 'vendor' && showVendorsEl.checked) ||
+					(e.kind === 'property' && showPropertiesEl.checked) ||
+					(e.kind === 'owner' && showOwnersEl.checked)
+				);
+				// Use the kind-filtered entity set (vendors/properties/owners toggles).
+				const ents = visibleEnts;
 
 				if (!obs.length && !bel.length && !ents.length) {
 					const empty = document.createElement('div');
 					empty.className = 'memory-empty';
 					empty.innerHTML =
 						'<div>No memory yet for this workspace.</div>' +
-						'<div class="hint">Click <b>+ new belief</b> to seed one, or wait for the agent to observe something.</div>';
+						'<div class="hint">Wait for the agent to observe something.</div>';
 					if (svgEl.parentNode.querySelector('.memory-empty')) {
 						svgEl.parentNode.querySelector('.memory-empty').remove();
 					}
@@ -2255,10 +2292,12 @@
 
 				const g = svg.append('g').attr('class', 'graph-root');
 
-				// Zoom + pan
-				svg.call(
-					d3.zoom().scaleExtent([0.2, 4]).on('zoom', (ev) => g.attr('transform', ev.transform))
-				);
+				// Zoom + pan (capture the behavior so we can drive it programmatically
+				// for the load-in animation).
+				const zoomBehavior = d3.zoom()
+					.scaleExtent([0.2, 4])
+					.on('zoom', (ev) => g.attr('transform', ev.transform));
+				svg.call(zoomBehavior);
 
 				const link = g
 					.append('g')
@@ -2292,10 +2331,21 @@
 					})
 					.on('click', (ev, d) => {
 						ev.stopPropagation();
-						console.log('[memory-graph] node click:', d._kind, d.id, d.name || d.title || d.summary);
 						selectedNodeId = d.id;
 						highlightNeighborhood(d.id);
 						showDetail(d);
+					})
+					.on('mouseenter', (ev, d) => {
+						// Obsidian-style: hover dims everything except the node + its
+						// connected neighborhood. Does NOT change selectedNodeId.
+						hoveredNodeId = d.id;
+						highlightNeighborhood(d.id);
+					})
+					.on('mouseleave', (ev, d) => {
+						hoveredNodeId = null;
+						// Restore selection highlight if a node is selected, else clear.
+						if (selectedNodeId) highlightNeighborhood(selectedNodeId);
+						else clearHighlight();
 					})
 					.on('dblclick', (ev, d) => {
 						// Double-click releases a pinned node back to the layout.
@@ -2433,6 +2483,32 @@
 							.attr('y2', (d) => d.target.y);
 						node.attr('transform', (d) => `translate(${d.x},${d.y})`);
 					});
+
+				// Pre-settle: tick the simulation synchronously so nodes start near
+				// their final positions (no top-left-corner bounce-in). Then cool the
+				// simulation so subsequent interaction (drag, filter change) only
+				// nudges things slightly.
+				simulation.stop();
+				for (let i = 0; i < 300; i++) simulation.tick();
+				link
+					.attr('x1', (d) => d.source.x)
+					.attr('y1', (d) => d.source.y)
+					.attr('x2', (d) => d.target.x)
+					.attr('y2', (d) => d.target.y);
+				node.attr('transform', (d) => `translate(${d.x},${d.y})`);
+				simulation.alpha(0.05).restart();
+
+				// Animated zoom-in: start slightly zoomed-out (0.7×) and animate to a
+				// centered, more-readable view (1.05×). Center around the centroid of
+				// the entity cluster so the camera lands on the dense middle.
+				const cx = w / 2;
+				const cy = h / 2;
+				const startScale = 0.45;
+				const endScale = 1.05;
+				const startTransform = d3.zoomIdentity.translate(cx * (1 - startScale), cy * (1 - startScale)).scale(startScale);
+				const endTransform = d3.zoomIdentity.translate(cx * (1 - endScale), cy * (1 - endScale)).scale(endScale);
+				svg.call(zoomBehavior.transform, startTransform);
+				svg.transition().duration(1400).ease(d3.easeCubicInOut).call(zoomBehavior.transform, endTransform);
 			}
 
 			function highlightNeighborhood(id) {
@@ -2739,7 +2815,7 @@
 				formEl.elements.tags.value = (existing?.tags ?? []).join(', ');
 				dialogEl.showModal();
 			}
-			newBeliefBtn.addEventListener('click', () => openBeliefDialog(null));
+			if (newBeliefBtn) newBeliefBtn.addEventListener('click', () => openBeliefDialog(null));
 			cancelBeliefBtn.addEventListener('click', () => dialogEl.close());
 			formEl.elements.confidence.addEventListener('input', (e) => {
 				confOut.textContent = Number(e.target.value).toFixed(2);
@@ -2804,14 +2880,35 @@
 			// ─ Filter toggles + search ─────────────────────────────────────
 			showObsEl.addEventListener('change', () => renderGraph());
 			showBelEl.addEventListener('change', () => renderGraph());
+			showVendorsEl.addEventListener('change', () => renderGraph());
+			showPropertiesEl.addEventListener('change', () => renderGraph());
+			showOwnersEl.addEventListener('change', () => renderGraph());
 
 			let searchTimer = null;
 			searchEl.addEventListener('input', () => {
 				clearTimeout(searchTimer);
 				searchTimer = setTimeout(runSearch, 200);
 			});
+			function filterListItems(q) {
+				const needle = q.toLowerCase();
+				const containers = [
+					document.getElementById('memory-obs-list'),
+					document.getElementById('memory-list'),
+					document.getElementById('memory-entities-list')
+				];
+				for (const c of containers) {
+					if (!c) continue;
+					for (const item of c.querySelectorAll('.list-item, .belief-row, .entity-row')) {
+						const text = item.textContent.toLowerCase();
+						item.style.display = !needle || text.includes(needle) ? '' : 'none';
+					}
+				}
+			}
+
 			async function runSearch() {
 				const q = searchEl.value.trim();
+				// Always filter list items so the search works in list mode too.
+				filterListItems(q);
 				if (!q) {
 					clearHighlight();
 					return;
@@ -2823,12 +2920,13 @@
 					if (!res.ok) throw new Error(await res.text());
 					const hits = await res.json();
 					const matched = new Set([...(hits.observations ?? []), ...(hits.beliefs ?? [])]);
-					d3.selectAll('.node')
+					const gsvg = d3.select(svgEl);
+					gsvg.selectAll('.node')
 						.classed('match', (d) => matched.has(d.id))
 						.classed('dimmed', (d) => matched.size > 0 && !matched.has(d.id));
-					d3.selectAll('.link').classed(
+					gsvg.selectAll('.link').classed(
 						'dimmed',
-						(l) => matched.size > 0 && !(matched.has(l.source.id) || matched.has(l.target.id))
+						(l) => l && l.source && matched.size > 0 && !(matched.has(l.source.id) || matched.has(l.target.id))
 					);
 				} catch (err) {
 					toast(`search failed: ${err.message}`, 'error');
