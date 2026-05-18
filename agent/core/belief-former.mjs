@@ -97,30 +97,29 @@ async function consolidate(workspace_id, observation_id) {
 
 // ── entity resolution from observation ──────────────────────────────────────
 
-// observation.entities is jsonb shaped like { vendor: ["Yonic"], property: ["Pickford"], person: ["Jose"], ... }.
-// Flatten to [(kind, name)], filter to v1 kinds, resolve each to an entity row.
+// Post-PR2: observation entities are stored in the observation_entities join
+// (with signed weight). Read them directly from the join rather than walking
+// the legacy jsonb shape. Returns entity rows with a `_weight` field carrying
+// the chosen/rejected role.
 async function resolveObservationEntities(workspace_id, obs) {
-	const e = obs.entities ?? {};
-	const pairs = [];
-	for (const [kind, value] of Object.entries(e)) {
-		if (!ENTITY_KINDS.has(kind)) continue;
-		const names = Array.isArray(value) ? value : [value];
-		for (const name of names) {
-			if (typeof name === 'string' && name.trim()) {
-				pairs.push({ kind, name: name.trim() });
-			}
-		}
+	const { supabaseEnv } = await import('../supabase.mjs');
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'weight,entity:entities(id,kind,name,ref_id)',
+		observation_id: `eq.${obs.id}`
+	});
+	const res = await fetch(`${url}/rest/v1/observation_entities?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) {
+		console.error(`belief-former: fetch observation_entities ${res.status} ${await res.text()}`);
+		return [];
 	}
-	const resolved = [];
-	for (const p of pairs) {
-		try {
-			const ent = await entities.resolveEntity({ workspace_id, kind: p.kind, name: p.name });
-			resolved.push(ent);
-		} catch (err) {
-			console.error(`belief-former: resolveEntity(${p.kind}, ${p.name}) failed:`, err.message);
-		}
-	}
-	return resolved;
+	const rows = await res.json();
+	return rows
+		.map((r) => (r.entity ? { ...r.entity, _weight: r.weight ?? 1 } : null))
+		.filter(Boolean)
+		.filter((e) => ENTITY_KINDS.has(e.kind));
 }
 
 // ── candidate retrieval ─────────────────────────────────────────────────────
@@ -252,44 +251,89 @@ const OPS_SCHEMA = {
 	}
 };
 
-const SYSTEM_PROMPT = `You are the belief-former for an AI agent that runs property-management work orders.
+const SYSTEM_PROMPT = `You are an apprentice at a property management company. Right now your role is an assistant to the property manager — the user you talk to. You must learn as much as you can and transfer all of their knowledge to yourself. Your goal is to learn the inner workings of this company so you can take over all operations and run this company by yourself. This memory graph is literally your brain — you must cherish it and maintain it well. You collect observations from interacting with the PM and build BELIEFS over time. Be extremely diligent. Every single lazy decision you make will compound into huge flaws in decision-making later on.
 
-A "belief" is a typed relationship between entities (vendor / property / owner) plus an optional taxonomy scope. Each belief is short and self-contained — examples:
-  - "Kori is handyman for Harrison Properties"   entities=[vendor:Kori, owner:Harrison Properties]
-  - "Yonic is the primary plumber"               entities=[vendor:Yonic]
-  - "Tre Elevators services 6337 Primrose"      entities=[vendor:Tre Elevators, property:6337 Primrose]
-  - "Solomon Grauzinis Trust requires owner approval before dispatch"   entities=[owner:Solomon Grauzinis Trust]
-  - "Darwin is no longer used"                   entities=[vendor:Darwin]
+Your job NOW: given ONE new observation and a list of candidate beliefs, decide what belief operations to apply. A belief is a durable, rule-like NOTE you memorize. The agent will retrieve beliefs to make routing decisions later, so each belief should read like a fact or standard.
 
-A belief is identified by its (entity-set, claim). Two observations producing the SAME entity-set and similar claim must consolidate into ONE belief via attach — never create duplicates.
+# THE GENERALIZATION MANDATE (read first, apply throughout)
 
-You will receive:
-- ONE new observation, including the entities already resolved from it.
-- Similar past observations (context only — do NOT create beliefs about them).
-- Candidate beliefs, each tagged with how it was matched (entity = shares an entity with the new observation; vector = looser semantic match) and its current entity-set.
+Beliefs are the PRIMARY retrieval surface for future decisions. Observations are the FALLBACK — they exist only to support beliefs that don't yet stand on their own. Your goal is to make every belief AS GENERAL AS POSSIBLE while still being plausibly correct.
 
-Operations:
-  - attach: this observation supports (positive weight) or contradicts (negative weight) a candidate belief. Optionally add new entities to that belief.
-  - create: a brand-new relationship not covered by any candidate. Provide claim, entities, explicitness.
-  - noop: redundant, noisy, or not load-bearing.
+Generalization order (broadest → narrowest):
+  1. Vendor-wide: "X handles Y issues" (no property/owner scope)
+  2. Owner-scoped: "X handles Y at Owner properties"
+  3. Property-scoped: "X handles Y at specific property"
+  4. Issue-specific or one-off: usually NOT a belief at all — leave as obs evidence
 
-Decision priority (top-down):
-  1. If a candidate belief has an OVERLAPPING entity-set with this observation AND a similar claim direction → ATTACH. Don't create a new belief for "Kori at Glencoe" when "Kori at Harrison Properties" already exists.
-  2. STRONGLY prefer attach. If you find yourself about to create a belief whose entities are already in a candidate, attach instead.
-  3. Create only when the (entity-set, claim) is genuinely new. Different entity-set is the strongest signal.
-  4. Emit AT MOST 2 ops per observation. Secondary claims wait for their own observations.
+When picking scope, push UP one level if it's plausibly correct. "Kori at 50 Rose" + "Kori at 17 Ozone" + "Kori at 15 Ozone" → owner-scoped "Kori at Harrison Properties" — NOT three property-scoped beliefs. "Osalpa at 829 OP" + "Osalpa at 1520 OP" → vendor-wide "Osalpa handles electrical" — NOT two property-scoped beliefs.
 
-Claim writing rules:
-  - Short and self-contained. "Kori is handyman for Harrison Properties" — not "Use Kori for handyman work at Harrison Properties (Rose, Glencoe, Ozone)."
-  - Refer to entities by their names (the entity-set carries the structural link).
-  - Don't pile multiple unrelated claims into one belief.
+If you find yourself creating two beliefs about the SAME vendor where only the property differs, STOP — generalize upward instead.
 
-Scope:
-  - Only for taxonomy axes that AREN'T named entities: trade ("plumbing", "handyman", "electrical"), problem_subtype, urgency_tier, etc. Most beliefs need none.
+# BELIEF SHAPE & STYLE
 
-Weight & explicitness:
-  - 0.8–1.0 for direct PM statements, 0.3–0.5 for inferred-from-behavior. Negative for contradictions.
-  - explicitness=stated when the PM said it directly; inferred for behavior-pattern beliefs.
+A belief is a SHORT, SELF-CONTAINED RULE-LIKE CLAIM anchored to one or more entities (vendor / property / owner).
+
+Good examples:
+  ✓ "Yonic Herrera handles all plumbing issues — drains, garbage disposals, water heaters, faucets, complex repairs."
+  ✓ "Abraham Monroy handles general handyman issues AND simple plumbing (toilet basics, slow drains, doorknobs, blinds)."
+  ✓ "Kori Anderson handles all maintenance (handyman + simple plumbing + electrical) at Harrison Properties."
+  ✓ "Solomon Grauzinis Trust requires owner approval before vendor dispatch for all issues."
+  ✓ "Tre Elevators services elevators at 6337 Primrose Ave (under contract)."
+  ✓ "Jimenez Services is the primary vendor for gates."
+  ✓ "Unit 14 tenant at 221-229 Union Pl is the onsite manager; route property-level questions through them."
+
+Bad examples:
+  ✗ "X has property-management quirk" — vague filler. NEVER write this.
+  ✗ "Kori at Glencoe handyman" + "Kori at Rose handyman" + "Kori at Ozone handyman" — three property-scoped beliefs when ONE owner-scoped belief covers them all.
+  ✗ "X handled Y on date Z" — that's an observation, not a belief.
+
+# DESIGN RULES (must obey)
+
+1. **OWNER-SCOPED > PROPERTY-SCOPED.** When a vendor has obs at multiple properties owned by the SAME owner, write the belief at OWNER scope. Use the owner entity in entities[]. Example: Kori at Harrison Properties (not Kori at Glencoe + Kori at Rose).
+
+2. **CLAIM = RULE-LIKE STATEMENT.** Belief claims read like memos or standards — "X handles Y", "X requires Y before Z", "For Y, use X". Never "X has quirk Y" or "X did Y once".
+
+3. **MULTIPLE BELIEFS PER VENDOR ARE FINE.** Don't merge a vendor's capabilities into one giant claim. Better as separate retrievable beliefs:
+   - "Cross Appliance handles appliances" (one belief)
+   - "Cross Appliance was rejected by Grauzinis owner for oven repair" (separate belief if it matters)
+
+4. **DOMAIN ASSIGNMENT:**
+   - Garbage disposals = PLUMBING (not appliance). Route to Yonic/Abraham, not Cross.
+   - Fridge / dishwasher / ice maker / dryer / range = appliance → Cross Appliance.
+   - Status updates ("issue fixed") → NOOP — they're not beliefs.
+
+5. **VENDOR LIFECYCLE EVENTS → NOOP.** Vendor retirement (Darwin), new vendor added (new Juan) are admin actions, not beliefs. NOOP.
+
+6. **SINGLE-OBS BELIEFS ONLY WITH STATED RULE LANGUAGE.** Create from one obs only when:
+   - PM stated a rule explicitly ("Yonic is more experienced plumber").
+   - PM asked you to remember it ("Primerose has contract with Tre elevators").
+   - It's a vendor exclusion ("don't use Darwin").
+   - It's an owner approval policy ("Grauzinis requires approval").
+   - Property-specific ownership exception ("we don't own the laundry machines at Westmoreland").
+   Otherwise: NOOP (just store the obs as evidence — no belief).
+
+7. **JOSE = JL.** Don't write "Jose self-handled X via JL" — Jose IS JL. Just "Jose self-handled X" or "JL handled X". Don't append "at properties he manages directly" — he's PM for ALL properties.
+
+# OPERATIONS
+
+- **attach**: this observation supports (positive weight) or contradicts (negative weight) an existing candidate belief. Use this when entity overlap + similar claim already exists.
+- **create**: a brand-new belief. Only when (entity-set + claim direction) is genuinely new and the design rules say emit.
+- **noop**: redundant / lifecycle / status / weak single-obs / not load-bearing. Pick this LIBERALLY — belief noise compounds.
+
+# DECISION PRIORITY (top-down)
+
+1. If candidate belief's entity-set OVERLAPS with this observation AND has a similar claim direction → ATTACH. Don't duplicate.
+2. STRONGLY prefer attach. Reinforcing a belief is better than creating a near-duplicate.
+3. Create only when claim is genuinely new (different entity-set OR different rule direction).
+4. NOOP when: status confirmations, vendor lifecycle admin, weak single-obs without stated rule, or just routine evidence for an existing belief.
+5. Emit AT MOST 2 ops per observation. Secondary claims wait for their own observations.
+
+# WEIGHT & EXPLICITNESS
+
+- weight 0.8–1.0 for direct PM statements (stated rules, explicit preferences, "remember this").
+- weight 0.4–0.6 for inferred from behavior (pattern observed).
+- NEGATIVE weight for contradictions ("the rejected vendor / wrong choice" signal).
+- explicitness=stated when PM said it directly; explicitness=inferred for behavior-pattern beliefs.
 
 Output JSON matching the schema. No prose.`;
 
@@ -339,6 +383,15 @@ function formatEntityRef(e) {
 	return `${e.kind}:${e.name}`;
 }
 
+function formatObsEntityRef(e) {
+	const weightTag = e._weight === undefined || e._weight === 1
+		? ''
+		: e._weight < 0
+			? ` (REJECTED, w=${e._weight.toFixed(1)})`
+			: ` (w=${e._weight.toFixed(1)})`;
+	return `${e.kind}:${e.name}${weightTag}`;
+}
+
 function formatPrompt({
 	observation,
 	observationEntities,
@@ -346,18 +399,18 @@ function formatPrompt({
 	candidateBeliefs
 }) {
 	const obsEntityLine = observationEntities.length
-		? observationEntities.map((e) => `[${e.id.slice(0, 8)}] ${formatEntityRef(e)}`).join(', ')
-		: '(none of kind vendor/property/owner)';
+		? observationEntities.map((e) => `[${e.id.slice(0, 8)}] ${formatObsEntityRef(e)}`).join(', ')
+		: '(none)';
 
 	const obsBlock = [
 		`# new observation`,
 		`id: ${observation.id}`,
+		observation.title ? `title: ${observation.title}` : null,
 		`summary: ${observation.summary}`,
-		`salience: ${observation.salience}`,
-		`resolved entities: ${obsEntityLine}`,
-		`raw entities (incl. non-v1 kinds): ${JSON.stringify(observation.entities ?? {})}`,
+		observation.raw_text ? `source_quote: "${observation.raw_text}"` : null,
 		`tags: ${(observation.tags ?? []).join(', ') || '(none)'}`,
-		observation.raw_text ? `raw_text: ${observation.raw_text}` : null
+		`entities (with weight): ${obsEntityLine}`,
+		`salience: ${observation.salience}`
 	]
 		.filter(Boolean)
 		.join('\n');
@@ -511,7 +564,7 @@ async function fetchObservation(id) {
 	const { supabaseEnv } = await import('../supabase.mjs');
 	const { url, key } = supabaseEnv();
 	const params = new URLSearchParams({
-		select: 'id,workspace_id,summary,raw_text,entities,salience,tags,source_message_id',
+		select: 'id,workspace_id,title,summary,raw_text,entities,salience,tags,source_message_id',
 		id: `eq.${id}`,
 		limit: '1'
 	});

@@ -234,14 +234,19 @@ export async function listBeliefs(workspace_id, { limit = 500 } = {}) {
 	const { url, key } = supabaseEnv();
 	const params = new URLSearchParams({
 		select:
-			'id,claim,scope,confidence,explicitness,created_by,created_at,updated_at,tags',
+			'id,claim,scope,confidence,explicitness,created_by,created_at,updated_at,tags,status,evidence_count:belief_evidence(count)',
 		workspace_id: `eq.${workspace_id}`,
 		order: 'updated_at.desc',
 		limit: String(limit)
 	});
 	const res = await fetch(`${url}/rest/v1/beliefs?${params}`, { headers: headers(key) });
 	if (!res.ok) throw new Error(`listBeliefs: ${res.status} ${await res.text()}`);
-	return res.json();
+	const rows = await res.json();
+	// PostgREST returns evidence_count as [{ count: N }] — flatten.
+	return rows.map((b) => ({
+		...b,
+		evidence_count: Array.isArray(b.evidence_count) ? b.evidence_count[0]?.count ?? 0 : 0
+	}));
 }
 
 export async function recallBeliefs(

@@ -2328,7 +2328,13 @@
 					);
 
 				function nodeRadius(d) {
-					if (d._kind === 'belief') return 6 + 14 * (d.confidence ?? 0.5);
+					if (d._kind === 'belief') {
+						// Belief size = evidence depth × confidence.
+						// A single-obs belief should be only a touch larger than an obs node.
+						const ev = d.evidence_count ?? 1;
+						const conf = d.confidence ?? 0.5;
+						return Math.min(22, 5 + Math.sqrt(ev) * 2.5 * (0.5 + conf));
+					}
 					if (d._kind === 'entity') {
 						const total = (d.belief_count ?? 0) + (d.observation_count ?? 0);
 						return Math.min(26, 8 + total * 1.5);
