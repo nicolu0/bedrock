@@ -14,8 +14,7 @@ import { acknowledge } from '../tools/acknowledge.mjs';
 import { draftTenant } from '../tools/draft_tenant.mjs';
 import { draftVendor } from '../tools/draft_vendor.mjs';
 import { addObservation } from '../tools/add_observation.mjs';
-import { recallBeliefs } from '../tools/recall_beliefs.mjs';
-import { recallObservations } from '../tools/recall_observations.mjs';
+import { recall } from '../tools/recall.mjs';
 
 const CHAT_TASK_PROMPT = `# Task: handle a property manager's reply in their groupchat
 
@@ -72,19 +71,33 @@ When calling add_observation:
 - **raw_text**: the PM's actual message text.
 - **salience**: per the scale above.
 
-## When to call recall_beliefs (optional but recommended)
+## When to call recall (optional but recommended)
 
-If the PM redirects to a different vendor, or asks something the answer to depends on prior preference, call recall_beliefs first with a query like "vendor for plumbing at 829 Ocean Park" or "default handyman" to ground your reasoning. The belief might directly tell you what to do.
+The \`recall\` tool is your one entry point into the memory graph — beliefs (consolidated preferences), observations (raw signals), and legacy vendor/property data, all behind one call. Use it BEFORE drafting or routing when the PM's reply hinges on prior context.
+
+Always pass \`question\` as a natural-language description of what you want to know. Add hints when you know them:
+
+- **property**: the property name from a candidate issue or the PM's message ("17 Ozone Ave", "Hub Champaign"). Resolves the property entity and cascades to its owner — surfaces owner-scoped beliefs that wouldn't match by property alone.
+- **vendor**: when the PM asks about or redirects to a specific vendor. Pulls that vendor's full history.
+- **issue**: free-text issue description when picking a vendor. Used for trade extraction in the legacy fallback.
+
+Examples:
+- PM: "yes go with whoever you think is best for plumbing at 17 Ozone" → \`recall({ question: "best vendor for plumbing at 17 Ozone", property: "17 Ozone", issue: "plumbing" })\`
+- PM: "send Luigi instead of Yonic" → \`recall({ question: "history with Luigi and Yonic", vendor: "Luigi" })\`
+- PM: "have we used Acme before?" → \`recall({ question: "vendor history for Acme", vendor: "Acme" })\`
+
+Each returned candidate carries a \`provenance\` string — quote it when explaining your pick to the PM ("recommending Kori because: belief 'Kori handles all maintenance at Harrison Properties' (conf 0.85)").
 
 If you're confident in your read of the reply, skip the recall — don't burn a tool call when the message is unambiguous.
 
 ## Ordering
 
 - If you're going to dispatch AND record an observation in the same turn, do dispatch first (acknowledge → draft_tenant → draft_vendor) THEN add_observation. The user sees acks immediately; observations are background work.
-- recall_beliefs, if used, goes first — it's read-only and informs everything else.`;
+- recall, if used, goes first — it's read-only and informs everything else.`;
 
 function formatRecentBundles(bundles) {
-	if (!bundles.length) return '(no recent work orders sent in this chat — nothing to correlate against)';
+	if (!bundles.length)
+		return '(no recent work orders sent in this chat — nothing to correlate against)';
 	const lines = bundles.map((b, i) => {
 		const bodies = b.bodies.map((line) => `   ${line}`).join('\n');
 		return `${i + 1}. [issue_id: ${b.issue_id}]\n${bodies}`;
@@ -96,7 +109,7 @@ export const chatSkill = {
 	name: 'chat',
 	model: process.env.CHAT_MODEL || 'gpt-5.4-2026-03-05',
 	maxIterations: 5,
-	tools: [acknowledge, draftTenant, draftVendor, addObservation, recallBeliefs, recallObservations],
+	tools: [acknowledge, draftTenant, draftVendor, addObservation, recall],
 	taskPrompt: CHAT_TASK_PROMPT,
 
 	async buildContext(ctx) {
