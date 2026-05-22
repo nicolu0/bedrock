@@ -16,10 +16,16 @@ export const WORKSPACES = {
 		pm_handles: ['andrew51@illinois.edu']
 	},
 	// LAPM (Vanessa) — prod. Jose has two phone numbers on the groupchat.
+	// agent_handles: the cofounders' numbers in the chat. Pre-pivot they sent
+	// real human messages; post-pivot they (and the Mac mini, via is_from_me)
+	// act as the agent. Sessionizer + LLM prompts collapse these into one
+	// "agent" persona so transcripts read correctly. The UI shows messages
+	// from these handles on the "me" side of the conversation.
 	'2e4373a0-40b8-42c2-a873-b08c99dbf76a': {
 		label: 'prod',
 		chatEnv: 'JOSE_CHAT_GUID',
-		pm_handles: ['+13106990643', '+13102663152']
+		pm_handles: ['+13106990643', '+13102663152'],
+		agent_handles: ['+19496566275', '+15109358199']
 	}
 };
 

@@ -519,6 +519,17 @@
 				stroke: #d9a366;
 				stroke-width: 2;
 			}
+			/* Entity nodes — color-coded per kind. Larger than observations so
+			   they read as anchors in the graph. */
+			.node.entity circle { stroke: #2a2f37; stroke-width: 1.5; }
+			.node.entity.vendor   circle { fill: #74c99a; }
+			.node.entity.property circle { fill: #d4a855; }
+			.node.entity.owner    circle { fill: #7eb7f0; }
+			.link.entity { stroke: #3a4554; stroke-opacity: 0.55; stroke-dasharray: 4 3; }
+			/* Structural property↔owner edges from legacy owner_properties.
+			   Solid + brighter so they read as "load-bearing relationship,
+			   not a derived belief link." */
+			.link.structural { stroke: #6b7a8f; stroke-opacity: 0.7; }
 			.node.selected circle {
 				stroke: #2d6cdf;
 				stroke-width: 3;
@@ -534,6 +545,13 @@
 				font-family: ui-sans-serif, system-ui, sans-serif;
 				pointer-events: none;
 				dominant-baseline: hanging;
+			}
+			.node.observation text {
+				display: none;
+			}
+			.node.observation:hover text {
+				display: block;
+				font-size: 9.5px;
 			}
 			.link {
 				stroke: #2a2f37;
@@ -722,6 +740,350 @@
 			/* Memory tab hides the Clear Test button — it's a Work Orders action */
 			body.memory-mode #clear-test-btn { display: none; }
 			body.memory-mode .memory-search { display: inline-block; }
+
+			/* ── Memory tab: list-view pane ─────────────────────────────── */
+			/* Memory section is a flex column when active so the graph or list
+			   pane fills the available height under the toolbar. */
+			.memory-view.active {
+				display: flex;
+				flex-direction: column;
+			}
+			#memory-graph-pane {
+				position: relative;
+				flex: 1 1 auto;
+				min-height: 0;
+				width: 100%;
+				height: 100%;
+			}
+			#memory-graph-pane svg { width: 100%; height: 100%; display: block; }
+			#memory-list-pane {
+				flex: 1 1 auto;
+				min-height: 0;
+				display: flex;
+				flex-direction: column;
+				padding: 0;
+				width: 100%;
+				max-width: none;
+				margin: 0;
+				overflow: hidden;
+				box-sizing: border-box;
+			}
+			#memory-list-pane[hidden] { display: none; }
+			#memory-list-controls {
+				display: flex;
+				gap: 10px;
+				align-items: center;
+				margin-bottom: 14px;
+			}
+			#memory-list-controls input,
+			#memory-list-controls select {
+				background: #14161b;
+				border: 1px solid #2a2f37;
+				color: #c0c5cc;
+				padding: 6px 10px;
+				border-radius: 6px;
+				font-size: 12.5px;
+			}
+			#memory-list-controls input { flex: 1 1 auto; }
+			#memory-list-controls input:focus,
+			#memory-list-controls select:focus { outline: none; border-color: #2d6cdf; }
+			.memory-list-count {
+				color: #6c727b;
+				font-size: 11.5px;
+				font-family: ui-monospace, Menlo, monospace;
+				margin-left: auto;
+			}
+			.belief-row {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-left-width: 3px;
+				border-radius: 8px;
+				padding: 10px 14px;
+				margin-bottom: 6px;
+				font-size: 13px;
+				display: grid;
+				grid-template-columns: 1fr auto;
+				gap: 4px 12px;
+			}
+			.belief-row.user { border-left-color: #d9a366; }
+			.belief-row.agent { border-left-color: #4a5560; }
+			.belief-row .claim { color: #e6e6e6; line-height: 1.4; }
+			.belief-row .right {
+				display: flex;
+				flex-direction: column;
+				align-items: flex-end;
+				gap: 2px;
+				font-size: 11px;
+				color: #8a9099;
+				font-family: ui-monospace, Menlo, monospace;
+				white-space: nowrap;
+			}
+			.belief-row .right .conf { color: #cfe2ff; }
+			.belief-row .right .ev { color: #74c99a; }
+			.belief-row .meta {
+				grid-column: 1 / -1;
+				display: flex;
+				flex-wrap: wrap;
+				gap: 4px;
+				font-size: 10.5px;
+				color: #6c727b;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.belief-row .pill {
+				background: #1a1f26;
+				border: 1px solid #232a33;
+				padding: 1px 7px;
+				border-radius: 9px;
+			}
+			.belief-row .pill.scope { color: #d4a855; background: #221c14; border-color: #36281c; }
+			.belief-row .pill.tag   { color: #7eb7f0; background: #15212d; border-color: #1d2d40; }
+
+			.memory-view-toggle { display: inline-flex; gap: 0; pointer-events: auto; }
+			.memory-view-toggle button {
+				background: #14161b;
+				border: 1px solid #2a2f37;
+				color: #8a9099;
+				padding: 5px 12px;
+				font-size: 11.5px;
+				cursor: pointer;
+			}
+			.memory-view-toggle button:first-child { border-radius: 6px 0 0 6px; }
+			.memory-view-toggle button:last-child  { border-radius: 0 6px 6px 0; border-left: 0; }
+			.memory-view-toggle button.active { background: #1f2329; color: #e6e6e6; }
+			.memory-view-toggle button:hover { color: #c0c5cc; }
+
+			/* When in list view, the graph filters / detail pane don't apply. */
+			body.memory-list-mode #memory-graph-pane { display: none; }
+			body.memory-list-mode #memory-entities-pane { display: none; }
+			body.memory-list-mode .memory-filters { display: none; }
+			body.memory-list-mode #memory-list-pane { display: grid; }
+			#memory-list-pane.three-col {
+				grid-template-columns: 1fr 1fr 1fr;
+				gap: 0;
+				padding: 0;
+			}
+			.list-col { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #1f2329; }
+			.list-col:last-child { border-right: none; }
+			.list-col-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #1f2329; background: #0d0f12; position: sticky; top: 0; z-index: 5; }
+			.list-col-header h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: #c0c4cc; }
+			.list-col-header .count { color: #8a9099; font-size: 11.5px; }
+			.list-col-body { flex: 1 1 auto; overflow-y: auto; padding: 8px 12px 24px; }
+			.list-item { padding: 8px 10px; margin-bottom: 6px; border-radius: 4px; background: #1a1d23; border-left: 3px solid #2a2f37; cursor: pointer; transition: background 0.1s; }
+			.list-item:hover { background: #21262d; }
+			.list-item.kind-observation { border-left-color: #74c99a; }
+			.list-item.kind-belief { border-left-color: #d9a366; }
+			.list-item.kind-entity-vendor { border-left-color: #5fa676; }
+			.list-item.kind-entity-property { border-left-color: #d9a366; }
+			.list-item.kind-entity-owner { border-left-color: #7aaae0; }
+			.list-item .li-title { font-weight: 600; font-size: 12.5px; color: #e6e6e6; }
+			.list-item .li-meta { font-size: 11px; color: #8a9099; margin-top: 3px; }
+			.list-item .li-pill { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 3px; background: #2a2f37; color: #c0c4cc; font-size: 10px; }
+
+			/* Entities sub-view ─────────────────────────────────────────── */
+			#memory-entities-pane {
+				flex: 1 1 auto;
+				min-height: 0;
+				display: flex;
+				flex-direction: column;
+				padding: 14px 20px 60px;
+				width: 100%;
+				max-width: 1100px;
+				margin: 0 auto;
+				overflow-y: auto;
+				box-sizing: border-box;
+			}
+			#memory-entities-pane[hidden] { display: none; }
+			.entity-row {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-left-width: 3px;
+				border-radius: 8px;
+				padding: 10px 14px;
+				margin-bottom: 6px;
+				font-size: 13px;
+				display: grid;
+				grid-template-columns: auto 1fr auto;
+				gap: 4px 12px;
+				cursor: pointer;
+			}
+			.entity-row:hover { background: #1a1f26; }
+			.entity-row.vendor   { border-left-color: #74c99a; }
+			.entity-row.property { border-left-color: #d4a855; }
+			.entity-row.owner    { border-left-color: #7eb7f0; }
+			.entity-row .kind-pill {
+				font-family: ui-monospace, Menlo, monospace;
+				font-size: 10.5px;
+				padding: 2px 8px;
+				border-radius: 9px;
+				background: #1a1f26;
+				border: 1px solid #232a33;
+				color: #c0c5cc;
+				align-self: center;
+			}
+			.entity-row .name { color: #e6e6e6; align-self: center; }
+			.entity-row .right {
+				display: flex;
+				flex-direction: column;
+				align-items: flex-end;
+				gap: 2px;
+				font-size: 11px;
+				color: #8a9099;
+				font-family: ui-monospace, Menlo, monospace;
+				white-space: nowrap;
+			}
+			.entity-row .right .ev { color: #74c99a; }
+			.entity-row .right .legacy { color: #6c727b; }
+			#memory-entities-detail {
+				margin-top: 18px;
+				padding-top: 14px;
+				border-top: 1px solid #1f2329;
+			}
+			#memory-entities-detail[hidden] { display: none; }
+			#memory-entities-detail h3 {
+				margin: 0 0 10px;
+				font-size: 13.5px;
+				color: #e6e6e6;
+				display: flex;
+				align-items: center;
+				gap: 10px;
+			}
+			#memory-entities-detail .close-btn {
+				margin-left: auto;
+				background: transparent;
+				border: 1px solid #232a33;
+				color: #8a9099;
+				padding: 3px 9px;
+				border-radius: 5px;
+				font-size: 11px;
+				cursor: pointer;
+			}
+
+			/* ── Sessions tab ───────────────────────────────────────────── */
+			.sessions-view {
+				padding: 14px 20px 60px;
+				overflow-y: auto;
+				max-width: 980px;
+				margin: 0 auto;
+			}
+			.sessions-empty {
+				color: #6c727b;
+				text-align: center;
+				padding: 80px 20px;
+				font-size: 13px;
+			}
+			.session-card {
+				background: #14161b;
+				border: 1px solid #1f2329;
+				border-radius: 10px;
+				padding: 14px 16px;
+				margin-bottom: 10px;
+			}
+			.session-card .head {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				font-size: 11.5px;
+				color: #8a9099;
+				margin-bottom: 8px;
+				flex-wrap: wrap;
+			}
+			.session-card .head .range { color: #c0c5cc; font-weight: 500; }
+			.session-card .head .count { color: #6c727b; }
+			.session-card .head .num {
+				font-family: ui-monospace, Menlo, monospace;
+				font-size: 11px;
+				color: #c0c5cc;
+				background: #1f2329;
+				border: 1px solid #2a2f37;
+				padding: 1px 6px;
+				border-radius: 4px;
+			}
+			.session-card .head .extracted {
+				font-size: 10.5px;
+				font-family: ui-monospace, Menlo, monospace;
+				background: rgba(60, 200, 120, 0.14);
+				color: #74c99a;
+				border: 1px solid rgba(60, 200, 120, 0.32);
+				padding: 1px 6px;
+				border-radius: 4px;
+			}
+			.session-card .head .extracted.pending {
+				background: rgba(126, 130, 140, 0.14);
+				color: #8a9099;
+				border-color: rgba(126, 130, 140, 0.32);
+			}
+			.session-card .summary {
+				color: #d6dadf;
+				font-size: 13.5px;
+				line-height: 1.5;
+				margin: 4px 0 10px;
+			}
+			.session-card .pills {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 5px;
+				margin-bottom: 8px;
+			}
+			.session-card .pill {
+				font-size: 10.5px;
+				padding: 2px 8px;
+				border-radius: 10px;
+				background: #1a1f26;
+				color: #8a9099;
+				border: 1px solid #232a33;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.session-card .pill.tag { color: #7eb7f0; background: #15212d; border-color: #1d2d40; }
+			.session-card .pill.entity { color: #d4a855; background: #221c14; border-color: #36281c; }
+			.session-card .expand-btn,
+			.session-card .delete-btn {
+				background: transparent;
+				border: 1px solid #232a33;
+				color: #8a9099;
+				padding: 4px 10px;
+				border-radius: 6px;
+				font-size: 11.5px;
+				cursor: pointer;
+			}
+			.session-card .expand-btn:hover { background: #1f2329; color: #c0c5cc; }
+			.session-card .delete-btn {
+				color: #6c727b;
+				border-color: #2a1f24;
+			}
+			.session-card .delete-btn:hover {
+				background: rgba(240, 128, 137, 0.14);
+				color: #f08089;
+				border-color: rgba(240, 128, 137, 0.32);
+			}
+			.session-card .transcript {
+				margin-top: 12px;
+				padding-top: 10px;
+				border-top: 1px solid #1f2329;
+				display: flex;
+				flex-direction: column;
+				gap: 4px;
+				max-height: 540px;
+				overflow-y: auto;
+			}
+			.session-card .transcript .msg {
+				display: flex;
+				flex-direction: column;
+				max-width: 80%;
+				padding: 6px 11px;
+				border-radius: 14px;
+				font-size: 13px;
+				line-height: 1.35;
+				white-space: pre-wrap;
+				word-wrap: break-word;
+			}
+			.session-card .transcript .msg .who {
+				font-size: 9.5px;
+				color: #6c727b;
+				margin-bottom: 1px;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.session-card .transcript .msg.them { align-self: flex-start; background: #1f2329; color: #e6e6e6; }
+			.session-card .transcript .msg.me { align-self: flex-end; background: #1f3a5a; color: #cfe2ff; }
 		</style>
 	</head>
 	<body>
@@ -730,6 +1092,7 @@
 			<nav class="tab-nav" id="tab-nav">
 				<button data-tab="work-orders" class="active">Work Orders</button>
 				<button data-tab="memory">Memory</button>
+				<button data-tab="sessions">Sessions</button>
 			</nav>
 			<div class="ws-toggle" id="ws-toggle">
 				<button data-ws="all">All</button>
@@ -755,18 +1118,47 @@
 		</main>
 
 		<section id="view-memory" class="view memory-view">
-			<svg id="memory-graph"></svg>
-			<aside id="memory-detail" class="memory-detail" hidden>
-				<button class="memory-detail-close" id="memory-detail-close" aria-label="close">×</button>
-				<div id="memory-detail-body"></div>
-			</aside>
+			<div id="memory-graph-pane">
+				<svg id="memory-graph"></svg>
+				<aside id="memory-detail" class="memory-detail" hidden>
+					<button class="memory-detail-close" id="memory-detail-close" aria-label="close">×</button>
+					<div id="memory-detail-body"></div>
+				</aside>
+			</div>
+			<div id="memory-list-pane" class="three-col" hidden>
+				<div class="list-col">
+					<div class="list-col-header"><h3>Observations</h3><span class="count" id="memory-obs-count"></span></div>
+					<div class="list-col-body" id="memory-obs-list"></div>
+				</div>
+				<div class="list-col">
+					<div class="list-col-header"><h3>Beliefs</h3><span class="count" id="memory-list-count"></span></div>
+					<div class="list-col-body" id="memory-list"></div>
+				</div>
+				<div class="list-col">
+					<div class="list-col-header"><h3>Entities</h3><span class="count" id="memory-entities-count"></span></div>
+					<div class="list-col-body" id="memory-entities-list"></div>
+				</div>
+			</div>
+			<!-- Legacy entities-pane removed; entity click in list mode reuses
+			     the graph's detail panel via renderEntityDetail. -->
+			<div id="memory-entities-detail" hidden style="display:none"></div>
 			<div class="memory-controls">
-				<button class="primary" id="new-belief-btn">+ new belief</button>
+				<div class="memory-view-toggle" id="memory-view-toggle">
+					<button data-view="graph" class="active">Graph</button>
+					<button data-view="list">List</button>
+				</div>
 				<div class="memory-filters">
 					<label><input type="checkbox" id="show-obs" checked /> observations</label>
 					<label><input type="checkbox" id="show-bel" checked /> beliefs</label>
+					<label><input type="checkbox" id="show-vendors" checked /> vendors</label>
+					<label><input type="checkbox" id="show-properties" checked /> properties</label>
+					<label><input type="checkbox" id="show-owners" checked /> owners</label>
 				</div>
 			</div>
+		</section>
+
+		<section id="view-sessions" class="view sessions-view">
+			<div id="sessions-list"></div>
 		</section>
 
 		<dialog id="new-belief-dialog" class="belief-dialog">
@@ -822,6 +1214,7 @@
 				renderedHistoryIds = '';
 				renderedChatIds = '';
 				refresh();
+				if (activeTab === 'sessions') loadSessions();
 			});
 			applyWsToggleStyle();
 
@@ -1370,6 +1763,8 @@
 				}
 				if (activeTab === 'memory') {
 					loadMemoryGraph();
+				} else if (activeTab === 'sessions') {
+					loadSessions();
 				}
 			}
 			document.getElementById('tab-nav').addEventListener('click', (e) => {
@@ -1380,6 +1775,156 @@
 				applyTab();
 			});
 			applyTab();
+
+			/* ─── Sessions tab ─────────────────────────────────────────── */
+
+			const sessionsList = document.getElementById('sessions-list');
+			let sessionsCache = []; // { id -> session row }
+			let sessionsLoading = false;
+
+			function sessionsWorkspace() {
+				return workspaceFilter === 'all' ? 'prod' : workspaceFilter;
+			}
+
+			async function loadSessions() {
+				if (sessionsLoading) return;
+				sessionsLoading = true;
+				sessionsList.innerHTML = '<div class="sessions-empty">Loading sessions…</div>';
+				try {
+					const res = await fetch('/api/sessions?workspace=' + sessionsWorkspace());
+					if (!res.ok) throw new Error(await res.text());
+					sessionsCache = await res.json();
+					renderSessions();
+				} catch (err) {
+					sessionsList.innerHTML =
+						'<div class="sessions-empty">Failed to load sessions: ' + escapeHtml(err.message) + '</div>';
+				} finally {
+					sessionsLoading = false;
+				}
+			}
+
+			function fmtRange(startISO, endISO) {
+				const s = new Date(startISO);
+				const e = endISO ? new Date(endISO) : null;
+				const opts = { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+				const same = e && s.toDateString() === e.toDateString();
+				if (!e) return s.toLocaleString(undefined, opts) + ' — open';
+				if (same) {
+					const endTime = e.toLocaleString(undefined, { hour: 'numeric', minute: '2-digit' });
+					return s.toLocaleString(undefined, opts) + ' – ' + endTime;
+				}
+				return s.toLocaleString(undefined, opts) + ' → ' + e.toLocaleString(undefined, opts);
+			}
+
+			function fmtEntities(entities) {
+				if (!entities || typeof entities !== 'object') return [];
+				const out = [];
+				for (const [k, v] of Object.entries(entities)) {
+					if (Array.isArray(v)) for (const item of v) out.push(`${k}:${item}`);
+					else if (v != null) out.push(`${k}:${v}`);
+				}
+				return out;
+			}
+
+			function escapeHtml(s) {
+				return String(s ?? '')
+					.replaceAll('&', '&amp;')
+					.replaceAll('<', '&lt;')
+					.replaceAll('>', '&gt;')
+					.replaceAll('"', '&quot;');
+			}
+
+			function renderSessions() {
+				if (!sessionsCache.length) {
+					sessionsList.innerHTML =
+						'<div class="sessions-empty">No sessions yet for ' +
+						escapeHtml(sessionsWorkspace()) +
+						'. Run <code>node agent/scripts/backfill-from-chat.mjs --workspace=' +
+						escapeHtml(sessionsWorkspace()) +
+						' --phase=1</code> to backfill.</div>';
+					return;
+				}
+				const total = sessionsCache.length;
+				const html = sessionsCache
+					.map((s, i) => {
+						// Sessions arrive newest-first; number chronologically so
+						// the oldest session is #1 and the newest is #N.
+						const num = total - i;
+						const tags = (s.tags ?? [])
+							.map((t) => `<span class="pill tag">${escapeHtml(t)}</span>`)
+							.join('');
+						const ents = fmtEntities(s.entities)
+							.slice(0, 12)
+							.map((e) => `<span class="pill entity">${escapeHtml(e)}</span>`)
+							.join('');
+						const extracted = s.observations_extracted_at
+							? '<span class="extracted">obs ✓</span>'
+							: '<span class="extracted pending">obs pending</span>';
+						const transcript = renderTranscript(s.messages ?? []);
+						return `
+							<div class="session-card" data-id="${s.id}">
+								<div class="head">
+									<span class="num">#${num}</span>
+									<span class="range">${escapeHtml(fmtRange(s.started_at, s.ended_at))}</span>
+									<span class="count">${s.message_count ?? 0} msgs</span>
+									${extracted}
+									<button class="delete-btn" data-action="delete" style="margin-left:auto" title="Delete this session and its messages">Delete</button>
+								</div>
+								<div class="summary">${escapeHtml(s.summary ?? '(no summary yet)')}</div>
+								<div class="pills">${tags}${ents}</div>
+								<div class="transcript">${transcript}</div>
+							</div>
+						`;
+					})
+					.join('');
+				sessionsList.innerHTML = html;
+			}
+
+			function renderTranscript(msgs) {
+				return msgs
+					.map((m) => {
+						const isAgent = m.is_agent ?? m.is_from_me;
+						const tail = m.handle ? ` (${m.handle.slice(-4)})` : '';
+						const who = isAgent ? `agent${tail}` : m.handle || 'unknown';
+						const ts = new Date(m.ts).toLocaleString(undefined, {
+							month: 'short',
+							day: 'numeric',
+							hour: 'numeric',
+							minute: '2-digit'
+						});
+						return `<div class="msg ${isAgent ? 'me' : 'them'}">
+							<span class="who">${escapeHtml(who)} · ${escapeHtml(ts)}</span>
+							${escapeHtml(m.body)}
+						</div>`;
+					})
+					.join('');
+			}
+
+			sessionsList.addEventListener('click', async (e) => {
+				const delBtn = e.target.closest('button[data-action="delete"]');
+				if (!delBtn) return;
+				const card = delBtn.closest('.session-card');
+				const id = card?.dataset.id;
+				if (!id) return;
+				const summary = card.querySelector('.summary')?.textContent?.slice(0, 80) ?? '';
+				if (!confirm(`Delete this session and its messages?\n\n${summary}…`)) return;
+				const orig = delBtn.textContent;
+				delBtn.textContent = 'Deleting…';
+				delBtn.disabled = true;
+				try {
+					const res = await fetch('/api/sessions/' + encodeURIComponent(id), {
+						method: 'DELETE'
+					});
+					if (!res.ok) throw new Error(await res.text());
+					sessionsCache = sessionsCache.filter((s) => s.id !== id);
+					card.remove();
+					if (!sessionsCache.length) renderSessions();
+				} catch (err) {
+					delBtn.disabled = false;
+					delBtn.textContent = orig;
+					alert('Delete failed: ' + err.message);
+				}
+			});
 
 			// Workspace for memory view: 'all' isn't meaningful here, default to prod.
 			function memoryWorkspace() {
@@ -1392,6 +1937,9 @@
 			const detailCloseEl = document.getElementById('memory-detail-close');
 			const showObsEl = document.getElementById('show-obs');
 			const showBelEl = document.getElementById('show-bel');
+			const showVendorsEl = document.getElementById('show-vendors');
+			const showPropertiesEl = document.getElementById('show-properties');
+			const showOwnersEl = document.getElementById('show-owners');
 			const searchEl = document.getElementById('memory-search');
 			const newBeliefBtn = document.getElementById('new-belief-btn');
 			const dialogEl = document.getElementById('new-belief-dialog');
@@ -1405,6 +1953,7 @@
 			let editingBeliefId = null; // null when creating new
 			let simulation = null;
 			let selectedNodeId = null;
+			let hoveredNodeId = null;
 
 			// AABB separation force. Each node carries `_bbox` (the rendered
 			// bounding box of its circle + label, relative to its center).
@@ -1451,10 +2000,224 @@
 					if (!res.ok) throw new Error(await res.text());
 					memoryState = await res.json();
 					renderGraph();
+					renderBeliefList();
 				} catch (err) {
 					toast(`memory load failed: ${err.message}`, 'error');
 				}
 			}
+
+			/* ── Memory list view ──────────────────────────────────────── */
+
+			const MEMORY_VIEW_KEY = 'bedrock.memoryView';
+			let memoryView = localStorage.getItem(MEMORY_VIEW_KEY) || 'graph';
+			const memoryListPane = document.getElementById('memory-list-pane');
+			const memoryGraphPane = document.getElementById('memory-graph-pane');
+			const memoryListEl = document.getElementById('memory-list');
+			// Search + sort inputs removed in the 3-column list; keep null-safe refs.
+			const memoryListSearch = document.getElementById('memory-list-search');
+			const memoryListSort = document.getElementById('memory-list-sort');
+			const memoryListCount = document.getElementById('memory-list-count');
+
+			function applyMemoryView() {
+				document.body.classList.toggle('memory-list-mode', memoryView === 'list');
+				memoryListPane.hidden = memoryView !== 'list';
+				memoryGraphPane.hidden = memoryView !== 'graph';
+				for (const btn of document.querySelectorAll('#memory-view-toggle button')) {
+					btn.classList.toggle('active', btn.dataset.view === memoryView);
+				}
+				if (memoryView === 'list') {
+					renderBeliefList();
+					renderObsList();
+					loadEntities();
+				}
+			}
+			document.getElementById('memory-view-toggle').addEventListener('click', (e) => {
+				const btn = e.target.closest('button[data-view]');
+				if (!btn) return;
+				memoryView = btn.dataset.view;
+				localStorage.setItem(MEMORY_VIEW_KEY, memoryView);
+				applyMemoryView();
+			});
+			applyMemoryView();
+
+			function renderBeliefList() {
+				if (memoryView !== 'list') return;
+				const evidenceByBelief = {};
+				for (const e of memoryState.edges ?? []) {
+					evidenceByBelief[e.belief_id] = (evidenceByBelief[e.belief_id] || 0) + 1;
+				}
+				const q = memoryListSearch ? memoryListSearch.value.trim().toLowerCase() : '';
+				const sort = memoryListSort ? memoryListSort.value : 'evidence';
+				let rows = (memoryState.beliefs ?? []).map((b) => ({
+					...b,
+					evidence: evidenceByBelief[b.id] || 0
+				}));
+				if (q) {
+					rows = rows.filter((b) => {
+						const hay = `${b.claim} ${JSON.stringify(b.scope ?? {})} ${(b.tags ?? []).join(' ')}`.toLowerCase();
+						return hay.includes(q);
+					});
+				}
+				rows.sort((a, b) => {
+					if (sort === 'confidence') return b.confidence - a.confidence;
+					if (sort === 'updated') return new Date(b.updated_at) - new Date(a.updated_at) > 0 ? -1 : 1;
+					if (sort === 'claim') return a.claim.localeCompare(b.claim);
+					// default: evidence desc, then confidence desc
+					if (b.evidence !== a.evidence) return b.evidence - a.evidence;
+					return b.confidence - a.confidence;
+				});
+				memoryListCount.textContent = `${rows.length}/${memoryState.beliefs?.length ?? 0}`;
+				if (!rows.length) {
+					memoryListEl.innerHTML =
+						'<div class="memory-empty" style="position:static;padding:40px 0;text-align:center">No beliefs match.</div>';
+					return;
+				}
+				memoryListEl.innerHTML = rows
+					.map((b) => {
+						const scopePills = Object.entries(b.scope ?? {})
+							.map(([k, v]) => `<span class="pill scope">${escapeHtml(k)}=${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : v)}</span>`)
+							.join('');
+						const tagPills = (b.tags ?? [])
+							.map((t) => `<span class="pill tag">${escapeHtml(t)}</span>`)
+							.join('');
+						return `
+							<div class="belief-row ${b.created_by}" data-id="${b.id}">
+								<div class="claim">${escapeHtml(b.claim)}</div>
+								<div class="right">
+									<span class="conf">conf ${b.confidence.toFixed(2)}</span>
+									<span class="ev">ev ${b.evidence}</span>
+									<span>${escapeHtml(b.created_by)} / ${escapeHtml(b.explicitness)}</span>
+								</div>
+								<div class="meta">${scopePills}${tagPills}</div>
+							</div>
+						`;
+					})
+					.join('');
+			}
+
+			/* ── Entities sub-view ─────────────────────────────────────── */
+
+			const entitiesListEl = document.getElementById('memory-entities-list');
+			const entitiesDetailEl = document.getElementById('memory-entities-detail');
+			const entitiesSearchEl = document.getElementById('memory-entities-search');
+			const entitiesFilterEl = document.getElementById('memory-entities-filter');
+			const entitiesCountEl = document.getElementById('memory-entities-count');
+			let entitiesCache = [];
+			let entitiesLoading = false;
+
+			async function loadEntities() {
+				if (entitiesLoading) return;
+				entitiesLoading = true;
+				entitiesListEl.innerHTML = '<div class="memory-empty" style="position:static;padding:40px 0;text-align:center">Loading…</div>';
+				try {
+					const res = await fetch('/api/entities?workspace=' + memoryWorkspace());
+					if (!res.ok) throw new Error(await res.text());
+					entitiesCache = await res.json();
+					renderEntitiesList();
+				} catch (err) {
+					entitiesListEl.innerHTML = '<div class="memory-empty" style="position:static;padding:40px 0;text-align:center">Failed: ' + escapeHtml(err.message) + '</div>';
+				} finally {
+					entitiesLoading = false;
+				}
+			}
+
+			function renderEntitiesList() {
+				const q = entitiesSearchEl ? entitiesSearchEl.value.trim().toLowerCase() : '';
+				const kind = entitiesFilterEl ? entitiesFilterEl.value : '';
+				let rows = entitiesCache.slice();
+				if (kind) rows = rows.filter((e) => e.kind === kind);
+				if (q) {
+					rows = rows.filter((e) => {
+						return (
+							(e.name || '').toLowerCase().includes(q) ||
+							(e.kind || '').toLowerCase().includes(q) ||
+							JSON.stringify(e.metadata ?? {}).toLowerCase().includes(q)
+						);
+					});
+				}
+				rows.sort((a, b) => {
+					if (b.belief_count !== a.belief_count) return b.belief_count - a.belief_count;
+					if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
+					return a.name.localeCompare(b.name);
+				});
+				entitiesCountEl.textContent = `${rows.length}/${entitiesCache.length}`;
+				if (!rows.length) {
+					entitiesListEl.innerHTML = '<div class="memory-empty" style="position:static;padding:40px 0;text-align:center">No entities match.</div>';
+					return;
+				}
+				entitiesListEl.innerHTML = rows
+					.map((e) => {
+						const legacy = e.ref_table ? `<span class="legacy">→ ${escapeHtml(e.ref_table)}</span>` : '';
+						return `
+							<div class="entity-row ${e.kind}" data-id="${e.id}">
+								<span class="kind-pill">${escapeHtml(e.kind)}</span>
+								<span class="name">${escapeHtml(e.name)}</span>
+								<div class="right">
+									<span class="ev">${e.belief_count} belief${e.belief_count === 1 ? '' : 's'}</span>
+									${legacy}
+								</div>
+							</div>
+						`;
+					})
+					.join('');
+			}
+
+			if (entitiesSearchEl) entitiesSearchEl.addEventListener('input', renderEntitiesList);
+			if (entitiesFilterEl) entitiesFilterEl.addEventListener('change', renderEntitiesList);
+
+			// Entity row click in list mode → reuse the graph's detail panel
+			// (renderEntityDetail) so the same panel works in both modes.
+			entitiesListEl.addEventListener('click', (e) => {
+				const row = e.target.closest('.entity-row, .list-item');
+				if (!row) return;
+				const id = row.dataset.id;
+				const entity = (memoryState.entities || []).find((x) => x.id === id);
+				if (!entity) return;
+				selectedNodeId = id;
+				detailEl.style.display = '';
+				detailEl.hidden = false;
+				renderEntityDetail(entity);
+			});
+
+			// New: observation list (left column in list mode)
+			const memoryObsListEl = document.getElementById('memory-obs-list');
+			const memoryObsCount = document.getElementById('memory-obs-count');
+			function renderObsList() {
+				const all = memoryState.observations ?? [];
+				memoryObsCount.textContent = all.length;
+				memoryObsListEl.innerHTML = all
+					.map((o) => `
+						<div class="list-item kind-observation" data-id="${o.id}">
+							<div class="li-title">${escapeHtml(o.title || '(no title)')}</div>
+							<div class="li-meta">${escapeHtml((o.summary || '').slice(0, 90))}${(o.summary || '').length > 90 ? '…' : ''}</div>
+						</div>
+					`)
+					.join('');
+			}
+			memoryObsListEl.addEventListener('click', (e) => {
+				const row = e.target.closest('.list-item');
+				if (!row) return;
+				const id = row.dataset.id;
+				const obs = (memoryState.observations || []).find((x) => x.id === id);
+				if (!obs) return;
+				selectedNodeId = id;
+				detailEl.style.display = '';
+				detailEl.hidden = false;
+				renderObservationDetail(obs);
+			});
+
+			// Belief row click in list mode → also open the graph detail panel.
+			memoryListEl.addEventListener('click', (e) => {
+				const row = e.target.closest('.belief-row, .list-item');
+				if (!row) return;
+				const id = row.dataset.id;
+				const belief = (memoryState.beliefs || []).find((x) => x.id === id);
+				if (!belief) return;
+				selectedNodeId = id;
+				detailEl.style.display = '';
+				detailEl.hidden = false;
+				renderBeliefDetail(belief);
+			});
 
 			function renderGraph() {
 				const svg = d3.select(svgEl);
@@ -1462,13 +2225,22 @@
 
 				const obs = showObsEl.checked ? memoryState.observations : [];
 				const bel = showBelEl.checked ? memoryState.beliefs : [];
+				// Entity-kind filters
+				const allEnts = memoryState.entities ?? [];
+				const visibleEnts = allEnts.filter((e) =>
+					(e.kind === 'vendor' && showVendorsEl.checked) ||
+					(e.kind === 'property' && showPropertiesEl.checked) ||
+					(e.kind === 'owner' && showOwnersEl.checked)
+				);
+				// Use the kind-filtered entity set (vendors/properties/owners toggles).
+				const ents = visibleEnts;
 
-				if (!obs.length && !bel.length) {
+				if (!obs.length && !bel.length && !ents.length) {
 					const empty = document.createElement('div');
 					empty.className = 'memory-empty';
 					empty.innerHTML =
 						'<div>No memory yet for this workspace.</div>' +
-						'<div class="hint">Click <b>+ new belief</b> to seed one, or wait for the agent to observe something.</div>';
+						'<div class="hint">Wait for the agent to observe something.</div>';
 					if (svgEl.parentNode.querySelector('.memory-empty')) {
 						svgEl.parentNode.querySelector('.memory-empty').remove();
 					}
@@ -1487,46 +2259,134 @@
 				// from (0,0) — D3's default phyllotaxis spawn point.
 				const nodes = [
 					...obs.map((o) => ({ ...o, _kind: 'observation' })),
-					...bel.map((b) => ({ ...b, _kind: 'belief' }))
-				].map((n) => ({
-					...n,
-					x: w / 2 + (Math.random() - 0.5) * 40,
-					y: h / 2 + (Math.random() - 0.5) * 40
-				}));
+					...bel.map((b) => ({ ...b, _kind: 'belief' })),
+					...ents.map((e) => ({ ...e, _kind: 'entity' }))
+				];
 				const visibleIds = new Set(nodes.map((n) => n.id));
-				const links = memoryState.edges
+				const evidenceLinks = memoryState.edges
 					.filter((e) => visibleIds.has(e.belief_id) && visibleIds.has(e.observation_id))
-					.map((e) => ({ source: e.observation_id, target: e.belief_id, weight: e.weight }));
+					.map((e) => ({
+						source: e.observation_id,
+						target: e.belief_id,
+						weight: e.weight,
+						_type: 'evidence'
+					}));
+				const entityLinks = (memoryState.entity_edges ?? [])
+					.filter((e) => visibleIds.has(e.belief_id) && visibleIds.has(e.entity_id))
+					.map((e) => ({
+						source: e.entity_id,
+						target: e.belief_id,
+						weight: 0.6,
+						_type: 'entity'
+					}));
+				const structuralLinks = (memoryState.structural_edges ?? [])
+					.filter((e) => visibleIds.has(e.property_entity_id) && visibleIds.has(e.owner_entity_id))
+					.map((e) => ({
+						source: e.property_entity_id,
+						target: e.owner_entity_id,
+						weight: 0.8,
+						_type: 'structural'
+					}));
+				const obsEntityLinks = (memoryState.observation_entity_edges ?? [])
+					.filter((e) => visibleIds.has(e.observation_id) && visibleIds.has(e.entity_id))
+					// Negative weights = entity was REJECTED in this obs; no visible link
+					// or gravity pull. The data is preserved (the obs detail panel shows
+					// the entity as a rejected chip).
+					.filter((e) => (e.weight ?? 1.0) > 0)
+					.map((e) => ({
+						source: e.observation_id,
+						target: e.entity_id,
+						weight: e.weight ?? 1.0,
+						_type: 'obs-entity'
+					}));
+				const links = [...evidenceLinks, ...entityLinks, ...structuralLinks, ...obsEntityLinks];
+
+				// Icon symbols (bootstrap-icons) reused per entity node.
+				// 16x16 viewBox; `<use>` per node sets width/height to scale.
+				const defs = svg.append('defs');
+				defs
+					.append('symbol')
+					.attr('id', 'icon-property')
+					.attr('viewBox', '0 0 16 16')
+					.append('path')
+					.attr(
+						'd',
+						'M6.5 14.5v-3.505c0-.245.25-.495.5-.495h2c.25 0 .5.25.5.5v3.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.146-.354L13 5.793V2.5a.5.5 0 0 0-.5-.5h-1a.5.5 0 0 0-.5.5v1.293L8.354 1.146a.5.5 0 0 0-.708 0l-6 6A.5.5 0 0 0 1.5 7.5v7a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5'
+					);
+				defs
+					.append('symbol')
+					.attr('id', 'icon-vendor')
+					.attr('viewBox', '0 0 16 16')
+					.append('g')
+					.html(
+						'<path d="M16 4.5a4.5 4.5 0 0 1-1.703 3.526L13 5l2.959-1.11q.04.3.041.61"/><path d="M11.5 9c.653 0 1.273-.139 1.833-.39L12 5.5 11 3l3.826-1.53A4.5 4.5 0 0 0 7.29 6.092l-6.116 5.096a2.583 2.583 0 1 0 3.638 3.638L9.908 8.71A4.5 4.5 0 0 0 11.5 9m-1.292-4.361-.596.893.809-.27a.25.25 0 0 1 .287.377l-.596.893.809-.27.158.475-1.5.5a.25.25 0 0 1-.287-.376l.596-.893-.809.27a.25.25 0 0 1-.287-.377l.596-.893-.809.27-.158-.475 1.5-.5a.25.25 0 0 1 .287.376M3 14a1 1 0 1 1 0-2 1 1 0 0 1 0 2"/>'
+					);
+				defs
+					.append('symbol')
+					.attr('id', 'icon-owner')
+					.attr('viewBox', '0 0 16 16')
+					.append('path')
+					.attr(
+						'd',
+						'M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6'
+					);
 
 				const g = svg.append('g').attr('class', 'graph-root');
 
-				// Zoom + pan
-				svg.call(
-					d3.zoom().scaleExtent([0.2, 4]).on('zoom', (ev) => g.attr('transform', ev.transform))
-				);
+				// Zoom + pan (capture the behavior so we can drive it programmatically
+				// for the load-in animation).
+				const zoomBehavior = d3.zoom()
+					.scaleExtent([0.2, 4])
+					.on('zoom', (ev) => g.attr('transform', ev.transform));
+				svg.call(zoomBehavior);
 
 				const link = g
 					.append('g')
 					.selectAll('line')
 					.data(links)
 					.join('line')
-					.attr('class', 'link')
-					.attr('stroke-width', (d) => Math.max(0.5, Math.abs(d.weight) * 1.5))
-					.attr('stroke', (d) => (d.weight < 0 ? '#5a2a30' : '#2a2f37'));
+					.attr('class', (d) => {
+						if (d._type === 'entity') return 'link entity';
+						if (d._type === 'structural') return 'link structural';
+						return 'link';
+					})
+					.attr('stroke-width', (d) => {
+						if (d._type === 'entity') return 1;
+						if (d._type === 'structural') return 1.5;
+						return Math.max(0.5, Math.abs(d.weight) * 1.5);
+					})
+					.attr('stroke', (d) => {
+						if (d._type === 'entity' || d._type === 'structural') return null; // CSS controls
+						return d.weight < 0 ? '#5a2a30' : '#2a2f37';
+					});
 
 				const node = g
 					.append('g')
 					.selectAll('g')
 					.data(nodes, (d) => d.id)
 					.join('g')
-					.attr('class', (d) =>
-						`node ${d._kind}` + (d._kind === 'belief' && d.created_by === 'user' ? ' user-created' : '')
-					)
+					.attr('class', (d) => {
+						if (d._kind === 'entity') return `node entity ${d.kind}`;
+						const userTag = d._kind === 'belief' && d.created_by === 'user' ? ' user-created' : '';
+						return `node ${d._kind}${userTag}`;
+					})
 					.on('click', (ev, d) => {
 						ev.stopPropagation();
 						selectedNodeId = d.id;
 						highlightNeighborhood(d.id);
 						showDetail(d);
+					})
+					.on('mouseenter', (ev, d) => {
+						// Obsidian-style: hover dims everything except the node + its
+						// connected neighborhood. Does NOT change selectedNodeId.
+						hoveredNodeId = d.id;
+						highlightNeighborhood(d.id);
+					})
+					.on('mouseleave', (ev, d) => {
+						hoveredNodeId = null;
+						// Restore selection highlight if a node is selected, else clear.
+						if (selectedNodeId) highlightNeighborhood(selectedNodeId);
+						else clearHighlight();
 					})
 					.on('dblclick', (ev, d) => {
 						// Double-click releases a pinned node back to the layout.
@@ -1558,22 +2418,50 @@
 							})
 					);
 
+				function nodeRadius(d) {
+					if (d._kind === 'belief') {
+						// Belief size = evidence depth × confidence.
+						// A single-obs belief should be only a touch larger than an obs node.
+						const ev = d.evidence_count ?? 1;
+						const conf = d.confidence ?? 0.5;
+						return Math.min(22, 5 + Math.sqrt(ev) * 2.5 * (0.5 + conf));
+					}
+					if (d._kind === 'entity') {
+						const total = (d.belief_count ?? 0) + (d.observation_count ?? 0);
+						return Math.min(26, 8 + total * 1.5);
+					}
+					return 3.5;
+				}
+
 				node
 					.append('circle')
-					.attr('r', (d) =>
-						d._kind === 'belief' ? 6 + 14 * (d.confidence ?? 0.5) : 3.5
-					)
+					.attr('r', nodeRadius)
 					.attr('fill-opacity', (d) =>
 						d._kind === 'observation' ? 0.3 + 0.7 * (d.salience ?? 0.5) : 1
 					);
 
+				// Icons: only entity nodes get them. Sized to ~70% of diameter.
+				node
+					.filter((d) => d._kind === 'entity')
+					.append('use')
+					.attr('href', (d) => `#icon-${d.kind}`)
+					.attr('width', (d) => nodeRadius(d) * 1.2)
+					.attr('height', (d) => nodeRadius(d) * 1.2)
+					.attr('x', (d) => -nodeRadius(d) * 0.6)
+					.attr('y', (d) => -nodeRadius(d) * 0.6)
+					.attr('fill', '#0d0f12')
+					.attr('pointer-events', 'none');
+
 				node
 					.append('text')
 					.attr('x', 0)
-					.attr('y', (d) => (d._kind === 'belief' ? 6 + 14 * (d.confidence ?? 0.5) + 4 : 8))
+					.attr('y', (d) => nodeRadius(d) + 4)
 					.attr('text-anchor', 'middle')
 					.text((d) => {
-						const txt = d._kind === 'belief' ? d.claim : d.summary;
+						let txt;
+						if (d._kind === 'belief') txt = d.claim;
+						else if (d._kind === 'entity') txt = d.name; // kind is encoded in color
+						else txt = d.title || d.summary;
 						return (txt ?? '').length > 36 ? txt.slice(0, 33) + '…' : txt;
 					});
 
@@ -1596,6 +2484,7 @@
 					hideDetail();
 				});
 
+				const radialOuter = Math.min(w, h) * 0.45;
 				simulation = d3
 					.forceSimulation(nodes)
 					.force(
@@ -1603,39 +2492,77 @@
 						d3
 							.forceLink(links)
 							.id((d) => d.id)
-							.distance((l) => 60 + 40 * (1 - Math.abs(l.weight)))
-							.strength((l) => Math.abs(l.weight) * 0.8)
+							.distance((l) => {
+								if (l._type === 'obs-entity') return 55;
+								if (l._type === 'structural') return 60;
+								return 100 + 60 * (1 - Math.abs(l.weight));
+							})
+							.strength((l) => {
+								if (l._type === 'obs-entity') return 0.45;
+								if (l._type === 'structural') return 0.55;
+								return Math.abs(l.weight) * 0.6;
+							})
 					)
-					// Charge falls off with distance (1/r-ish); forceX/Y is constant.
-					// At equilibrium they balance. Increase charge → wider spread.
-					// Increase forceX/Y strength → tighter cluster. Tuned together so
-					// 5 disconnected nodes spread comfortably and don't drift when one
-					// is held during a drag.
-					.force('charge', d3.forceManyBody().strength(-260).distanceMax(400))
-					.force('x', d3.forceX(w / 2).strength(0.05))
-					.force('y', d3.forceY(h / 2).strength(0.05))
-					.force('collide', rectCollide(6))
-					.stop();
+					// Stronger entity repulsion so the ~70-entity cluster spreads out
+					// readably. Observations get mild repulsion so they don't pile on
+					// top of each other near their parent entity.
+					.force(
+						'charge',
+						d3.forceManyBody().strength((d) => (d._kind === 'observation' ? -40 : -600)).distanceMax(700)
+					)
+					.force('x', d3.forceX(w / 2).strength(0.03))
+					.force('y', d3.forceY(h / 2).strength(0.03))
+					// Radial: only observations get pushed outward. Entities free-float
+					// within the cluster — their layout comes from charge + structural
+					// + obs-entity links.
+					.force(
+						'radial',
+						d3
+							.forceRadial(radialOuter, w / 2, h / 2)
+							.strength((d) => (d._kind === 'observation' ? 0.05 : 0))
+					)
+					.force(
+						'collide',
+						d3.forceCollide().radius((d) => {
+							if (d._kind === 'belief') return 42;
+							if (d._kind === 'entity') return nodeRadius(d) + 50;
+							return 14;
+						})
+					)
+					.on('tick', () => {
+						link
+							.attr('x1', (d) => d.source.x)
+							.attr('y1', (d) => d.source.y)
+							.attr('x2', (d) => d.target.x)
+							.attr('y2', (d) => d.target.y);
+						node.attr('transform', (d) => `translate(${d.x},${d.y})`);
+					});
 
-				// Settle the layout off-screen, then paint once. Without this the
-				// nodes visibly drift from their seed positions to equilibrium.
-				const settleTicks = Math.ceil(
-					Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay())
-				);
-				for (let i = 0; i < settleTicks; i++) simulation.tick();
+				// Pre-settle: tick the simulation synchronously so nodes start near
+				// their final positions (no top-left-corner bounce-in). Then cool the
+				// simulation so subsequent interaction (drag, filter change) only
+				// nudges things slightly.
+				simulation.stop();
+				for (let i = 0; i < 300; i++) simulation.tick();
+				link
+					.attr('x1', (d) => d.source.x)
+					.attr('y1', (d) => d.source.y)
+					.attr('x2', (d) => d.target.x)
+					.attr('y2', (d) => d.target.y);
+				node.attr('transform', (d) => `translate(${d.x},${d.y})`);
+				simulation.alpha(0.05).restart();
 
-				function paintTick() {
-					link
-						.attr('x1', (d) => d.source.x)
-						.attr('y1', (d) => d.source.y)
-						.attr('x2', (d) => d.target.x)
-						.attr('y2', (d) => d.target.y);
-					node.attr('transform', (d) => `translate(${d.x},${d.y})`);
-				}
-				paintTick();
-
-				// Re-attach tick handler so drags still animate.
-				simulation.on('tick', paintTick);
+				// Animated zoom-in: start slightly zoomed-out (0.7×) and animate to a
+				// centered, more-readable view (1.05×). Center around the centroid of
+				// the entity cluster so the camera lands on the dense middle.
+				const cx = w / 2;
+				const cy = h / 2;
+				const startScale = 0.45;
+				const endScale = 1.05;
+				const startTransform = d3.zoomIdentity.translate(cx * (1 - startScale), cy * (1 - startScale)).scale(startScale);
+				const endTransform = d3.zoomIdentity.translate(cx * (1 - endScale), cy * (1 - endScale)).scale(endScale);
+				svg.call(zoomBehavior.transform, startTransform);
+				svg.transition().duration(1400).ease(d3.easeCubicInOut).call(zoomBehavior.transform, endTransform);
 			}
 
 			function highlightNeighborhood(id) {
@@ -1644,36 +2571,150 @@
 					if (e.belief_id === id) neighbors.add(e.observation_id);
 					if (e.observation_id === id) neighbors.add(e.belief_id);
 				}
-				d3.selectAll('.node').classed('dimmed', (d) => !neighbors.has(d.id));
-				d3.selectAll('.node').classed('selected', (d) => d.id === id);
-				d3.selectAll('.link').classed(
+				for (const e of memoryState.entity_edges ?? []) {
+					if (e.belief_id === id) neighbors.add(e.entity_id);
+					if (e.entity_id === id) neighbors.add(e.belief_id);
+				}
+				for (const e of memoryState.structural_edges ?? []) {
+					if (e.property_entity_id === id) neighbors.add(e.owner_entity_id);
+					if (e.owner_entity_id === id) neighbors.add(e.property_entity_id);
+				}
+				// Scope selectors to the graph SVG so we don't accidentally pick up
+				// HTML elements with the same class name (e.g. .scope-pill.link in
+				// the detail panel, which would throw when read as a d3 datum).
+				const gsvg = d3.select(svgEl);
+				gsvg.selectAll('.node').classed('dimmed', (d) => !neighbors.has(d.id));
+				gsvg.selectAll('.node').classed('selected', (d) => d.id === id);
+				gsvg.selectAll('.link').classed(
 					'dimmed',
-					(l) => !(neighbors.has(l.source.id) && neighbors.has(l.target.id))
+					(l) => l && l.source && !(neighbors.has(l.source.id) && neighbors.has(l.target.id))
 				);
 			}
 
 			function clearHighlight() {
-				d3.selectAll('.node').classed('dimmed', false).classed('selected', false).classed('match', false);
-				d3.selectAll('.link').classed('dimmed', false);
+				const gsvg = d3.select(svgEl);
+				gsvg.selectAll('.node').classed('dimmed', false).classed('selected', false).classed('match', false);
+				gsvg.selectAll('.link').classed('dimmed', false);
 			}
 
 			function showDetail(d) {
+				// Defensive: clear any inline display style that could keep the
+				// panel invisible after a previous hideDetail.
+				detailEl.style.display = '';
 				detailEl.hidden = false;
 				if (d._kind === 'belief') renderBeliefDetail(d);
+				else if (d._kind === 'entity') renderEntityDetail(d);
 				else renderObservationDetail(d);
+			}
+
+			function renderEntityDetail(e) {
+				const linkedBeliefs = (memoryState.entity_edges ?? [])
+					.filter((edge) => edge.entity_id === e.id)
+					.map((edge) => memoryState.beliefs.find((b) => b.id === edge.belief_id))
+					.filter(Boolean);
+
+				// Structural relations derived from legacy owner_properties:
+				// property → its owner(s); owner → its property/properties.
+				const relatedEntities = [];
+				const structural = memoryState.structural_edges ?? [];
+				if (e.kind === 'property') {
+					for (const se of structural) {
+						if (se.property_entity_id === e.id) {
+							const o = memoryState.entities.find((x) => x.id === se.owner_entity_id);
+							if (o) relatedEntities.push(o);
+						}
+					}
+				} else if (e.kind === 'owner') {
+					for (const se of structural) {
+						if (se.owner_entity_id === e.id) {
+							const p = memoryState.entities.find((x) => x.id === se.property_entity_id);
+							if (p) relatedEntities.push(p);
+						}
+					}
+				}
+				const relatedHeading =
+					e.kind === 'property' ? 'Owner' : e.kind === 'owner' ? 'Properties' : null;
+
+				detailBodyEl.innerHTML = `
+					<h3>Entity</h3>
+					<div class="claim">${escapeHtml(e.kind)}: ${escapeHtml(e.name)}</div>
+					<div class="kv"><span class="k">kind</span><span>${escapeHtml(e.kind)}</span></div>
+					<div class="kv"><span class="k">legacy ref</span><span>${e.ref_table ? `${escapeHtml(e.ref_table)} / ${(e.ref_id || '').slice(0, 8)}` : '<span style="color:#6c727b">none (informal)</span>'}</span></div>
+					<div class="kv"><span class="k">created</span><span>${e.created_at ? fmtAge(e.created_at) : '—'}</span></div>
+					${
+						relatedHeading
+							? `<h3 style="margin-top:18px">${relatedHeading} (${relatedEntities.length})</h3>
+								${
+									relatedEntities.length
+										? relatedEntities
+												.map(
+													(r) => `<div class="evidence-row entity-link" data-ent-id="${r.id}">
+											<span class="weight" style="color:#6c727b">${escapeHtml(r.kind)}</span>
+											${escapeHtml(r.name)}
+										</div>`
+												)
+												.join('')
+										: '<div style="color:#6c727b;font-size:12px">' +
+											(e.kind === 'property'
+												? 'No owner found (informal property or missing owner_properties row).'
+												: 'No properties found for this owner.') +
+											'</div>'
+								}`
+							: ''
+					}
+					<h3 style="margin-top:18px">Beliefs (${linkedBeliefs.length})</h3>
+					${
+						linkedBeliefs.length
+							? linkedBeliefs
+									.map(
+										(b) => `<div class="evidence-row" data-bel-id="${b.id}">
+								<span class="weight">${(b.confidence ?? 0).toFixed(2)}</span>
+								${escapeHtml(b.claim)}
+							</div>`
+									)
+									.join('')
+							: '<div style="color:#6c727b;font-size:12px">No beliefs reference this entity yet.</div>'
+					}
+				`;
+
+				// Wire click-through on related-entity rows.
+				detailBodyEl.querySelectorAll('.entity-link').forEach((row) => {
+					row.addEventListener('click', () => {
+						const entId = row.dataset.entId;
+						const ent = memoryState.entities.find((x) => x.id === entId);
+						if (ent) {
+							selectedNodeId = entId;
+							highlightNeighborhood(entId);
+							renderEntityDetail(ent);
+						}
+					});
+				});
 			}
 			function hideDetail() {
 				detailEl.hidden = true;
 			}
 			detailCloseEl.addEventListener('click', (e) => {
 				e.stopPropagation();
+				e.stopImmediatePropagation();
 				selectedNodeId = null;
 				clearHighlight();
 				hideDetail();
 			});
 
 			function scopePills(scope) {
-				if (!scope || !Object.keys(scope).length) return '<span style="color:#6c727b">unscoped</span>';
+				if (!scope) return '<span style="color:#6c727b">unscoped</span>';
+				// New shape: array of {kind, name} (observations, post-PR2).
+				if (Array.isArray(scope)) {
+					if (scope.length === 0) return '<span style="color:#6c727b">unscoped</span>';
+					return scope
+						.map(
+							(e) =>
+								`<span class="scope-pill">${escapeHtml(e.kind ?? '')}: ${escapeHtml(e.name ?? '')}</span>`
+						)
+						.join('');
+				}
+				// Legacy shape: object {key: value} (beliefs scope).
+				if (!Object.keys(scope).length) return '<span style="color:#6c727b">unscoped</span>';
 				return Object.entries(scope)
 					.map(
 						([k, v]) =>
@@ -1741,12 +2782,33 @@
 						return { ...e, belief: b };
 					})
 					.filter((e) => e.belief);
+				// Resolve linked entities from the observation_entity_edges join so
+				// the panel shows canonical entity names + can navigate on click.
+				const linkedEntities = (memoryState.observation_entity_edges ?? [])
+					.filter((e) => e.observation_id === o.id)
+					.map((edge) => {
+						const ent = memoryState.entities.find((x) => x.id === edge.entity_id);
+						return ent ? { ...ent, weight: edge.weight ?? 1.0 } : null;
+					})
+					.filter(Boolean);
+				const entityChips = linkedEntities.length
+					? linkedEntities
+							.map((e) => {
+								const isNeg = e.weight < 0;
+								const style = isNeg
+									? 'cursor:pointer;opacity:0.55;text-decoration:line-through'
+									: 'cursor:pointer';
+								const weightLabel = e.weight === 1 ? '' : ` <span style="opacity:0.6">(${e.weight.toFixed(1)})</span>`;
+								return `<span class="scope-pill link" data-entity-id="${e.id}" style="${style}">${escapeHtml(e.kind)}: ${escapeHtml(e.name)}${weightLabel}</span>`;
+							})
+							.join(' ')
+					: '<span style="color:#6c727b">unscoped</span>';
 				detailBodyEl.innerHTML = `
 					<h3>Observation</h3>
 					<div class="claim">${escapeHtml(o.summary)}</div>
 					<div class="kv"><span class="k">ts</span><span>${o.ts ? fmtAge(o.ts) : '—'}</span></div>
 					<div class="kv"><span class="k">salience</span><span>${(o.salience ?? 0).toFixed(2)}</span></div>
-					<div class="kv"><span class="k">entities</span><span>${scopePills(o.entities)}</span></div>
+					<div class="kv"><span class="k">entities</span><span>${entityChips}</span></div>
 					<div class="kv"><span class="k">tags</span><span>${(o.tags ?? []).map((t) => `<span class="scope-pill">${escapeHtml(t)}</span>`).join('') || '<span style="color:#6c727b">none</span>'}</span></div>
 					${o.raw_text ? `<div class="kv"><span class="k">raw text</span><span style="font-style:italic">"${escapeHtml(o.raw_text)}"</span></div>` : ''}
 					<h3 style="margin-top:18px">Connected beliefs (${beliefs.length})</h3>
@@ -1764,6 +2826,19 @@
 							: '<div style="color:#6c727b;font-size:12px">Not yet connected to any belief.</div>'
 					}
 				`;
+				// Wire click-through on entity chips in the entities row.
+				detailBodyEl.querySelectorAll('.scope-pill.link[data-entity-id]').forEach((chip) => {
+					chip.addEventListener('click', (e) => {
+						e.stopPropagation();
+						const entId = chip.dataset.entityId;
+						const ent = memoryState.entities.find((x) => x.id === entId);
+						if (ent) {
+							selectedNodeId = entId;
+							highlightNeighborhood(entId);
+							renderEntityDetail(ent);
+						}
+					});
+				});
 				detailBodyEl.querySelectorAll('.evidence-row').forEach((row) => {
 					row.addEventListener('click', () => {
 						const belId = row.dataset.belId;
@@ -1794,7 +2869,7 @@
 				formEl.elements.tags.value = (existing?.tags ?? []).join(', ');
 				dialogEl.showModal();
 			}
-			newBeliefBtn.addEventListener('click', () => openBeliefDialog(null));
+			if (newBeliefBtn) newBeliefBtn.addEventListener('click', () => openBeliefDialog(null));
 			cancelBeliefBtn.addEventListener('click', () => dialogEl.close());
 			formEl.elements.confidence.addEventListener('input', (e) => {
 				confOut.textContent = Number(e.target.value).toFixed(2);
@@ -1859,14 +2934,35 @@
 			// ─ Filter toggles + search ─────────────────────────────────────
 			showObsEl.addEventListener('change', () => renderGraph());
 			showBelEl.addEventListener('change', () => renderGraph());
+			showVendorsEl.addEventListener('change', () => renderGraph());
+			showPropertiesEl.addEventListener('change', () => renderGraph());
+			showOwnersEl.addEventListener('change', () => renderGraph());
 
 			let searchTimer = null;
 			searchEl.addEventListener('input', () => {
 				clearTimeout(searchTimer);
 				searchTimer = setTimeout(runSearch, 200);
 			});
+			function filterListItems(q) {
+				const needle = q.toLowerCase();
+				const containers = [
+					document.getElementById('memory-obs-list'),
+					document.getElementById('memory-list'),
+					document.getElementById('memory-entities-list')
+				];
+				for (const c of containers) {
+					if (!c) continue;
+					for (const item of c.querySelectorAll('.list-item, .belief-row, .entity-row')) {
+						const text = item.textContent.toLowerCase();
+						item.style.display = !needle || text.includes(needle) ? '' : 'none';
+					}
+				}
+			}
+
 			async function runSearch() {
 				const q = searchEl.value.trim();
+				// Always filter list items so the search works in list mode too.
+				filterListItems(q);
 				if (!q) {
 					clearHighlight();
 					return;
@@ -1878,12 +2974,13 @@
 					if (!res.ok) throw new Error(await res.text());
 					const hits = await res.json();
 					const matched = new Set([...(hits.observations ?? []), ...(hits.beliefs ?? [])]);
-					d3.selectAll('.node')
+					const gsvg = d3.select(svgEl);
+					gsvg.selectAll('.node')
 						.classed('match', (d) => matched.has(d.id))
 						.classed('dimmed', (d) => matched.size > 0 && !matched.has(d.id));
-					d3.selectAll('.link').classed(
+					gsvg.selectAll('.link').classed(
 						'dimmed',
-						(l) => matched.size > 0 && !(matched.has(l.source.id) || matched.has(l.target.id))
+						(l) => l && l.source && matched.size > 0 && !(matched.has(l.source.id) || matched.has(l.target.id))
 					);
 				} catch (err) {
 					toast(`search failed: ${err.message}`, 'error');

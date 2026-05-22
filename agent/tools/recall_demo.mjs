@@ -1,7 +1,8 @@
-// Legacy demo-skill recall — handle-scoped, file-backed, keyword match.
-// Kept for the F1 demo flow. The canonical recall paths are recall_beliefs
-// and recall_observations (workspace-scoped, vector-backed) — use those in
-// new code.
+// Demo-skill recall — handle-scoped, file-backed, keyword match. Used by the
+// onboarding flow (skills/demo.mjs) when there's no workspace yet. The post-
+// onboarding sibling is tools/recall.mjs — workspace-scoped, hybrid graph
+// retrieval. Both tools are exported to the LLM under the same name `recall`;
+// each skill binds whichever one fits its lifecycle stage.
 
 import * as memory from '../memory.mjs';
 
