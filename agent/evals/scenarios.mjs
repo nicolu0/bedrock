@@ -240,7 +240,7 @@ export const scenarios = [
 	},
 
 	{
-		name: 'chat: vendor redirect ("no send Luigi") → no dispatch, record observation',
+		name: 'chat: vendor redirect ("no send Luigi") → no dispatch, record write_memory',
 		skill: 'chat',
 		setup: {
 			sent_log: sentBundle(ISSUE_FAUCET),
@@ -251,7 +251,7 @@ export const scenarios = [
 			// New: vendor redirects warrant an observation (the redirect is a
 			// learnable signal). recall_beliefs is optional — model may consult
 			// before deciding. No dispatch tools fire — v1 doesn't handle swaps.
-			tool_calls_set_includes: ['add_observation'],
+			tool_calls_set_includes: ['write_memory'],
 			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
 			drafts_count: 0,
 			outbox_count: 0
@@ -358,7 +358,7 @@ export const scenarios = [
 	// ─── Chat: learning behavior (new tools) ───────────────────────────────
 
 	{
-		name: 'chat: stated preference ("always use Yonic for plumbing") → add_observation, no dispatch',
+		name: 'chat: stated preference ("always use Yonic for plumbing") → write_memory, no dispatch',
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: {
@@ -367,7 +367,7 @@ export const scenarios = [
 			text: 'btw always use Yonic for plumbing at the Hub Champaign building'
 		},
 		expected: {
-			tool_calls_set_includes: ['add_observation'],
+			tool_calls_set_includes: ['write_memory'],
 			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
 			drafts_count: 0,
 			outbox_count: 0
@@ -375,7 +375,7 @@ export const scenarios = [
 	},
 
 	{
-		name: 'chat: per-property quirk (elevator vendor) → add_observation, no dispatch',
+		name: 'chat: per-property quirk (elevator vendor) → write_memory, no dispatch',
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: {
@@ -384,7 +384,7 @@ export const scenarios = [
 			text: 'fyi the elevator vendor for 1234 Main St is Acme Elevators, they have a contract'
 		},
 		expected: {
-			tool_calls_set_includes: ['add_observation'],
+			tool_calls_set_includes: ['write_memory'],
 			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
 			drafts_count: 0,
 			outbox_count: 0
@@ -407,7 +407,7 @@ export const scenarios = [
 			text: 'yes go ahead. and just so you know we always use Yonic for plumbing here.'
 		},
 		expected: {
-			tool_calls_set_includes: ['acknowledge', 'draft_tenant', 'draft_vendor', 'add_observation'],
+			tool_calls_set_includes: ['acknowledge', 'draft_tenant', 'draft_vendor', 'write_memory'],
 			drafts_count: 2,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
 		}

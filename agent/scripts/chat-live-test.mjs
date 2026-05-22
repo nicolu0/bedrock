@@ -165,7 +165,7 @@ if (changed.length) {
 	}
 }
 if (!newObs.length && !newBeliefs.length && !changed.length) {
-	console.log(`\nno memory changes — model did not call add_observation, or belief-former classified as noop.`);
+	console.log(`\nno memory changes — model did not call write_memory, or belief-former classified as noop.`);
 }
 
 console.log(`\nOpen the Memory tab to see the graph: http://127.0.0.1:7879/  (switch to ${wsArg} workspace)`);
