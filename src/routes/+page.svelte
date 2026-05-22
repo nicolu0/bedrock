@@ -89,7 +89,7 @@
 		<!-- Hero text — centered on desktop, upper-center on mobile -->
 		<div class="flex flex-1 flex-col items-center justify-center sm:pb-48">
 				<div class="mb-5">
-					<span class="px-4 py-1.5 text-xs italic text-stone-500">Helping manage 400+ units</span>
+					<span class="px-4 py-1.5 text-xs italic text-stone-500">Helping manage 1100+ units</span>
 				</div>
 			<h1 class="anim-hero w-full font-medium leading-tight tracking-tight text-stone-700">
 				<div class="whitespace-nowrap" style="font-size: clamp(1.7rem, 10.5vw, 3.75rem);">Bedrock <span
