@@ -13,7 +13,7 @@ import { recentSentForChat } from '../work-orders/state/helpers.mjs';
 import { acknowledge } from '../tools/acknowledge.mjs';
 import { draftTenant } from '../tools/draft_tenant.mjs';
 import { draftVendor } from '../tools/draft_vendor.mjs';
-import { addObservation } from '../tools/add_observation.mjs';
+import { writeMemory } from '../tools/write_memory.mjs';
 import { recallBeliefs } from '../tools/recall_beliefs.mjs';
 import { recallObservations } from '../tools/recall_observations.mjs';
 
@@ -22,7 +22,7 @@ const CHAT_TASK_PROMPT = `# Task: handle a property manager's reply in their gro
 The property manager just replied in a groupchat where you previously texted them about open work orders. You have two parallel jobs every turn:
 
 1. **Dispatch** — if the reply approves vendor dispatch, call the dispatch tools.
-2. **Learn** — if the reply contains information that should change how the agent handles future work orders, call add_observation to record it.
+2. **Learn** — if the reply contains information that should change how the agent handles future work orders, call write_memory to record it.
 
 You will receive:
 - A numbered list of the most recent work orders you texted them about, each tagged with an issue_id, including the message bodies you sent (which already contain property, unit, and vendor names).
@@ -36,24 +36,24 @@ You will receive:
   3. Call draft_vendor with that issue_id.
   Three tool calls in that order. Use the issue_id EXACTLY as shown — copy it.
 
-- If the reply redirects to a DIFFERENT vendor than the one we suggested ("send Luigi instead"), do NOT draft. v1 doesn't handle vendor swaps yet — but DO call add_observation (see below). The redirect is exactly the kind of signal we need to learn from.
+- If the reply redirects to a DIFFERENT vendor than the one we suggested ("send Luigi instead"), do NOT draft. v1 doesn't handle vendor swaps yet — but DO call write_memory (see below). The redirect is exactly the kind of signal we need to learn from.
 
 - If the reply is a question, ambiguous, off-topic, or could plausibly match more than one issue, make no dispatch tool calls. The dashboard will log this as 'no_match' so the human sees it.
 
 - Never invent an issue_id. Use only the ones from the candidate list.
 
-- Do not call acknowledge unless you are ALSO going to call draft_tenant and draft_vendor in the same turn. Acks are for confirming you're taking *dispatch* action, not for chit-chat. **add_observation is NOT a dispatch action** — recording a preference or correction does NOT justify an acknowledge. The PM will see the effect of the observation in future turns, not now.
+- Do not call acknowledge unless you are ALSO going to call draft_tenant and draft_vendor in the same turn. Acks are for confirming you're taking *dispatch* action, not for chit-chat. **write_memory is NOT a dispatch action** — recording a preference or correction does NOT justify an acknowledge. The PM will see the effect of the observation in future turns, not now.
 
 ## Learning rules
 
-Call add_observation when the PM says something that should change future routing or drafting decisions. Examples that warrant an observation:
+Call write_memory when the PM says something that should change future routing or drafting decisions. Examples that warrant a write:
 
 - **Stated preferences**: "always use Yonic for plumbing at 829 Ocean Park", "we don't use ServPro anymore" → high salience (0.85–1.0).
 - **Per-property quirks**: "the elevator vendor for 1234 Main is Acme Elevators", "tenants at Harrison Properties prefer email, not text" → 0.7–0.9.
 - **Vendor redirects**: "send Luigi instead of Yonic" → 0.7. The redirect is a correction; it may or may not generalize, the belief-former will decide.
 - **Process rules**: "always contact the owner before sending pest control" → 0.85+.
 
-Examples that do NOT warrant an observation:
+Examples that do NOT warrant a write:
 
 - "yes" / "ok" / "go ahead" — these are routine acks, captured by the dispatch flow.
 - Questions back to you ("did you call the tenant yet?") — no rule-shaped content.
@@ -63,12 +63,13 @@ Salience scale:
 - **0.9–1.0**: explicit, emphatic ("always", "never", "we don't use X anymore").
 - **0.6–0.8**: clear preference, situational ("for this property", "send him instead").
 - **0.3–0.5**: weak signal, indirect ("yeah he's usually fine"). Use sparingly.
-- Anything weaker: skip — don't pollute the observation stream.
+- Anything weaker: skip — don't pollute the memory graph.
 
-When calling add_observation:
+When calling write_memory:
+- **title**: ≤10 words, shape "subject → outcome". Scannable headline used in dashboards. Examples: "Hub Champaign plumbing → Yonic", "Darwin → retired", "Solomon Grauzinis Trust → approval required". No parentheticals.
 - **summary**: a self-contained one-liner. Embed-friendly. Include vendor/trade/property names if mentioned.
-- **entities**: pin known fields. Use trade, property_id (if you have it from a referenced issue), vendor_id, portfolio. Free-form JSON — pin what's certain.
-- **tags**: free-form for retrieval. Examples: "vendor-preference", "correction", "per-property-rule", "process".
+- **entities**: an ARRAY of {kind, name, weight?}. kind must be one of: "vendor", "property", "owner". Pull names directly from the PM's message and from the work-order context above. Use weight = +1 (default) for the chosen/preferred entity and weight = -0.5 (or lower) for any rejected/overridden entity in the same signal. Example for "send Luigi instead of Yonic": [{kind:"vendor", name:"Luigi", weight:1}, {kind:"vendor", name:"Yonic", weight:-0.5}]. Owner entities are cascaded automatically from any property you list — you don't need to add the owner yourself.
+- **tags**: free-form strings for retrieval. Examples: "vendor-preference", "correction", "per-property-rule", "process".
 - **raw_text**: the PM's actual message text.
 - **salience**: per the scale above.
 
@@ -80,7 +81,7 @@ If you're confident in your read of the reply, skip the recall — don't burn a 
 
 ## Ordering
 
-- If you're going to dispatch AND record an observation in the same turn, do dispatch first (acknowledge → draft_tenant → draft_vendor) THEN add_observation. The user sees acks immediately; observations are background work.
+- If you're going to dispatch AND record a memory write in the same turn, do dispatch first (acknowledge → draft_tenant → draft_vendor) THEN write_memory. The user sees acks immediately; memory writes are background work.
 - recall_beliefs, if used, goes first — it's read-only and informs everything else.`;
 
 function formatRecentBundles(bundles) {
@@ -96,7 +97,7 @@ export const chatSkill = {
 	name: 'chat',
 	model: process.env.CHAT_MODEL || 'gpt-5.4-2026-03-05',
 	maxIterations: 5,
-	tools: [acknowledge, draftTenant, draftVendor, addObservation, recallBeliefs, recallObservations],
+	tools: [acknowledge, draftTenant, draftVendor, writeMemory, recallBeliefs, recallObservations],
 	taskPrompt: CHAT_TASK_PROMPT,
 
 	async buildContext(ctx) {

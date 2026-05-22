@@ -420,6 +420,14 @@ async function handleGroupchatMessage(row, ws) {
 		}
 	};
 
+	// Pull the live session_id from the sessionizer cache (already populated by
+	// the parallel sessionizer.ingestMessage call for this same row). The
+	// session_id rides on ctx so write_memory can stamp it on the observation.
+	// If the sessionizer hasn't run yet for this chat (rare race), session_id
+	// is null and write_memory still functions — the obs just won't be linked.
+	const openSession = await sessionizer.getOpenSession(chatGuid).catch(() => null);
+	const session_id = openSession?.session_id ?? null;
+
 	const ctx = {
 		handle,
 		text,
@@ -431,7 +439,10 @@ async function handleGroupchatMessage(row, ws) {
 		// Groupchat with a PM is NOT a 1:1 with a PM. The send_text safety
 		// guard (refuse live + isPmHandle) is about preventing direct DMs;
 		// the chat skill doesn't expose send_text anyway.
-		isPmHandle: false
+		isPmHandle: false,
+		// Memory-graph plumbing — write_memory consumes these.
+		session_id,
+		source_message_id: row.guid ?? null
 	};
 
 	let result;
