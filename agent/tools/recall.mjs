@@ -158,7 +158,7 @@ export const recall = {
 	},
 	async run({ question, property = null, vendor = null, issue = null }, ctx) {
 		if (process.env.BEDROCK_EVAL_MODE === '1') {
-			return { candidates: [], resolved_entities: [], fallback_reason: 'eval mode' };
+			return { candidates: [], resolved_entities: [], tiers_fired: [], note: 'eval mode' };
 		}
 		if (!ctx.workspace_id) throw new Error('recall: ctx.workspace_id required');
 		if (!question) throw new Error('recall: question required');
@@ -199,30 +199,24 @@ export const recall = {
 
 		const anchorEntities = resolved.filter(Boolean);
 
-		// ── Tier 1: structural ──────────────────────────────────────────────
-		const t1 = await tier1Structural(ctx.workspace_id, anchorEntities);
-
-		// ── Tier 2: semantic (only run when structural thin) ────────────────
-		const needSemantic = t1.beliefs.length < 3;
-		const t2 = needSemantic
-			? await tier2Semantic(ctx.workspace_id, question)
-			: { beliefs: [], observations: [] };
+		// ── Run all three tiers in parallel ────────────────────────────────
+		// Each tier returns whatever signal it has; the LLM reads provenance
+		// and decides what's relevant. No gating — vector search nearly always
+		// returns something, which used to suppress the legacy directory lookup
+		// even when memory had no trade-relevant answer. Letting all three fire
+		// gives the LLM the full picture; the code-side score is a sort hint,
+		// not a verdict.
+		const [t1, t2, t3] = await Promise.all([
+			tier1Structural(ctx.workspace_id, anchorEntities),
+			tier2Semantic(ctx.workspace_id, question),
+			tier3Legacy(ctx.workspace_id, { issueText: issue, propertyEntity })
+		]);
 
 		// Dedupe semantic results that already appeared structurally
 		const structuralBeliefIds = new Set(t1.beliefs.map((b) => b.id));
 		const structuralObsIds = new Set(t1.observations.map((o) => o.id));
 		const semBeliefs = t2.beliefs.filter((b) => !structuralBeliefIds.has(b.id));
 		const semObservations = t2.observations.filter((o) => !structuralObsIds.has(o.id));
-
-		// ── Tier 3: legacy (only if both structural + semantic are empty) ───
-		const memoryEmpty =
-			t1.beliefs.length === 0 &&
-			t1.observations.length === 0 &&
-			semBeliefs.length === 0 &&
-			semObservations.length === 0;
-		const t3 = memoryEmpty
-			? await tier3Legacy(ctx.workspace_id, { issueText: issue, propertyEntity })
-			: { vendors: [], owners: [] };
 
 		// ── Build candidates with provenance ────────────────────────────────
 		const candidates = [];
@@ -301,18 +295,17 @@ export const recall = {
 
 		candidates.sort((a, b) => b.score - a.score);
 
-		const fallback_reason = memoryEmpty
-			? t3.vendors.length || t3.owners.length
-				? 'memory empty — used legacy PMS fallback'
-				: 'memory empty and no legacy match'
-			: needSemantic && t1.beliefs.length === 0
-				? 'no entity-anchored beliefs — used semantic recall'
-				: null;
+		// Summarize which tiers contributed so the LLM knows what to expect.
+		const tiers_fired = [];
+		if (t1.beliefs.length || t1.observations.length) tiers_fired.push('structural');
+		if (semBeliefs.length || semObservations.length) tiers_fired.push('semantic');
+		if (t3.vendors.length || t3.owners.length) tiers_fired.push('legacy');
 
 		return {
 			candidates,
 			resolved_entities: resolved.map((e) => ({ kind: e.kind, name: e.name, id: e.id })),
-			fallback_reason
+			tiers_fired,
+			note: 'Candidates are sorted by a coarse heuristic score. Read each provenance string and pick what actually fits the question — top-1 is not always the right answer.'
 		};
 	}
 };

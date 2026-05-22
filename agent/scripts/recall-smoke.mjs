@@ -44,7 +44,7 @@ async function run(label, args) {
 	console.log(
 		`  resolved: ${out.resolved_entities.map((e) => `${e.kind}:${e.name}`).join(', ') || '(none)'}`
 	);
-	console.log(`  fallback: ${out.fallback_reason ?? '(none)'}`);
+	console.log(`  tiers fired: ${out.tiers_fired.join(', ') || '(none)'}`);
 	console.log(`  candidates (${out.candidates.length}):`);
 	for (const c of out.candidates.slice(0, 5)) {
 		const summary =
