@@ -1,5 +1,6 @@
-// recall — the agent's one entry point into the memory graph. Runs a hybrid
-// retrieval over three tiers and returns ranked candidates with provenance:
+// read_memory — the agent's one entry point into the memory graph. Runs a
+// hybrid retrieval over three tiers and returns ranked candidates with
+// provenance:
 //
 //   1. STRUCTURAL — resolve entity hints (property, vendor) and walk
 //      belief_entities / observation_entities joins. Property hints also
@@ -91,9 +92,9 @@ async function tier1Structural(workspace_id, anchorEntities) {
 }
 
 async function tier2Semantic(workspace_id, question) {
-	// Floor 0 mirrors the existing recall_beliefs / recall_observations tools:
-	// rely on vector ranking + top_k cap rather than a hard threshold. The
-	// belief scorer downstream will penalize low-relevance matches.
+	// Floor 0: rely on vector ranking + top_k cap rather than a hard
+	// threshold. The belief scorer downstream will penalize low-relevance
+	// matches.
 	if (!question) return { beliefs: [], observations: [] };
 	const [beliefs, observations] = await Promise.all([
 		memory.recallBeliefs(workspace_id, { query: question, top_k: 8, similarity_floor: 0 }),
@@ -127,10 +128,10 @@ function rankObservation(o) {
 	return sal * w * recencyWeight(o.ts);
 }
 
-export const recall = {
-	name: 'recall',
+export const readMemory = {
+	name: 'read_memory',
 	description:
-		'Look up what the memory graph knows about this conversation. Pass a natural-language `question` always; add optional `property`, `vendor`, and `issue` hints when known so the hybrid retrieval can anchor on the right entities. Returns ranked candidates with provenance strings — quote them when explaining a pick to the PM. Use this BEFORE drafting or routing; it replaces recall_beliefs and recall_observations.',
+		'Look up what the memory graph knows about this conversation. Pass a natural-language `question` always; add optional `property`, `vendor`, and `issue` hints when known so the hybrid retrieval can anchor on the right entities. Returns ranked candidates with provenance strings — quote them when explaining a pick to the PM. Use this BEFORE drafting or routing.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -160,8 +161,8 @@ export const recall = {
 		if (process.env.BEDROCK_EVAL_MODE === '1') {
 			return { candidates: [], resolved_entities: [], tiers_fired: [], note: 'eval mode' };
 		}
-		if (!ctx.workspace_id) throw new Error('recall: ctx.workspace_id required');
-		if (!question) throw new Error('recall: question required');
+		if (!ctx.workspace_id) throw new Error('read_memory: ctx.workspace_id required');
+		if (!question) throw new Error('read_memory: question required');
 
 		// ── Resolve entity hints ────────────────────────────────────────────
 		const resolved = [];
@@ -180,7 +181,7 @@ export const recall = {
 					for (const o of cascadedOwners) resolved.push(o);
 				}
 			} catch (err) {
-				console.error(`recall: resolve property "${property}" failed: ${err.message}`);
+				console.error(`read_memory: resolve property "${property}" failed: ${err.message}`);
 			}
 		}
 		let vendorEntity = null;
@@ -193,7 +194,7 @@ export const recall = {
 				});
 				resolved.push(vendorEntity);
 			} catch (err) {
-				console.error(`recall: resolve vendor "${vendor}" failed: ${err.message}`);
+				console.error(`read_memory: resolve vendor "${vendor}" failed: ${err.message}`);
 			}
 		}
 

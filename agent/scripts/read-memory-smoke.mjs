@@ -32,7 +32,7 @@ async function loadDotEnv(p) {
 await loadDotEnv(path.join(REPO_ROOT, '.env'));
 await loadDotEnv(path.join(AGENT_ROOT, '.env'));
 
-const { recall } = await import('../tools/recall.mjs');
+const { readMemory } = await import('../tools/read_memory.mjs');
 
 const ws = '2e4373a0-40b8-42c2-a873-b08c99dbf76a';
 const ctx = { workspace_id: ws };
@@ -40,7 +40,7 @@ const ctx = { workspace_id: ws };
 async function run(label, args) {
 	console.log(`\n══ ${label}`);
 	console.log(`  args: ${JSON.stringify(args)}`);
-	const out = await recall.run(args, ctx);
+	const out = await readMemory.run(args, ctx);
 	console.log(
 		`  resolved: ${out.resolved_entities.map((e) => `${e.kind}:${e.name}`).join(', ') || '(none)'}`
 	);

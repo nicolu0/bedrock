@@ -38,7 +38,7 @@ await fs.mkdir(STATE_DIR, { recursive: true });
 await fs.mkdir(DATA_DIR, { recursive: true });
 process.env.BEDROCK_STATE_DIR = STATE_DIR;
 process.env.BEDROCK_DATA_DIR = DATA_DIR;
-// Memory tools (add_observation, recall) check this and short-circuit
+// Memory tools (add_observation, read_memory) check this and short-circuit
 // instead of writing to live Supabase / firing the belief-former. The eval
 // suite asserts tool-call behavior, not memory side effects. The dedicated
 // memory scenarios still see the calls happen — they just don't persist.

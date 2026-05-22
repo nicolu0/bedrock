@@ -252,7 +252,7 @@ export const scenarios = [
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'no send Luigi instead' },
 		expected: {
 			// New: vendor redirects warrant an observation (the redirect is a
-			// learnable signal). recall is optional — model may consult before
+			// learnable signal). read_memory is optional — model may consult before
 			// deciding. No dispatch tools fire — v1 doesn't handle swaps.
 			tool_calls_set_includes: ['add_observation'],
 			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
@@ -559,14 +559,15 @@ export const scenarios = [
 		}
 	},
 
-	// ─── recall (PR5) ──────────────────────────────────────────────────────────
-	// The recall tool is the agent's one entry point into the memory graph. These
-	// scenarios verify that chat learns to call it in the right contexts with the
-	// right hints. Under BEDROCK_EVAL_MODE recall short-circuits to an empty
-	// candidates list — we assert the tool was CALLED, not what it returned.
+	// ─── read_memory (PR5) ─────────────────────────────────────────────────────
+	// The read_memory tool is the agent's one entry point into the memory graph.
+	// These scenarios verify that chat learns to call it in the right contexts
+	// with the right hints. Under BEDROCK_EVAL_MODE read_memory short-circuits to
+	// an empty candidates list — we assert the tool was CALLED, not what it
+	// returned.
 
 	{
-		name: 'chat: recall fires for vendor-pick question with property hint',
+		name: 'chat: read_memory fires for vendor-pick question with property hint',
 		skill: 'chat',
 		setup: {
 			sent_log: [],
@@ -579,13 +580,13 @@ export const scenarios = [
 			text: 'who do we use for plumbing at 17 Ozone Ave?'
 		},
 		expected: {
-			tool_calls_set_includes: ['recall'],
+			tool_calls_set_includes: ['read_memory'],
 			tool_calls_excludes: ['recall_beliefs', 'recall_observations']
 		}
 	},
 
 	{
-		name: 'chat: recall fires for vendor history question',
+		name: 'chat: read_memory fires for vendor history question',
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: {
@@ -595,13 +596,13 @@ export const scenarios = [
 			text: 'have we used Yonic before?'
 		},
 		expected: {
-			tool_calls_set_includes: ['recall'],
+			tool_calls_set_includes: ['read_memory'],
 			tool_calls_excludes: ['recall_beliefs', 'recall_observations']
 		}
 	},
 
 	{
-		name: 'chat: stated preference recorded as observation (no recall needed)',
+		name: 'chat: stated preference recorded as observation (no read_memory needed)',
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: {
@@ -619,7 +620,7 @@ export const scenarios = [
 	},
 
 	{
-		name: 'chat: recall used to verify before dispatch on ambiguous "yes"',
+		name: 'chat: read_memory used to verify before dispatch on ambiguous "yes"',
 		skill: 'chat',
 		setup: {
 			sent_log: sentBundle(ISSUE_FAUCET),
@@ -632,7 +633,7 @@ export const scenarios = [
 			text: 'yes go with whoever you think is best for plumbing here'
 		},
 		expected: {
-			tool_calls_set_includes: ['recall'],
+			tool_calls_set_includes: ['read_memory'],
 			tool_calls_excludes: ['recall_beliefs', 'recall_observations']
 		}
 	}

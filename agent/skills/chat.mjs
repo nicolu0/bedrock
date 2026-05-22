@@ -14,7 +14,7 @@ import { acknowledge } from '../tools/acknowledge.mjs';
 import { draftTenant } from '../tools/draft_tenant.mjs';
 import { draftVendor } from '../tools/draft_vendor.mjs';
 import { addObservation } from '../tools/add_observation.mjs';
-import { recall } from '../tools/recall.mjs';
+import { readMemory } from '../tools/read_memory.mjs';
 
 const CHAT_TASK_PROMPT = `# Task: handle a property manager's reply in their groupchat
 
@@ -71,9 +71,9 @@ When calling add_observation:
 - **raw_text**: the PM's actual message text.
 - **salience**: per the scale above.
 
-## When to call recall (optional but recommended)
+## When to call read_memory (optional but recommended)
 
-The \`recall\` tool is your one entry point into the memory graph — beliefs (consolidated preferences), observations (raw signals), and legacy vendor/property data, all behind one call. Use it BEFORE drafting or routing when the PM's reply hinges on prior context.
+The \`read_memory\` tool is your one entry point into the memory graph — beliefs (consolidated preferences), observations (raw signals), and legacy vendor/property data, all behind one call. Use it BEFORE drafting or routing when the PM's reply hinges on prior context.
 
 Always pass \`question\` as a natural-language description of what you want to know. Add hints when you know them:
 
@@ -82,18 +82,18 @@ Always pass \`question\` as a natural-language description of what you want to k
 - **issue**: free-text issue description when picking a vendor. Used for trade extraction in the legacy fallback.
 
 Examples:
-- PM: "yes go with whoever you think is best for plumbing at 17 Ozone" → \`recall({ question: "best vendor for plumbing at 17 Ozone", property: "17 Ozone", issue: "plumbing" })\`
-- PM: "send Luigi instead of Yonic" → \`recall({ question: "history with Luigi and Yonic", vendor: "Luigi" })\`
-- PM: "have we used Acme before?" → \`recall({ question: "vendor history for Acme", vendor: "Acme" })\`
+- PM: "yes go with whoever you think is best for plumbing at 17 Ozone" → \`read_memory({ question: "best vendor for plumbing at 17 Ozone", property: "17 Ozone", issue: "plumbing" })\`
+- PM: "send Luigi instead of Yonic" → \`read_memory({ question: "history with Luigi and Yonic", vendor: "Luigi" })\`
+- PM: "have we used Acme before?" → \`read_memory({ question: "vendor history for Acme", vendor: "Acme" })\`
 
 Each returned candidate carries a \`provenance\` string — quote it when explaining your pick to the PM ("recommending Kori because: belief 'Kori handles all maintenance at Harrison Properties' (conf 0.85)").
 
-If you're confident in your read of the reply, skip the recall — don't burn a tool call when the message is unambiguous.
+If you're confident in your read of the reply, skip the call — don't burn a tool call when the message is unambiguous.
 
 ## Ordering
 
 - If you're going to dispatch AND record an observation in the same turn, do dispatch first (acknowledge → draft_tenant → draft_vendor) THEN add_observation. The user sees acks immediately; observations are background work.
-- recall, if used, goes first — it's read-only and informs everything else.`;
+- read_memory, if used, goes first — it's read-only and informs everything else.`;
 
 function formatRecentBundles(bundles) {
 	if (!bundles.length)
@@ -109,7 +109,7 @@ export const chatSkill = {
 	name: 'chat',
 	model: process.env.CHAT_MODEL || 'gpt-5.4-2026-03-05',
 	maxIterations: 5,
-	tools: [acknowledge, draftTenant, draftVendor, addObservation, recall],
+	tools: [acknowledge, draftTenant, draftVendor, addObservation, readMemory],
 	taskPrompt: CHAT_TASK_PROMPT,
 
 	async buildContext(ctx) {

@@ -33,14 +33,14 @@ async function loadDotEnv(p) {
 await loadDotEnv(path.join(REPO_ROOT, '.env'));
 await loadDotEnv(path.join(AGENT_ROOT, '.env'));
 
-const { recall } = await import('../tools/recall.mjs');
+const { readMemory } = await import('../tools/read_memory.mjs');
 
 const ws = '2e4373a0-40b8-42c2-a873-b08c99dbf76a';
 const ctx = { workspace_id: ws };
 
 const examples = [
 	{
-		title: "PM asks: who do we use for a broken garbage disposal?",
+		title: 'PM asks: who do we use for a broken garbage disposal?',
 		args: {
 			question: 'who do we use for garbage disposals',
 			issue: 'broken garbage disposal'
@@ -55,7 +55,7 @@ const examples = [
 		}
 	},
 	{
-		title: "PM asks: have we used Abraham before?",
+		title: 'PM asks: have we used Abraham before?',
 		args: {
 			question: 'history with Abraham',
 			vendor: 'Abraham'
@@ -82,9 +82,9 @@ for (const [i, ex] of examples.entries()) {
 	console.log(`\n${'═'.repeat(70)}`);
 	console.log(`EXAMPLE ${i + 1}: ${ex.title}`);
 	console.log('─'.repeat(70));
-	console.log(`call: recall(${JSON.stringify(ex.args, null, 2).replace(/\n/g, '\n      ')})`);
+	console.log(`call: read_memory(${JSON.stringify(ex.args, null, 2).replace(/\n/g, '\n      ')})`);
 
-	const out = await recall.run(ex.args, ctx);
+	const out = await readMemory.run(ex.args, ctx);
 
 	console.log('');
 	console.log(
@@ -97,11 +97,7 @@ for (const [i, ex] of examples.entries()) {
 
 	for (const [j, c] of out.candidates.entries()) {
 		const summary =
-			c.kind === 'belief'
-				? c.data.claim
-				: c.kind === 'observation'
-					? c.data.summary
-					: c.data.name;
+			c.kind === 'belief' ? c.data.claim : c.kind === 'observation' ? c.data.summary : c.data.name;
 		console.log('');
 		console.log(
 			`  ${j + 1}. [${c.via}/${c.kind}] score=${c.score.toFixed(2)} conf=${c.confidence.toFixed(2)}`
