@@ -1,4 +1,4 @@
-// Data access layer for work-orders state.
+// Data access layer for agent state.
 //
 // All reads/writes to the JSON files in this directory go through here.
 // Writes are atomic: write to <name>.tmp, then rename — a crash mid-write

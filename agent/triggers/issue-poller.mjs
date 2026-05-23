@@ -19,10 +19,10 @@ import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 
-import * as db from './state/helpers.mjs';
+import * as db from '../state/helpers.mjs';
 import { runTurn } from '../core/orchestrator.mjs';
-import { WORKSPACES } from './workspaces.mjs';
-import { supabaseEnv } from '../supabase.mjs';
+import { WORKSPACES } from '../core/workspaces.mjs';
+import { supabaseEnv } from '../core/supabase.mjs';
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_PROCESSED_IDS = 1000;

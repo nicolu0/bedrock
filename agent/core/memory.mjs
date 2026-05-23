@@ -5,7 +5,7 @@
 // bypassed and workspace scoping is the caller's responsibility — every
 // read/write must pass workspace_id.
 
-import { supabaseEnv } from '../supabase.mjs';
+import { supabaseEnv } from './supabase.mjs';
 import { resolveEntity, cascadeOwners } from './entities.mjs';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';

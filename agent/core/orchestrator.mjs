@@ -29,7 +29,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { identityPrompt } from '../identity.mjs';
+import { identityPrompt } from './identity.mjs';
 import { ALL_TOOLS } from '../tools/registry.mjs';
 import { resolveEvent } from './router.mjs';
 import { buildReminders, composeUserContent } from './reminders.mjs';
@@ -37,7 +37,7 @@ import { loadSkill } from './skills.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STATE_DIR =
-	process.env.BEDROCK_STATE_DIR || path.join(__dirname, '..', 'work-orders', 'state');
+	process.env.BEDROCK_STATE_DIR || path.join(__dirname, '..', 'state');
 const TURNS_LOG_PATH = path.join(STATE_DIR, 'turns.jsonl');
 
 const DEFAULT_MAX_ITERATIONS = 8;
