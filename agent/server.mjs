@@ -20,8 +20,6 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { helper } from './imessage/helper.mjs';
 import { runTurn } from './core/orchestrator.mjs';
-import { demoSkill } from './skills/demo.mjs';
-import { chatSkill } from './skills/chat.mjs';
 import { startUi } from './work-orders/ui/index.mjs';
 import { startIssuePoller } from './work-orders/issue-poller.mjs';
 import { buildChatGuidIndex } from './work-orders/workspaces.mjs';
@@ -353,7 +351,8 @@ async function handleIncoming(row) {
 	};
 
 	try {
-		await runTurn(demoSkill, {
+		const event = { type: 'demo_message', payload: { text, handle, msg_guid: row.guid } };
+		await runTurn(event, {
 			handle,
 			text,
 			chatGuid,
@@ -447,13 +446,17 @@ async function handleGroupchatMessage(row, ws) {
 		source_message_id: row.guid ?? null
 	};
 
+	const event = {
+		type: 'pm_reply',
+		payload: { text, chat_guid: chatGuid, sender_handle: handle, msg_guid: row.guid ?? null }
+	};
 	let result;
 	let runError = null;
 	try {
-		result = await runTurn(chatSkill, ctx);
+		result = await runTurn(event, ctx);
 	} catch (err) {
 		runError = err;
-		log(`chat skill error: ${err.message}`);
+		log(`pm_reply error: ${err.message}`);
 	} finally {
 		await setTyping(chatGuid, false);
 	}

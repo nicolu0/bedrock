@@ -1,14 +1,16 @@
-// Trigger: new row in issues_v2 → hand to process_wo skill → bundle draft.
+// Trigger: new row in issues_v2 → emit a new_issue event → orchestrator routes
+// to process_work_order skill → bundle draft.
 //
 // Workspace-driven routing. The poller fetches issues across all mapped
 // workspaces (see WORKSPACES). Each issue's workspace_id resolves to a
 // display label (test/prod) AND a recipient chat env var. An issue from a
 // workspace not in the table is skipped — we don't know where to send it.
 //
-// The poller itself does not call the LLM. It hands the issue to the
-// orchestrator with the process_wo skill; the skill calls enrich_issue,
-// read_memory, set_vendor, and send_text in one turn. The poller then writes
-// one draft row carrying messages: [{ body }, ...].
+// The poller itself does not call the LLM. It emits a normalized AgentEvent
+// to the orchestrator with the issue + candidate vendors as payload; the
+// orchestrator handles enrich_issue, read_memory, set_vendor, and send_text
+// via the process_work_order skill. The poller then writes one draft row
+// carrying messages: [{ body }, ...].
 //
 // Cursor + dedup state lives in state/issues-cursor.json:
 //   { lastCheckedAt: ISO, processedIds: { [issueId]: unixMs } }
@@ -19,7 +21,6 @@ import Database from 'better-sqlite3';
 
 import * as db from './state/helpers.mjs';
 import { runTurn } from '../core/orchestrator.mjs';
-import { processWoSkill } from '../skills/process_wo.mjs';
 import { WORKSPACES } from './workspaces.mjs';
 import { supabaseEnv } from '../supabase.mjs';
 
@@ -182,25 +183,28 @@ async function pollOnce() {
 		try {
 			const candidate_vendors = await fetchWorkspaceVendors(issue.workspace_id, vendorCache);
 
+			const event = {
+				type: 'new_issue',
+				payload: { issue, candidate_vendors }
+			};
 			const ctx = {
-				issue,
 				workspace_id: issue.workspace_id,
-				candidate_vendors,
 				sendMode: 'draft',
 				workspace_label: ws.label,
 				chat_guid: chatGuid,
-				// Skill sends to a groupchat that includes the PM, but the agent
-				// never live-sends from this path. Belt-and-suspenders.
+				// Skill drafts a message bundle for a groupchat that includes the
+				// PM, but the orchestrator never live-sends from this path.
+				// Belt-and-suspenders.
 				isPmHandle: true
 			};
-			const result = await runTurn(processWoSkill, ctx);
+			const result = await runTurn(event, ctx);
 			const messages = result.drafts;
 
 			// Failure is a warning, not a hard skip — if the loop produced a
 			// usable bundle (drafts present) we still want the human to see
 			// it. Only skip when the bundle is empty.
 			if (result.failure) {
-				log(`process_wo warning: ${JSON.stringify(result.failure)}`, {
+				log(`new_issue warning: ${JSON.stringify(result.failure)}`, {
 					id: issue.id,
 					drafts: messages?.length ?? 0
 				});

@@ -86,13 +86,43 @@ if (!process.env.OPENAI_API_KEY) {
 
 const { scenarios } = await import('./scenarios.mjs');
 const { runTurn } = await import('../core/orchestrator.mjs');
-const { demoSkill, resetConversation, _setConversationForTest } = await import('../skills/demo.mjs');
-const { processWoSkill } = await import('../skills/process_wo.mjs');
-const { chatSkill } = await import('../skills/chat.mjs');
+const { resetConversation, _setConversationForTest } = await import('../core/demo-state.mjs');
 const memory = await import('../memory.mjs');
 const { judge } = await import('./judge.mjs');
 
-const SKILLS = { demo: demoSkill, process_wo: processWoSkill, chat: chatSkill };
+// Map legacy scenario.skill → AgentEvent for back-compat. New scenarios should
+// declare scenario.event directly; this shim lets existing entries keep working
+// while the suite migrates incrementally.
+function deriveEvent(scenario) {
+	if (scenario.event) return scenario.event;
+	const c = scenario.ctx ?? {};
+	if (scenario.skill === 'process_wo') {
+		return {
+			type: 'new_issue',
+			payload: { issue: c.issue, candidate_vendors: c.candidate_vendors }
+		};
+	}
+	if (scenario.skill === 'chat') {
+		return {
+			type: 'pm_reply',
+			payload: {
+				text: c.text,
+				chat_guid: c.chat_guid,
+				sender_handle: c.handle ?? null,
+				msg_guid: null
+			}
+		};
+	}
+	if (scenario.skill === 'demo') {
+		return {
+			type: 'demo_message',
+			payload: { text: c.text, handle: c.handle }
+		};
+	}
+	throw new Error(
+		`scenario "${scenario.name}" has no event and no recognized skill ("${scenario.skill}")`
+	);
+}
 
 // ─── State setup / teardown per scenario ──────────────────────────────────
 
@@ -184,7 +214,12 @@ async function checkExpected(scenario, result, ctx) {
 	const exp = scenario.expected ?? {};
 	const fails = [];
 
-	const toolNames = (result.toolCalls ?? []).map((t) => t.name);
+	// use_skill is orchestration mechanics, not behavior — it loads a skill
+	// for the model to follow. Strip it from the actual tool sequence so
+	// behavioral assertions stay clean. If a scenario specifically wants to
+	// assert use_skill firing, it can opt in via expected.assert_use_skill.
+	const allToolNames = (result.toolCalls ?? []).map((t) => t.name);
+	const toolNames = allToolNames.filter((n) => n !== 'use_skill');
 
 	if (exp.tool_calls) {
 		if (JSON.stringify(toolNames) !== JSON.stringify(exp.tool_calls)) {
@@ -318,30 +353,32 @@ for (const scenario of scenarios) {
 	await resetState(scenario);
 	supabaseMock = scenario.setup?.supabase ?? {};
 
-	const skill = SKILLS[scenario.skill];
-	if (!skill) {
-		console.log(`SKIP — unknown skill: ${scenario.skill}`);
+	let event;
+	try {
+		event = deriveEvent(scenario);
+	} catch (err) {
+		console.log(`SKIP — ${err.message}`);
 		continue;
 	}
 
 	const ctx = {
 		...scenario.ctx,
-		// Live skills (demo) emit messages via onEvent → capture in outbox.
+		// Live events (demo_message) emit messages via onEvent → capture in outbox.
 		onEvent: async (ev) => {
 			// outbox is auto-populated by tool implementations; orchestrator emits
 			// tool_call events which we ignore here.
 		},
 		// Default sendMode if not specified by the scenario.
-		// chat is live in prod (ack texts go live to the groupchat); process_wo
-		// drafts new-issue pings for human review.
-		sendMode: scenario.ctx?.sendMode ?? (scenario.skill === 'process_wo' ? 'draft' : 'live'),
+		// pm_reply / demo_message are live (acks go to the groupchat, demo bot
+		// streams to the prospect); new_issue drafts for human review.
+		sendMode: scenario.ctx?.sendMode ?? (event.type === 'new_issue' ? 'draft' : 'live'),
 		isPmHandle: scenario.ctx?.isPmHandle ?? false
 	};
 
 	let result,
 		runError = null;
 	try {
-		result = await runTurn(skill, ctx);
+		result = await runTurn(event, ctx);
 	} catch (err) {
 		runError = err;
 	}

@@ -12,7 +12,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runTurn } from './core/orchestrator.mjs';
-import { demoSkill, resetConversation, getConversation } from './skills/demo.mjs';
+import { resetConversation, getConversation } from './core/demo-state.mjs';
 import * as memory from './memory.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -84,7 +84,8 @@ function onEvent(ev) {
 
 async function turnAndPrint(line) {
 	try {
-		await runTurn(demoSkill, {
+		const event = { type: 'demo_message', payload: { text: line, handle } };
+		await runTurn(event, {
 			handle,
 			text: line,
 			onEvent,
