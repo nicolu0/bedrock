@@ -1,20 +1,17 @@
-// F1 trigger: new row in issues_v2 -> hand to orchestrator -> bundle draft.
+// Trigger: new row in issues_v2 → hand to process_wo skill → bundle draft.
 //
 // Workspace-driven routing. The poller fetches issues across all mapped
-// workspaces (see WORKSPACES below). Each issue's workspace_id resolves to a
+// workspaces (see WORKSPACES). Each issue's workspace_id resolves to a
 // display label (test/prod) AND a recipient chat env var. An issue from a
 // workspace not in the table is skipped — we don't know where to send it.
 //
 // The poller itself does not call the LLM. It hands the issue to the
-// orchestrator with trigger='new_issue'; the work-orders orchestrator (with
-// its own prompt + tools) runs the turn and returns the send_text bundle.
-// The poller then writes one draft row carrying messages: [{ body }, ...].
+// orchestrator with the process_wo skill; the skill calls enrich_issue,
+// read_memory, set_vendor, and send_text in one turn. The poller then writes
+// one draft row carrying messages: [{ body }, ...].
 //
 // Cursor + dedup state lives in state/issues-cursor.json:
 //   { lastCheckedAt: ISO, processedIds: { [issueId]: unixMs } }
-//
-// Readiness gate: both agent_runs(intake) and agent_runs(vendor) must be
-// 'done' before we draft. Cursor pauses on not-ready issues — never skips.
 
 import os from 'node:os';
 import path from 'node:path';
@@ -72,8 +69,7 @@ async function fetchNewIssues(cursor) {
 			'tenant:tenants!tenant_id(name),' +
 			'property:properties!property_id(name),' +
 			'unit:units!unit_id(name),' +
-			'vendor:vendors!vendor_id(name),' +
-			'agent_runs(agent_name,status)',
+			'vendor:vendors!vendor_id(name)',
 		order: 'created_at.asc',
 		limit: '20'
 	});
@@ -92,11 +88,27 @@ async function fetchNewIssues(cursor) {
 	return res.json();
 }
 
-function isReady(issue) {
-	const runs = issue.agent_runs ?? [];
-	const intake = runs.find((r) => r.agent_name === 'intake');
-	const vendor = runs.find((r) => r.agent_name === 'vendor');
-	return intake?.status === 'done' && vendor?.status === 'done';
+// Per-poll cache: don't refetch a workspace's vendor list across multiple
+// issues from the same workspace in one tick.
+async function fetchWorkspaceVendors(workspace_id, cache) {
+	if (cache.has(workspace_id)) return cache.get(workspace_id);
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'id,name',
+		workspace_id: `eq.${workspace_id}`,
+		order: 'name.asc'
+	});
+	const res = await fetch(`${url}/rest/v1/vendors?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) {
+		log(`vendor fetch failed for workspace=${workspace_id}: ${res.status}`);
+		cache.set(workspace_id, []);
+		return [];
+	}
+	const rows = await res.json();
+	cache.set(workspace_id, rows);
+	return rows;
 }
 
 // ── Weekend hold ────────────────────────────────────────────────────────────
@@ -119,22 +131,16 @@ async function saveCursor(cursor) {
 	await db.saveCursor('issues', cursor);
 }
 
-async function pollOnce({ requireReady }) {
+async function pollOnce() {
 	const cursor = await db.loadCursor('issues');
 	cursor.processedIds = cursor.processedIds ?? {};
 
 	const issues = await fetchNewIssues(cursor);
 	if (!issues.length) return;
 
-	for (const issue of issues) {
-		if (requireReady && !isReady(issue)) {
-			log('issue not ready, waiting on intake/vendor', {
-				id: issue.id,
-				workspace: issue.workspace_id
-			});
-			break; // pause cursor — re-poll next tick
-		}
+	const vendorCache = new Map();
 
+	for (const issue of issues) {
 		const ws = WORKSPACES[issue.workspace_id];
 		if (!ws) {
 			log('unknown workspace, skipping', { id: issue.id, workspace: issue.workspace_id });
@@ -174,12 +180,16 @@ async function pollOnce({ requireReady }) {
 		});
 
 		try {
+			const candidate_vendors = await fetchWorkspaceVendors(issue.workspace_id, vendorCache);
+
 			const ctx = {
 				issue,
+				workspace_id: issue.workspace_id,
+				candidate_vendors,
 				sendMode: 'draft',
 				workspace_label: ws.label,
 				chat_guid: chatGuid,
-				// F1 sends to a groupchat that includes the PM, but the agent
+				// Skill sends to a groupchat that includes the PM, but the agent
 				// never live-sends from this path. Belt-and-suspenders.
 				isPmHandle: true
 			};
@@ -190,7 +200,7 @@ async function pollOnce({ requireReady }) {
 			// usable bundle (drafts present) we still want the human to see
 			// it. Only skip when the bundle is empty.
 			if (result.failure) {
-				log(`f1 warning: ${JSON.stringify(result.failure)}`, {
+				log(`process_wo warning: ${JSON.stringify(result.failure)}`, {
 					id: issue.id,
 					drafts: messages?.length ?? 0
 				});
@@ -225,8 +235,6 @@ async function pollOnce({ requireReady }) {
 }
 
 export async function startIssuePoller() {
-	const requireReady = process.env.WORK_ORDERS_REQUIRE_READY !== '0';
-
 	const cursor = await db.loadCursor('issues');
 	if (!cursor.lastCheckedAt) {
 		cursor.lastCheckedAt = new Date().toISOString();
@@ -239,9 +247,7 @@ export async function startIssuePoller() {
 		const participants = guid ? resolveParticipants(guid) : [];
 		return `${w.label}: ${id} → ${w.chatEnv}=${guid ?? '(unset)'} [${participants.join(', ')}]`;
 	});
-	log(
-		`started (interval=${POLL_INTERVAL_MS}ms, require_ready=${requireReady}, from=${cursor.lastCheckedAt})`
-	);
+	log(`started (interval=${POLL_INTERVAL_MS}ms, from=${cursor.lastCheckedAt})`);
 	for (const line of mapped) log(`  workspace ${line}`);
 
 	let running = false;
@@ -249,7 +255,7 @@ export async function startIssuePoller() {
 		if (running) return;
 		running = true;
 		try {
-			await pollOnce({ requireReady });
+			await pollOnce();
 		} catch (err) {
 			// Node's `fetch failed` hides the real reason in err.cause. Surface it.
 			const cause = err?.cause
