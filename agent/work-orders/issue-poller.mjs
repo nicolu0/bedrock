@@ -22,7 +22,7 @@ import Database from 'better-sqlite3';
 
 import * as db from './state/helpers.mjs';
 import { runTurn } from '../core/orchestrator.mjs';
-import { f1Skill } from '../skills/f1.mjs';
+import { processWoSkill } from '../skills/process_wo.mjs';
 import { WORKSPACES } from './workspaces.mjs';
 import { supabaseEnv } from '../supabase.mjs';
 
@@ -183,7 +183,7 @@ async function pollOnce({ requireReady }) {
 				// never live-sends from this path. Belt-and-suspenders.
 				isPmHandle: true
 			};
-			const result = await runTurn(f1Skill, ctx);
+			const result = await runTurn(processWoSkill, ctx);
 			const messages = result.drafts;
 
 			// Failure is a warning, not a hard skip — if the loop produced a

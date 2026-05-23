@@ -5,7 +5,7 @@
 //
 // Usage:
 //   node agent/evals/run.mjs                 # run all scenarios
-//   node agent/evals/run.mjs --filter f1     # run only scenarios whose name includes 'f1'
+//   node agent/evals/run.mjs --filter process_wo  # run only scenarios whose name includes 'process_wo'
 //   node agent/evals/run.mjs --bail          # stop at first failure
 //
 // Isolation:
@@ -80,12 +80,12 @@ if (!process.env.OPENAI_API_KEY) {
 const { scenarios } = await import('./scenarios.mjs');
 const { runTurn } = await import('../core/orchestrator.mjs');
 const { demoSkill, resetConversation, _setConversationForTest } = await import('../skills/demo.mjs');
-const { f1Skill } = await import('../skills/f1.mjs');
+const { processWoSkill } = await import('../skills/process_wo.mjs');
 const { chatSkill } = await import('../skills/chat.mjs');
 const memory = await import('../memory.mjs');
 const { judge } = await import('./judge.mjs');
 
-const SKILLS = { demo: demoSkill, f1: f1Skill, chat: chatSkill };
+const SKILLS = { demo: demoSkill, process_wo: processWoSkill, chat: chatSkill };
 
 // ─── State setup / teardown per scenario ──────────────────────────────────
 
@@ -297,7 +297,7 @@ for (const scenario of scenarios) {
 			// tool_call events which we ignore here.
 		},
 		// Default sendMode if not specified by the scenario
-		sendMode: scenario.ctx?.sendMode ?? (scenario.skill === 'f1' || scenario.skill === 'chat' ? 'draft' : 'live'),
+		sendMode: scenario.ctx?.sendMode ?? (scenario.skill === 'process_wo' || scenario.skill === 'chat' ? 'draft' : 'live'),
 		isPmHandle: scenario.ctx?.isPmHandle ?? false
 	};
 

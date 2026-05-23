@@ -1,5 +1,5 @@
-// F1 skill — new work order arrives in Supabase, draft a 1–2 bubble ping to
-// the property manager's groupchat.
+// process_wo skill — new work order arrives in Supabase, draft a 1–2 bubble
+// ping to the property manager's groupchat.
 //
 // Strict slot-fill template — no creativity, no owner branching, no fallback
 // phrasings. Mini model is fine because the prompt is rigid. Always drafts
@@ -7,7 +7,7 @@
 
 import { sendText } from '../tools/send_text.mjs';
 
-const F1_TASK_PROMPT = `# Task: draft a new-work-order ping
+const PROCESS_WO_TASK_PROMPT = `# Task: draft a new-work-order ping
 
 A new work order just arrived. Send the property manager 1 or 2 iMessages via the send_text tool, then STOP.
 
@@ -82,19 +82,19 @@ function formatIssue(issue) {
 	return lines.join('\n');
 }
 
-export const f1Skill = {
-	name: 'f1',
+export const processWoSkill = {
+	name: 'process_wo',
 	model: process.env.WORK_ORDERS_MODEL || 'gpt-5.4-2026-03-05',
 	maxIterations: 3,
 	maxTokens: 300,
 	tools: [sendText],
-	// Transitional: f1 prompt occasionally drifts and emits a draft as plain
+	// Transitional: process_wo prompt occasionally drifts and emits a draft as plain
 	// content instead of a send_text call. Keep the orchestrator's fallback
 	// as a safety net until the prompt is tightened. See orchestrator.mjs.
 	allowPlainContentSend: true,
-	taskPrompt: F1_TASK_PROMPT,
+	taskPrompt: PROCESS_WO_TASK_PROMPT,
 	buildContext(ctx) {
-		if (!ctx.issue) throw new Error('f1 skill: ctx.issue required');
+		if (!ctx.issue) throw new Error('process_wo skill: ctx.issue required');
 		return [{ role: 'user', content: formatIssue(ctx.issue) }];
 	}
 };

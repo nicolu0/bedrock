@@ -4,7 +4,7 @@
 //
 // Scenario shape: { name, skill, setup?, ctx, expected }
 //
-//   skill    — 'demo' | 'f1' | 'chat'. Determines which skill the runner loads.
+//   skill    — 'demo' | 'process_wo' | 'chat'. Determines which skill the runner loads.
 //   setup    — optional pre-populated state for this scenario:
 //                sent_log:   rows pre-written to sent-log.json
 //                chat_log:   rows pre-written to chat-log.json
@@ -94,7 +94,7 @@ export const scenarios = [
 
 	{
 		name: 'f1: standard issue with vendor → 2 messages',
-		skill: 'f1',
+		skill: 'process_wo',
 		ctx: {
 			issue: ISSUE_FAUCET,
 			sendMode: 'draft',
@@ -110,7 +110,7 @@ export const scenarios = [
 
 	{
 		name: 'f1: no recommended vendor → 1 message only',
-		skill: 'f1',
+		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, vendor: null, name: 'wifi down' },
 			sendMode: 'draft',
@@ -130,7 +130,7 @@ export const scenarios = [
 
 	{
 		name: 'f1: urgent issue prepends URGENT',
-		skill: 'f1',
+		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, urgent: true, name: 'gas leak' },
 			sendMode: 'draft',
@@ -144,7 +144,7 @@ export const scenarios = [
 
 	{
 		name: 'f1: missing unit → drops "Unit X at" prefix',
-		skill: 'f1',
+		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, unit: null, name: 'roof leak in lobby' },
 			sendMode: 'draft',
@@ -163,7 +163,7 @@ export const scenarios = [
 
 	{
 		name: 'f1: awkward "has X" title → natural grammar',
-		skill: 'f1',
+		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, name: 'dryer not working' },
 			sendMode: 'draft',
@@ -181,7 +181,7 @@ export const scenarios = [
 
 	{
 		name: 'f1: long description gets compact summary',
-		skill: 'f1',
+		skill: 'process_wo',
 		ctx: {
 			issue: {
 				...ISSUE_FAUCET,
