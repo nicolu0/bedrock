@@ -90,34 +90,37 @@ function sentBundle(issue, { ago_min = 5 } = {}) {
 }
 
 export const scenarios = [
-	// ─── F1 (5) ────────────────────────────────────────────────────────────
+	// ─── process_wo (PR7: enrich → read_memory → set_vendor → send_text) ─────
 
 	{
-		name: 'f1: standard issue with vendor → 2 messages',
+		name: 'process_wo: standard issue with vendor candidate → full new-flow pipeline',
 		skill: 'process_wo',
 		ctx: {
 			issue: ISSUE_FAUCET,
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test',
 			chat_guid: TEST_CHAT
 		},
 		expected: {
-			tool_calls: ['send_text', 'send_text'],
+			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
 			drafts_count: 2,
 			drafts_include: ['Unit 701', 'Hub Champaign', 'Mario']
 		}
 	},
 
 	{
-		name: 'f1: no recommended vendor → 1 message only',
+		name: 'process_wo: no candidate vendor → enrich + read_memory + 1 message, no set_vendor',
 		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, vendor: null, name: 'wifi down' },
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test'
 		},
 		expected: {
-			tool_calls_set: ['send_text'],
+			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'send_text'],
+			tool_calls_excludes: ['set_vendor'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign'],
 			judge: {
@@ -129,28 +132,32 @@ export const scenarios = [
 	},
 
 	{
-		name: 'f1: urgent issue prepends URGENT',
+		name: 'process_wo: urgent issue prepends URGENT through new flow',
 		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, urgent: true, name: 'gas leak' },
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test'
 		},
 		expected: {
+			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
 			drafts_count: 2,
 			drafts_include: ['URGENT', 'gas leak', 'Mario']
 		}
 	},
 
 	{
-		name: 'f1: missing unit → drops "Unit X at" prefix',
+		name: 'process_wo: missing unit → drops "Unit X at" prefix through new flow',
 		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, unit: null, name: 'roof leak in lobby' },
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test'
 		},
 		expected: {
+			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
 			drafts_count: 2,
 			// First message should NOT start with "Unit"
 			judge: {
@@ -162,14 +169,16 @@ export const scenarios = [
 	},
 
 	{
-		name: 'f1: awkward "has X" title → natural grammar',
+		name: 'process_wo: awkward "has X" title → natural grammar through new flow',
 		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, name: 'dryer not working' },
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test'
 		},
 		expected: {
+			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
 			drafts_count: 2,
 			judge: {
 				target: 'drafts',
@@ -180,7 +189,7 @@ export const scenarios = [
 	},
 
 	{
-		name: 'f1: long description gets compact summary',
+		name: 'process_wo: long description gets compact summary through new flow',
 		skill: 'process_wo',
 		ctx: {
 			issue: {
@@ -188,16 +197,48 @@ export const scenarios = [
 				description:
 					'tenant reports that the kitchen faucet has been leaking for several days, water has been pooling under the sink and damaging the cabinet floor, the leak appears to come from the base of the faucet and is worse when hot water is used, they have placed towels but they need replacing constantly'
 			},
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test'
 		},
 		expected: {
+			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
 			drafts_count: 2,
 			judge: {
 				target: 'drafts',
 				criteria:
 					'The first draft must mention the kitchen faucet leak at Unit 701 / Hub Champaign and stay under about 25 words total. It is OK if the summary is two short sentences or has a newline — but it must not be a multi-paragraph dump of all the details. The second draft must be exactly: "Should we send Mario?"'
 			}
+		}
+	},
+
+	{
+		name: 'process_wo: raw issue (no property/unit/tenant) → enrich_issue fires first',
+		skill: 'process_wo',
+		ctx: {
+			// Raw issue as inserted by the gutted intake-agent — only fields known
+			// from the email. property, unit, tenant, name, urgent are all blank.
+			// process_wo must call enrich_issue before it can read_memory by
+			// property or draft a ping that names the unit.
+			issue: {
+				id: 'iss-raw-001',
+				workspace_id: TEST_WS,
+				appfolio_srn: '7575',
+				description: 'tenant reports water pooling under the sink',
+				gmail_message_id: 'gmail-raw-001'
+			},
+			workspace_id: TEST_WS,
+			sendMode: 'draft',
+			workspace_label: 'test'
+		},
+		expected: {
+			// enrich_issue must fire before send_text — otherwise the agent has no
+			// property/unit name to put in the ping.
+			tool_calls_set_includes: ['enrich_issue', 'send_text'],
+			// At least one draft must land. With no real AppFolio/memory in eval
+			// mode the picked vendor / unit may be sparse, but a ping should still
+			// draft from whatever enrich_issue returns in the mock.
+			drafts_count: 1
 		}
 	},
 
