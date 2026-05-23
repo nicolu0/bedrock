@@ -4,8 +4,8 @@
 // fills template, writes draft row with channel='vendor_appfolio'. Human
 // reviews + copies into AppFolio.
 
-import { fetchIssueById } from '../supabase.mjs';
-import * as db from '../work-orders/state/helpers.mjs';
+import { fetchIssueById } from '../core/supabase.mjs';
+import * as db from '../state/helpers.mjs';
 
 function renderVendorBody({ issue_summary }) {
 	return `Please schedule with the tenant for ${issue_summary}. Their phone number is [phone].`;

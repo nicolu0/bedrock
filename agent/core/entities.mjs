@@ -18,7 +18,7 @@
 // "Kori is handyman for Harrison Properties" belief via FK, not vector.
 
 import { embed } from './memory.mjs';
-import { supabaseEnv } from '../supabase.mjs';
+import { supabaseEnv } from './supabase.mjs';
 
 // Per-kind vector-match thresholds. Properties need a higher floor because
 // short numbered street names ("15th street", "17th street", "828 11th",

@@ -2,7 +2,7 @@
 // Called by process_wo after read_memory + ranking. The vendor_id powers the
 // dashboard's "recommended vendor" column and downstream draft_vendor.
 
-import { supabaseEnv } from '../supabase.mjs';
+import { supabaseEnv } from '../core/supabase.mjs';
 
 export const setVendor = {
 	name: 'set_vendor',

@@ -18,9 +18,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as db from '../state/helpers.mjs';
-import { WORKSPACES } from '../workspaces.mjs';
-import { deleteIssuesByWorkspace, supabaseEnv } from '../../supabase.mjs';
-import * as memory from '../../core/memory.mjs';
+import { WORKSPACES } from '../core/workspaces.mjs';
+import { deleteIssuesByWorkspace, supabaseEnv } from '../core/supabase.mjs';
+import * as memory from '../core/memory.mjs';
 
 // Cofounder phone numbers that act as the agent post-pivot. The chat_messages
 // table stores is_from_me as the raw chat.db value (true only for messages

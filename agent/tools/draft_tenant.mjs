@@ -7,8 +7,8 @@
 // Phone numbers are not in the schema yet — template uses a [phone] placeholder
 // the human fills in before sending.
 
-import { fetchIssueById } from '../supabase.mjs';
-import * as db from '../work-orders/state/helpers.mjs';
+import { fetchIssueById } from '../core/supabase.mjs';
+import * as db from '../state/helpers.mjs';
 
 function renderTenantBody({ tenant_name, vendor_name }) {
 	return `Hi ${tenant_name},

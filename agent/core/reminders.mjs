@@ -15,7 +15,7 @@
 //   # recalled beliefs       — workspace turns: top beliefs for the relevant entity
 
 import { loadSkill, getMenu } from './skills.mjs';
-import { recentSentForChat } from '../work-orders/state/helpers.mjs';
+import { recentSentForChat } from '../state/helpers.mjs';
 import * as memory from '../memory.mjs';
 
 function reminder(content) {

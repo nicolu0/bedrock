@@ -11,7 +11,7 @@
 // intake-agent edge function; deletes the AppFolio call + LLM out of the
 // edge surface.
 
-import { supabaseEnv } from '../supabase.mjs';
+import { supabaseEnv } from '../core/supabase.mjs';
 
 const APPFOLIO_MODEL = process.env.ENRICH_MODEL || 'gpt-5.4-mini-2026-03-17';
 

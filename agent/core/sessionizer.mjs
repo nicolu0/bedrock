@@ -20,8 +20,8 @@
 // chat_guid holds open-session state. No locking needed.
 
 import { embed } from './memory.mjs';
-import { supabaseEnv } from '../supabase.mjs';
-import { WORKSPACES } from '../work-orders/workspaces.mjs';
+import { supabaseEnv } from './supabase.mjs';
+import { WORKSPACES } from './workspaces.mjs';
 
 // True if this handle is one of the configured agent personas for the
 // workspace (cofounders' phones). Pre-pivot the cofounders sent real human

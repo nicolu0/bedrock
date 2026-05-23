@@ -159,7 +159,7 @@ const { runBeliefFormer } = dryRun
 	? { runBeliefFormer: null }
 	: await import('../core/belief-former.mjs');
 const entitiesModule = dryRun ? null : await import('../core/entities.mjs');
-const { WORKSPACES } = await import('../work-orders/workspaces.mjs');
+const { WORKSPACES } = await import('../core/workspaces.mjs');
 const AGENT_HANDLES = new Set(WORKSPACES[workspace_id]?.agent_handles ?? []);
 function effectiveSender(is_from_me, handle) {
 	if (is_from_me) return 'agent';
