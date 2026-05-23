@@ -1,8 +1,9 @@
 // Memory graph — Supabase-backed episodic (observations) + semantic (beliefs)
-// store. Replaces the file-based agent/memory.mjs over time. All access goes
-// through the REST API with the service-role key, so RLS is bypassed and
-// workspace scoping is the caller's responsibility — every read/write must
-// pass workspace_id.
+// store. Workspace-scoped, owns the post-onboarding lifecycle stage (the demo
+// flow uses agent/memory.mjs for handle-scoped pre-workspace state). All
+// access goes through the REST API with the service-role key, so RLS is
+// bypassed and workspace scoping is the caller's responsibility — every
+// read/write must pass workspace_id.
 
 import { supabaseEnv } from '../supabase.mjs';
 import { resolveEntity, cascadeOwners } from './entities.mjs';
@@ -163,14 +164,7 @@ export async function recallObservations(
 
 export async function createBelief(
 	workspace_id,
-	{
-		claim,
-		scope = {},
-		confidence,
-		explicitness,
-		created_by,
-		tags = []
-	}
+	{ claim, scope = {}, confidence, explicitness, created_by, tags = [] }
 ) {
 	if (!workspace_id) throw new Error('createBelief: workspace_id required');
 	if (!claim) throw new Error('createBelief: claim required');
@@ -205,9 +199,7 @@ export async function updateBelief(id, patch) {
 	const { url, key } = supabaseEnv();
 	const body = { ...patch };
 	if (body.claim !== undefined || body.scope !== undefined) {
-		body.embedding = await embed(
-			embeddingTextForBelief(body.claim ?? '', body.scope ?? {})
-		);
+		body.embedding = await embed(embeddingTextForBelief(body.claim ?? '', body.scope ?? {}));
 	}
 	const res = await fetch(`${url}/rest/v1/beliefs?id=eq.${id}`, {
 		method: 'PATCH',
@@ -245,7 +237,7 @@ export async function listBeliefs(workspace_id, { limit = 500 } = {}) {
 	// PostgREST returns evidence_count as [{ count: N }] — flatten.
 	return rows.map((b) => ({
 		...b,
-		evidence_count: Array.isArray(b.evidence_count) ? b.evidence_count[0]?.count ?? 0 : 0
+		evidence_count: Array.isArray(b.evidence_count) ? (b.evidence_count[0]?.count ?? 0) : 0
 	}));
 }
 
@@ -316,6 +308,123 @@ export async function listEdges(workspace_id) {
 		observation_id: r.observation_id,
 		weight: r.weight
 	}));
+}
+
+// ── entity-anchored recall (structural tier of hybrid retrieval) ────────────
+
+/**
+ * Walk belief_entities for every belief tagged to any of the given entity ids.
+ * Higher-precision than vector recall — used as the primary signal when the
+ * caller already knows which entities the query is about (e.g. a resolved
+ * property + cascaded owners). Returns full belief rows with evidence_count
+ * and a matched_entity_ids array showing which of the input entities matched.
+ */
+export async function beliefsForEntities(workspace_id, entity_ids, { limit = 50 } = {}) {
+	if (!workspace_id) throw new Error('beliefsForEntities: workspace_id required');
+	if (!Array.isArray(entity_ids) || entity_ids.length === 0) return [];
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select:
+			'entity_id,belief:beliefs!inner(id,claim,scope,confidence,explicitness,created_by,created_at,updated_at,tags,status,evidence_count:belief_evidence(count))',
+		'belief.workspace_id': `eq.${workspace_id}`,
+		entity_id: `in.(${entity_ids.join(',')})`,
+		limit: String(limit)
+	});
+	const res = await fetch(`${url}/rest/v1/belief_entities?${params}`, { headers: headers(key) });
+	if (!res.ok) throw new Error(`beliefsForEntities: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	const seen = new Map();
+	for (const row of rows) {
+		const b = row.belief;
+		if (!b) continue;
+		const evCount = Array.isArray(b.evidence_count) ? (b.evidence_count[0]?.count ?? 0) : 0;
+		if (!seen.has(b.id)) {
+			seen.set(b.id, { ...b, evidence_count: evCount, matched_entity_ids: [row.entity_id] });
+		} else {
+			seen.get(b.id).matched_entity_ids.push(row.entity_id);
+		}
+	}
+	return Array.from(seen.values());
+}
+
+/**
+ * Walk observation_entities for every obs tagged to any of the given entity
+ * ids. The join carries a signed weight ∈ [-1, 1]; we keep the strongest
+ * |weight| if an obs matches via multiple entities. Sorted recent-first.
+ */
+export async function observationsForEntities(workspace_id, entity_ids, { limit = 50 } = {}) {
+	if (!workspace_id) throw new Error('observationsForEntities: workspace_id required');
+	if (!Array.isArray(entity_ids) || entity_ids.length === 0) return [];
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select:
+			'entity_id,weight,observation:observations!inner(id,ts,summary,raw_text,entities,salience,tags,source_message_id,session_id)',
+		'observation.workspace_id': `eq.${workspace_id}`,
+		entity_id: `in.(${entity_ids.join(',')})`,
+		limit: String(limit)
+	});
+	const res = await fetch(`${url}/rest/v1/observation_entities?${params}`, {
+		headers: headers(key)
+	});
+	if (!res.ok) throw new Error(`observationsForEntities: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	const seen = new Map();
+	for (const row of rows) {
+		const o = row.observation;
+		if (!o) continue;
+		const w = typeof row.weight === 'number' ? row.weight : 1;
+		if (!seen.has(o.id)) {
+			seen.set(o.id, { ...o, matched_entity_ids: [row.entity_id], weight: w });
+		} else {
+			const ex = seen.get(o.id);
+			ex.matched_entity_ids.push(row.entity_id);
+			if (Math.abs(w) > Math.abs(ex.weight)) ex.weight = w;
+		}
+	}
+	return Array.from(seen.values()).sort((a, b) => (b.ts ?? '').localeCompare(a.ts ?? ''));
+}
+
+// ── legacy PMS fallbacks (third tier of hybrid retrieval) ───────────────────
+
+/**
+ * Legacy `vendors` table lookup by trade keyword. Used as the escape hatch
+ * when the memory graph has no relevant beliefs/obs for a vendor query.
+ * Trade column is free-text; matches substring case-insensitively.
+ */
+export async function legacyVendorsForTrade(workspace_id, trade, { limit = 10 } = {}) {
+	if (!workspace_id) throw new Error('legacyVendorsForTrade: workspace_id required');
+	if (!trade) return [];
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'id,name,trade,phone,email',
+		workspace_id: `eq.${workspace_id}`,
+		trade: `ilike.*${trade}*`,
+		limit: String(limit)
+	});
+	const res = await fetch(`${url}/rest/v1/vendors?${params}`, { headers: headers(key) });
+	if (!res.ok) throw new Error(`legacyVendorsForTrade: ${res.status} ${await res.text()}`);
+	return res.json();
+}
+
+/**
+ * Legacy `owner_properties` lookup. Given a property's legacy ref_id, returns
+ * raw owner rows (no entity promotion). Used by the recall tool's legacy
+ * fallback when the property entity hasn't been promoted yet — cascadeOwners
+ * is the entity-creating counterpart used during ingest.
+ */
+export async function legacyOwnerForProperty(workspace_id, property_ref_id) {
+	if (!workspace_id) throw new Error('legacyOwnerForProperty: workspace_id required');
+	if (!property_ref_id) return [];
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'owner:owners(id,name)',
+		property_id: `eq.${property_ref_id}`,
+		workspace_id: `eq.${workspace_id}`
+	});
+	const res = await fetch(`${url}/rest/v1/owner_properties?${params}`, { headers: headers(key) });
+	if (!res.ok) throw new Error(`legacyOwnerForProperty: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	return rows.map((r) => r.owner).filter(Boolean);
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

@@ -38,11 +38,10 @@ await fs.mkdir(STATE_DIR, { recursive: true });
 await fs.mkdir(DATA_DIR, { recursive: true });
 process.env.BEDROCK_STATE_DIR = STATE_DIR;
 process.env.BEDROCK_DATA_DIR = DATA_DIR;
-// Memory tools (write_memory, recall_beliefs, recall_observations) check
-// this and short-circuit instead of writing to live Supabase / firing the
-// belief-former. The eval suite asserts tool-call behavior, not memory side
-// effects. The dedicated memory scenarios still see the calls happen — they
-// just don't persist.
+// Memory tools (write_memory, read_memory) check this and short-circuit
+// instead of writing to live Supabase / firing the belief-former. The eval
+// suite asserts tool-call behavior, not memory side effects. The dedicated
+// memory scenarios still see the calls happen — they just don't persist.
 process.env.BEDROCK_EVAL_MODE = '1';
 
 // Load .env from repo root + agent/.
@@ -99,15 +98,22 @@ async function resetState(scenario) {
 	await writeJson('sent-log.json', setup.sent_log ?? []);
 	await writeJson('chat-log.json', setup.chat_log ?? []);
 	await writeJson('response-log.json', []);
-	await writeJson('issues-cursor.json', { processedIds: {}, lastCheckedAt: new Date().toISOString() });
+	await writeJson('issues-cursor.json', {
+		processedIds: {},
+		lastCheckedAt: new Date().toISOString()
+	});
 	// Clear turns.jsonl
-	try { await fs.unlink(path.join(STATE_DIR, 'turns.jsonl')); } catch {}
+	try {
+		await fs.unlink(path.join(STATE_DIR, 'turns.jsonl'));
+	} catch {}
 
 	// Demo skill memory seeding
 	if (scenario.skill === 'demo' && setup.memory) {
 		for (const [handle, mem] of Object.entries(setup.memory)) {
 			// Wipe + reseed in temp DATA_DIR
-			try { await memory.resetHandle(handle); } catch {}
+			try {
+				await memory.resetHandle(handle);
+			} catch {}
 			for (const [slug, value] of Object.entries(mem.profile ?? {})) {
 				await memory.updateProfile(handle, slug, value);
 			}
@@ -122,7 +128,9 @@ async function resetState(scenario) {
 		}
 	} else if (scenario.skill === 'demo' && scenario.ctx?.handle) {
 		// Default: clean slate for the test handle.
-		try { await memory.resetHandle(scenario.ctx.handle); } catch {}
+		try {
+			await memory.resetHandle(scenario.ctx.handle);
+		} catch {}
 		resetConversation(scenario.ctx.handle);
 	}
 }
@@ -133,7 +141,7 @@ const realFetch = global.fetch;
 let supabaseMock = {};
 
 global.fetch = async (url, init) => {
-	const urlStr = typeof url === 'string' ? url : url?.toString?.() ?? '';
+	const urlStr = typeof url === 'string' ? url : (url?.toString?.() ?? '');
 	if (urlStr.includes('/rest/v1/issues_v2')) {
 		// Parse id=eq.<uuid> from the query string
 		const m = urlStr.match(/id=eq\.([^&]+)/);
@@ -161,7 +169,7 @@ function setEqual(a, b) {
 }
 
 function joinBodies(arr) {
-	return (arr ?? []).map((x) => (typeof x === 'string' ? x : x.body ?? '')).join('\n');
+	return (arr ?? []).map((x) => (typeof x === 'string' ? x : (x.body ?? ''))).join('\n');
 }
 
 async function checkExpected(scenario, result, ctx) {
@@ -172,12 +180,16 @@ async function checkExpected(scenario, result, ctx) {
 
 	if (exp.tool_calls) {
 		if (JSON.stringify(toolNames) !== JSON.stringify(exp.tool_calls)) {
-			fails.push(`tool_calls expected ${JSON.stringify(exp.tool_calls)}, got ${JSON.stringify(toolNames)}`);
+			fails.push(
+				`tool_calls expected ${JSON.stringify(exp.tool_calls)}, got ${JSON.stringify(toolNames)}`
+			);
 		}
 	}
 	if (exp.tool_calls_set) {
 		if (!setEqual(toolNames, exp.tool_calls_set)) {
-			fails.push(`tool_calls_set expected ${JSON.stringify(exp.tool_calls_set)}, got ${JSON.stringify(toolNames)}`);
+			fails.push(
+				`tool_calls_set expected ${JSON.stringify(exp.tool_calls_set)}, got ${JSON.stringify(toolNames)}`
+			);
 		}
 	}
 	if (exp.no_tools === true && toolNames.length > 0) {
@@ -188,7 +200,9 @@ async function checkExpected(scenario, result, ctx) {
 		const have = new Set(toolNames);
 		const missing = exp.tool_calls_set_includes.filter((n) => !have.has(n));
 		if (missing.length) {
-			fails.push(`tool_calls_set_includes missing ${JSON.stringify(missing)}, got ${JSON.stringify(toolNames)}`);
+			fails.push(
+				`tool_calls_set_includes missing ${JSON.stringify(missing)}, got ${JSON.stringify(toolNames)}`
+			);
 		}
 	}
 	// tool_calls_excludes: none of the listed names may appear.
@@ -196,7 +210,9 @@ async function checkExpected(scenario, result, ctx) {
 		const have = new Set(toolNames);
 		const present = exp.tool_calls_excludes.filter((n) => have.has(n));
 		if (present.length) {
-			fails.push(`tool_calls_excludes saw forbidden ${JSON.stringify(present)}, got ${JSON.stringify(toolNames)}`);
+			fails.push(
+				`tool_calls_excludes saw forbidden ${JSON.stringify(present)}, got ${JSON.stringify(toolNames)}`
+			);
 		}
 	}
 
@@ -213,7 +229,9 @@ async function checkExpected(scenario, result, ctx) {
 		const allDrafts = JSON.parse(await fs.readFile(path.join(STATE_DIR, 'drafts.json'), 'utf8'));
 		const channels = allDrafts.map((d) => d.channel);
 		if (!setEqual(channels, exp.drafts_channels)) {
-			fails.push(`drafts_channels expected ${JSON.stringify(exp.drafts_channels)}, got ${JSON.stringify(channels)}`);
+			fails.push(
+				`drafts_channels expected ${JSON.stringify(exp.drafts_channels)}, got ${JSON.stringify(channels)}`
+			);
 		}
 	}
 
@@ -246,7 +264,9 @@ async function checkExpected(scenario, result, ctx) {
 	if (exp.failure_stage !== undefined) {
 		const actualStage = result.failure?.stage ?? null;
 		if (actualStage !== exp.failure_stage) {
-			fails.push(`failure_stage expected ${JSON.stringify(exp.failure_stage)}, got ${JSON.stringify(actualStage)}`);
+			fails.push(
+				`failure_stage expected ${JSON.stringify(exp.failure_stage)}, got ${JSON.stringify(actualStage)}`
+			);
 		}
 	}
 
@@ -261,7 +281,11 @@ async function checkExpected(scenario, result, ctx) {
 		} else if (target === 'outbox') {
 			output = (ctx.outbox ?? []).join('\n');
 		} else {
-			output = JSON.stringify({ outbox: ctx.outbox, drafts: stagedDrafts, toolCalls: toolNames }, null, 2);
+			output = JSON.stringify(
+				{ outbox: ctx.outbox, drafts: stagedDrafts, toolCalls: toolNames },
+				null,
+				2
+			);
 		}
 		const { pass, reason } = await judge({ output, criteria: exp.judge.criteria });
 		if (!pass) fails.push(`judge: ${reason}`);
@@ -273,7 +297,8 @@ async function checkExpected(scenario, result, ctx) {
 // ─── Main loop ─────────────────────────────────────────────────────────────
 
 const start = Date.now();
-let pass = 0, fail = 0;
+let pass = 0,
+	fail = 0;
 const failures = [];
 
 for (const scenario of scenarios) {
@@ -301,7 +326,8 @@ for (const scenario of scenarios) {
 		isPmHandle: scenario.ctx?.isPmHandle ?? false
 	};
 
-	let result, runError = null;
+	let result,
+		runError = null;
 	try {
 		result = await runTurn(skill, ctx);
 	} catch (err) {
@@ -356,7 +382,9 @@ if (failures.length > 0) {
 // Cleanup scratch dir (comment out to inspect after run)
 const keep = args.includes('--keep');
 if (!keep) {
-	try { await fs.rm(SCRATCH, { recursive: true, force: true }); } catch {}
+	try {
+		await fs.rm(SCRATCH, { recursive: true, force: true });
+	} catch {}
 } else {
 	console.log(`scratch: ${SCRATCH}`);
 }

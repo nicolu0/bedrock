@@ -228,7 +228,10 @@ export const scenarios = [
 		name: 'chat: "yes" with two open candidates → no_match (ambiguous)',
 		skill: 'chat',
 		setup: {
-			sent_log: [...sentBundle(ISSUE_FAUCET, { ago_min: 30 }), ...sentBundle(ISSUE_AC, { ago_min: 5 })],
+			sent_log: [
+				...sentBundle(ISSUE_FAUCET, { ago_min: 30 }),
+				...sentBundle(ISSUE_AC, { ago_min: 5 })
+			],
 			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET, [ISSUE_AC.id]: ISSUE_AC }
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
@@ -249,8 +252,8 @@ export const scenarios = [
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'no send Luigi instead' },
 		expected: {
 			// New: vendor redirects warrant an observation (the redirect is a
-			// learnable signal). recall_beliefs is optional — model may consult
-			// before deciding. No dispatch tools fire — v1 doesn't handle swaps.
+			// learnable signal). read_memory is optional — model may consult before
+			// deciding. No dispatch tools fire — v1 doesn't handle swaps.
 			tool_calls_set_includes: ['write_memory'],
 			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
 			drafts_count: 0,
@@ -469,7 +472,8 @@ export const scenarios = [
 						{ role: 'user', content: 'hi' },
 						{
 							role: 'assistant',
-							content: "alright, let's run through a plumbing example. what's a property you manage?"
+							content:
+								"alright, let's run through a plumbing example. what's a property you manage?"
 						}
 					]
 				}
@@ -526,7 +530,11 @@ export const scenarios = [
 						'vendor/plumbing/mariposa': 'mario'
 					},
 					observations: [
-						{ ts: NOW_ISO(), content: 'mario is the default plumber for mariposa', tags: ['preference'] }
+						{
+							ts: NOW_ISO(),
+							content: 'mario is the default plumber for mariposa',
+							tags: ['preference']
+						}
 					],
 					conversation: [
 						{ role: 'user', content: 'yes' },
@@ -548,6 +556,85 @@ export const scenarios = [
 				criteria:
 					'The outbox must contain a short confirmation that the agent is pinging both (something like "on it, pinging both for an update"). The closer messages ("that\'s how we\'ll usually handle work orders" and "any questions?") must also appear in the outbox. Do NOT evaluate stage transitions — that\'s a tool call, not visible in the output text.'
 			}
+		}
+	},
+
+	// ─── read_memory (PR5) ─────────────────────────────────────────────────────
+	// The read_memory tool is the agent's one entry point into the memory graph.
+	// These scenarios verify that chat learns to call it in the right contexts
+	// with the right hints. Under BEDROCK_EVAL_MODE read_memory short-circuits to
+	// an empty candidates list — we assert the tool was CALLED, not what it
+	// returned.
+
+	{
+		name: 'chat: read_memory fires for vendor-pick question with property hint',
+		skill: 'chat',
+		setup: {
+			sent_log: [],
+			supabase: {}
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			workspace_id: TEST_WS,
+			text: 'who do we use for plumbing at 17 Ozone Ave?'
+		},
+		expected: {
+			tool_calls_set_includes: ['read_memory'],
+			tool_calls_excludes: ['recall_beliefs', 'recall_observations']
+		}
+	},
+
+	{
+		name: 'chat: read_memory fires for vendor history question',
+		skill: 'chat',
+		setup: { sent_log: [], supabase: {} },
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			workspace_id: TEST_WS,
+			text: 'have we used Yonic before?'
+		},
+		expected: {
+			tool_calls_set_includes: ['read_memory'],
+			tool_calls_excludes: ['recall_beliefs', 'recall_observations']
+		}
+	},
+
+	{
+		name: 'chat: stated preference recorded as memory write (no read_memory needed)',
+		skill: 'chat',
+		setup: { sent_log: [], supabase: {} },
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			workspace_id: TEST_WS,
+			text: 'always use Yonic for plumbing at Hub Champaign'
+		},
+		expected: {
+			tool_calls_set_includes: ['write_memory'],
+			tool_calls_excludes: ['recall_beliefs', 'recall_observations'],
+			drafts_count: 0,
+			outbox_count: 0
+		}
+	},
+
+	{
+		name: 'chat: read_memory used to verify before dispatch on ambiguous "yes"',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_FAUCET),
+			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			workspace_id: TEST_WS,
+			text: 'yes go with whoever you think is best for plumbing here'
+		},
+		expected: {
+			tool_calls_set_includes: ['read_memory'],
+			tool_calls_excludes: ['recall_beliefs', 'recall_observations']
 		}
 	}
 ];
