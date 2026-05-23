@@ -5,20 +5,11 @@
 // preCheck, commit }
 //   - preCheck handles the canned opener on first turn (no LLM call).
 //   - taskPrompt is a function so the stage block refreshes each iteration
-//     (set_demo_stage can advance mid-turn).
+//     (write_profile system/stage can advance mid-turn).
 //   - buildContext loads history + appends the new user message.
 //   - commit appends the assistant's outbox to history after the loop.
 
 import * as memory from '../memory.mjs';
-import { sendText } from '../tools/send_text.mjs';
-import { updateProfile } from '../tools/update_profile.mjs';
-import { getProfile } from '../tools/get_profile.mjs';
-import { addObservationDemo } from '../tools/add_observation_demo.mjs';
-import { recallDemo } from '../tools/recall_demo.mjs';
-import { listProperties } from '../tools/list_properties.mjs';
-import { listVendors } from '../tools/list_vendors.mjs';
-import { reactToMessage } from '../tools/react_to_message.mjs';
-import { setDemoStage } from '../tools/set_demo_stage.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -133,7 +124,7 @@ example: bot is mid-dispatch; user asks "what's my name?" and the agent has noth
   good:
     bot: "i don't actually, what's your name?"
     user: "andrew"
-    [update_profile("user/name", "Andrew")]
+    [write_profile("user/name", "Andrew")]
     bot: "nice to meet you andrew."
     bot: "back to that work order, want me to ping mario and the tenant?"
 
@@ -141,17 +132,16 @@ note: the FIRST time you learn the user's name, just say "nice to meet you <name
 
 # memory
 
-memory has two layers:
+memory has one layer in demo:
 - profile (canonical slug to value). slugs:
     user/<key>                        e.g. user/name = Andrew
     property/<slug>                   e.g. property/mariposa = true   (one entry per property they manage)
     vendor/<trade>/<property-slug>    e.g. vendor/electrician/mariposa = luigi
   trade is flexible: plumbing, electrical, hvac, pest, roofing, landscaping, handyman, appliance, whatever they say.
   property and trade slugs are lowercase, dash-separated.
-- observations (fuzzy notes). use add_observation for preferences, anecdotes, context that doesn't fit a slug.
 
-before asking something you might already know, call get_profile, list_properties, or list_vendors.
-when you learn something concrete, store it immediately via update_profile or add_observation.`;
+before asking something you might already know, call read_profile (exact slug for one value, prefix ending "/" for a namespace like "property/" or "vendor/").
+when you learn something concrete, store it immediately via write_profile.`;
 
 const STAGE_BLOCKS = {
 	intro: `# current state: intro
@@ -159,7 +149,7 @@ const STAGE_BLOCKS = {
 the opener was sent. you're waiting for the user to agree to walk through an example.
 
 if they agree (yes, sure, ok, let's go, etc.):
-- call set_demo_stage('setup')
+- call write_profile("system/stage", "setup")
 - in the same turn, ask for one property they manage. one short, natural question. just ask conversationally.
 
 if they ask a question instead, answer it briefly in character then bring it back to the example.
@@ -177,12 +167,12 @@ turn 1, first entry into setup (right after they agreed to the demo):
   then stop.
 
 turn 2, after they name a property:
-  store: update_profile("property/<slug>", "true"). slug is lowercase, dash-separated.
+  store: write_profile("property/<slug>", "true"). slug is lowercase, dash-separated.
   ask who they use for plumbing there: "who's your go-to plumber for <property>?" or "who do you usually call for plumbing there?".
 
 turn 3, after they name a plumber:
-  store: update_profile("vendor/plumbing/<property-slug>", "<name>")
-  call set_demo_stage('dispatch') and continue (the dispatch block tells you what to send next, in the same turn).
+  store: write_profile("vendor/plumbing/<property-slug>", "<name>")
+  call write_profile("system/stage", "dispatch") and continue (the dispatch block tells you what to send next, in the same turn).
 
 extras:
 - if they offer multiple properties or vendors, store all of them
@@ -203,15 +193,15 @@ when they approve (any affirmative: "yes", "yep", "yeah", "ok", "sure", "go for 
   send 2 messages back to back:
     msg 1: short decision. use ONLY action-neutral phrasing like "on it" or "ok, on it". do NOT use "sending mario" or "dispatching mario" here — that anticipates the action before you've reported doing it, and it makes msg 2 feel like a restatement.
     msg 2: action confirmation, phrased as something you DID, not something you're doing. use "i texted mario and emailed the tenant" or "texted mario, emailed the tenant". do NOT use "sending mario" or "dispatching" — those describe an in-progress send, not a completed action.
-  then call set_demo_stage('learning') in the same turn. that next stage tells you what to say next.
+  then call write_profile("system/stage", "learning") in the same turn. that next stage tells you what to say next.
 
 when they redirect to a specific vendor (e.g. "we usually send luigi", "send joe instead", "luigi handles unit 4", "actually use luigi"):
   treat that as approval. do NOT re-ask "want me to send luigi?" they already told you who to send.
-  store the vendor (update_profile vendor/<trade>/<property> = name) and any relevant observation about the redirect.
+  store the vendor (write_profile vendor/<trade>/<property> = name) and any relevant observation about the redirect.
   then send 2 messages:
     msg 1: short decision ("ok, i'll go with luigi then" or "ok, on it"). same rule as above — no "sending luigi" / "dispatching luigi" phrasing.
     msg 2: action confirmation ("i texted luigi and emailed the tenant")
-  then call set_demo_stage('learning').
+  then call write_profile("system/stage", "learning").
 
 when they reject without naming a replacement ("no, not mario"):
   ask once: "who should i send instead?"`,
@@ -223,7 +213,7 @@ you just dispatched the vendor for this work order. now demonstrate that bedrock
 short-circuit: before sending anything, check memory. if an observation already says <vendor> is the default <trade> for <property> (i.e. this user ran through the demo before and the rule is already locked in), do NOT re-ask. send ONE short message acknowledging the rule is already on file and pointing forward (vary the phrasing, don't copy verbatim):
   "you've already told me <vendor> is your go-to for <trade> at <property>, so i didn't need to ask this time."
   "<vendor> for <trade> at <property> is already locked in from last time, so i ran with it."
-then call set_demo_stage('followup') in the same turn and stop. the rest of this block does not apply.
+then call write_profile("system/stage", "followup") in the same turn and stop. the rest of this block does not apply.
 
 otherwise (no prior preference observation exists for this <vendor>+<trade>+<property>):
 
@@ -235,16 +225,15 @@ then stop and wait.
 
 turn 2 (after they answer):
   if affirmative ("yes", "always", "yep", "definitely", "usually"):
-    call add_observation describing the confirmed default, e.g. content: "<vendor> is the default <trade> for <property>", tags: ["preference", "vendor"].
-    send ONE short acknowledgment. examples: "ok, i'll remember that for next time", "noted, default for next time", "got it, i'll lock that in". vary the phrasing.
+    confirm the default by writing it: the vendor slug is already stored from setup, so just send ONE short acknowledgment. examples: "ok, i'll remember that for next time", "noted, default for next time", "got it, i'll lock that in". vary the phrasing.
 
   if conditional ("depends", "sometimes", "it varies"):
-    ask a brief clarifying question to learn the rule ("what does it depend on?" or "what changes when you'd send someone else?"). once you have their answer, call add_observation capturing the nuance with tags ["preference", "vendor"]. then send a brief acknowledgment.
+    ask a brief clarifying question to learn the rule ("what does it depend on?" or "what changes when you'd send someone else?"). once you have their answer, send a brief acknowledgment. (heavy observation memory isn't wired up in demo yet — just acknowledge.)
 
   if negative ("no"):
-    ask "who do you usually use then?" or similar. when they answer, store the new vendor via update_profile, add_observation explaining the correction, and send a brief acknowledgment.
+    ask "who do you usually use then?" or similar. when they answer, store the new vendor via write_profile and send a brief acknowledgment.
 
-  in the same turn after the acknowledgment, call set_demo_stage('followup'). the followup block tells you what to send next.`,
+  in the same turn after the acknowledgment, call write_profile("system/stage", "followup"). the followup block tells you what to send next.`,
 
 	followup: `# current state: followup
 
@@ -260,14 +249,15 @@ turn 2 (after they respond):
   interpret ambiguous affirmatives ("ok", "sure", "yes", "yep", "go for it", "do it", "yeah") as YES.
   only treat as NO if they're explicitly negative ("no", "not yet", "don't", "leave it").
 
-  send EXACTLY 1 message:
-    if yes: "on it, pinging both for an update"
-    if no:  "ok, i'll leave it for now"
-  then call set_demo_stage('complete'). do NOT send anything else — the closing messages are appended automatically when the stage advances.`,
+  send 3 messages in order:
+    msg 1: if yes: "on it, pinging both for an update". if no: "ok, i'll leave it for now".
+    msg 2: "that's how we'll usually handle work orders."
+    msg 3: "any questions?"
+  then call write_profile("system/stage", "complete"). stop after the stage write — no further tool calls.`,
 
 	complete: `# current state: complete
 
-the demo's wrapped. the closing messages ("that's how we'll usually handle work orders." and "any questions?") were sent automatically by the system at the end of the previous turn. you're now answering whatever the user asks, in character, per the product context above.
+the demo's wrapped. the closing messages ("that's how we'll usually handle work orders." and "any questions?") were sent at the end of the previous turn. you're now answering whatever the user asks, in character, per the product context above.
 
 do NOT proactively pitch additional capabilities. wait for them to ask.
 
@@ -284,7 +274,7 @@ example, if they ask "can i ask you for stuff like phone numbers?":
 bad (do not produce):
   bot: "bedrock can do a lot more too. factual stuff like lockbox codes or owner numbers, batching similar work orders, owner approvals, all of that over text"
 
-if they seem interested in another scenario, offer to walk through one (call set_demo_stage('dispatch') with a different property/vendor or a different issue).
+if they seem interested in another scenario, offer to walk through one (call write_profile("system/stage", "dispatch") with a different property/vendor or a different issue).
 
 stay in character as bedrock the product. you can acknowledge that the previous flow was an example or walk-through (you already framed it that way). what you must NOT do is talk about being an llm, ai, model, or assistant — that breaks character.`
 };
@@ -304,19 +294,8 @@ export const demoSkill = {
 	// instead of a send_text call. Keep the orchestrator's fallback as a
 	// safety net until the prompt is tightened. See orchestrator.mjs.
 	allowPlainContentSend: true,
-	tools: [
-		sendText,
-		updateProfile,
-		getProfile,
-		addObservationDemo,
-		recallDemo,
-		listProperties,
-		listVendors,
-		reactToMessage,
-		setDemoStage
-	],
 
-	// Rebuilt each iteration so a mid-turn set_demo_stage applies on the
+	// Rebuilt each iteration so a mid-turn demo/stage write applies on the
 	// next loop.
 	async taskPrompt(ctx) {
 		const stage = (await memory.getProfile(ctx.handle, 'system/stage')) || 'intro';
