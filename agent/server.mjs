@@ -15,6 +15,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { helper } from './imessage/helper.mjs';
@@ -590,8 +591,22 @@ async function main() {
 	await loadState();
 
 	if (HELPER_ENABLED) {
-		// Wait briefly for the helper to dial in (Messages.app may have just launched).
-		for (let i = 0; i < 12 && !helper.isConnected(); i++) {
+		// Launch Messages.app with the helper dylib injected so it dials back
+		// into our IPC listener. Skip if the dylib is already connected — e.g.
+		// you ran run-messages.sh by hand in another terminal.
+		if (!helper.isConnected()) {
+			const script = path.join(SCRIPT_DIR, 'imessage', 'run-messages.sh');
+			log('launching Messages.app with helper dylib injected');
+			const proc = spawn(script, [], { stdio: 'ignore' });
+			proc.on('error', (err) => log(`Messages.app spawn error: ${err.message}`));
+			proc.on('exit', (code, sig) => {
+				if (code !== 0) log(`Messages.app exited (code=${code}, sig=${sig})`);
+			});
+		}
+
+		// Wait up to ~10s for the helper to dial in. Messages.app needs to
+		// quit + relaunch when run-messages.sh fires, which takes a moment.
+		for (let i = 0; i < 40 && !helper.isConnected(); i++) {
 			await new Promise(r => setTimeout(r, 250));
 		}
 		const ping = await helper.ping();
