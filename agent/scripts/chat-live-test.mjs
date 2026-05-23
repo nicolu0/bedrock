@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Live test for the chat skill against real Supabase + OpenAI. Synthesizes
-// one PM reply, runs runTurn(chatSkill, ctx), then polls observations/beliefs
-// for the workspace to see what landed. Use this to sanity-check that
-// learning actually fires end-to-end before deploying to the Mac mini.
+// Live test for the pm_reply event against real Supabase + OpenAI. Synthesizes
+// one PM reply, runs runTurn(event, ctx), then polls observations/beliefs for
+// the workspace to see what landed. Use this to sanity-check that learning
+// actually fires end-to-end before deploying to the Mac mini.
 //
 // NOT under BEDROCK_EVAL_MODE — real writes happen. Default workspace is
 // TEST so prod isn't polluted with experiments. Pass --workspace=prod
@@ -83,7 +83,6 @@ if (!text) {
 const workspace_id = WORKSPACE_LABELS[wsArg] ?? wsArg;
 
 const { runTurn } = await import('../core/orchestrator.mjs');
-const { chatSkill } = await import('../skills/chat.mjs');
 const memory = await import('../core/memory.mjs');
 
 // Snapshot beliefs BEFORE so we can diff.
@@ -109,9 +108,13 @@ const ctx = {
 console.log(`\nworkspace : ${wsArg} (${workspace_id})`);
 console.log(`text      : "${text}"`);
 console.log(`beliefs before: ${beliefsBefore.length} | observations before: ${obsCountBefore}\n`);
-console.log(`▷ running chat skill...`);
+console.log(`▷ running pm_reply event...`);
 
-const result = await runTurn(chatSkill, ctx);
+const event = {
+	type: 'pm_reply',
+	payload: { text, chat_guid: ctx.chat_guid, sender_handle: null, msg_guid: null }
+};
+const result = await runTurn(event, ctx);
 const toolNames = (result.toolCalls ?? []).map((t) => t.name);
 console.log(`\nturn complete. tool calls: ${JSON.stringify(toolNames)}`);
 
