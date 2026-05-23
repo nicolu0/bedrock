@@ -257,7 +257,7 @@ export const scenarios = [
 			text: 'yes'
 		},
 		expected: {
-			tool_calls_set: ['acknowledge', 'draft_tenant', 'draft_vendor'],
+			tool_calls_set: ['send_text', 'draft_tenant', 'draft_vendor'],
 			drafts_count: 2,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
 			drafts_include: ['Anna', 'Mario', 'kitchen faucet leaking'],
@@ -296,7 +296,7 @@ export const scenarios = [
 			// learnable signal). read_memory is optional — model may consult before
 			// deciding. No dispatch tools fire — v1 doesn't handle swaps.
 			tool_calls_set_includes: ['write_memory'],
-			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor'],
 			drafts_count: 0,
 			outbox_count: 0
 		}
@@ -334,7 +334,7 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yep send Mario' },
 		expected: {
-			tool_calls_set: ['acknowledge', 'draft_tenant', 'draft_vendor'],
+			tool_calls_set: ['send_text', 'draft_tenant', 'draft_vendor'],
 			drafts_count: 2,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
 		}
@@ -368,7 +368,7 @@ export const scenarios = [
 			text: "Assigned plumbing to guox and I'll talk to them about the filter tomorrow"
 		},
 		expected: {
-			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor'],
 			drafts_count: 0,
 			outbox_count: 0
 		}
@@ -412,7 +412,7 @@ export const scenarios = [
 		},
 		expected: {
 			tool_calls_set_includes: ['write_memory'],
-			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor'],
 			drafts_count: 0,
 			outbox_count: 0
 		}
@@ -429,7 +429,7 @@ export const scenarios = [
 		},
 		expected: {
 			tool_calls_set_includes: ['write_memory'],
-			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor'],
 			drafts_count: 0,
 			outbox_count: 0
 		}
@@ -451,7 +451,7 @@ export const scenarios = [
 			text: 'yes go ahead. and just so you know we always use Yonic for plumbing here.'
 		},
 		expected: {
-			tool_calls_set_includes: ['acknowledge', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
 			drafts_count: 2,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
 		}
@@ -492,7 +492,7 @@ export const scenarios = [
 		},
 		ctx: { handle: '+19000000002', text: 'yes', sendMode: 'live' },
 		expected: {
-			tool_calls_set: ['set_demo_stage', 'send_text'],
+			tool_calls_set: ['write_profile', 'send_text'],
 			judge: {
 				target: 'outbox',
 				criteria:
@@ -522,7 +522,7 @@ export const scenarios = [
 		},
 		ctx: { handle: '+19000000003', text: 'we manage mariposa apartments', sendMode: 'live' },
 		expected: {
-			tool_calls_set: ['update_profile', 'send_text'],
+			tool_calls_set: ['write_profile', 'send_text'],
 			judge: {
 				target: 'outbox',
 				criteria:
@@ -550,7 +550,7 @@ export const scenarios = [
 		},
 		ctx: { handle: '+19000000004', text: 'mario', sendMode: 'live' },
 		expected: {
-			tool_calls_set: ['update_profile', 'set_demo_stage', 'send_text'],
+			tool_calls_set: ['write_profile', 'write_profile', 'send_text'],
 			judge: {
 				target: 'outbox',
 				criteria:
@@ -590,7 +590,7 @@ export const scenarios = [
 		},
 		ctx: { handle: '+19000000005', text: 'yes', sendMode: 'live' },
 		expected: {
-			tool_calls_set: ['send_text', 'set_demo_stage'],
+			tool_calls_set: ['send_text', 'write_profile'],
 			outbox_includes: ["that's how we'll usually handle work orders", 'any questions'],
 			judge: {
 				target: 'outbox',

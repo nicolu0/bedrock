@@ -342,7 +342,7 @@ async function handleIncoming(row) {
 		}
 	};
 
-	// react closure for the orchestrator's react_to_message tool. Bound to this
+	// react closure for the orchestrator's send_reaction tool. Bound to this
 	// specific incoming message — the LLM doesn't need to know GUIDs.
 	const react = async (reactionType) => {
 		if (!HELPER_ENABLED) return { ok: false, error: 'helper disabled' };
@@ -404,8 +404,9 @@ async function handleGroupchatMessage(row, ws) {
 	// Step 2: fire read receipt immediately — same as the demo path.
 	await markRead(chatGuid);
 
-	// Step 3: run the chat skill. acknowledge emits live to the groupchat;
-	// draft_tenant / draft_vendor write to drafts.json for human review.
+	// Step 3: run the chat skill. send_text emits live to the groupchat (used
+	// for the short ack phrases); draft_tenant / draft_vendor write to
+	// drafts.json for human review.
 	const onEvent = async (ev) => {
 		if (ev.type === 'read') {
 			await markRead(chatGuid);
@@ -436,10 +437,10 @@ async function handleGroupchatMessage(row, ws) {
 		workspace_id: ws.workspace_id,
 		workspace_label: ws.label,
 		onEvent,
-		sendMode: 'live', // for acknowledge — the only live-send tool in this skill
+		sendMode: 'live', // ack texts go live; draft_tenant/draft_vendor still write drafts
 		// Groupchat with a PM is NOT a 1:1 with a PM. The send_text safety
 		// guard (refuse live + isPmHandle) is about preventing direct DMs;
-		// the chat skill doesn't expose send_text anyway.
+		// short ack phrases ("got it", "on it") are explicitly intended here.
 		isPmHandle: false,
 		// Memory-graph plumbing — write_memory consumes these.
 		session_id,

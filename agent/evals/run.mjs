@@ -4,9 +4,11 @@
 // a pass/fail summary.
 //
 // Usage:
-//   node agent/evals/run.mjs                 # run all scenarios
-//   node agent/evals/run.mjs --filter process_wo  # run only scenarios whose name includes 'process_wo'
-//   node agent/evals/run.mjs --bail          # stop at first failure
+//   node agent/evals/run.mjs                          # run all scenarios
+//   node agent/evals/run.mjs --filter process_wo      # only scenarios whose name includes 'process_wo'
+//   node agent/evals/run.mjs --filter "yes,vendor"    # comma-separated → match ANY substring
+//   node agent/evals/run.mjs --skip "no_match,opener" # comma-separated → exclude matching names
+//   node agent/evals/run.mjs --bail                   # stop at first failure
 //
 // Isolation:
 //   - BEDROCK_STATE_DIR points at /tmp/bedrock-evals-<pid>/state — drafts,
@@ -23,10 +25,16 @@ import os from 'node:os';
 // ─── Argv ──────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
-const filter = (() => {
-	const i = args.indexOf('--filter');
-	return i >= 0 ? args[i + 1] : null;
-})();
+function parseListArg(flag) {
+	const i = args.indexOf(flag);
+	if (i < 0) return null;
+	return args[i + 1]
+		.split(',')
+		.map((s) => s.trim().toLowerCase())
+		.filter(Boolean);
+}
+const filters = parseListArg('--filter'); // run if name includes ANY filter
+const skips = parseListArg('--skip'); // skip if name includes ANY skip
 const bail = args.includes('--bail');
 
 // ─── Env: temp dirs FIRST, before any imports that read them ───────────────
@@ -302,7 +310,9 @@ let pass = 0,
 const failures = [];
 
 for (const scenario of scenarios) {
-	if (filter && !scenario.name.toLowerCase().includes(filter.toLowerCase())) continue;
+	const lname = scenario.name.toLowerCase();
+	if (filters && !filters.some((f) => lname.includes(f))) continue;
+	if (skips && skips.some((s) => lname.includes(s))) continue;
 
 	process.stdout.write(`▷ ${scenario.name} `);
 	await resetState(scenario);
@@ -321,8 +331,10 @@ for (const scenario of scenarios) {
 			// outbox is auto-populated by tool implementations; orchestrator emits
 			// tool_call events which we ignore here.
 		},
-		// Default sendMode if not specified by the scenario
-		sendMode: scenario.ctx?.sendMode ?? (scenario.skill === 'process_wo' || scenario.skill === 'chat' ? 'draft' : 'live'),
+		// Default sendMode if not specified by the scenario.
+		// chat is live in prod (ack texts go live to the groupchat); process_wo
+		// drafts new-issue pings for human review.
+		sendMode: scenario.ctx?.sendMode ?? (scenario.skill === 'process_wo' ? 'draft' : 'live'),
 		isPmHandle: scenario.ctx?.isPmHandle ?? false
 	};
 

@@ -1,7 +1,7 @@
 // Chat skill — runs when the PM replies in a mapped groupchat.
 //
 // Decides whether the reply confirms vendor dispatch on one of the recent
-// work orders we texted the PM about. If yes: acknowledge + tenant draft +
+// work orders we texted the PM about. If yes: send_text ack + tenant draft +
 // vendor draft. If no: no tool calls (chat poller will tag the chat-log row
 // as 'no_match' so we can see it in the dashboard).
 //
@@ -10,11 +10,6 @@
 // message bodies (which include property/unit/vendor names) to correlate.
 
 import { recentSentForChat } from '../work-orders/state/helpers.mjs';
-import { acknowledge } from '../tools/acknowledge.mjs';
-import { draftTenant } from '../tools/draft_tenant.mjs';
-import { draftVendor } from '../tools/draft_vendor.mjs';
-import { writeMemory } from '../tools/write_memory.mjs';
-import { readMemory } from '../tools/read_memory.mjs';
 
 const CHAT_TASK_PROMPT = `# Task: handle a property manager's reply in their groupchat
 
@@ -30,7 +25,7 @@ You will receive:
 ## Dispatch rules (unchanged)
 
 - If the reply clearly confirms going ahead with the vendor for ONE of the listed issues (e.g. "yes", "yep", "go ahead", "send him", "okay", or just naming the same vendor):
-  1. Call acknowledge with a phrase like 'got it' or 'on it'.
+  1. Call send_text with a short ack phrase: 'got it', 'on it', 'okay', 'thanks', or 'noted'. One word or two — never more.
   2. Call draft_tenant with that issue_id.
   3. Call draft_vendor with that issue_id.
   Three tool calls in that order. Use the issue_id EXACTLY as shown — copy it.
@@ -41,7 +36,7 @@ You will receive:
 
 - Never invent an issue_id. Use only the ones from the candidate list.
 
-- Do not call acknowledge unless you are ALSO going to call draft_tenant and draft_vendor in the same turn. Acks are for confirming you're taking *dispatch* action, not for chit-chat. **write_memory is NOT a dispatch action** — recording a preference or correction does NOT justify an acknowledge. The PM will see the effect of the observation in future turns, not now.
+- Do not send an ack text unless you are ALSO going to call draft_tenant and draft_vendor in the same turn. Acks are for confirming you're taking *dispatch* action, not for chit-chat. **write_memory is NOT a dispatch action** — recording a preference or correction does NOT justify an ack. The PM will see the effect of the observation in future turns, not now.
 
 ## Learning rules
 
@@ -93,7 +88,7 @@ If you're confident in your read of the reply, skip the call — don't burn a to
 
 ## Ordering
 
-- If you're going to dispatch AND record a memory write in the same turn, do dispatch first (acknowledge → draft_tenant → draft_vendor) THEN write_memory. The user sees acks immediately; memory writes are background work.
+- If you're going to dispatch AND record a memory write in the same turn, do dispatch first (send_text ack → draft_tenant → draft_vendor) THEN write_memory. The user sees the ack immediately; memory writes are background work.
 - read_memory, if used, goes first — it's read-only and informs everything else.`;
 
 function formatRecentBundles(bundles) {
@@ -110,7 +105,6 @@ export const chatSkill = {
 	name: 'chat',
 	model: process.env.CHAT_MODEL || 'gpt-5.4-2026-03-05',
 	maxIterations: 5,
-	tools: [acknowledge, draftTenant, draftVendor, writeMemory, readMemory],
 	taskPrompt: CHAT_TASK_PROMPT,
 
 	async buildContext(ctx) {

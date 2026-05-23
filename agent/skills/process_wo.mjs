@@ -3,11 +3,6 @@
 // bubble ping to the PM's groupchat. Replaces the old f1 slot-fill skill
 // AND the deprecated intake-agent + vendor-agent edge functions.
 
-import { sendText } from '../tools/send_text.mjs';
-import { enrichIssue } from '../tools/enrich_issue.mjs';
-import { readMemory } from '../tools/read_memory.mjs';
-import { setVendor } from '../tools/set_vendor.mjs';
-
 const PROCESS_WO_TASK_PROMPT = `# Task: process a new work order
 
 A new work order just landed. Walk it through this pipeline, then STOP:
@@ -105,7 +100,6 @@ export const processWoSkill = {
 	model: process.env.WORK_ORDERS_MODEL || 'gpt-5.4-2026-03-05',
 	maxIterations: 8,
 	maxTokens: 500,
-	tools: [enrichIssue, readMemory, setVendor, sendText],
 	// Transitional: the slot-fill drafting prompt occasionally emits a draft as
 	// plain content instead of a send_text call. Keep the orchestrator's
 	// fallback until the prompt is tightened.

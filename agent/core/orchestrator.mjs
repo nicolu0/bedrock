@@ -5,12 +5,14 @@
 // Skill shape (see agent/skills/*.mjs):
 //   {
 //     name, model, maxIterations, maxTokens?,
-//     tools: [{ name, description, parameters, run(args, ctx) }, ...],
 //     taskPrompt: string | (ctx) => string,
 //     buildContext: (ctx) => OpenAI messages array,
 //     preCheck?:  (ctx) => result | null,    // short-circuit before LLM
 //     commit?:    (ctx) => void              // post-LLM hook
 //   }
+//
+// Tools are NOT scoped per skill. Every turn loads ALL_TOOLS from the
+// registry (agent/tools/registry.mjs). Skills are pure prompt overlays.
 //
 // Tool result conventions (generic — orchestrator never names a tool):
 //   { ...result, assistantContent?: string, endTurn?: boolean }
@@ -18,7 +20,7 @@
 //       working messages so the model reads its own speech as text on the
 //       next iteration. (send_text uses this; other tools normally don't.)
 //     endTurn — break the loop after this tool runs. Used by tools that
-//       speak the final word of a turn (e.g., set_demo_stage's closer).
+//       speak the final word of a turn.
 //
 // Grep-test invariant: this file must contain zero references to specific
 // skill names (f1, demo, chat) or specific tool names (send_text, etc.).
@@ -27,6 +29,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { identityPrompt } from '../identity.mjs';
+import { ALL_TOOLS } from '../tools/registry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Honors BEDROCK_STATE_DIR so the eval harness redirects writes to a temp dir.
@@ -101,8 +104,11 @@ export async function runTurn(skill, ctx) {
 	if (!apiKey) throw new Error('OPENAI_API_KEY not set');
 
 	const userMessages = await skill.buildContext(ctx);
-	const toolDefs = toOpenAIToolDefs(skill.tools);
-	const toolByName = new Map((skill.tools ?? []).map((t) => [t.name, t]));
+	// Every tool every turn. Skills are pure prompt overlays — they no longer
+	// scope which tools the model sees. Runbook prose can suggest which tools
+	// to use for a given phase, but it's guidance, not enforcement.
+	const toolDefs = toOpenAIToolDefs(ALL_TOOLS);
+	const toolByName = new Map(ALL_TOOLS.map((t) => [t.name, t]));
 
 	const working = [...userMessages];
 	const toolCallsLog = [];
@@ -270,7 +276,7 @@ export async function runTurn(skill, ctx) {
 
 		// No tool calls — model returned plain content (or nothing). Default
 		// behavior: drop it and warn. The only path to a real outbound message
-		// should be through a tool (send_text, acknowledge, etc.) so tool-level
+		// should be through a tool (send_text, etc.) so tool-level
 		// safety guards stay the single chokepoint.
 		//
 		// Opt-in: a skill may set `allowPlainContentSend: true` to keep a
