@@ -343,5 +343,151 @@
       null
     ],
     "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-18T18:45:02.986Z",
+    "draft_id": "drf_623096ecc4626b81",
+    "issue_id": "bf3c52e8-f912-41fc-afeb-357bd378b131",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "dismiss",
+    "messages_original": [
+      "URGENT: Unit 19 1/2 at 19 Ozone Ave has a leaking toilet.",
+      "Should we send Abraham?"
+    ],
+    "messages_final": [
+      "URGENT: Unit 19 1/2 at 19 Ozone Ave has a leaking toilet.",
+      "Should we send Abraham?"
+    ],
+    "edited": false,
+    "diffs": [
+      null,
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-18T18:45:07.254Z",
+    "draft_id": "drf_d5762a6e69df1826",
+    "issue_id": "3f707f5b-2423-4043-844d-0632d45a7620",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "dismiss",
+    "messages_original": [
+      "URGENT: Unit 292-2 at 6337 Primrose Ave has a leaking toilet base.",
+      "Should we send Abraham?"
+    ],
+    "messages_final": [
+      "URGENT: Unit 292-2 at 6337 Primrose Ave has a leaking toilet base.",
+      "Should we send Abraham?"
+    ],
+    "edited": false,
+    "diffs": [
+      null,
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-18T18:45:19.796Z",
+    "draft_id": "drf_32f42da9e7521630",
+    "issue_id": "0c636550-e1fd-4c6b-8ab6-0a1924653dad",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "dismiss",
+    "messages_original": [
+      "Unit 292-2 at 6337 Primrose Ave needs a refrigerator filter replacement.",
+      "Should we send Cross Appliance Inc?"
+    ],
+    "messages_final": [
+      "Unit 292-2 at 6337 Primrose Ave needs a refrigerator filter replacement.",
+      "Should we send Cross Appliance Inc?"
+    ],
+    "edited": false,
+    "diffs": [
+      null,
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-18T18:45:31.225Z",
+    "draft_id": "drf_18666ceb11c9a9e2",
+    "issue_id": "53033638-ebb5-4be3-973d-e56cab90a6a8",
+    "channel": "tenant_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "Tomas Chevykinas",
+    "to_participants": [
+      "Tomas Chevykinas"
+    ],
+    "action": "copy",
+    "messages_original": [
+      "Hi Tomas Chevykinas,\n\nI sent this to Cross Appliance Inc. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "messages_final": [
+      "Hi Tomas Chevykinas,\n\nI sent this to Cross Appliance Inc. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-18T18:48:27.902Z",
+    "draft_id": "drf_a56e06c86b61f7de",
+    "issue_id": "53033638-ebb5-4be3-973d-e56cab90a6a8",
+    "channel": "vendor_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "Cross Appliance Inc",
+    "to_participants": [
+      "Cross Appliance Inc"
+    ],
+    "action": "copy",
+    "messages_original": [
+      "Please schedule with the tenant for Dryer not working. Their phone number is [phone]."
+    ],
+    "messages_final": [
+      "Please schedule with the tenant for Dryer burning smell. Their phone number is (202) 315-8393."
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nPlease schedule with the tenant for Dryer not working. Their phone number is [phone].\n--- final\nPlease schedule with the tenant for Dryer burning smell. Their phone number is (202) 315-8393."
+    ],
+    "forced_send": false
   }
 ]
