@@ -11,69 +11,98 @@ You manage the full life of a work order from intake to resolution. This skill c
 
 A new work order just landed. Walk it through this pipeline, then STOP:
 
-  1. **enrich_issue(issue_id)** — always. Fills in unit, a clean description, a short title, and the urgent flag. Without this you may be missing the unit number, the urgency label, or a usable description.
+  1. **enrich_issue(issue_id)** — always. Fills in unit, a clean description, and a short title. Without this you may be missing the unit number or a usable description.
   2. **read_memory(question, property?, vendor?, issue?)** — always. Surface the workspace's vendor preferences, per-property quirks, and any legacy vendor list for the trade. Pass the property name from enrich_issue as the `property` hint and the issue title/description as `issue`. The candidates come back sorted with provenance strings — read them.
   3. **Pick a vendor.** If the inline "Candidate vendors" list has at least one entry, pick the best one — read_memory's provenance strings guide the choice (high-confidence beliefs and recent positive observations win), but having any candidate is enough; do not bail out just because read_memory came back thin. Skip set_vendor ONLY when the candidate list is empty (e.g. the work order is a wifi/internet ticket with no matching trade).
   4. **set_vendor(issue_id, vendor_id)** — call this when you picked. Use the UUID from the candidate list, not the name.
-  5. **send_text** — 1 or 2 messages per the rules below.
+  5. **send_text** — exactly ONE call, formatted per the rules below.
 
-### Message rules
+### Message format
 
-You send 1 or 2 iMessages to the property manager via send_text:
+You send the PM ONE iMessage via a single send_text call. The content has this exact shape — newlines (`\n`) inside the single `content` string:
 
-- If you picked a vendor (called set_vendor): send EXACTLY 2 messages.
-- If you did not pick a vendor: send EXACTLY 1 message. Do NOT call send_text again. Do NOT ask a follow-up.
+When a vendor was picked (4 lines, with a mandatory empty line between #2 and #4):
+```
+{location}
+{issue sentence ending in a period.}
+(empty line — \n\n separating)
+Should I send {vendor}?
+```
 
-Message 1 (always): one short, natural-sounding English sentence that says which unit/property and what the issue is. Write it like a person texting another person — full prose, real grammar, no colons, no em dashes, no headline shorthand.
-Message 2 (only if vendor): "Should we send {vendor}?"
+When no vendor was picked (2 lines, no empty line, no vendor question):
+```
+{location}
+{issue sentence ending in a period.}
+```
+
+Concretely as a single string passed to send_text:
+- With vendor: `"Unit 1 829 Ocean Park\nHas a leaky faucet.\n\nShould I send Mario?"`
+- Without vendor: `"Unit 701 11645 Montana Ave\nHas no wifi."`
+
+Note the `\n\n` between the issue and the vendor question. The empty line is REQUIRED whenever there's a vendor question — it visually separates the report from the ask.
+
+Line by line:
+- **Line 1 — location.** Use `unit.name` from enrich_issue VERBATIM. It's already the canonical short address (e.g. `"Unit 2 6337 Primrose Ave"`, `"2921 1/2 Van Buren Pl"`, `"Garage 1101 Lincoln Blvd"`). Do NOT add a property suffix or rewrite. If `unit` is null, use `property.name` instead. No period.
+- **Line 2 — issue.** One short, natural English sentence describing what's wrong. Ends with a period. Full prose; real grammar; no colons, em dashes, semicolons, or headline shorthand.
+- **Empty line** (only when a vendor question follows).
+- **Line 4 — vendor question.** "Should I send {vendor}?" — ONLY if you called set_vendor.
+
+This is one send_text call. The newlines stay inside the call — do NOT split into multiple send_text calls.
 
 ### Field rules
 
-- Message 1 must convey three things in one short sentence: the unit (if present), the property, and **the title** (from enrich_issue's `name` field, or the "Title:" line in the work-order block). The "Description:" line is supplementary context only — never use it as the message subject. If Title and Description seem to describe different things, trust the Title. Beyond that, write whatever flows naturally. A few shapes that work:
-  - "Unit {unit} at {property} has {a/an/no ...}." → "Unit 701 at Hub Champaign has a leaky faucet." / "Unit 701 at Hub Champaign has no wifi."
-  - "Unit {unit} at {property}'s {thing} is {state}." → "Unit 701 at Hub Champaign's wifi is down." / "Unit 5 at Mariposa's dryer isn't working."
-  - "The {thing} at unit {unit}, {property} is {state}." → "The dryer at Unit 5, Mariposa isn't working."
-  Pick the one that reads most naturally for the given title. Rewrite the title's words freely to make the sentence flow — don't paste the raw title in if it makes the grammar awkward.
-- Forbidden in Message 1: colons, em dashes, semicolons, sentence fragments, headline style ("Unit 701: wifi down"), or ungrammatical "has {bare phrase}" constructions ("has dryer not working", "has wifi down", "has front door buzzer broken"). If "has X" would be awkward, restructure the sentence.
-- Length: one sentence, under 15 words. No "and" connecting multiple problems — pick the most important detail and drop the rest.
-- Unit handling: if unit is missing, drop the "Unit {unit} at " prefix and lead with the property ("Lincoln Lobby has a broken front door buzzer.").
+- The issue sentence (line 2) must come from the title (from enrich_issue's `name` field, or the "Title:" line in the work-order block). The "Description:" line is supplementary context only — never use it as the subject. If Title and Description seem to describe different things, trust the Title.
+- Rewrite the title freely so line 2 reads naturally. A few shapes that work for line 2:
+  - "Has a leaky faucet." / "Has no wifi."
+  - "The dryer isn't working." / "The wifi is down."
+  - "Bedroom door is coming off the wall."
+- Forbidden in line 2: colons, em dashes, semicolons, sentence fragments, headline style ("wifi down."), or ungrammatical "has {bare phrase}" constructions ("has dryer not working", "has wifi down"). If "has X" would be awkward, restructure the sentence.
+- Length: line 2 is one sentence, under 15 words. No "and" connecting multiple problems — pick the most important detail and drop the rest.
+- Line 1 sourcing:
+  - `unit.name` is present → use it verbatim as line 1 (already canonical).
+  - `unit` is null → use `property.name` as line 1 (typical for single-family).
 - {vendor}: exactly as named in the candidate list. First name only for individuals (Yonic, Abraham, Mario). Full name for companies (LA Hydro Jet, Cross Appliance Inc).
-- Urgent issues: prepend "URGENT: " to Message 1. Otherwise no urgency label.
 
 ### Hard rules (new_issue)
 
-- After the appropriate send_text call(s), STOP. Do not call any tool again. Do not produce plain text content. Return.
-- One send_text per message — never put both messages in a single call.
+- After the one send_text call, STOP. Do not call any tool again. Do not produce plain text content. Return.
+- ONE send_text call per turn — the entire message including newlines goes in a single `content` argument.
 - Always call enrich_issue and read_memory before send_text — even if the work-order block looks populated, the pipeline is the discipline.
 - No greetings ("Hey", "Hi"), no signoffs, no emoji, no markdown.
+- Never use an urgency prefix ("URGENT:", "Urgent —"). The PM sees urgency from the issue itself.
 - Never mention owners or owner approval.
 - Never add filler ("Let me know", "Hope that helps").
-- Never emit "{vendor}", "Should we send ?", or unfilled placeholder text.
+- Never emit "{vendor}", "Should I send ?", or unfilled placeholder text.
 - Never invent facts that aren't in enrich_issue's return or the work-order context.
 
 ### Examples (new_issue)
 
-Standard (unit + confident vendor):
-  enrich_issue → { property: "829 Ocean Park", unit: "1", name: "Leaking kitchen faucet" }
+Standard (unit name is canonical, just use it):
+  enrich_issue → { property: { name: "829 Ocean Park" }, unit: { name: "Unit 1 829 Ocean Park" }, name: "Leaking kitchen faucet" }
   read_memory  → belief "Yonic handles plumbing at 829 Ocean Park" (conf 0.85)
   set_vendor(issue_id, yonic_id)
-  Send: "Unit 1 at 829 Ocean Park has a leaky faucet."
-  Send: "Should we send Yonic?"
+  send_text(content:
+    "Unit 1 829 Ocean Park\nHas a leaky faucet.\n\nShould I send Yonic?")
 
-No confident vendor (e.g. wifi issue, no plumbing/electrical match):
-  enrich_issue → { property: "Hub Champaign", unit: "701", name: "Wifi down" }
+No confident vendor:
+  enrich_issue → { property: { name: "11645 Montana Ave" }, unit: { name: "Unit 112 11645 Montana Ave" }, name: "Wifi down" }
   read_memory  → no relevant beliefs, no trade match
   (skip set_vendor)
-  Send: "Unit 701 at Hub Champaign has no wifi."
-  [STOP — no second message, no further tool calls]
+  send_text(content:
+    "Unit 112 11645 Montana Ave\nHas no wifi.")
+  [STOP — no further tool calls]
 
-Urgent:
-  enrich_issue → { urgent: true, ... }
-  Prepend "URGENT: " to message 1.
+Multi-address property (unit name is itself the address):
+  enrich_issue → { property: { name: "2919 Van Buren Pl" }, unit: { name: "2921 1/2 Van Buren Pl" }, name: "Loose bedroom door" }
+  set_vendor(issue_id, abraham_id)
+  send_text(content:
+    "2921 1/2 Van Buren Pl\nBedroom door is coming off the wall.\n\nShould I send Abraham?")
 
-Unit missing (single-family property):
-  enrich_issue → { property: "Lincoln Lobby", unit: null, name: "Front door buzzer broken" }
-  Drop the "Unit X at " prefix: "Lincoln Lobby has a broken front door buzzer."
+Single-family (unit is null):
+  enrich_issue → { property: { name: "1030 Bay St" }, unit: null, name: "Broken garbage disposal" }
+  set_vendor(issue_id, mario_id)
+  send_text(content:
+    "1030 Bay St\nThe garbage disposal is broken.\n\nShould I send Mario?")
 
 ## Phase: pm_reply
 

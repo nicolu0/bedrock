@@ -3,7 +3,7 @@
 // intake shim) and fills in the rest:
 //
 //   - AppFolio reports API: unit_id + a cleaner job_description
-//   - Mini LLM: a 3–7 word title (`name`) + an `urgent` boolean
+//   - Mini LLM: a 3–7 word title (`name`)
 //   - PATCH issues_v2 with all of the above
 //
 // Returns the enriched fields so the agent can hint read_memory with a
@@ -18,7 +18,7 @@ const APPFOLIO_MODEL = process.env.ENRICH_MODEL || 'gpt-5.4-mini-2026-03-17';
 export const enrichIssue = {
 	name: 'enrich_issue',
 	description:
-		'Fill in property/unit/tenant context and a short title + urgent flag for a freshly-arrived work order. Run this BEFORE read_memory and send_text — without it the work order may be missing the unit number, a clean description, and the urgency label that drives the URGENT prefix. Pass the issue_id from your task context. Returns the enriched fields and PATCHes the issues_v2 row.',
+		'Fill in property/unit/tenant context and a short title for a freshly-arrived work order. Run this BEFORE read_memory and send_text — without it the work order may be missing the unit number and a clean description. Pass the issue_id from your task context. Returns the enriched fields and PATCHes the issues_v2 row.',
 	parameters: {
 		type: 'object',
 		additionalProperties: false,
@@ -40,7 +40,6 @@ export const enrichIssue = {
 				unit: f.unit ?? null,
 				tenant: f.tenant ?? null,
 				name: f.name ?? null,
-				urgent: f.urgent ?? false,
 				description: f.description ?? null,
 				eval_mode: true
 			};
@@ -76,15 +75,12 @@ export const enrichIssue = {
 			}
 		}
 
-		// 3. LLM: name + urgent. Uses the cleanest description we have.
+		// 3. LLM: extract a short title from the cleanest description we have.
 		const descriptionForLlm = cleanDescription || row.description || '';
 		let name = row.name ?? null;
-		let urgent = row.urgent ?? false;
 		if (descriptionForLlm) {
 			try {
-				const out = await extractNameAndUrgent(descriptionForLlm);
-				name = out.name;
-				urgent = out.urgent;
+				name = await extractName(descriptionForLlm);
 			} catch (err) {
 				console.error(`enrich_issue: LLM extract failed for ${issue_id}: ${err.message}`);
 			}
@@ -95,7 +91,6 @@ export const enrichIssue = {
 		if (unitId && unitId !== row.unit_id) update.unit_id = unitId;
 		if (cleanDescription && cleanDescription !== row.description) update.description = cleanDescription;
 		if (name && name !== row.name) update.name = name;
-		if (typeof urgent === 'boolean' && urgent !== row.urgent) update.urgent = urgent;
 		if (Object.keys(update).length > 0) {
 			await patchIssueRow(issue_id, update);
 		}
@@ -113,7 +108,6 @@ export const enrichIssue = {
 			unit: unit ? { id: unit.id, name: unit.name } : null,
 			tenant: tenant ? { id: tenant.id, name: tenant.name } : null,
 			name,
-			urgent: !!urgent,
 			description: cleanDescription || row.description || null
 		};
 	}
@@ -134,7 +128,7 @@ function supabaseHeaders() {
 async function fetchIssueRow(issue_id) {
 	const { url } = supabaseEnv();
 	const params = new URLSearchParams({
-		select: 'id,workspace_id,appfolio_srn,description,property_id,tenant_id,unit_id,name,urgent',
+		select: 'id,workspace_id,appfolio_srn,description,property_id,tenant_id,unit_id,name',
 		id: `eq.${issue_id}`,
 		limit: '1'
 	});
@@ -284,7 +278,7 @@ async function fetchAppfolioWorkOrder({ appfolio_property_id, srn }) {
 
 // ─── Mini LLM ──────────────────────────────────────────────────────────────
 
-async function extractNameAndUrgent(description) {
+async function extractName(description) {
 	const res = await fetch('https://api.openai.com/v1/chat/completions', {
 		method: 'POST',
 		headers: {
@@ -298,9 +292,8 @@ async function extractNameAndUrgent(description) {
 				{
 					role: 'system',
 					content:
-						'You are a maintenance ticket triager. Given a work order description, return JSON with two fields:\n' +
-						'- name: a 3-7 word title summarizing the issue (e.g. "Leaking kitchen faucet", "Broken bedroom window"). No quotes, no period.\n' +
-						'- urgent: boolean. True only if the issue poses safety, health, or rapid property damage risk (active leak, no heat in winter, no AC in heat, no hot water, gas smell, electrical sparking, lockout, sewage backup). False for routine repairs.'
+						'You are a maintenance ticket triager. Given a work order description, return JSON with one field:\n' +
+						'- name: a 3-7 word title summarizing the issue (e.g. "Leaking kitchen faucet", "Broken bedroom window"). No quotes, no period.'
 				},
 				{ role: 'user', content: description }
 			]
@@ -310,8 +303,5 @@ async function extractNameAndUrgent(description) {
 	const json = await res.json();
 	const content = json.choices?.[0]?.message?.content ?? '{}';
 	const parsed = JSON.parse(content);
-	return {
-		name: String(parsed.name ?? '').slice(0, 120) || 'Work order',
-		urgent: Boolean(parsed.urgent)
-	};
+	return String(parsed.name ?? '').slice(0, 120) || 'Work order';
 }
