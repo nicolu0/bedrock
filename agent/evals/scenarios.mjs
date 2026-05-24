@@ -65,9 +65,7 @@ function sentBundle(issue, { ago_min = 5 } = {}) {
 	const sent_at = MINUTES_AGO(ago_min);
 	const bundle_id = `drf_${issue.id.replace(/[^a-z0-9]/g, '').slice(0, 16)}`;
 	const body =
-		`${issue.unit.name}\n` +
-		`Has a ${issue.name}.\n\n` +
-		`Should I send ${issue.vendor.name}?`;
+		`${issue.unit.name}\n` + `Has a ${issue.name}.\n\n` + `Should I send ${issue.vendor.name}?`;
 	return [
 		{
 			sent_at,
@@ -85,7 +83,10 @@ function sentBundle(issue, { ago_min = 5 } = {}) {
 }
 
 export const scenarios = [
-	// ─── process_wo (PR7: enrich → read_memory → set_vendor → send_text) ─────
+	// ─── process_wo (read_memory → set_vendor → send_text) ──────────────────
+	// The poller enriches the issue before runTurn, so the agent receives a
+	// populated issue (property/unit/title) and never calls an enrich tool.
+	// Scenario fixtures are already enriched to match.
 
 	{
 		name: 'process_wo: standard issue with vendor candidate → one multi-line draft',
@@ -98,14 +99,14 @@ export const scenarios = [
 			chat_guid: TEST_CHAT
 		},
 		expected: {
-			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
+			tool_calls_set_includes: ['read_memory', 'set_vendor', 'send_text'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign', 'Mario', 'Should I send']
 		}
 	},
 
 	{
-		name: 'process_wo: no candidate vendor → enrich + read_memory + 1 draft, no vendor question',
+		name: 'process_wo: no candidate vendor → read_memory + 1 draft, no vendor question',
 		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, vendor: null, name: 'wifi down' },
@@ -114,7 +115,7 @@ export const scenarios = [
 			workspace_label: 'test'
 		},
 		expected: {
-			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'send_text'],
+			tool_calls_set_includes: ['read_memory', 'send_text'],
 			tool_calls_excludes: ['set_vendor'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign'],
@@ -137,7 +138,7 @@ export const scenarios = [
 			workspace_label: 'test'
 		},
 		expected: {
-			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
+			tool_calls_set_includes: ['read_memory', 'set_vendor', 'send_text'],
 			drafts_count: 1,
 			drafts_include: ['Hub Champaign', '\n\nShould I send Mario?'],
 			drafts_excludes: ['Unit ', 'URGENT']
@@ -154,7 +155,7 @@ export const scenarios = [
 			workspace_label: 'test'
 		},
 		expected: {
-			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
+			tool_calls_set_includes: ['read_memory', 'set_vendor', 'send_text'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign', '\n\nShould I send Mario?'],
 			drafts_excludes: ['has dryer not working', 'URGENT'],
@@ -180,7 +181,7 @@ export const scenarios = [
 			workspace_label: 'test'
 		},
 		expected: {
-			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
+			tool_calls_set_includes: ['read_memory', 'set_vendor', 'send_text'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign', '\n\nShould I send Mario?', 'faucet'],
 			drafts_excludes: ['URGENT', 'towels', 'cabinet', 'several days'],
@@ -189,36 +190,6 @@ export const scenarios = [
 				criteria:
 					'The issue is summarized in ONE short sentence (under ~20 words) — NOT a multi-paragraph dump. Mentioning "faucet" is enough; "kitchen faucet" is also fine but not required.'
 			}
-		}
-	},
-
-	{
-		name: 'process_wo: raw issue (no property/unit/tenant) → enrich_issue fires first',
-		skill: 'process_wo',
-		ctx: {
-			// Raw issue as inserted by the gutted intake-agent — only fields known
-			// from the email. property, unit, tenant, name, urgent are all blank.
-			// process_wo must call enrich_issue before it can read_memory by
-			// property or draft a ping that names the unit.
-			issue: {
-				id: 'iss-raw-001',
-				workspace_id: TEST_WS,
-				appfolio_srn: '7575',
-				description: 'tenant reports water pooling under the sink',
-				gmail_message_id: 'gmail-raw-001'
-			},
-			workspace_id: TEST_WS,
-			sendMode: 'draft',
-			workspace_label: 'test'
-		},
-		expected: {
-			// enrich_issue must fire before send_text — otherwise the agent has no
-			// property/unit name to put in the ping.
-			tool_calls_set_includes: ['enrich_issue', 'send_text'],
-			// At least one draft must land. With no real AppFolio/memory in eval
-			// mode the picked vendor / unit may be sparse, but a ping should still
-			// draft from whatever enrich_issue returns in the mock.
-			drafts_count: 1
 		}
 	},
 

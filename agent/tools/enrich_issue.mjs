@@ -1,117 +1,94 @@
-// enrich_issue — the first tool process_wo calls. Takes a freshly-inserted
-// issues_v2 row (raw description + property_id/tenant_id resolved by the
-// intake shim) and fills in the rest:
+// enrich_issue — deterministic work-order setup, run by the issue-poller BEFORE
+// it hands the issue to the agent (no longer an agent tool). Takes a freshly-
+// inserted issues_v2 row (raw description + property_id/tenant_id resolved by
+// the intake shim) and fills in the rest:
 //
 //   - AppFolio reports API: unit_id + a cleaner job_description
 //   - Mini LLM: a 3–7 word title (`name`)
 //   - PATCH issues_v2 with all of the above
 //
-// Returns the enriched fields so the agent can hint read_memory with a
-// property name and draft a ping that names the unit. Ported from the old
-// intake-agent edge function; deletes the AppFolio call + LLM out of the
-// edge surface.
+// Returns the enriched display fields { property, unit, tenant, name,
+// description } so the poller can merge them into the new_issue payload — the
+// agent reads them inline instead of spending a tool round-trip. This is setup,
+// not a decision, so it lives outside the tool registry. Ported from the old
+// intake-agent edge function; deletes the AppFolio call + LLM out of the edge
+// surface.
 
 import { supabaseEnv } from '../core/supabase.mjs';
 
 const APPFOLIO_MODEL = process.env.ENRICH_MODEL || 'gpt-5.4-mini-2026-03-17';
 
-export const enrichIssue = {
-	name: 'enrich_issue',
-	description:
-		'Fill in property/unit/tenant context and a short title for a freshly-arrived work order. Run this BEFORE read_memory and send_text — without it the work order may be missing the unit number and a clean description. Pass the issue_id from your task context. Returns the enriched fields and PATCHes the issues_v2 row.',
-	parameters: {
-		type: 'object',
-		additionalProperties: false,
-		required: ['issue_id'],
-		properties: {
-			issue_id: { type: 'string', description: 'UUID of the issues_v2 row to enrich.' }
-		}
-	},
-	async run({ issue_id }, ctx) {
-		// Eval mode: no AppFolio, no OpenAI, no Supabase writes. Return the
-		// fixture the scenario already provided in ctx.issue so the agent can
-		// keep working with realistic data. The suite asserts the call HAPPENED;
-		// the data shape comes from the fixture.
-		if (process.env.BEDROCK_EVAL_MODE === '1') {
-			const f = ctx.issue ?? {};
-			return {
-				ok: true,
-				property: f.property ?? null,
-				unit: f.unit ?? null,
-				tenant: f.tenant ?? null,
-				name: f.name ?? null,
-				description: f.description ?? null,
-				eval_mode: true
-			};
-		}
+// Best-effort: AppFolio and the LLM are each wrapped so a failure degrades the
+// field rather than aborting. A missing row returns { ok: false } and the
+// caller proceeds with the raw issue.
+export async function enrichIssue(issue_id) {
+	// 1. Load the row + property's appfolio_property_id.
+	const row = await fetchIssueRow(issue_id);
+	if (!row) return { ok: false, error: `enrich_issue: issue ${issue_id} not found` };
+	const property = row.property_id ? await fetchProperty(row.property_id) : null;
 
-		// 1. Load the row + property's appfolio_property_id.
-		const row = await fetchIssueRow(issue_id);
-		if (!row) return { ok: false, error: `enrich_issue: issue ${issue_id} not found` };
-		const property = row.property_id ? await fetchProperty(row.property_id) : null;
-
-		// 2. AppFolio reports API → unit + cleaner desc. Failure here is
-		//    non-fatal; row keeps its email-derived description.
-		let unitId = row.unit_id ?? null;
-		let cleanDescription = null;
-		if (property?.appfolio_property_id && row.appfolio_srn) {
-			try {
-				const wo = await fetchAppfolioWorkOrder({
-					appfolio_property_id: property.appfolio_property_id,
-					srn: row.appfolio_srn
-				});
-				if (wo) {
-					cleanDescription = wo.job_description || wo.service_request_description || null;
-					if (wo.unit_id != null) {
-						const unit = await fetchUnitByAppfolioId({
-							property_id: row.property_id,
-							appfolio_unit_id: String(wo.unit_id)
-						});
-						unitId = unit?.id ?? unitId;
-					}
+	// 2. AppFolio reports API → unit + cleaner desc. Failure here is
+	//    non-fatal; row keeps its email-derived description.
+	let unitId = row.unit_id ?? null;
+	let cleanDescription = null;
+	if (property?.appfolio_property_id && row.appfolio_srn) {
+		try {
+			const wo = await fetchAppfolioWorkOrder({
+				appfolio_property_id: property.appfolio_property_id,
+				srn: row.appfolio_srn
+			});
+			if (wo) {
+				cleanDescription = wo.job_description || wo.service_request_description || null;
+				if (wo.unit_id != null) {
+					const unit = await fetchUnitByAppfolioId({
+						property_id: row.property_id,
+						appfolio_unit_id: String(wo.unit_id)
+					});
+					unitId = unit?.id ?? unitId;
 				}
-			} catch (err) {
-				console.error(`enrich_issue: AppFolio fetch failed for ${issue_id}: ${err.message}`);
 			}
+		} catch (err) {
+			console.error(`enrich_issue: AppFolio fetch failed for ${issue_id}: ${err.message}`);
 		}
-
-		// 3. LLM: extract a short title from the cleanest description we have.
-		const descriptionForLlm = cleanDescription || row.description || '';
-		let name = row.name ?? null;
-		if (descriptionForLlm) {
-			try {
-				name = await extractName(descriptionForLlm);
-			} catch (err) {
-				console.error(`enrich_issue: LLM extract failed for ${issue_id}: ${err.message}`);
-			}
-		}
-
-		// 4. PATCH the row with whatever we resolved.
-		const update = {};
-		if (unitId && unitId !== row.unit_id) update.unit_id = unitId;
-		if (cleanDescription && cleanDescription !== row.description) update.description = cleanDescription;
-		if (name && name !== row.name) update.name = name;
-		if (Object.keys(update).length > 0) {
-			await patchIssueRow(issue_id, update);
-		}
-
-		// 5. Fetch tenant + unit names for the return shape (so the agent has a
-		//    ready-to-quote display name without a second tool call).
-		const [tenant, unit] = await Promise.all([
-			row.tenant_id ? fetchTenant(row.tenant_id) : Promise.resolve(null),
-			unitId ? fetchUnit(unitId) : Promise.resolve(null)
-		]);
-
-		return {
-			ok: true,
-			property: property ? { id: property.id, name: property.name } : null,
-			unit: unit ? { id: unit.id, name: unit.name } : null,
-			tenant: tenant ? { id: tenant.id, name: tenant.name } : null,
-			name,
-			description: cleanDescription || row.description || null
-		};
 	}
-};
+
+	// 3. LLM: extract a short title from the cleanest description we have.
+	const descriptionForLlm = cleanDescription || row.description || '';
+	let name = row.name ?? null;
+	if (descriptionForLlm) {
+		try {
+			name = await extractName(descriptionForLlm);
+		} catch (err) {
+			console.error(`enrich_issue: LLM extract failed for ${issue_id}: ${err.message}`);
+		}
+	}
+
+	// 4. PATCH the row with whatever we resolved.
+	const update = {};
+	if (unitId && unitId !== row.unit_id) update.unit_id = unitId;
+	if (cleanDescription && cleanDescription !== row.description)
+		update.description = cleanDescription;
+	if (name && name !== row.name) update.name = name;
+	if (Object.keys(update).length > 0) {
+		await patchIssueRow(issue_id, update);
+	}
+
+	// 5. Fetch tenant + unit names for the return shape (so the poller has a
+	//    ready-to-quote display name without a second tool call).
+	const [tenant, unit] = await Promise.all([
+		row.tenant_id ? fetchTenant(row.tenant_id) : Promise.resolve(null),
+		unitId ? fetchUnit(unitId) : Promise.resolve(null)
+	]);
+
+	return {
+		ok: true,
+		property: property ? { id: property.id, name: property.name } : null,
+		unit: unit ? { id: unit.id, name: unit.name } : null,
+		tenant: tenant ? { id: tenant.id, name: tenant.name } : null,
+		name,
+		description: cleanDescription || row.description || null
+	};
+}
 
 // ─── Supabase helpers ──────────────────────────────────────────────────────
 
@@ -193,10 +170,11 @@ async function fetchUnitByAppfolioId({ property_id, appfolio_unit_id }) {
 
 async function patchIssueRow(issue_id, fields) {
 	const { url } = supabaseEnv();
-	const res = await fetch(
-		`${url}/rest/v1/issues_v2?id=eq.${encodeURIComponent(issue_id)}`,
-		{ method: 'PATCH', headers: supabaseHeaders(), body: JSON.stringify(fields) }
-	);
+	const res = await fetch(`${url}/rest/v1/issues_v2?id=eq.${encodeURIComponent(issue_id)}`, {
+		method: 'PATCH',
+		headers: supabaseHeaders(),
+		body: JSON.stringify(fields)
+	});
 	if (!res.ok) throw new Error(`patchIssueRow ${res.status}: ${await res.text()}`);
 }
 

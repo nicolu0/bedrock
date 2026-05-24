@@ -9,13 +9,12 @@ You manage the full life of a work order from intake to resolution. This skill c
 
 ## Phase: new_issue
 
-A new work order just landed. Walk it through this pipeline, then STOP:
+A new work order just landed. The issue context (property, unit, title, description) is already filled in for you — the poller enriched it before this turn, so don't expect to call a tool to populate it. Walk it through this pipeline, then STOP:
 
-  1. **enrich_issue(issue_id)** — always. Fills in unit, a clean description, and a short title. Without this you may be missing the unit number or a usable description.
-  2. **read_memory(question, property?, vendor?, issue?)** — always. Surface the workspace's vendor preferences, per-property quirks, and any legacy vendor list for the trade. Pass the property name from enrich_issue as the `property` hint and the issue title/description as `issue`. The candidates come back sorted with provenance strings — read them.
-  3. **Pick a vendor.** If the inline "Candidate vendors" list has at least one entry, pick the best one — read_memory's provenance strings guide the choice (high-confidence beliefs and recent positive observations win), but having any candidate is enough; do not bail out just because read_memory came back thin. Skip set_vendor ONLY when the candidate list is empty (e.g. the work order is a wifi/internet ticket with no matching trade).
-  4. **set_vendor(issue_id, vendor_id)** — call this when you picked. Use the UUID from the candidate list, not the name.
-  5. **send_text** — exactly ONE call, formatted per the rules below.
+  1. **read_memory(question, property?, vendor?, issue?)** — always. Surface the workspace's vendor preferences, per-property quirks, and any legacy vendor list for the trade. Pass the property name from the work-order context as the `property` hint and the issue title/description as `issue`. The candidates come back sorted with provenance strings — read them.
+  2. **Pick a vendor.** If the inline "Candidate vendors" list has at least one entry, pick the best one — read_memory's provenance strings guide the choice (high-confidence beliefs and recent positive observations win), but having any candidate is enough; do not bail out just because read_memory came back thin. Skip set_vendor ONLY when the candidate list is empty (e.g. the work order is a wifi/internet ticket with no matching trade).
+  3. **set_vendor(issue_id, vendor_id)** — call this when you picked. Use the UUID from the candidate list, not the name.
+  4. **send_text** — exactly ONE call, formatted per the rules below.
 
 ### Message format
 
@@ -42,7 +41,7 @@ Concretely as a single string passed to send_text:
 Note the `\n\n` between the issue and the vendor question. The empty line is REQUIRED whenever there's a vendor question — it visually separates the report from the ask.
 
 Line by line:
-- **Line 1 — location.** Use `unit.name` from enrich_issue VERBATIM. It's already the canonical short address (e.g. `"Unit 2 6337 Primrose Ave"`, `"2921 1/2 Van Buren Pl"`, `"Garage 1101 Lincoln Blvd"`). Do NOT add a property suffix or rewrite. If `unit` is null, use `property.name` instead. No period.
+- **Line 1 — location.** Use `unit.name` from the work-order context VERBATIM. It's already the canonical short address (e.g. `"Unit 2 6337 Primrose Ave"`, `"2921 1/2 Van Buren Pl"`, `"Garage 1101 Lincoln Blvd"`). Do NOT add a property suffix or rewrite. If `unit` is null, use `property.name` instead. No period.
 - **Line 2 — issue.** One short, natural English sentence describing what's wrong. Ends with a period. Full prose; real grammar; no colons, em dashes, semicolons, or headline shorthand.
 - **Empty line** (only when a vendor question follows).
 - **Line 4 — vendor question.** "Should I send {vendor}?" — ONLY if you called set_vendor.
@@ -51,7 +50,7 @@ This is one send_text call. The newlines stay inside the call — do NOT split i
 
 ### Field rules
 
-- The issue sentence (line 2) must come from the title (from enrich_issue's `name` field, or the "Title:" line in the work-order block). The "Description:" line is supplementary context only — never use it as the subject. If Title and Description seem to describe different things, trust the Title.
+- The issue sentence (line 2) must come from the title (the `name` field / "Title:" line in the work-order context). The "Description:" line is supplementary context only — never use it as the subject. If Title and Description seem to describe different things, trust the Title.
 - Rewrite the title freely so line 2 reads naturally. A few shapes that work for line 2:
   - "Has a leaky faucet." / "Has no wifi."
   - "The dryer isn't working." / "The wifi is down."
@@ -67,25 +66,27 @@ This is one send_text call. The newlines stay inside the call — do NOT split i
 
 - After the one send_text call, STOP. Do not call any tool again. Do not produce plain text content. Return.
 - ONE send_text call per turn — the entire message including newlines goes in a single `content` argument.
-- Always call enrich_issue and read_memory before send_text — even if the work-order block looks populated, the pipeline is the discipline.
+- Always call read_memory before send_text — even if the work-order block looks populated, the pipeline is the discipline.
 - No greetings ("Hey", "Hi"), no signoffs, no emoji, no markdown.
 - Never use an urgency prefix ("URGENT:", "Urgent —"). The PM sees urgency from the issue itself.
 - Never mention owners or owner approval.
 - Never add filler ("Let me know", "Hope that helps").
 - Never emit "{vendor}", "Should I send ?", or unfilled placeholder text.
-- Never invent facts that aren't in enrich_issue's return or the work-order context.
+- Never invent facts that aren't in the work-order context.
 
 ### Examples (new_issue)
 
+(The `context:` line shows the already-enriched fields you receive in the work-order block — you do NOT fetch them.)
+
 Standard (unit name is canonical, just use it):
-  enrich_issue → { property: { name: "829 Ocean Park" }, unit: { name: "Unit 1 829 Ocean Park" }, name: "Leaking kitchen faucet" }
+  context: property "829 Ocean Park", unit "Unit 1 829 Ocean Park", title "Leaking kitchen faucet"
   read_memory  → belief "Yonic handles plumbing at 829 Ocean Park" (conf 0.85)
   set_vendor(issue_id, yonic_id)
   send_text(content:
     "Unit 1 829 Ocean Park\nHas a leaky faucet.\n\nShould I send Yonic?")
 
 No confident vendor:
-  enrich_issue → { property: { name: "11645 Montana Ave" }, unit: { name: "Unit 112 11645 Montana Ave" }, name: "Wifi down" }
+  context: property "11645 Montana Ave", unit "Unit 112 11645 Montana Ave", title "Wifi down"
   read_memory  → no relevant beliefs, no trade match
   (skip set_vendor)
   send_text(content:
@@ -93,13 +94,13 @@ No confident vendor:
   [STOP — no further tool calls]
 
 Multi-address property (unit name is itself the address):
-  enrich_issue → { property: { name: "2919 Van Buren Pl" }, unit: { name: "2921 1/2 Van Buren Pl" }, name: "Loose bedroom door" }
+  context: property "2919 Van Buren Pl", unit "2921 1/2 Van Buren Pl", title "Loose bedroom door"
   set_vendor(issue_id, abraham_id)
   send_text(content:
     "2921 1/2 Van Buren Pl\nBedroom door is coming off the wall.\n\nShould I send Abraham?")
 
 Single-family (unit is null):
-  enrich_issue → { property: { name: "1030 Bay St" }, unit: null, name: "Broken garbage disposal" }
+  context: property "1030 Bay St", unit null, title "Broken garbage disposal"
   set_vendor(issue_id, mario_id)
   send_text(content:
     "1030 Bay St\nThe garbage disposal is broken.\n\nShould I send Mario?")
