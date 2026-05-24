@@ -1,17 +1,5 @@
 [
   {
-    "sent_at": "2026-05-24T08:14:15.978Z",
-    "message_guid": null,
-    "bundle_id": "drf_053353a9e9da9074",
-    "part_index": 0,
-    "issue_id": "981d12bf-cd99-482f-846c-7b074c28d5ed",
-    "channel": "groupchat",
-    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
-    "workspace_label": "test",
-    "chat_guid": "iMessage;-;andrew51@illinois.edu",
-    "body": "Unit 701 Hub Champaign\nThe kitchen sink is leaking.\n\nShould I send Tier 7 Plumbing & Rooter?"
-  },
-  {
     "sent_at": "2026-05-24T21:33:03.796Z",
     "message_guid": null,
     "bundle_id": "drf_f0694c2c507a49c4",
@@ -22,5 +10,17 @@
     "workspace_label": "prod",
     "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
     "body": "Unit 12 6337 Primrose \nComplaining that rats have broken in again. Asking for Primex to be dispatched ASAP and an update on the tree trimming. Mentioned health crisis again.\n\nShould I send Primex Termite Co.?"
+  },
+  {
+    "sent_at": "2026-05-24T23:05:40.462Z",
+    "message_guid": null,
+    "bundle_id": "drf_f8b99e5017428b45",
+    "part_index": 0,
+    "issue_id": "2509a0d7-8e8e-4828-8c0d-f79d90ec2422",
+    "channel": "groupchat",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "body": "Unit 701 Hub Champaign\nThe toilet keeps running.\n\nShould I send Tier 7 Plumbing & Rooter?"
   }
 ]
