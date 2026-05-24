@@ -264,7 +264,10 @@ export const scenarios = [
 	},
 
 	{
-		name: 'chat: vendor redirect ("no send Luigi") → no dispatch, record write_memory',
+		// PM redirects to a different vendor than we suggested. Agent should
+		// dispatch using the named vendor (passing vendor_name to the drafters)
+		// AND record write_memory so the belief-former can learn from the swap.
+		name: 'chat: vendor swap ("no send Luigi instead") → drafts with Luigi + write_memory',
 		skill: 'chat',
 		setup: {
 			sent_log: sentBundle(ISSUE_FAUCET),
@@ -272,13 +275,33 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'no send Luigi instead' },
 		expected: {
-			// New: vendor redirects warrant an observation (the redirect is a
-			// learnable signal). read_memory is optional — model may consult before
-			// deciding. No dispatch tools fire — v1 doesn't handle swaps.
-			tool_calls_set_includes: ['write_memory'],
-			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 0,
-			outbox_count: 0
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			drafts_count: 2,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			drafts_include: ['Anna', 'Luigi', 'kitchen faucet leaking'],
+			drafts_excludes: ['Mario'],
+			outbox_count: 1
+		}
+	},
+
+	{
+		// Bare "send X" with no "instead" cue. This is the shape that broke
+		// in production on 2026-05-24 ("Send yonic") — the agent didn't
+		// recognize it as a swap and drafted with the original vendor.
+		name: 'chat: bare vendor swap ("send Yonic") → drafts with Yonic, not Mario',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_FAUCET),
+			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET }
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'send Yonic' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			drafts_count: 2,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			drafts_include: ['Anna', 'Yonic', 'kitchen faucet leaking'],
+			drafts_excludes: ['Mario'],
+			outbox_count: 1
 		}
 	},
 
