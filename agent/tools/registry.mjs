@@ -6,7 +6,6 @@
 // Adding or removing a tool from the agent's surface is one edit to this file.
 
 import { sendText } from './send_text.mjs';
-import { sendReaction } from './send_reaction.mjs';
 import { draftTenant } from './draft_tenant.mjs';
 import { draftVendor } from './draft_vendor.mjs';
 import { setVendor } from './set_vendor.mjs';
@@ -19,7 +18,6 @@ import { useSkill } from './use_skill.mjs';
 
 export const ALL_TOOLS = [
 	sendText,
-	sendReaction,
 	draftTenant,
 	draftVendor,
 	setVendor,
