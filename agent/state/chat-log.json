@@ -1,1 +1,34 @@
-[]
+[
+  {
+    "received_at": "2026-05-24T06:20:21.657Z",
+    "message_guid": "83C63D1C-F1BB-4110-92A5-8A1C51BF3027",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "No, I have someone working in the lower unit and will have them check something",
+    "is_from_me": false,
+    "db_date": 801254803476846200,
+    "agent_action": "no_match",
+    "agent_runs_at": "2026-05-24T06:20:24.669Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-24T06:20:24.672Z",
+    "message_guid": "1AAEF152-9523-476E-8178-8DA5B6B696C8",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "I’ll update you soon",
+    "is_from_me": false,
+    "db_date": 801254809597912800,
+    "agent_action": "no_match",
+    "agent_runs_at": "2026-05-24T06:20:26.057Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  }
+]
