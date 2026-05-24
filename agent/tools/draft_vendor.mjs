@@ -14,21 +14,32 @@ function renderVendorBody({ issue_summary }) {
 export const draftVendor = {
 	name: 'draft_vendor',
 	description:
-		'Create a vendor-facing draft message for the given work order. Fills a fixed template using the issue name + recommended vendor. Returns the new draft id. Use this together with draft_tenant when the PM has approved a vendor dispatch.',
+		'Create a vendor-facing draft message for the given work order. Returns the new draft id. Use this together with draft_tenant when the PM has approved a vendor dispatch. Pass vendor_name when the PM has named a vendor — it overrides whatever vendor is on the issue (use this for vendor swaps like "send Luigi" or "no send Luigi instead"). Omit vendor_name to fall back to the vendor on the issue row.',
 	parameters: {
 		type: 'object',
 		properties: {
 			issue_id: {
 				type: 'string',
 				description: 'The UUID of the work order this draft is for.'
+			},
+			vendor_name: {
+				type: 'string',
+				description:
+					'Optional. The vendor to address this draft to. Pass this when the PM has named a vendor in their reply (same or different from what we suggested). If omitted, falls back to the vendor on the issue.'
 			}
 		},
 		required: ['issue_id']
 	},
-	async run({ issue_id }, ctx) {
+	async run({ issue_id, vendor_name }, ctx) {
 		const issue = await fetchIssueById(issue_id);
 		if (!issue) return { ok: false, error: `issue not found: ${issue_id}` };
-		if (!issue.vendor?.name) return { ok: false, error: `issue ${issue_id} has no recommended vendor on file` };
+
+		const vendorName = (vendor_name ?? '').trim() || issue.vendor?.name;
+		if (!vendorName)
+			return {
+				ok: false,
+				error: `issue ${issue_id} has no vendor (none on file, none passed via vendor_name)`
+			};
 
 		// issue.name is the work-order title (e.g. "kitchen faucet leaking"),
 		// which reads naturally in the template's "for <issue>" slot.
@@ -41,8 +52,8 @@ export const draftVendor = {
 			workspace_id: issue.workspace_id,
 			workspace_label: ctx.workspace_label ?? null,
 			issue_id: issue.id,
-			to: issue.vendor.name,
-			to_participants: [issue.vendor.name],
+			to: vendorName,
+			to_participants: [vendorName],
 			messages: [{ body }],
 			hold_until: null
 		});
