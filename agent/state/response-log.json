@@ -1,30 +1,5 @@
 [
   {
-    "timestamp": "2026-05-24T08:14:15.979Z",
-    "draft_id": "drf_053353a9e9da9074",
-    "issue_id": "981d12bf-cd99-482f-846c-7b074c28d5ed",
-    "channel": "groupchat",
-    "trigger": "new_issue",
-    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
-    "workspace_label": "test",
-    "to": "iMessage;-;andrew51@illinois.edu",
-    "to_participants": [
-      "andrew51@illinois.edu"
-    ],
-    "action": "send",
-    "messages_original": [
-      "Unit 701 Hub Champaign\nThe kitchen sink is leaking.\n\nShould I send Tier 7 Plumbing & Rooter?"
-    ],
-    "messages_final": [
-      "Unit 701 Hub Champaign\nThe kitchen sink is leaking.\n\nShould I send Tier 7 Plumbing & Rooter?"
-    ],
-    "edited": false,
-    "diffs": [
-      null
-    ],
-    "forced_send": false
-  },
-  {
     "timestamp": "2026-05-24T21:33:03.797Z",
     "draft_id": "drf_f0694c2c507a49c4",
     "issue_id": "53ed40c5-a38d-410d-bd5e-7ea4e6a70aac",
@@ -54,5 +29,30 @@
     "forced_send": true,
     "notes": "no unit bc of appfolio enrich_issue error\nbad urgency detection (seems like we're abt to get sued)\nno context on this tenant sending like 4 same issues before",
     "notes_updated_at": "2026-05-24T21:34:07.448Z"
+  },
+  {
+    "timestamp": "2026-05-24T23:05:40.463Z",
+    "draft_id": "drf_f8b99e5017428b45",
+    "issue_id": "2509a0d7-8e8e-4828-8c0d-f79d90ec2422",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "to": "iMessage;-;andrew51@illinois.edu",
+    "to_participants": [
+      "andrew51@illinois.edu"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 701 Hub Champaign\nThe toilet keeps running.\n\nShould I send Tier 7 Plumbing & Rooter?"
+    ],
+    "messages_final": [
+      "Unit 701 Hub Champaign\nThe toilet keeps running.\n\nShould I send Tier 7 Plumbing & Rooter?"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": true
   }
 ]

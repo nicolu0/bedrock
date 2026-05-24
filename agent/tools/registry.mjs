@@ -9,7 +9,6 @@ import { sendText } from './send_text.mjs';
 import { draftTenant } from './draft_tenant.mjs';
 import { draftVendor } from './draft_vendor.mjs';
 import { setVendor } from './set_vendor.mjs';
-import { enrichIssue } from './enrich_issue.mjs';
 import { readProfile } from './read_profile.mjs';
 import { writeProfile } from './write_profile.mjs';
 import { readMemory } from './read_memory.mjs';
@@ -21,7 +20,6 @@ export const ALL_TOOLS = [
 	draftTenant,
 	draftVendor,
 	setVendor,
-	enrichIssue,
 	readProfile,
 	writeProfile,
 	readMemory,

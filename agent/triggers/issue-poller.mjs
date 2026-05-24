@@ -6,11 +6,13 @@
 // display label (test/prod) AND a recipient chat env var. An issue from a
 // workspace not in the table is skipped — we don't know where to send it.
 //
-// The poller itself does not call the LLM. It emits a normalized AgentEvent
-// to the orchestrator with the issue + candidate vendors as payload; the
-// orchestrator handles enrich_issue, read_memory, set_vendor, and send_text
-// via the process_work_order skill. The poller then writes one draft row
-// carrying messages: [{ body }, ...].
+// The poller sets the issue up deterministically before the agent sees it: it
+// enriches the row (AppFolio unit + clean description + a mini-LLM title) and
+// fetches the workspace vendor roster, then emits a normalized AgentEvent with
+// the enriched issue + candidate vendors as payload. The orchestrator handles
+// only the decisions — read_memory, set_vendor, send_text — via the
+// process_work_order skill. The poller then writes one draft row carrying
+// messages: [{ body }, ...].
 //
 // Cursor + dedup state lives in state/issues-cursor.json:
 //   { lastCheckedAt: ISO, processedIds: { [issueId]: unixMs } }
@@ -21,6 +23,7 @@ import Database from 'better-sqlite3';
 
 import * as db from '../state/helpers.mjs';
 import { runTurn } from '../core/orchestrator.mjs';
+import { enrichIssue } from '../tools/enrich_issue.mjs';
 import { WORKSPACES } from '../core/workspaces.mjs';
 import { supabaseEnv } from '../core/supabase.mjs';
 
@@ -181,7 +184,24 @@ async function pollOnce() {
 		});
 
 		try {
-			const candidate_vendors = await fetchWorkspaceVendors(issue.workspace_id, vendorCache);
+			// Set up the issue before the agent sees it: enrich (unit + clean
+			// description + title) and the vendor roster run in parallel — both are
+			// just data-gathering. Enrich is best-effort; on failure we fall back to
+			// whatever the join already gave us rather than skip the draft.
+			const [candidate_vendors, enriched] = await Promise.all([
+				fetchWorkspaceVendors(issue.workspace_id, vendorCache),
+				enrichIssue(issue.id).catch((err) => {
+					log(`enrich failed for ${issue.id}: ${err.message}`);
+					return null;
+				})
+			]);
+			if (enriched?.ok) {
+				if (enriched.unit) issue.unit = enriched.unit;
+				if (enriched.tenant) issue.tenant = enriched.tenant;
+				if (enriched.property) issue.property = enriched.property;
+				if (enriched.name) issue.name = enriched.name;
+				if (enriched.description) issue.description = enriched.description;
+			}
 
 			const event = {
 				type: 'new_issue',
