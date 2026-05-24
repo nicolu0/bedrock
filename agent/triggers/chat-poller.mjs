@@ -317,16 +317,6 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 			}
 		};
 
-		// react closure for the orchestrator's send_reaction tool. Bound to this
-		// specific incoming message — the LLM doesn't need to know GUIDs.
-		const react = async (reactionType) => {
-			if (!HELPER_ENABLED) return { ok: false, error: 'helper disabled' };
-			const r = await helper.react(chatGuid, row.guid, reactionType, text);
-			if (!r.ok) log(`react(${reactionType}) failed: ${r.error}`);
-			else log(`  · react ${reactionType} -> "${text.slice(0, 40)}${text.length > 40 ? '…' : ''}"`);
-			return r;
-		};
-
 		try {
 			const event = { type: 'demo_message', payload: { text, handle, msg_guid: row.guid } };
 			await runTurn(event, {
@@ -334,7 +324,6 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 				text,
 				chatGuid,
 				onEvent,
-				react,
 				sendMode: 'live',
 				// Demo path is unknown 1:1 handles only. knownSet filtered above
 				// rejects PM numbers before we get here. Belt-and-suspenders flag
