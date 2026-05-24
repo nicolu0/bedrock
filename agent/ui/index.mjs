@@ -18,9 +18,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as db from '../state/helpers.mjs';
-import { WORKSPACES } from '../core/workspaces.mjs';
+import { WORKSPACES, normalizeHandle } from '../core/workspaces.mjs';
 import { deleteIssuesByWorkspace, supabaseEnv } from '../core/supabase.mjs';
 import * as memory from '../core/memory.mjs';
+import { getDb as getChatDb, extractText, appleDateToISO } from '../triggers/chat-poller.mjs';
 
 // Cofounder phone numbers that act as the agent post-pivot. The chat_messages
 // table stores is_from_me as the raw chat.db value (true only for messages
@@ -492,6 +493,67 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				if (ws) items = items.filter((m) => m.workspace_label === ws);
 				items = items.slice(-limit).reverse();
 				return json(res, 200, items);
+			}
+
+			if (req.method === 'GET' && pathname === '/api/chat-thread') {
+				const wsLabel = url.searchParams.get('workspace') ?? 'prod';
+				const limit = Math.max(1, Math.min(2000, Number(url.searchParams.get('limit')) || 500));
+				const entry = Object.entries(WORKSPACES).find(([, w]) => w.label === wsLabel);
+				if (!entry) return json(res, 200, { messages: [], pm_handles: [], agent_handles: [], pm_label: 'jose' });
+				const [, w] = entry;
+				const chat_guid = process.env[w.chatEnv];
+				const pm_label = w.pm_label ?? 'jose';
+				if (!chat_guid) return json(res, 200, { messages: [], pm_handles: [], agent_handles: [], pm_label });
+				const pmSet = new Set((w.pm_handles ?? []).map(normalizeHandle));
+				const agentSet = new Set((w.agent_handles ?? []).map(normalizeHandle));
+				try {
+					const rows = getChatDb()
+						.prepare(
+							`SELECT m.ROWID AS rowid, m.guid, m.text, m.attributedBody, m.date, m.is_from_me,
+							        h.id AS handle
+							 FROM message m
+							 LEFT JOIN handle h ON h.ROWID = m.handle_id
+							 LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+							 LEFT JOIN chat c ON c.ROWID = cmj.chat_id
+							 WHERE c.guid = ?
+							   AND m.service = 'iMessage'
+							   AND COALESCE(m.cache_has_attachments, 0) = 0
+							 ORDER BY m.date DESC
+							 LIMIT ?`
+						)
+						.all(chat_guid, limit);
+					const messages = rows
+						.map((r) => {
+							const text = extractText(r);
+							if (!text) return null;
+							const handle = normalizeHandle(r.handle);
+							const isFromMe = Number(r.is_from_me) === 1;
+							// is_from_me always wins. In 1:1 (style=45) chats chat.db
+							// stores the OTHER party's handle on outbound rows, which
+							// previously made my own messages match pmSet and land
+							// on the left.
+							const isPm = !isFromMe && !!handle && pmSet.has(handle);
+							const side = isPm ? 'left' : 'right';
+							return {
+								guid: r.guid,
+								ts: appleDateToISO(r.date),
+								handle: handle || null,
+								is_from_me: isFromMe,
+								text,
+								side
+							};
+						})
+						.filter(Boolean)
+						.reverse();
+					return json(res, 200, {
+						messages,
+						pm_handles: [...pmSet],
+						agent_handles: [...agentSet],
+						pm_label
+					});
+				} catch (err) {
+					return json(res, 500, { error: err.message });
+				}
 			}
 
 			if (req.method === 'GET' && pathname === '/api/history') {

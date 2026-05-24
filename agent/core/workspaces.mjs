@@ -13,7 +13,8 @@ export const WORKSPACES = {
 	'40d675ba-4dec-47dd-9222-79c0345c493f': {
 		label: 'test',
 		chatEnv: 'TEST_CHAT_GUID',
-		pm_handles: ['andrew51@illinois.edu']
+		pm_handles: ['andrew51@illinois.edu'],
+		pm_label: 'Test User'
 	},
 	// LAPM (Vanessa) — prod. Jose has two phone numbers on the groupchat.
 	// agent_handles: the cofounders' numbers in the chat. Pre-pivot they sent
@@ -25,7 +26,8 @@ export const WORKSPACES = {
 		label: 'prod',
 		chatEnv: 'JOSE_CHAT_GUID',
 		pm_handles: ['+13106990643', '+13102663152'],
-		agent_handles: ['+19496566275', '+15109358199']
+		agent_handles: ['+19496566275', '+15109358199'],
+		pm_label: 'jose'
 	}
 };
 

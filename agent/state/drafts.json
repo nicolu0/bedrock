@@ -1,1 +1,50 @@
-[]
+[
+  {
+    "id": "drf_9bca56b0041db697",
+    "created_at": "2026-05-24T08:15:24.202Z",
+    "hold_until": null,
+    "trigger": "groupchat_reply",
+    "channel": "tenant_appfolio",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "issue_id": "981d12bf-cd99-482f-846c-7b074c28d5ed",
+    "to": "Andrew",
+    "to_participants": [
+      "Andrew"
+    ],
+    "messages": [
+      {
+        "body": "Hi Andrew,\n\nI sent this to Tier 7 Plumbing & Rooter. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Hi Andrew,\n\nI sent this to Tier 7 Plumbing & Rooter. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose"
+      }
+    ]
+  },
+  {
+    "id": "drf_d435c3279d33604b",
+    "created_at": "2026-05-24T08:15:25.491Z",
+    "hold_until": null,
+    "trigger": "groupchat_reply",
+    "channel": "vendor_appfolio",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "issue_id": "981d12bf-cd99-482f-846c-7b074c28d5ed",
+    "to": "Tier 7 Plumbing & Rooter",
+    "to_participants": [
+      "Tier 7 Plumbing & Rooter"
+    ],
+    "messages": [
+      {
+        "body": "Please schedule with the tenant for Kitchen sink leak under cabinet. Their phone number is [phone]."
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Please schedule with the tenant for Kitchen sink leak under cabinet. Their phone number is [phone]."
+      }
+    ]
+  }
+]

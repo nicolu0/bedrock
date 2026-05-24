@@ -95,7 +95,7 @@ function normalizeHandle(raw) {
 
 let db = null;
 
-function getDb() {
+export function getDb() {
 	if (!db) db = new Database(CHAT_DB_PATH, { readonly: true, fileMustExist: true });
 	return db;
 }
@@ -104,7 +104,7 @@ function getDb() {
 // streamtyped binary). Scan for the longest printable UTF-8 run between the
 // "NSString" class marker and the next attribute-class marker. Kept in sync
 // with agent/scripts/backfill-from-chat.mjs.
-function extractText(row) {
+export function extractText(row) {
 	if (row.text) return row.text;
 	const blob = row.attributedBody;
 	if (!blob || !Buffer.isBuffer(blob)) return null;
@@ -162,7 +162,7 @@ function extractText(row) {
 // message.date as nanoseconds since 2001 on Sierra+. Older schemas used
 // seconds; the magnitude check handles both.
 const APPLE_EPOCH_MS = 978307200000;
-function appleDateToISO(date) {
+export function appleDateToISO(date) {
 	const n = Number(date);
 	if (!Number.isFinite(n) || n <= 0) return null;
 	const ms = n > 1e10 ? APPLE_EPOCH_MS + n / 1e6 : APPLE_EPOCH_MS + n * 1000;

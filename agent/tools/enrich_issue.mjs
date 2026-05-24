@@ -244,16 +244,21 @@ async function fetchAppfolioWorkOrder({ appfolio_property_id, srn }) {
 		]
 	};
 
-	const url = `https://${id}:${secret}@${vhost}/api/v2/reports/work_order.json`;
+	// Creds go in a Basic auth header, NOT the URL: fetch (undici) refuses any
+	// URL carrying credentials. AppFolio's next_page_url comes back with creds
+	// embedded, so strip them off every page before handing the URL to fetch.
+	const auth = 'Basic ' + Buffer.from(`${id}:${secret}`).toString('base64');
 	const rows = [];
-	let nextUrl = url;
+	let nextUrl = `https://${vhost}/api/v2/reports/work_order.json`;
 	let isFirst = true;
 	while (nextUrl) {
+		const u = new URL(nextUrl);
+		u.username = u.password = '';
 		let res = null;
 		for (let attempt = 1; attempt <= 3; attempt++) {
-			res = await fetch(nextUrl, {
+			res = await fetch(u, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', Authorization: auth },
 				body: isFirst ? JSON.stringify(body) : JSON.stringify({})
 			});
 			if (res.status !== 429) break;

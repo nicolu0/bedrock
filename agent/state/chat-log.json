@@ -30,5 +30,40 @@
     "agent_drafts_count": 0,
     "agent_draft_ids": [],
     "agent_error": null
+  },
+  {
+    "received_at": "2026-05-24T08:15:04.356Z",
+    "message_guid": "A111BA9E-BAD0-4D73-8A12-8EDD11179DF8",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "handle": "andrew51@illinois.edu",
+    "text": "No send sonic",
+    "is_from_me": false,
+    "db_date": 801303303693019400,
+    "agent_action": "no_match",
+    "agent_runs_at": "2026-05-24T08:15:10.560Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-24T08:15:21.366Z",
+    "message_guid": "6ADF70F0-3A92-4375-9261-352855B975C2",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "handle": "andrew51@illinois.edu",
+    "text": "Send yonic",
+    "is_from_me": false,
+    "db_date": 801303320358669600,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-05-24T08:15:26.257Z",
+    "agent_drafts_count": 2,
+    "agent_draft_ids": [
+      "drf_9bca56b0041db697",
+      "drf_d435c3279d33604b"
+    ],
+    "agent_error": null
   }
 ]

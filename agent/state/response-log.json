@@ -1,1 +1,58 @@
-[]
+[
+  {
+    "timestamp": "2026-05-24T08:14:15.979Z",
+    "draft_id": "drf_053353a9e9da9074",
+    "issue_id": "981d12bf-cd99-482f-846c-7b074c28d5ed",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "to": "iMessage;-;andrew51@illinois.edu",
+    "to_participants": [
+      "andrew51@illinois.edu"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 701 Hub Champaign\nThe kitchen sink is leaking.\n\nShould I send Tier 7 Plumbing & Rooter?"
+    ],
+    "messages_final": [
+      "Unit 701 Hub Champaign\nThe kitchen sink is leaking.\n\nShould I send Tier 7 Plumbing & Rooter?"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-24T21:33:03.797Z",
+    "draft_id": "drf_f0694c2c507a49c4",
+    "issue_id": "53ed40c5-a38d-410d-bd5e-7ea4e6a70aac",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "6337 Primrose Ave\nThere is a rat entry in the bedroom ceiling.\n\nShould I send Primex Termite Co.?"
+    ],
+    "messages_final": [
+      "Unit 12 6337 Primrose \nComplaining that rats have broken in again. Asking for Primex to be dispatched ASAP and an update on the tree trimming. Mentioned health crisis again.\n\nShould I send Primex Termite Co.?"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\n6337 Primrose Ave\nThere is a rat entry in the bedroom ceiling.\n\nShould I send Primex Termite Co.?\n--- final\nUnit 12 6337 Primrose \nComplaining that rats have broken in again. Asking for Primex to be dispatched ASAP and an update on the tree trimming. Mentioned health crisis again.\n\nShould I send Primex Termite Co.?"
+    ],
+    "forced_send": true,
+    "notes": "no unit bc of appfolio enrich_issue error\nbad urgency detection (seems like we're abt to get sued)\nno context on this tenant sending like 4 same issues before",
+    "notes_updated_at": "2026-05-24T21:34:07.448Z"
+  }
+]

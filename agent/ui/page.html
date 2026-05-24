@@ -9,18 +9,22 @@
 			* { box-sizing: border-box; }
 			html, body {
 				margin: 0;
-				background: #08090a;
-				color: #f7f8f8;
+				background: #0c0a09;
+				color: #fafaf9;
 				font: 14px/1.5 -apple-system, ui-sans-serif, system-ui, sans-serif;
 				min-height: 100vh;
 			}
-			html { background-color: #08090a; }
+			html { background-color: #0c0a09; }
 			header {
 				padding: 18px 24px;
-				border-bottom: 1px solid #26272b;
+				border-bottom: 1px solid #292524;
 				display: flex;
 				align-items: baseline;
 				gap: 16px;
+				position: sticky;
+				top: 0;
+				z-index: 50;
+				background: #0c0a09;
 			}
 			header h1 {
 				margin: 0;
@@ -28,21 +32,21 @@
 				font-weight: 600;
 				letter-spacing: 0.2px;
 			}
-			header .sub { color: #8a8f98; font-size: 12px; }
-			header .status { margin-left: 16px; font-size: 12px; color: #8a8f98; }
+			header .sub { color: #a8a29e; font-size: 12px; }
+			header .status { margin-left: 16px; font-size: 12px; color: #a8a29e; }
 			.ws-toggle {
 				margin-left: auto;
 				display: flex;
 				gap: 2px;
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				border-radius: 6px;
 				padding: 2px;
 			}
 			.ws-toggle button {
 				background: transparent;
 				border: none;
-				color: #b4b8bf;
+				color: #a8a29e;
 				padding: 4px 12px;
 				font-size: 11.5px;
 				letter-spacing: 0.04em;
@@ -51,8 +55,8 @@
 				text-transform: uppercase;
 				font-weight: 500;
 			}
-			.ws-toggle button:hover { color: #d0d4db; }
-			.ws-toggle button.active { background: #2e2f33; color: #f7f8f8; }
+			.ws-toggle button:hover { color: #d6d3d1; }
+			.ws-toggle button.active { background: #44403c; color: #fafaf9; }
 			.ws-toggle button.active.prod { background: #3a1a1f; color: #f08089; }
 			.ws-toggle button.active.test { background: #2a2538; color: #a8a4d8; }
 
@@ -92,28 +96,28 @@
 				font-size: 11px;
 				letter-spacing: 0.12em;
 				text-transform: uppercase;
-				color: #8a8f98;
+				color: #a8a29e;
 				margin: 0 0 10px;
 				display: flex;
 				align-items: baseline;
 				gap: 8px;
 			}
 			.col-header .count {
-				color: #62656b;
+				color: #78716c;
 				font-family: ui-monospace, Menlo, monospace;
 				letter-spacing: 0;
 				text-transform: none;
 				font-size: 11px;
 			}
 			.empty {
-				color: #8a8f98;
+				color: #a8a29e;
 				text-align: center;
 				padding: 60px 0;
 				font-size: 13px;
 			}
 			.draft {
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				border-radius: 10px;
 				padding: 16px 18px;
 				margin-bottom: 14px;
@@ -122,14 +126,14 @@
 				display: flex;
 				gap: 8px;
 				font-size: 11px;
-				color: #b4b8bf;
+				color: #a8a29e;
 				margin-bottom: 10px;
 				flex-wrap: wrap;
 				align-items: center;
 			}
 			.meta .tag {
-				background: #26272b;
-				color: #d0d4db;
+				background: #292524;
+				color: #d6d3d1;
 				padding: 2px 8px;
 				border-radius: 4px;
 				letter-spacing: 0.2px;
@@ -145,7 +149,7 @@
 			}
 			.recipients {
 				font-size: 11px;
-				color: #b4b8bf;
+				color: #a8a29e;
 				margin: -4px 0 12px;
 				font-family: ui-monospace, SF Mono, Menlo, monospace;
 				display: flex;
@@ -158,10 +162,10 @@
 				gap: 4px 8px;
 				align-items: baseline;
 			}
-			.recipients .label { color: #8a8f98; }
-			.recipients .handle { color: #d0d4db; }
+			.recipients .label { color: #a8a29e; }
+			.recipients .handle { color: #d6d3d1; }
 			.recipients .guid {
-				color: #62656b;
+				color: #78716c;
 				font-size: 10px;
 				word-break: break-all;
 			}
@@ -175,7 +179,7 @@
 			}
 			.bubble {
 				max-width: 78%;
-				background: #5e6ad2;
+				background: #1d6ee2;
 				color: #ffffff;
 				border-radius: 18px;
 				padding: 9px 14px;
@@ -185,7 +189,7 @@
 				position: relative;
 				min-width: 60px;
 			}
-			.bubble:has(textarea:focus) { background: #6b76e0; box-shadow: 0 0 0 1px #7c87e8 inset; }
+			.bubble:has(textarea:focus) { background: #2a82f0; box-shadow: 0 0 0 1px #4a9cff inset; }
 			.bubble textarea {
 				background: transparent;
 				border: none;
@@ -218,26 +222,26 @@
 				margin-top: 4px;
 			}
 			button {
-				background: #26272b;
-				color: #f7f8f8;
-				border: 1px solid #2e2f33;
+				background: #292524;
+				color: #fafaf9;
+				border: 1px solid #44403c;
 				padding: 7px 14px;
 				border-radius: 6px;
 				font: inherit;
 				font-size: 13px;
 				cursor: pointer;
 			}
-			button:hover { background: #26272b; }
-			button.primary { background: #5e6ad2; border-color: #5e6ad2; color: white; }
-			button.primary:hover { background: #6b76e0; }
+			button:hover { background: #292524; }
+			button.primary { background: #1d6ee2; border-color: #1d6ee2; color: white; }
+			button.primary:hover { background: #2a82f0; }
 			button.danger { color: #f08089; }
 			button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 			.kpi {
 				display: flex;
 				gap: 18px;
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				border-radius: 10px;
 				padding: 14px 18px;
 				margin-bottom: 18px;
@@ -245,14 +249,14 @@
 				flex-wrap: wrap;
 			}
 			.kpi .stat { display: flex; flex-direction: column; gap: 2px; }
-			.kpi .stat .label { color: #8a8f98; font-size: 11px; letter-spacing: 0.05em; }
-			.kpi .stat .value { color: #f7f8f8; font-size: 18px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
+			.kpi .stat .label { color: #a8a29e; font-size: 11px; letter-spacing: 0.05em; }
+			.kpi .stat .value { color: #fafaf9; font-size: 18px; font-weight: 600; font-family: ui-monospace, Menlo, monospace; }
 			.kpi .stat .value .pct { color: #74c99a; }
-			.kpi .stat .sub { color: #8a8f98; font-size: 11px; }
+			.kpi .stat .sub { color: #a8a29e; font-size: 11px; }
 
 			.history-item {
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				border-radius: 10px;
 				padding: 14px 16px;
 				margin-bottom: 10px;
@@ -262,7 +266,7 @@
 				gap: 8px;
 				align-items: center;
 				font-size: 11px;
-				color: #b4b8bf;
+				color: #a8a29e;
 				margin-bottom: 8px;
 				flex-wrap: wrap;
 			}
@@ -277,7 +281,7 @@
 			.action-tag.send { background: rgba(60, 200, 120, 0.14); color: #74c99a; border: 1px solid rgba(60, 200, 120, 0.32); }
 			.action-tag.copy { background: rgba(126, 183, 240, 0.14); color: #a8a4d8; border: 1px solid rgba(126, 183, 240, 0.32); }
 			.action-tag.dismiss { background: rgba(240, 128, 137, 0.14); color: #f08089; border: 1px solid rgba(240, 128, 137, 0.32); }
-			.history-item .when { color: #8a8f98; font-size: 11px; margin-left: auto; }
+			.history-item .when { color: #a8a29e; font-size: 11px; margin-left: auto; }
 			.history-item .recipients {
 				margin: -2px 0 8px;
 			}
@@ -289,7 +293,7 @@
 			}
 			.history-item .bubble {
 				max-width: 78%;
-				background: #5e6ad2;
+				background: #1d6ee2;
 				color: #ffffff;
 				border-radius: 18px;
 				padding: 8px 13px;
@@ -298,7 +302,7 @@
 				white-space: pre-wrap;
 				word-wrap: break-word;
 			}
-			.history-item.dismiss .bubble { background: #26272b; color: #d0d4db; text-decoration: line-through; opacity: 0.7; }
+			.history-item.dismiss .bubble { background: #292524; color: #d6d3d1; text-decoration: line-through; opacity: 0.7; }
 			.history-item .bubble .strike {
 				display: block;
 				color: rgba(255, 255, 255, 0.62);
@@ -318,22 +322,22 @@
 			}
 			.notes {
 				margin-top: 10px;
-				border-top: 1px dashed #2e2f33;
+				border-top: 1px dashed #44403c;
 				padding-top: 8px;
 			}
 			.notes .note-empty {
-				color: #8a8f98;
+				color: #a8a29e;
 				font-size: 11px;
 				cursor: pointer;
 				font-style: italic;
 				user-select: none;
 			}
-			.notes .note-empty:hover { color: #b4b8bf; }
+			.notes .note-empty:hover { color: #a8a29e; }
 			.notes textarea {
 				width: 100%;
-				background: #08090a;
-				color: #f7f8f8;
-				border: 1px solid #2e2f33;
+				background: #0c0a09;
+				color: #fafaf9;
+				border: 1px solid #44403c;
 				border-radius: 6px;
 				padding: 8px 10px;
 				font: inherit;
@@ -344,8 +348,8 @@
 				overflow: hidden;
 				min-height: 32px;
 			}
-			.notes textarea:focus { border-color: #6b76e0; }
-			.notes textarea::placeholder { color: #8a8f98; font-style: italic; }
+			.notes textarea:focus { border-color: #2a82f0; }
+			.notes textarea::placeholder { color: #a8a29e; font-style: italic; }
 			.notes .saved {
 				font-size: 10px;
 				color: #74c99a;
@@ -356,8 +360,8 @@
 			.notes .saved.show { opacity: 1; }
 
 			.chat-item {
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				border-radius: 10px;
 				padding: 12px 14px;
 				margin-bottom: 8px;
@@ -367,11 +371,11 @@
 				gap: 6px;
 				align-items: center;
 				font-size: 11px;
-				color: #b4b8bf;
+				color: #a8a29e;
 				margin-bottom: 6px;
 				flex-wrap: wrap;
 			}
-			.chat-item .top .when { margin-left: auto; color: #8a8f98; }
+			.chat-item .top .when { margin-left: auto; color: #a8a29e; }
 			.chat-item .handle-row {
 				display: flex;
 				align-items: center;
@@ -381,11 +385,11 @@
 			}
 			.chat-item .handle-row .handle-text {
 				font-family: ui-monospace, Menlo, monospace;
-				color: #d0d4db;
+				color: #d6d3d1;
 			}
 			.chat-item .in-bubble {
-				background: #26272b;
-				color: #f7f8f8;
+				background: #292524;
+				color: #fafaf9;
 				border-radius: 16px;
 				padding: 8px 13px;
 				font-size: 13.5px;
@@ -410,7 +414,7 @@
 			.chat-item .agent-action.no_match,
 			.chat-item .agent-action.no_action {
 				background: rgba(126, 130, 140, 0.14);
-				color: #b4b8bf;
+				color: #a8a29e;
 				border: 1px solid rgba(126, 130, 140, 0.32);
 			}
 			.chat-item .agent-action.failure {
@@ -437,9 +441,9 @@
 				position: fixed;
 				bottom: 24px;
 				right: 24px;
-				background: #1c1d22;
-				border: 1px solid #2e2f33;
-				color: #f7f8f8;
+				background: #1c1917;
+				border: 1px solid #44403c;
+				color: #fafaf9;
 				padding: 10px 16px;
 				border-radius: 6px;
 				font-size: 13px;
@@ -457,7 +461,7 @@
 			.tab-nav button {
 				background: transparent;
 				border: none;
-				color: #b4b8bf;
+				color: #a8a29e;
 				padding: 6px 14px;
 				font-size: 12px;
 				letter-spacing: 0.04em;
@@ -466,14 +470,14 @@
 				text-transform: uppercase;
 				font-weight: 500;
 			}
-			.tab-nav button:hover { color: #d0d4db; }
-			.tab-nav button.active { background: #26272b; color: #f7f8f8; }
+			.tab-nav button:hover { color: #d6d3d1; }
+			.tab-nav button.active { background: #292524; color: #fafaf9; }
 
 			.memory-search {
 				margin-left: 10px;
-				background: #1c1d22;
-				border: 1px solid #26272b;
-				color: #f7f8f8;
+				background: #1c1917;
+				border: 1px solid #292524;
+				color: #fafaf9;
 				padding: 6px 10px;
 				border-radius: 6px;
 				font: inherit;
@@ -481,7 +485,7 @@
 				width: 200px;
 				display: none;
 			}
-			.memory-search:focus { outline: none; border-color: #5e6ad2; }
+			.memory-search:focus { outline: none; border-color: #1d6ee2; }
 
 			.view { display: none; }
 			.view.active { display: block; }
@@ -496,7 +500,7 @@
 			.memory-view svg {
 				width: 100%;
 				height: 100%;
-				background: #08090a;
+				background: #0c0a09;
 				display: block;
 				cursor: grab;
 			}
@@ -508,13 +512,13 @@
 				transition: stroke 0.12s, stroke-width 0.12s;
 			}
 			.node.observation circle {
-				fill: #62656b;
-				stroke: #2e2f33;
+				fill: #78716c;
+				stroke: #44403c;
 				stroke-width: 1;
 			}
 			.node.belief circle {
-				fill: #d0d4db;
-				stroke: #2e2f33;
+				fill: #d6d3d1;
+				stroke: #44403c;
 				stroke-width: 1.5;
 			}
 			.node.belief.user-created circle {
@@ -523,17 +527,17 @@
 			}
 			/* Entity nodes — color-coded per kind. Larger than observations so
 			   they read as anchors in the graph. */
-			.node.entity circle { stroke: #2e2f33; stroke-width: 1.5; }
+			.node.entity circle { stroke: #44403c; stroke-width: 1.5; }
 			.node.entity.vendor   circle { fill: #74c99a; }
 			.node.entity.property circle { fill: #d4a855; }
 			.node.entity.owner    circle { fill: #a8a4d8; }
-			.link.entity { stroke: #2e2f33; stroke-opacity: 0.55; stroke-dasharray: 4 3; }
+			.link.entity { stroke: #44403c; stroke-opacity: 0.55; stroke-dasharray: 4 3; }
 			/* Structural property↔owner edges from legacy owner_properties.
 			   Solid + brighter so they read as "load-bearing relationship,
 			   not a derived belief link." */
-			.link.structural { stroke: #8a8f98; stroke-opacity: 0.7; }
+			.link.structural { stroke: #a8a29e; stroke-opacity: 0.7; }
 			.node.selected circle {
-				stroke: #5e6ad2;
+				stroke: #1d6ee2;
 				stroke-width: 3;
 			}
 			.node.dimmed { opacity: 0.18; }
@@ -542,7 +546,7 @@
 				stroke-width: 2.5;
 			}
 			.node text {
-				fill: #b4b8bf;
+				fill: #a8a29e;
 				font-size: 10px;
 				font-family: ui-sans-serif, system-ui, sans-serif;
 				pointer-events: none;
@@ -556,7 +560,7 @@
 				font-size: 9.5px;
 			}
 			.link {
-				stroke: #2e2f33;
+				stroke: #44403c;
 				stroke-opacity: 0.6;
 			}
 			.link.dimmed { stroke-opacity: 0.08; }
@@ -568,8 +572,8 @@
 				right: 0;
 				width: 380px;
 				height: 100%;
-				background: #1c1d22;
-				border-left: 1px solid #26272b;
+				background: #1c1917;
+				border-left: 1px solid #292524;
 				overflow-y: auto;
 				padding: 24px 22px 80px;
 				box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
@@ -582,27 +586,27 @@
 				right: 14px;
 				background: transparent;
 				border: none;
-				color: #8a8f98;
+				color: #a8a29e;
 				font-size: 22px;
 				cursor: pointer;
 				padding: 2px 8px;
 				line-height: 1;
 			}
-			.memory-detail-close:hover { color: #f7f8f8; }
+			.memory-detail-close:hover { color: #fafaf9; }
 			.memory-detail h3 {
 				margin: 0 0 14px;
 				font-size: 14px;
-				color: #f7f8f8;
+				color: #fafaf9;
 			}
 			.memory-detail .kv {
 				font-size: 12px;
 				margin: 8px 0;
 				display: flex;
 				gap: 10px;
-				color: #d0d4db;
+				color: #d6d3d1;
 			}
 			.memory-detail .kv .k {
-				color: #8a8f98;
+				color: #a8a29e;
 				min-width: 90px;
 				text-transform: uppercase;
 				letter-spacing: 0.05em;
@@ -610,19 +614,19 @@
 			}
 			.memory-detail .claim {
 				font-size: 14px;
-				color: #f7f8f8;
+				color: #fafaf9;
 				line-height: 1.5;
 				margin: 0 0 14px;
 				padding: 12px;
-				background: #1c1d22;
+				background: #1c1917;
 				border-radius: 6px;
-				border-left: 3px solid #d0d4db;
+				border-left: 3px solid #d6d3d1;
 			}
 			.memory-detail .claim.user { border-left-color: #d9a366; }
 			.memory-detail .scope-pill {
 				display: inline-block;
-				background: #26272b;
-				color: #d0d4db;
+				background: #292524;
+				color: #d6d3d1;
 				padding: 2px 8px;
 				border-radius: 4px;
 				font-size: 11px;
@@ -632,18 +636,18 @@
 			.memory-detail .evidence-row {
 				font-size: 12px;
 				padding: 8px 10px;
-				background: #1c1d22;
+				background: #1c1917;
 				border-radius: 6px;
 				margin: 6px 0;
 				cursor: pointer;
 				border-left: 2px solid transparent;
 			}
-			.memory-detail .evidence-row:hover { background: #26272b; }
+			.memory-detail .evidence-row:hover { background: #292524; }
 			.memory-detail .evidence-row.contradicts { border-left-color: #f08089; }
 			.memory-detail .evidence-row.supports { border-left-color: #74c99a; }
 			.memory-detail .evidence-row .weight {
 				font-family: ui-monospace, Menlo, monospace;
-				color: #8a8f98;
+				color: #a8a29e;
 				font-size: 10px;
 				float: right;
 			}
@@ -670,12 +674,12 @@
 				margin-left: auto;
 				display: flex;
 				gap: 14px;
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				border-radius: 6px;
 				padding: 6px 12px;
 				font-size: 12px;
-				color: #d0d4db;
+				color: #d6d3d1;
 			}
 			.memory-filters label { cursor: pointer; user-select: none; display: flex; gap: 6px; align-items: center; }
 
@@ -684,20 +688,20 @@
 				position: absolute;
 				top: 50%; left: 50%;
 				transform: translate(-50%, -50%);
-				color: #8a8f98;
+				color: #a8a29e;
 				font-size: 14px;
 				text-align: center;
 				pointer-events: none;
 			}
-			.memory-empty .hint { color: #62656b; font-size: 12px; margin-top: 6px; }
+			.memory-empty .hint { color: #78716c; font-size: 12px; margin-top: 6px; }
 
 			/* + new belief dialog */
 			.belief-dialog {
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				border-radius: 10px;
 				padding: 24px;
-				color: #f7f8f8;
+				color: #fafaf9;
 				width: 440px;
 				max-width: 90vw;
 			}
@@ -710,26 +714,26 @@
 				margin-bottom: 14px;
 			}
 			.belief-dialog .field > span {
-				color: #8a8f98;
+				color: #a8a29e;
 				font-size: 11px;
 				text-transform: uppercase;
 				letter-spacing: 0.05em;
 			}
 			.belief-dialog textarea, .belief-dialog input[type=text] {
-				background: #08090a;
-				border: 1px solid #26272b;
-				color: #f7f8f8;
+				background: #0c0a09;
+				border: 1px solid #292524;
+				color: #fafaf9;
 				padding: 8px 10px;
 				border-radius: 6px;
 				font: inherit;
 				font-size: 13px;
 				resize: vertical;
 			}
-			.belief-dialog textarea:focus, .belief-dialog input[type=text]:focus { outline: none; border-color: #5e6ad2; }
+			.belief-dialog textarea:focus, .belief-dialog input[type=text]:focus { outline: none; border-color: #1d6ee2; }
 			.belief-dialog input[type=range] { width: 100%; }
 			.belief-dialog #conf-out {
 				font-family: ui-monospace, Menlo, monospace;
-				color: #d0d4db;
+				color: #d6d3d1;
 				margin-left: 6px;
 			}
 			.belief-dialog-actions {
@@ -779,25 +783,25 @@
 			}
 			#memory-list-controls input,
 			#memory-list-controls select {
-				background: #1c1d22;
-				border: 1px solid #2e2f33;
-				color: #d0d4db;
+				background: #1c1917;
+				border: 1px solid #44403c;
+				color: #d6d3d1;
 				padding: 6px 10px;
 				border-radius: 6px;
 				font-size: 12.5px;
 			}
 			#memory-list-controls input { flex: 1 1 auto; }
 			#memory-list-controls input:focus,
-			#memory-list-controls select:focus { outline: none; border-color: #5e6ad2; }
+			#memory-list-controls select:focus { outline: none; border-color: #1d6ee2; }
 			.memory-list-count {
-				color: #8a8f98;
+				color: #a8a29e;
 				font-size: 11.5px;
 				font-family: ui-monospace, Menlo, monospace;
 				margin-left: auto;
 			}
 			.belief-row {
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				border-left-width: 3px;
 				border-radius: 8px;
 				padding: 10px 14px;
@@ -808,19 +812,19 @@
 				gap: 4px 12px;
 			}
 			.belief-row.user { border-left-color: #d9a366; }
-			.belief-row.agent { border-left-color: #62656b; }
-			.belief-row .claim { color: #f7f8f8; line-height: 1.4; }
+			.belief-row.agent { border-left-color: #78716c; }
+			.belief-row .claim { color: #fafaf9; line-height: 1.4; }
 			.belief-row .right {
 				display: flex;
 				flex-direction: column;
 				align-items: flex-end;
 				gap: 2px;
 				font-size: 11px;
-				color: #b4b8bf;
+				color: #a8a29e;
 				font-family: ui-monospace, Menlo, monospace;
 				white-space: nowrap;
 			}
-			.belief-row .right .conf { color: #f7f8f8; }
+			.belief-row .right .conf { color: #fafaf9; }
 			.belief-row .right .ev { color: #74c99a; }
 			.belief-row .meta {
 				grid-column: 1 / -1;
@@ -828,31 +832,31 @@
 				flex-wrap: wrap;
 				gap: 4px;
 				font-size: 10.5px;
-				color: #8a8f98;
+				color: #a8a29e;
 				font-family: ui-monospace, Menlo, monospace;
 			}
 			.belief-row .pill {
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				padding: 1px 7px;
 				border-radius: 9px;
 			}
 			.belief-row .pill.scope { color: #d4a855; background: #221c14; border-color: #36281c; }
-			.belief-row .pill.tag   { color: #a8a4d8; background: #1c1d22; border-color: #26272b; }
+			.belief-row .pill.tag   { color: #a8a4d8; background: #1c1917; border-color: #292524; }
 
 			.memory-view-toggle { display: inline-flex; gap: 0; pointer-events: auto; }
 			.memory-view-toggle button {
-				background: #1c1d22;
-				border: 1px solid #2e2f33;
-				color: #b4b8bf;
+				background: #1c1917;
+				border: 1px solid #44403c;
+				color: #a8a29e;
 				padding: 5px 12px;
 				font-size: 11.5px;
 				cursor: pointer;
 			}
 			.memory-view-toggle button:first-child { border-radius: 6px 0 0 6px; }
 			.memory-view-toggle button:last-child  { border-radius: 0 6px 6px 0; border-left: 0; }
-			.memory-view-toggle button.active { background: #26272b; color: #f7f8f8; }
-			.memory-view-toggle button:hover { color: #d0d4db; }
+			.memory-view-toggle button.active { background: #292524; color: #fafaf9; }
+			.memory-view-toggle button:hover { color: #d6d3d1; }
 
 			/* When in list view, the graph filters / detail pane don't apply. */
 			body.memory-list-mode #memory-graph-pane { display: none; }
@@ -864,22 +868,22 @@
 				gap: 0;
 				padding: 0;
 			}
-			.list-col { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #26272b; }
+			.list-col { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #292524; }
 			.list-col:last-child { border-right: none; }
-			.list-col-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #26272b; background: #08090a; position: sticky; top: 0; z-index: 5; }
-			.list-col-header h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: #b4b8bf; }
-			.list-col-header .count { color: #b4b8bf; font-size: 11.5px; }
+			.list-col-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #292524; background: #0c0a09; position: sticky; top: 0; z-index: 5; }
+			.list-col-header h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: #a8a29e; }
+			.list-col-header .count { color: #a8a29e; font-size: 11.5px; }
 			.list-col-body { flex: 1 1 auto; overflow-y: auto; padding: 8px 12px 24px; }
-			.list-item { padding: 8px 10px; margin-bottom: 6px; border-radius: 4px; background: #1c1d22; border-left: 3px solid #2e2f33; cursor: pointer; transition: background 0.1s; }
-			.list-item:hover { background: #26272b; }
+			.list-item { padding: 8px 10px; margin-bottom: 6px; border-radius: 4px; background: #1c1917; border-left: 3px solid #44403c; cursor: pointer; transition: background 0.1s; }
+			.list-item:hover { background: #292524; }
 			.list-item.kind-observation { border-left-color: #74c99a; }
 			.list-item.kind-belief { border-left-color: #d9a366; }
 			.list-item.kind-entity-vendor { border-left-color: #5fa676; }
 			.list-item.kind-entity-property { border-left-color: #d9a366; }
-			.list-item.kind-entity-owner { border-left-color: #8a8f98; }
-			.list-item .li-title { font-weight: 600; font-size: 12.5px; color: #f7f8f8; }
-			.list-item .li-meta { font-size: 11px; color: #b4b8bf; margin-top: 3px; }
-			.list-item .li-pill { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 3px; background: #2e2f33; color: #b4b8bf; font-size: 10px; }
+			.list-item.kind-entity-owner { border-left-color: #a8a29e; }
+			.list-item .li-title { font-weight: 600; font-size: 12.5px; color: #fafaf9; }
+			.list-item .li-meta { font-size: 11px; color: #a8a29e; margin-top: 3px; }
+			.list-item .li-pill { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 3px; background: #44403c; color: #a8a29e; font-size: 10px; }
 
 			/* Entities sub-view ─────────────────────────────────────────── */
 			#memory-entities-pane {
@@ -896,8 +900,8 @@
 			}
 			#memory-entities-pane[hidden] { display: none; }
 			.entity-row {
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				border-left-width: 3px;
 				border-radius: 8px;
 				padding: 10px 14px;
@@ -908,7 +912,7 @@
 				gap: 4px 12px;
 				cursor: pointer;
 			}
-			.entity-row:hover { background: #1c1d22; }
+			.entity-row:hover { background: #1c1917; }
 			.entity-row.vendor   { border-left-color: #74c99a; }
 			.entity-row.property { border-left-color: #d4a855; }
 			.entity-row.owner    { border-left-color: #a8a4d8; }
@@ -917,34 +921,34 @@
 				font-size: 10.5px;
 				padding: 2px 8px;
 				border-radius: 9px;
-				background: #1c1d22;
-				border: 1px solid #26272b;
-				color: #d0d4db;
+				background: #1c1917;
+				border: 1px solid #292524;
+				color: #d6d3d1;
 				align-self: center;
 			}
-			.entity-row .name { color: #f7f8f8; align-self: center; }
+			.entity-row .name { color: #fafaf9; align-self: center; }
 			.entity-row .right {
 				display: flex;
 				flex-direction: column;
 				align-items: flex-end;
 				gap: 2px;
 				font-size: 11px;
-				color: #b4b8bf;
+				color: #a8a29e;
 				font-family: ui-monospace, Menlo, monospace;
 				white-space: nowrap;
 			}
 			.entity-row .right .ev { color: #74c99a; }
-			.entity-row .right .legacy { color: #8a8f98; }
+			.entity-row .right .legacy { color: #a8a29e; }
 			#memory-entities-detail {
 				margin-top: 18px;
 				padding-top: 14px;
-				border-top: 1px solid #26272b;
+				border-top: 1px solid #292524;
 			}
 			#memory-entities-detail[hidden] { display: none; }
 			#memory-entities-detail h3 {
 				margin: 0 0 10px;
 				font-size: 13.5px;
-				color: #f7f8f8;
+				color: #fafaf9;
 				display: flex;
 				align-items: center;
 				gap: 10px;
@@ -952,8 +956,8 @@
 			#memory-entities-detail .close-btn {
 				margin-left: auto;
 				background: transparent;
-				border: 1px solid #26272b;
-				color: #b4b8bf;
+				border: 1px solid #292524;
+				color: #a8a29e;
 				padding: 3px 9px;
 				border-radius: 5px;
 				font-size: 11px;
@@ -968,14 +972,14 @@
 				margin: 0 auto;
 			}
 			.sessions-empty {
-				color: #8a8f98;
+				color: #a8a29e;
 				text-align: center;
 				padding: 80px 20px;
 				font-size: 13px;
 			}
 			.session-card {
-				background: #1c1d22;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				border: 1px solid #292524;
 				border-radius: 10px;
 				padding: 14px 16px;
 				margin-bottom: 10px;
@@ -985,18 +989,18 @@
 				align-items: center;
 				gap: 10px;
 				font-size: 11.5px;
-				color: #b4b8bf;
+				color: #a8a29e;
 				margin-bottom: 8px;
 				flex-wrap: wrap;
 			}
-			.session-card .head .range { color: #d0d4db; font-weight: 500; }
-			.session-card .head .count { color: #8a8f98; }
+			.session-card .head .range { color: #d6d3d1; font-weight: 500; }
+			.session-card .head .count { color: #a8a29e; }
 			.session-card .head .num {
 				font-family: ui-monospace, Menlo, monospace;
 				font-size: 11px;
-				color: #d0d4db;
-				background: #26272b;
-				border: 1px solid #2e2f33;
+				color: #d6d3d1;
+				background: #292524;
+				border: 1px solid #44403c;
 				padding: 1px 6px;
 				border-radius: 4px;
 			}
@@ -1011,11 +1015,11 @@
 			}
 			.session-card .head .extracted.pending {
 				background: rgba(126, 130, 140, 0.14);
-				color: #b4b8bf;
+				color: #a8a29e;
 				border-color: rgba(126, 130, 140, 0.32);
 			}
 			.session-card .summary {
-				color: #d0d4db;
+				color: #d6d3d1;
 				font-size: 13.5px;
 				line-height: 1.5;
 				margin: 4px 0 10px;
@@ -1030,26 +1034,26 @@
 				font-size: 10.5px;
 				padding: 2px 8px;
 				border-radius: 10px;
-				background: #1c1d22;
-				color: #b4b8bf;
-				border: 1px solid #26272b;
+				background: #1c1917;
+				color: #a8a29e;
+				border: 1px solid #292524;
 				font-family: ui-monospace, Menlo, monospace;
 			}
-			.session-card .pill.tag { color: #a8a4d8; background: #1c1d22; border-color: #26272b; }
+			.session-card .pill.tag { color: #a8a4d8; background: #1c1917; border-color: #292524; }
 			.session-card .pill.entity { color: #d4a855; background: #221c14; border-color: #36281c; }
 			.session-card .expand-btn,
 			.session-card .delete-btn {
 				background: transparent;
-				border: 1px solid #26272b;
-				color: #b4b8bf;
+				border: 1px solid #292524;
+				color: #a8a29e;
 				padding: 4px 10px;
 				border-radius: 6px;
 				font-size: 11.5px;
 				cursor: pointer;
 			}
-			.session-card .expand-btn:hover { background: #26272b; color: #d0d4db; }
+			.session-card .expand-btn:hover { background: #292524; color: #d6d3d1; }
 			.session-card .delete-btn {
-				color: #8a8f98;
+				color: #a8a29e;
 				border-color: #2a1f24;
 			}
 			.session-card .delete-btn:hover {
@@ -1060,7 +1064,7 @@
 			.session-card .transcript {
 				margin-top: 12px;
 				padding-top: 10px;
-				border-top: 1px solid #26272b;
+				border-top: 1px solid #292524;
 				display: flex;
 				flex-direction: column;
 				gap: 4px;
@@ -1080,12 +1084,203 @@
 			}
 			.session-card .transcript .msg .who {
 				font-size: 9.5px;
-				color: #8a8f98;
+				color: #a8a29e;
 				margin-bottom: 1px;
 				font-family: ui-monospace, Menlo, monospace;
 			}
-			.session-card .transcript .msg.them { align-self: flex-start; background: #26272b; color: #f7f8f8; }
-			.session-card .transcript .msg.me { align-self: flex-end; background: #2a2538; color: #f7f8f8; }
+			.session-card .transcript .msg.them { align-self: flex-start; background: #292524; color: #fafaf9; }
+			.session-card .transcript .msg.me { align-self: flex-end; background: #1f3a5a; color: #cfe2ff; }
+
+			/* ── Chat tab: drafts rail (left) + iMessage thread (right) ── */
+			.chat-view {
+				flex-direction: row;
+				align-items: stretch;
+				gap: 0;
+				padding: 0;
+				max-width: none;
+				margin: 0;
+				/* Fixed height + clipped so the rail and thread each scroll on
+				   their own (overflow-y below) instead of moving the whole page. */
+				height: calc(100vh - 73px); /* header height */
+				overflow: hidden;
+			}
+			/* Display rule must live on .chat-view.active so the base
+			   `.view { display: none }` actually hides it on other tabs. */
+			.chat-view.active { display: flex; }
+			.chat-drafts-rail {
+				flex: 0 0 420px;
+				border-right: 1px solid #292524;
+				background: #0c0a09;
+				padding: 14px 14px 80px;
+				overflow-y: auto;
+				min-height: 0; /* stretches to .chat-view height; scrolls internally */
+				display: flex;
+				flex-direction: column;
+				gap: 10px;
+			}
+			.chat-drafts-rail .rail-header {
+				font-size: 11px;
+				letter-spacing: 0.12em;
+				text-transform: uppercase;
+				color: #a8a29e;
+				padding: 4px 6px 8px;
+				font-weight: 600;
+				display: flex;
+				justify-content: space-between;
+				align-items: baseline;
+			}
+			.chat-drafts-rail .rail-empty {
+				color: #78716c;
+				font-size: 12px;
+				padding: 14px 6px;
+				font-style: italic;
+			}
+			.draft-window {
+				background: #1c1917;
+				border: 1px solid #292524;
+				border-radius: 8px;
+				padding: 10px 12px;
+				display: flex;
+				flex-direction: column;
+				gap: 6px;
+				cursor: pointer;
+				transition: border-color 0.1s, background 0.1s;
+			}
+			.draft-window:hover { border-color: #44403c; background: #221d1b; }
+			.draft-window .dw-top {
+				display: flex;
+				gap: 6px;
+				align-items: center;
+				flex-wrap: wrap;
+				font-size: 10px;
+			}
+			.draft-window .dw-top .pill {
+				background: #292524;
+				color: #d6d3d1;
+				padding: 2px 7px;
+				border-radius: 10px;
+				text-transform: uppercase;
+				letter-spacing: 0.04em;
+				font-weight: 600;
+			}
+			.draft-window .dw-top .pill.prod { background: #3a1a1f; color: #f08089; }
+			.draft-window .dw-top .pill.test { background: #2a2538; color: #a8a4d8; }
+			.draft-window .dw-top .age { margin-left: auto; color: #78716c; font-size: 10px; }
+			.draft-window .dw-recip {
+				font-size: 11px;
+				color: #a8a29e;
+			}
+			.draft-window .dw-recip strong { color: #d6d3d1; font-weight: 500; }
+			.draft-window .dw-preview {
+				font-size: 13px;
+				color: #fafaf9;
+				line-height: 1.4;
+				display: -webkit-box;
+				-webkit-line-clamp: 3;
+				-webkit-box-orient: vertical;
+				overflow: hidden;
+				word-break: break-word;
+			}
+			.draft-window .dw-multi {
+				font-size: 10px;
+				color: #78716c;
+			}
+
+			.chat-thread {
+				flex: 1 1 auto;
+				max-width: 760px;
+				margin: 0 auto;
+				padding: 18px 18px 100px;
+				display: flex;
+				flex-direction: column;
+				gap: 6px;
+				width: 100%;
+				overflow-y: auto; /* own scroll, independent of the drafts rail */
+				min-height: 0;
+			}
+			.chat-thread .row.right + .row.left,
+			.chat-thread .row.left + .row.right { margin-top: 12px; }
+			.chat-thread .day-sep {
+				align-self: stretch;
+				text-align: center;
+				color: #a8a29e;
+				font-size: 11px;
+				font-weight: 600;
+				letter-spacing: 0.04em;
+				margin: 22px 0 10px;
+			}
+
+			@media (max-width: 900px) {
+				.chat-view { flex-direction: column; }
+				.chat-drafts-rail {
+					flex: 0 0 auto;
+					border-right: 0;
+					border-bottom: 1px solid #292524;
+					min-height: 0;
+					max-height: 40vh;
+				}
+			}
+			.chat-view .row {
+				display: flex;
+				gap: 8px;
+				align-items: flex-end;
+				max-width: 100%;
+			}
+			.chat-view .row.left { justify-content: flex-start; }
+			.chat-view .row.right { justify-content: flex-end; }
+			.chat-view .avatar {
+				width: 24px;
+				height: 24px;
+				border-radius: 50%;
+				background: #44403c;
+				color: #fafaf9;
+				font-size: 11px;
+				font-weight: 600;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				flex-shrink: 0;
+				margin-bottom: 2px;
+			}
+			.chat-view .avatar.placeholder { visibility: hidden; }
+			.chat-view .stack {
+				display: flex;
+				flex-direction: column;
+				gap: 2px;
+				max-width: calc(100% - 40px);
+			}
+			.chat-view .row.right .stack { align-items: flex-end; }
+			.chat-view .stack .who {
+				color: #a8a29e;
+				font-size: 11px;
+				padding: 0 12px 2px;
+			}
+			.chat-view .bubble {
+				padding: 8px 13px;
+				border-radius: 18px;
+				font-size: 14px;
+				line-height: 1.35;
+				word-wrap: break-word;
+				overflow-wrap: anywhere;
+				white-space: pre-wrap;
+				max-width: 100%;
+			}
+			.chat-view .row.left .bubble {
+				background: #292524;
+				color: #fafaf9;
+				border-bottom-left-radius: 4px;
+			}
+			.chat-view .row.right .bubble {
+				background: #1d6ee2;
+				color: #ffffff;
+				border-bottom-right-radius: 4px;
+			}
+			.chat-view .empty {
+				color: #a8a29e;
+				text-align: center;
+				padding: 80px 20px;
+				font-size: 13px;
+			}
 		</style>
 	</head>
 	<body>
@@ -1097,7 +1292,6 @@
 				<button data-tab="sessions">Sessions</button>
 			</nav>
 			<div class="ws-toggle" id="ws-toggle">
-				<button data-ws="all">All</button>
 				<button data-ws="prod">Prod</button>
 				<button data-ws="test">Test</button>
 			</div>
@@ -1159,7 +1353,10 @@
 			</div>
 		</section>
 
-		<section id="view-chat" class="view chat-view"></section>
+		<section id="view-chat" class="view chat-view">
+			<aside id="chat-drafts-rail" class="chat-drafts-rail"></aside>
+			<div id="chat-thread" class="chat-thread"></div>
+		</section>
 
 		<section id="view-sessions" class="view sessions-view">
 			<div id="sessions-list"></div>
@@ -1197,7 +1394,9 @@
 			// Workspace filter — global, persists across reloads. Filters drafts,
 			// history, and chat by workspace_label client-side.
 			const WS_KEY = 'bedrock.workspaceFilter';
-			let workspaceFilter = localStorage.getItem(WS_KEY) || 'all';
+			// Two modes only: prod | test. Coerce a legacy stored 'all' to prod.
+			let workspaceFilter = localStorage.getItem(WS_KEY) || 'prod';
+			if (workspaceFilter === 'all') workspaceFilter = 'prod';
 			const wsToggle = document.getElementById('ws-toggle');
 			function applyWsToggleStyle() {
 				for (const btn of wsToggle.querySelectorAll('button')) {
@@ -1223,7 +1422,7 @@
 			applyWsToggleStyle();
 
 			function passesFilter(label) {
-				return workspaceFilter === 'all' || label === workspaceFilter;
+				return label === workspaceFilter;
 			}
 
 			// "Clear Test" button: wipes test-workspace drafts/logs/Supabase rows.
@@ -1301,10 +1500,105 @@
 				ta.style.height = ta.scrollHeight + 'px';
 			}
 
+			// Builds one full draft card (meta row + recipients + editable
+			// bubbles + Send/Dismiss). Both the Work Orders pane and the
+			// Chat-tab left rail use this so they stay 1:1 in sync.
+			function createDraftCard(d, refsMap) {
+				const messages = Array.isArray(d.messages) ? d.messages : [{ body: d.body ?? '' }];
+				const origs = (Array.isArray(d.original_messages) ? d.original_messages : messages).map(
+					(m) => m.body
+				);
+
+				const card = document.createElement('div');
+				card.className = 'draft';
+				card.dataset.id = d.id;
+
+				const wsLabel = d.workspace_label ?? 'unknown';
+				const wsClass = wsLabel === 'prod' ? 'workspace prod' : 'workspace';
+
+				const meta = document.createElement('div');
+				meta.className = 'meta';
+				meta.innerHTML =
+					`<span class="tag ${wsClass}">${escapeHtml(wsLabel)}</span>` +
+					`<span class="tag channel ${escapeHtml(d.channel ?? '')}">${escapeHtml(d.channel)}</span>` +
+					`<span class="tag" title="${escapeHtml(d.issue_id ?? '')}">issue ${escapeHtml(shortIssue(d.issue_id))}</span>` +
+					`<span class="age">${fmtAge(d.created_at)}</span>` +
+					(d.hold_until ? `<span class="tag hold">hold</span>` : '');
+				card.appendChild(meta);
+				const ageEl = meta.querySelector('.age');
+				if (refsMap) refsMap.set(d.id, { ageEl });
+
+				const recipients = d.to_participants?.length ? d.to_participants : d.to ? [d.to] : [];
+				const recip = document.createElement('div');
+				recip.className = 'recipients';
+				recip.innerHTML =
+					`<div class="handles"><span class="label">to</span>` +
+					recipients.map((r) => `<span class="handle">${escapeHtml(r)}</span>`).join('') +
+					`</div>`;
+				card.appendChild(recip);
+
+				const bubbles = document.createElement('div');
+				bubbles.className = 'bubbles';
+				const tas = [];
+				messages.forEach((m, i) => {
+					const b = document.createElement('div');
+					b.className = 'bubble';
+					const ta = document.createElement('textarea');
+					ta.value = m.body;
+					ta.rows = 1;
+					if (ta.value !== origs[i]) b.classList.add('edited');
+					ta.addEventListener('input', () => {
+						autoSize(ta);
+						b.classList.toggle('edited', ta.value !== origs[i]);
+						scheduleSave(d.id, tas);
+					});
+					ta.addEventListener('blur', () => flushSave(d.id, tas));
+					b.appendChild(ta);
+					bubbles.appendChild(b);
+					tas.push(ta);
+					// Defer sizing until in DOM. If the card is in a hidden tab
+					// scrollHeight = 0 and the textarea collapses to one line;
+					// resizeAllDraftTextareas() reruns on tab activation.
+					requestAnimationFrame(() => autoSize(ta));
+				});
+				card.appendChild(bubbles);
+
+				const actions = document.createElement('div');
+				actions.className = 'actions';
+
+				// Only groupchat drafts get a Send button (live dylib send). For
+				// tenant_appfolio / vendor_appfolio drafts there's no automated
+				// channel yet.
+				const canSend = d.channel === 'groupchat';
+				if (canSend) {
+					const sendBtn = document.createElement('button');
+					sendBtn.className = 'primary';
+					sendBtn.textContent = messages.length > 1 ? `Send (${messages.length})` : 'Send';
+					sendBtn.onclick = () => act(d.id, 'send', tas, origs, sendBtn);
+					actions.appendChild(sendBtn);
+				}
+
+				const dismissBtn = document.createElement('button');
+				dismissBtn.className = 'danger';
+				dismissBtn.textContent = 'Dismiss';
+				dismissBtn.onclick = () => act(d.id, 'dismiss', tas, origs, dismissBtn);
+				actions.appendChild(dismissBtn);
+				card.appendChild(actions);
+
+				return card;
+			}
+
+			// Re-run autoSize on every textarea inside both draft panes. Cheap
+			// and idempotent. Called after tab activation so hidden→visible
+			// textareas pick up their real scrollHeight.
+			function resizeAllDraftTextareas() {
+				const tas = document.querySelectorAll(
+					'#drafts-list .draft textarea, #chat-drafts-rail .draft textarea'
+				);
+				for (const ta of tas) autoSize(ta);
+			}
+
 			function render(drafts) {
-				// Only do a full re-render when the set of draft ids changes
-				// (something added or dismissed). Otherwise just refresh the
-				// age text — preserves in-flight textarea edits across polls.
 				const idsKey = drafts.map((d) => d.id).join('|');
 				if (idsKey === renderedDraftIds && drafts.length > 0) {
 					for (const d of drafts) {
@@ -1324,103 +1618,7 @@
 					return;
 				}
 				for (const d of drafts) {
-					const messages = Array.isArray(d.messages) ? d.messages : [{ body: d.body ?? '' }];
-					// Server-truth originals: what the agent first produced, frozen
-					// at draft creation. Used for the "edited" badge.
-					const origs = (Array.isArray(d.original_messages) ? d.original_messages : messages).map(
-						(m) => m.body
-					);
-
-					const card = document.createElement('div');
-					card.className = 'draft';
-					card.dataset.id = d.id;
-
-					const wsLabel = d.workspace_label ?? 'unknown';
-					const wsClass = wsLabel === 'prod' ? 'workspace prod' : 'workspace';
-
-					const meta = document.createElement('div');
-					meta.className = 'meta';
-					meta.innerHTML =
-						`<span class="tag ${wsClass}">${escapeHtml(wsLabel)}</span>` +
-						`<span class="tag channel ${escapeHtml(d.channel ?? '')}">${escapeHtml(d.channel)}</span>` +
-						`<span class="tag" title="${escapeHtml(d.issue_id ?? '')}">issue ${escapeHtml(shortIssue(d.issue_id))}</span>` +
-						`<span class="age">${fmtAge(d.created_at)}</span>` +
-						(d.hold_until ? `<span class="tag hold">hold</span>` : '');
-					card.appendChild(meta);
-					const ageEl = meta.querySelector('.age');
-					cardRefs.set(d.id, { ageEl });
-
-					const recipients = d.to_participants?.length ? d.to_participants : d.to ? [d.to] : [];
-					const recip = document.createElement('div');
-					recip.className = 'recipients';
-					recip.innerHTML =
-						`<div class="handles"><span class="label">to</span>` +
-						recipients.map((r) => `<span class="handle">${escapeHtml(r)}</span>`).join('') +
-						`</div>` +
-						(d.to ? `<div class="guid">${escapeHtml(d.to)}</div>` : '');
-					card.appendChild(recip);
-
-					const bubbles = document.createElement('div');
-					bubbles.className = 'bubbles';
-					const tas = [];
-					messages.forEach((m, i) => {
-						const b = document.createElement('div');
-						b.className = 'bubble';
-						const ta = document.createElement('textarea');
-						ta.value = m.body;
-						ta.rows = 1;
-						if (ta.value !== origs[i]) b.classList.add('edited');
-						ta.addEventListener('input', () => {
-							autoSize(ta);
-							b.classList.toggle('edited', ta.value !== origs[i]);
-							scheduleSave(d.id, tas);
-						});
-						ta.addEventListener('blur', () => flushSave(d.id, tas));
-						b.appendChild(ta);
-						bubbles.appendChild(b);
-						tas.push(ta);
-						// Defer sizing until in DOM
-						requestAnimationFrame(() => autoSize(ta));
-					});
-					card.appendChild(bubbles);
-
-					const actions = document.createElement('div');
-					actions.className = 'actions';
-
-					// Only groupchat drafts get a Send button (live dylib send). For
-					// tenant_appfolio / vendor_appfolio drafts there's no automated
-					// channel yet — the PM copies into AppFolio manually. Copy is
-					// the primary action on those.
-					const canSend = d.channel === 'groupchat';
-
-					const copyBtn = document.createElement('button');
-					copyBtn.className = canSend ? '' : 'primary';
-					copyBtn.textContent = 'Copy';
-					copyBtn.onclick = async () => {
-						const joined = tas.map((t) => t.value).join('\n\n');
-						try {
-							await navigator.clipboard.writeText(joined);
-						} catch {}
-						act(d.id, 'copy', tas, origs, copyBtn);
-					};
-
-					if (canSend) {
-						const sendBtn = document.createElement('button');
-						sendBtn.className = 'primary';
-						sendBtn.textContent = messages.length > 1 ? `Send (${messages.length})` : 'Send';
-						sendBtn.onclick = () => act(d.id, 'send', tas, origs, sendBtn);
-						actions.appendChild(sendBtn);
-					}
-					actions.appendChild(copyBtn);
-
-					const dismissBtn = document.createElement('button');
-					dismissBtn.className = 'danger';
-					dismissBtn.textContent = 'Dismiss';
-					dismissBtn.onclick = () => act(d.id, 'dismiss', tas, origs, dismissBtn);
-					actions.appendChild(dismissBtn);
-					card.appendChild(actions);
-
-					draftsList.appendChild(card);
+					draftsList.appendChild(createDraftCard(d, cardRefs));
 				}
 			}
 
@@ -1767,6 +1965,18 @@
 				}
 				if (activeTab === 'memory') {
 					loadMemoryGraph();
+				} else if (activeTab === 'chat') {
+					loadChatThread();
+					// Always scroll to bottom when entering the tab, even if the
+					// cache is fresh and renderChatThread skips the rebuild.
+					requestAnimationFrame(() => {
+						chatThreadEl.scrollTop = chatThreadEl.scrollHeight;
+						resizeAllDraftTextareas();
+					});
+				} else if (activeTab === 'work-orders') {
+					// Textareas created while the tab was hidden have scrollHeight=0
+					// and collapse to a single row. Reflow them now that they're visible.
+					requestAnimationFrame(resizeAllDraftTextareas);
 				} else if (activeTab === 'sessions') {
 					loadSessions();
 				}
@@ -1778,7 +1988,10 @@
 				localStorage.setItem(TAB_KEY, activeTab);
 				applyTab();
 			});
-			applyTab();
+			// Initial applyTab() runs at the very END of the script — see below.
+			// On reload it may activate the chat/memory/sessions tab, whose loaders
+			// read const/let module state declared further down; calling it here
+			// would hit those bindings in the temporal dead zone and throw.
 
 			/* ─── Sessions tab ─────────────────────────────────────────── */
 
@@ -1787,7 +2000,7 @@
 			let sessionsLoading = false;
 
 			function sessionsWorkspace() {
-				return workspaceFilter === 'all' ? 'prod' : workspaceFilter;
+				return workspaceFilter;
 			}
 
 			async function loadSessions() {
@@ -1930,9 +2143,208 @@
 				}
 			});
 
-			// Workspace for memory view: 'all' isn't meaningful here, default to prod.
+			/* ─── Chat tab: drafts rail + iMessage thread ─────────────── */
+
+			const chatThreadEl = document.getElementById('chat-thread');
+			const chatDraftsRailEl = document.getElementById('chat-drafts-rail');
+			let chatThreadCache = null;
+			let chatThreadLoading = false;
+			let chatThreadPoller = null;
+			let renderedChatThreadKey = '';
+			let renderedChatDraftIds = '';
+
+			function chatThreadWorkspace() {
+				return workspaceFilter;
+			}
+
+			async function loadChatThread() {
+				if (chatThreadLoading) return;
+				chatThreadLoading = true;
+				if (!chatThreadCache) {
+					chatThreadEl.innerHTML = '<div class="empty">Loading conversation…</div>';
+				}
+				try {
+					const [tRes, dRes] = await Promise.all([
+						fetch('/api/chat-thread?workspace=' + chatThreadWorkspace()),
+						fetch('/api/drafts')
+					]);
+					// Render the drafts rail FIRST and independently of the thread
+					// fetch. The chat.db read behind /api/chat-thread can intermittently
+					// 500 (SQLITE_BUSY while Messages writes); that must not blank the
+					// rail, whose data comes from the separate /api/drafts endpoint.
+					if (dRes.ok) {
+						const allDrafts = await dRes.json();
+						renderChatDrafts(allDrafts);
+					}
+					if (!tRes.ok) throw new Error(await tRes.text());
+					chatThreadCache = await tRes.json();
+					renderChatThread();
+				} catch (err) {
+					// Only show the thread-error placeholder if we have nothing
+					// painted yet; a transient poll failure shouldn't wipe a thread
+					// that already loaded.
+					if (!chatThreadCache) {
+						chatThreadEl.innerHTML =
+							'<div class="empty">Failed to load thread: ' + escapeHtml(err.message) + '</div>';
+					}
+				} finally {
+					chatThreadLoading = false;
+				}
+				if (!chatThreadPoller) {
+					chatThreadPoller = setInterval(() => {
+						if (activeTab === 'chat') loadChatThread();
+					}, 4000);
+				}
+			}
+
+			const chatCardRefs = new Map();
+
+			function renderChatDrafts(allDrafts) {
+				// Mirror the Work Orders pane: same passesFilter() against the
+				// active workspace toggle (prod | test), so anything visible in
+				// Work Orders is also listed in the chat rail.
+				const drafts = (allDrafts ?? []).filter((d) => passesFilter(d.workspace_label));
+				const idsKey = drafts.map((d) => d.id).join('|');
+				if (idsKey === renderedChatDraftIds && drafts.length > 0) {
+					for (const d of drafts) {
+						const ref = chatCardRefs.get(d.id);
+						if (ref?.ageEl) ref.ageEl.textContent = fmtAge(d.created_at);
+					}
+					return;
+				}
+				renderedChatDraftIds = idsKey;
+				chatCardRefs.clear();
+				chatDraftsRailEl.innerHTML = '';
+
+				if (!drafts.length) {
+					const e = document.createElement('div');
+					e.className = 'rail-empty';
+					e.textContent = 'No pending drafts.';
+					chatDraftsRailEl.appendChild(e);
+					return;
+				}
+
+				for (const d of drafts) {
+					chatDraftsRailEl.appendChild(createDraftCard(d, chatCardRefs));
+				}
+				// Cards just landed; ensure their textareas size correctly even
+				// if the chat tab was hidden when render() fired upstream.
+				requestAnimationFrame(resizeAllDraftTextareas);
+			}
+
+			function chatSenderLabel(msg) {
+				// Left side = the PM persona (per-workspace label: 'jose' for
+				// prod, 'Test User' for test). Right side ("me") is implicit
+				// and never shown.
+				const pmLabel = chatThreadCache?.pm_label ?? 'jose';
+				return msg.side === 'left' ? pmLabel : 'me';
+			}
+
+			function cleanChatText(s) {
+				if (!s) return '';
+				// Apple's tapback strings leak through chat.db as "+%Liked …" or
+				// similar — strip the prefix junk so they read like iMessage.
+				return s.replace(/^[+%\s]+(?=(Liked|Loved|Disliked|Laughed|Emphasized|Questioned)\b)/, '').trim();
+			}
+
+			function chatAvatar(side, label) {
+				if (side === 'right') return '';
+				const initial = (label || 'J').charAt(0).toUpperCase();
+				return `<div class="avatar">${escapeHtml(initial)}</div>`;
+			}
+
+			function fmtDayHeader(d) {
+				const now = new Date();
+				const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+				const yest = new Date(today.getTime() - 86400000);
+				const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+				const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+				if (day.getTime() === today.getTime()) return `Today ${time}`;
+				if (day.getTime() === yest.getTime()) return `Yesterday ${time}`;
+				const diffDays = Math.round((today - day) / 86400000);
+				if (diffDays < 7) {
+					const wd = d.toLocaleDateString([], { weekday: 'long' });
+					return `${wd} ${time}`;
+				}
+				return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
+			}
+
+			function renderChatThread() {
+				if (!chatThreadCache) return;
+				const msgs = chatThreadCache.messages ?? [];
+				const key = msgs.map((m) => m.guid).join('|');
+				// Skip rebuild only if the same set of rows is already painted.
+				// Empty-msgs case must not match the initial empty key, otherwise
+				// the "Loading conversation…" placeholder never gets cleared.
+				const hasRows = chatThreadEl.querySelector('.row, .day-sep');
+				if (msgs.length > 0 && key === renderedChatThreadKey && hasRows) return;
+				renderedChatThreadKey = key;
+
+				if (!msgs.length) {
+					chatThreadEl.innerHTML = '<div class="empty">No messages in this thread yet.</div>';
+					return;
+				}
+
+				const frag = document.createDocumentFragment();
+				let lastTs = null;
+				let lastDayKey = null;
+				let lastSender = null;
+				for (const m of msgs) {
+					const ts = m.ts ? new Date(m.ts) : null;
+					const tsMs = ts ? ts.getTime() : null;
+					const sender = chatSenderLabel(m);
+					const text = cleanChatText(m.text);
+					if (!text) continue;
+
+					const dayKey = ts
+						? `${ts.getFullYear()}-${ts.getMonth()}-${ts.getDate()}`
+						: null;
+					const dayChanged = dayKey && dayKey !== lastDayKey;
+					const bigGap =
+						tsMs != null && lastTs != null && tsMs - lastTs > 4 * 60 * 60 * 1000;
+					if (ts && (dayChanged || bigGap)) {
+						const sep = document.createElement('div');
+						sep.className = 'day-sep';
+						sep.textContent = fmtDayHeader(ts);
+						frag.appendChild(sep);
+					}
+
+					const senderChanged = sender !== lastSender;
+					// Only label the LEFT side (jose). Right side ("me") is
+					// implied — iMessage never labels your own messages.
+					const showSender = senderChanged && m.side === 'left';
+
+					const row = document.createElement('div');
+					row.className = 'row ' + m.side;
+					const avatarHtml =
+						m.side === 'left'
+							? senderChanged
+								? chatAvatar(m.side, sender)
+								: '<div class="avatar placeholder"></div>'
+							: '';
+					row.innerHTML =
+						avatarHtml +
+						`<div class="stack">` +
+						(showSender ? `<div class="who">${escapeHtml(sender)}</div>` : '') +
+						`<div class="bubble">${escapeHtml(text)}</div>` +
+						`</div>`;
+					frag.appendChild(row);
+					if (tsMs != null) lastTs = tsMs;
+					if (dayKey) lastDayKey = dayKey;
+					lastSender = sender;
+				}
+
+				chatThreadEl.innerHTML = '';
+				chatThreadEl.appendChild(frag);
+				// Scroll the thread (its own scroll container) to the bottom.
+				requestAnimationFrame(() => {
+					chatThreadEl.scrollTop = chatThreadEl.scrollHeight;
+				});
+			}
+
+			// Workspace for memory view (prod | test).
 			function memoryWorkspace() {
-				return workspaceFilter === 'all' ? 'prod' : workspaceFilter;
+				return workspaceFilter;
 			}
 
 			const svgEl = document.getElementById('memory-graph');
@@ -2361,7 +2773,7 @@
 					})
 					.attr('stroke', (d) => {
 						if (d._type === 'entity' || d._type === 'structural') return null; // CSS controls
-						return d.weight < 0 ? '#5a2a30' : '#2e2f33';
+						return d.weight < 0 ? '#5a2a30' : '#44403c';
 					});
 
 				const node = g
@@ -2453,7 +2865,7 @@
 					.attr('height', (d) => nodeRadius(d) * 1.2)
 					.attr('x', (d) => -nodeRadius(d) * 0.6)
 					.attr('y', (d) => -nodeRadius(d) * 0.6)
-					.attr('fill', '#08090a')
+					.attr('fill', '#0c0a09')
 					.attr('pointer-events', 'none');
 
 				node
@@ -2643,7 +3055,7 @@
 					<h3>Entity</h3>
 					<div class="claim">${escapeHtml(e.kind)}: ${escapeHtml(e.name)}</div>
 					<div class="kv"><span class="k">kind</span><span>${escapeHtml(e.kind)}</span></div>
-					<div class="kv"><span class="k">legacy ref</span><span>${e.ref_table ? `${escapeHtml(e.ref_table)} / ${(e.ref_id || '').slice(0, 8)}` : '<span style="color:#8a8f98">none (informal)</span>'}</span></div>
+					<div class="kv"><span class="k">legacy ref</span><span>${e.ref_table ? `${escapeHtml(e.ref_table)} / ${(e.ref_id || '').slice(0, 8)}` : '<span style="color:#a8a29e">none (informal)</span>'}</span></div>
 					<div class="kv"><span class="k">created</span><span>${e.created_at ? fmtAge(e.created_at) : '—'}</span></div>
 					${
 						relatedHeading
@@ -2653,12 +3065,12 @@
 										? relatedEntities
 												.map(
 													(r) => `<div class="evidence-row entity-link" data-ent-id="${r.id}">
-											<span class="weight" style="color:#8a8f98">${escapeHtml(r.kind)}</span>
+											<span class="weight" style="color:#a8a29e">${escapeHtml(r.kind)}</span>
 											${escapeHtml(r.name)}
 										</div>`
 												)
 												.join('')
-										: '<div style="color:#8a8f98;font-size:12px">' +
+										: '<div style="color:#a8a29e;font-size:12px">' +
 											(e.kind === 'property'
 												? 'No owner found (informal property or missing owner_properties row).'
 												: 'No properties found for this owner.') +
@@ -2677,7 +3089,7 @@
 							</div>`
 									)
 									.join('')
-							: '<div style="color:#8a8f98;font-size:12px">No beliefs reference this entity yet.</div>'
+							: '<div style="color:#a8a29e;font-size:12px">No beliefs reference this entity yet.</div>'
 					}
 				`;
 
@@ -2706,10 +3118,10 @@
 			});
 
 			function scopePills(scope) {
-				if (!scope) return '<span style="color:#8a8f98">unscoped</span>';
+				if (!scope) return '<span style="color:#a8a29e">unscoped</span>';
 				// New shape: array of {kind, name} (observations, post-PR2).
 				if (Array.isArray(scope)) {
-					if (scope.length === 0) return '<span style="color:#8a8f98">unscoped</span>';
+					if (scope.length === 0) return '<span style="color:#a8a29e">unscoped</span>';
 					return scope
 						.map(
 							(e) =>
@@ -2718,7 +3130,7 @@
 						.join('');
 				}
 				// Legacy shape: object {key: value} (beliefs scope).
-				if (!Object.keys(scope).length) return '<span style="color:#8a8f98">unscoped</span>';
+				if (!Object.keys(scope).length) return '<span style="color:#a8a29e">unscoped</span>';
 				return Object.entries(scope)
 					.map(
 						([k, v]) =>
@@ -2742,7 +3154,7 @@
 					<div class="kv"><span class="k">confidence</span><span>${(b.confidence ?? 0).toFixed(2)}</span></div>
 					<div class="kv"><span class="k">explicitness</span><span>${escapeHtml(b.explicitness ?? '')}</span></div>
 					<div class="kv"><span class="k">created by</span><span>${escapeHtml(b.created_by ?? '')}</span></div>
-					<div class="kv"><span class="k">tags</span><span>${(b.tags ?? []).map((t) => `<span class="scope-pill">${escapeHtml(t)}</span>`).join('') || '<span style="color:#8a8f98">none</span>'}</span></div>
+					<div class="kv"><span class="k">tags</span><span>${(b.tags ?? []).map((t) => `<span class="scope-pill">${escapeHtml(t)}</span>`).join('') || '<span style="color:#a8a29e">none</span>'}</span></div>
 					<div class="kv"><span class="k">updated</span><span>${b.updated_at ? fmtAge(b.updated_at) : '—'}</span></div>
 					<h3 style="margin-top:18px">Evidence (${evidence.length})</h3>
 					${
@@ -2756,7 +3168,7 @@
 								</div>`
 									)
 									.join('')
-							: '<div style="color:#8a8f98;font-size:12px">No evidence yet.</div>'
+							: '<div style="color:#a8a29e;font-size:12px">No evidence yet.</div>'
 					}
 					<div class="actions">
 						<button id="edit-belief-btn">Edit</button>
@@ -2806,14 +3218,14 @@
 								return `<span class="scope-pill link" data-entity-id="${e.id}" style="${style}">${escapeHtml(e.kind)}: ${escapeHtml(e.name)}${weightLabel}</span>`;
 							})
 							.join(' ')
-					: '<span style="color:#8a8f98">unscoped</span>';
+					: '<span style="color:#a8a29e">unscoped</span>';
 				detailBodyEl.innerHTML = `
 					<h3>Observation</h3>
 					<div class="claim">${escapeHtml(o.summary)}</div>
 					<div class="kv"><span class="k">ts</span><span>${o.ts ? fmtAge(o.ts) : '—'}</span></div>
 					<div class="kv"><span class="k">salience</span><span>${(o.salience ?? 0).toFixed(2)}</span></div>
 					<div class="kv"><span class="k">entities</span><span>${entityChips}</span></div>
-					<div class="kv"><span class="k">tags</span><span>${(o.tags ?? []).map((t) => `<span class="scope-pill">${escapeHtml(t)}</span>`).join('') || '<span style="color:#8a8f98">none</span>'}</span></div>
+					<div class="kv"><span class="k">tags</span><span>${(o.tags ?? []).map((t) => `<span class="scope-pill">${escapeHtml(t)}</span>`).join('') || '<span style="color:#a8a29e">none</span>'}</span></div>
 					${o.raw_text ? `<div class="kv"><span class="k">raw text</span><span style="font-style:italic">"${escapeHtml(o.raw_text)}"</span></div>` : ''}
 					<h3 style="margin-top:18px">Connected beliefs (${beliefs.length})</h3>
 					${
@@ -2827,7 +3239,7 @@
 								</div>`
 									)
 									.join('')
-							: '<div style="color:#8a8f98;font-size:12px">Not yet connected to any belief.</div>'
+							: '<div style="color:#a8a29e;font-size:12px">Not yet connected to any belief.</div>'
 					}
 				`;
 				// Wire click-through on entity chips in the entities row.
@@ -2995,6 +3407,11 @@
 			wsToggle.addEventListener('click', () => {
 				if (activeTab === 'memory') loadMemoryGraph();
 			});
+
+			// Activate the restored tab now that every loader and its module state
+			// (chat thread, sessions, memory graph) is initialized. Must stay at the
+			// bottom — see the note by the tab-nav click handler.
+			applyTab();
 		</script>
 	</body>
 </html>

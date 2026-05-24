@@ -67,7 +67,7 @@ const filterArg = (() => {
 // ─── Reset test workspace memory state ─────────────────────────────────────
 
 async function wipeTestWorkspace() {
-	const { url, key } = (await import('../supabase.mjs')).supabaseEnv();
+	const { url, key } = (await import('../core/supabase.mjs')).supabaseEnv();
 	const headers = { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' };
 	// Order matters: belief_evidence cascades from beliefs/observations, but
 	// deleting both parents explicitly is safer.

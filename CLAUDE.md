@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status
 
 - **`agent/` is the active product.** This is where new work happens.
+- **Active branch is `agentv1`, not `main`.** All work happens on `agentv1`; `main` is stale. Branch feature worktrees off `agentv1` and don't open PRs against `main`.
 - **`src/` and `supabase/` are the legacy webapp — frozen.** Don't edit without discussing first. Reading is fine; debugging is fine.
 - **Two customers, two PMSes already.** Vanessa (paying, Appfolio — day-to-day user is her PM Jose, not Vanessa) and Steve (free trial, Propertyware). Design the agent's PMS access as a pluggable surface. The "user" the agent talks to is the PM doing the work, not necessarily the buyer who signed.
 
