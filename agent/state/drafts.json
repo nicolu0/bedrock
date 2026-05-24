@@ -28,5 +28,311 @@
         "body": "Should we send Mario?"
       }
     ]
+  },
+  {
+    "id": "drf_1f3c762b2a7a741d",
+    "created_at": "2026-05-24T00:14:44.950Z",
+    "hold_until": null,
+    "trigger": "new_issue",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "issue_id": "f476552a-6ab2-48c9-9a71-72272637a56c",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "messages": [
+      {
+        "body": "URGENT: Unit 12 6337 Primrose Ave at 6337 Primrose Ave has overgrown trees."
+      },
+      {
+        "body": "Should we send Primex Termite Co.?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "URGENT: Unit 12 6337 Primrose Ave at 6337 Primrose Ave has overgrown trees."
+      },
+      {
+        "body": "Should we send Primex Termite Co.?"
+      }
+    ]
+  },
+  {
+    "id": "drf_f7b68f827a58988a",
+    "created_at": "2026-05-24T00:14:53.490Z",
+    "hold_until": null,
+    "trigger": "new_issue",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "issue_id": "e0e8cb7f-db48-4e74-9433-f531246022ce",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "messages": [
+      {
+        "body": "URGENT: Unit 4410 1/2 S. Centinela Ave at 4410-4414 S. Centinela Ave has a burning dryer smell."
+      },
+      {
+        "body": "Should we send Cross Appliance Inc?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "URGENT: Unit 4410 1/2 S. Centinela Ave at 4410-4414 S. Centinela Ave has a burning dryer smell."
+      },
+      {
+        "body": "Should we send Cross Appliance Inc?"
+      }
+    ]
+  },
+  {
+    "id": "drf_e6877ab68606461e",
+    "created_at": "2026-05-24T00:15:02.664Z",
+    "hold_until": "2026-05-25T16:00:00.000Z",
+    "trigger": "new_issue",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "issue_id": "ace5c5b9-aa05-4122-a9a5-73b3fcc75780",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "messages": [
+      {
+        "body": "URGENT: Unit 213 1/2 S. Arnaz Dr at 213 S. Arnaz Dr needs bathroom sink and shower repair."
+      },
+      {
+        "body": "Should we send Yonic?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "URGENT: Unit 213 1/2 S. Arnaz Dr at 213 S. Arnaz Dr needs bathroom sink and shower repair."
+      },
+      {
+        "body": "Should we send Yonic?"
+      }
+    ]
+  },
+  {
+    "id": "drf_5ed646826daa16e9",
+    "created_at": "2026-05-24T00:15:10.672Z",
+    "hold_until": "2026-05-25T16:00:00.000Z",
+    "trigger": "new_issue",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "issue_id": "8f48a846-35fc-42c1-bfc8-f48ea10701f5",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "messages": [
+      {
+        "body": "Unit 1 at 50 Rose Ave has a slow bathtub and sink drain."
+      },
+      {
+        "body": "Should we send Kori?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Unit 1 at 50 Rose Ave has a slow bathtub and sink drain."
+      },
+      {
+        "body": "Should we send Kori?"
+      }
+    ]
+  },
+  {
+    "id": "drf_1dc786f5253d36d2",
+    "created_at": "2026-05-24T00:15:18.809Z",
+    "hold_until": "2026-05-25T16:00:00.000Z",
+    "trigger": "new_issue",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "issue_id": "bd921c33-8db3-4792-bccb-9df687944326",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "messages": [
+      {
+        "body": "Unit 2919 1/2 Van Buren Pl at 2919 Van Buren Pl has a broken garbage disposal."
+      },
+      {
+        "body": "Should we send Yonic?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Unit 2919 1/2 Van Buren Pl at 2919 Van Buren Pl has a broken garbage disposal."
+      },
+      {
+        "body": "Should we send Yonic?"
+      }
+    ]
+  },
+  {
+    "id": "drf_c4fca3f784a71006",
+    "created_at": "2026-05-24T00:15:27.477Z",
+    "hold_until": "2026-05-25T16:00:00.000Z",
+    "trigger": "new_issue",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "issue_id": "ec28c89c-3cbb-41b6-85cf-ef2b3236407a",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "messages": [
+      {
+        "body": "Unit 6 at 943 5th St has a bedroom ceiling fan light out."
+      },
+      {
+        "body": "Should we send Osalpa Electric, INC.?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Unit 6 at 943 5th St has a bedroom ceiling fan light out."
+      },
+      {
+        "body": "Should we send Osalpa Electric, INC.?"
+      }
+    ]
+  },
+  {
+    "id": "drf_037c8a9ef323062f",
+    "created_at": "2026-05-24T00:15:35.369Z",
+    "hold_until": null,
+    "trigger": "new_issue",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "issue_id": "822def58-a967-4cfb-96fd-b8ae062fc4ad",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "messages": [
+      {
+        "body": "URGENT: Unit 112 245 Main St at 245 Main St has a leaking refrigerator."
+      },
+      {
+        "body": "Should we send Cross Appliance Inc?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "URGENT: Unit 112 245 Main St at 245 Main St has a leaking refrigerator."
+      },
+      {
+        "body": "Should we send Cross Appliance Inc?"
+      }
+    ]
+  },
+  {
+    "id": "drf_a43ed4443d6badd4",
+    "created_at": "2026-05-24T00:15:43.921Z",
+    "hold_until": "2026-05-25T16:00:00.000Z",
+    "trigger": "new_issue",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "issue_id": "9f93143a-0e68-4d05-b718-db789fe6e20a",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "messages": [
+      {
+        "body": "Unit 2921 1/2 Van Buren Pl at 2919 Van Buren Pl has a loose bedroom door."
+      },
+      {
+        "body": "Should we send Abraham?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Unit 2921 1/2 Van Buren Pl at 2919 Van Buren Pl has a loose bedroom door."
+      },
+      {
+        "body": "Should we send Abraham?"
+      }
+    ]
+  },
+  {
+    "id": "drf_5daaffb4e3ed44d9",
+    "created_at": "2026-05-24T00:15:52.122Z",
+    "hold_until": null,
+    "trigger": "new_issue",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "issue_id": "75917c4c-da16-4743-bc82-60e29d97af42",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "messages": [
+      {
+        "body": "URGENT: Unit 3 at 1222 26th St has no gas service."
+      },
+      {
+        "body": "Should we send Safe Gas Services, Inc.?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "URGENT: Unit 3 at 1222 26th St has no gas service."
+      },
+      {
+        "body": "Should we send Safe Gas Services, Inc.?"
+      }
+    ]
   }
 ]
