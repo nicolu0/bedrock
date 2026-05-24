@@ -35,11 +35,13 @@ const NOW_ISO = () => new Date().toISOString();
 const MINUTES_AGO = (m) => new Date(Date.now() - m * 60 * 1000).toISOString();
 
 // Mock issue rows used across multiple chat scenarios.
+// Post-units-table-normalization: unit.name is the canonical short address
+// the agent uses VERBATIM for line 1. No more "Unit X at Property" construction.
 const ISSUE_FAUCET = {
 	id: 'iss-faucet-001',
 	workspace_id: TEST_WS,
 	property: { name: 'Hub Champaign' },
-	unit: { name: '701' },
+	unit: { name: 'Unit 701 Hub Champaign' },
 	tenant: { name: 'Anna' },
 	vendor: { name: 'Mario' },
 	name: 'kitchen faucet leaking',
@@ -50,7 +52,7 @@ const ISSUE_AC = {
 	id: 'iss-ac-002',
 	workspace_id: TEST_WS,
 	property: { name: 'Hub Champaign' },
-	unit: { name: '701' },
+	unit: { name: 'Unit 701 Hub Champaign' },
 	tenant: { name: 'Anna' },
 	vendor: { name: 'California Heat Air Conditioning' },
 	name: 'AC not blowing cold',
@@ -58,9 +60,14 @@ const ISSUE_AC = {
 };
 
 // Helper: build a sent-log bundle for the test chat referring to one issue.
+// Line 1 = unit.name verbatim (canonical address from the normalized units table).
 function sentBundle(issue, { ago_min = 5 } = {}) {
 	const sent_at = MINUTES_AGO(ago_min);
 	const bundle_id = `drf_${issue.id.replace(/[^a-z0-9]/g, '').slice(0, 16)}`;
+	const body =
+		`${issue.unit.name}\n` +
+		`Has a ${issue.name}.\n\n` +
+		`Should I send ${issue.vendor.name}?`;
 	return [
 		{
 			sent_at,
@@ -72,19 +79,7 @@ function sentBundle(issue, { ago_min = 5 } = {}) {
 			workspace_id: TEST_WS,
 			workspace_label: 'test',
 			chat_guid: TEST_CHAT,
-			body: `Unit ${issue.unit.name} at ${issue.property.name} has a ${issue.name}.`
-		},
-		{
-			sent_at,
-			message_guid: `msg-${issue.id}-2`,
-			bundle_id,
-			part_index: 1,
-			issue_id: issue.id,
-			channel: 'groupchat',
-			workspace_id: TEST_WS,
-			workspace_label: 'test',
-			chat_guid: TEST_CHAT,
-			body: `Should we send ${issue.vendor.name}?`
+			body
 		}
 	];
 }
@@ -93,7 +88,7 @@ export const scenarios = [
 	// ─── process_wo (PR7: enrich → read_memory → set_vendor → send_text) ─────
 
 	{
-		name: 'process_wo: standard issue with vendor candidate → full new-flow pipeline',
+		name: 'process_wo: standard issue with vendor candidate → one multi-line draft',
 		skill: 'process_wo',
 		ctx: {
 			issue: ISSUE_FAUCET,
@@ -104,13 +99,13 @@ export const scenarios = [
 		},
 		expected: {
 			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
-			drafts_count: 2,
-			drafts_include: ['Unit 701', 'Hub Champaign', 'Mario']
+			drafts_count: 1,
+			drafts_include: ['Unit 701', 'Hub Champaign', 'Mario', 'Should I send']
 		}
 	},
 
 	{
-		name: 'process_wo: no candidate vendor → enrich + read_memory + 1 message, no set_vendor',
+		name: 'process_wo: no candidate vendor → enrich + read_memory + 1 draft, no vendor question',
 		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, vendor: null, name: 'wifi down' },
@@ -123,32 +118,17 @@ export const scenarios = [
 			tool_calls_excludes: ['set_vendor'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign'],
+			drafts_excludes: ['Should I send', 'URGENT'],
 			judge: {
 				target: 'drafts',
 				criteria:
-					'The single draft must reference Unit 701, Hub Champaign, and the wifi issue in one short, natural English sentence. It must NOT use a colon, em dash, or semicolon. It must NOT be a headline-style fragment like "Unit 701 at Hub Champaign: wifi down." It must NOT contain the ungrammatical phrase "has wifi down". Acceptable phrasings: "Unit 701 at Hub Champaign has no wifi.", "Unit 701 at Hub Champaign\'s wifi is down.", "The wifi at Unit 701, Hub Champaign is down.", or any other natural full-prose rewording.'
+					'The draft is a short two-line bubble about Unit 701 / Hub Champaign and a wifi issue. The second sentence must read as natural English (full prose, not a headline fragment, no colons/em dashes/semicolons, no ungrammatical "has wifi down"). Acceptable second-sentence phrasings: "Has no wifi.", "The wifi is down.", "Wifi is out.", or any other natural rewording.'
 			}
 		}
 	},
 
 	{
-		name: 'process_wo: urgent issue prepends URGENT through new flow',
-		skill: 'process_wo',
-		ctx: {
-			issue: { ...ISSUE_FAUCET, urgent: true, name: 'gas leak' },
-			workspace_id: TEST_WS,
-			sendMode: 'draft',
-			workspace_label: 'test'
-		},
-		expected: {
-			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
-			drafts_count: 2,
-			drafts_include: ['URGENT', 'gas leak', 'Mario']
-		}
-	},
-
-	{
-		name: 'process_wo: missing unit → drops "Unit X at" prefix through new flow',
+		name: 'process_wo: missing unit → location line is just the property',
 		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, unit: null, name: 'roof leak in lobby' },
@@ -158,18 +138,14 @@ export const scenarios = [
 		},
 		expected: {
 			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
-			drafts_count: 2,
-			// First message should NOT start with "Unit"
-			judge: {
-				target: 'drafts',
-				criteria:
-					'The first draft message should reference "Hub Champaign" and the issue, but must NOT start with "Unit". The phrasing should be like "Hub Champaign has a roof leak..." or similar. The second message must be exactly: "Should we send Mario?"'
-			}
+			drafts_count: 1,
+			drafts_include: ['Hub Champaign', '\n\nShould I send Mario?'],
+			drafts_excludes: ['Unit ', 'URGENT']
 		}
 	},
 
 	{
-		name: 'process_wo: awkward "has X" title → natural grammar through new flow',
+		name: 'process_wo: awkward "has X" title → natural grammar on line 2',
 		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, name: 'dryer not working' },
@@ -179,17 +155,19 @@ export const scenarios = [
 		},
 		expected: {
 			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
-			drafts_count: 2,
+			drafts_count: 1,
+			drafts_include: ['Unit 701', 'Hub Champaign', '\n\nShould I send Mario?'],
+			drafts_excludes: ['has dryer not working', 'URGENT'],
 			judge: {
 				target: 'drafts',
 				criteria:
-					'The first draft must reference Unit 701, Hub Champaign, and the dryer issue in one short, natural English sentence. It must NOT contain "has dryer not working". It must NOT use a colon, em dash, or semicolon, and must NOT be a headline-style fragment like "Unit 701 at Hub Champaign: dryer not working." Acceptable phrasings: "Unit 701 at Hub Champaign has a broken dryer.", "Unit 701 at Hub Champaign\'s dryer isn\'t working.", "The dryer at Unit 701, Hub Champaign isn\'t working.", or any other natural full-prose rewording. The second draft must be exactly: "Should we send Mario?"'
+					'The sentence describing the dryer issue reads as natural English — must NOT use a colon/em dash/semicolon, must NOT be a headline fragment. Acceptable phrasings: "Has a broken dryer.", "The dryer isn\'t working.", "Dryer is out.", or similar.'
 			}
 		}
 	},
 
 	{
-		name: 'process_wo: long description gets compact summary through new flow',
+		name: 'process_wo: long description gets compact line 2',
 		skill: 'process_wo',
 		ctx: {
 			issue: {
@@ -203,11 +181,13 @@ export const scenarios = [
 		},
 		expected: {
 			tool_calls_set_includes: ['enrich_issue', 'read_memory', 'set_vendor', 'send_text'],
-			drafts_count: 2,
+			drafts_count: 1,
+			drafts_include: ['Unit 701', 'Hub Champaign', '\n\nShould I send Mario?', 'faucet'],
+			drafts_excludes: ['URGENT', 'towels', 'cabinet', 'several days'],
 			judge: {
 				target: 'drafts',
 				criteria:
-					'The first draft must mention the kitchen faucet leak at Unit 701 / Hub Champaign and stay under about 25 words total. It is OK if the summary is two short sentences or has a newline — but it must not be a multi-paragraph dump of all the details. The second draft must be exactly: "Should we send Mario?"'
+					'The issue is summarized in ONE short sentence (under ~20 words) — NOT a multi-paragraph dump. Mentioning "faucet" is enough; "kitchen faucet" is also fine but not required.'
 			}
 		}
 	},
@@ -390,7 +370,7 @@ export const scenarios = [
 					workspace_id: 'other-ws',
 					workspace_label: 'prod',
 					chat_guid: 'iMessage;+;800f91610cea448fb5085603ab3ea973',
-					body: 'Unit 1 at 829 Ocean Park has a leak. Should we send Yonic?'
+					body: 'Unit 1 at 829 Ocean Park\nHas a leak.\n\nShould I send Yonic?'
 				}
 			],
 			supabase: {}

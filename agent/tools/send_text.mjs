@@ -15,11 +15,11 @@
 export const sendText = {
 	name: 'send_text',
 	description:
-		'Send one customer-visible message. Each call becomes its own message bubble — call multiple times for multiple separate messages back to back. Never include newlines or multiple thoughts inside a single call; split into separate calls instead.',
+		'Send one customer-visible message. Each call becomes one bubble. Newlines INSIDE the content stay within that bubble — use them to format multi-line bubbles when the skill calls for it. To send several separate bubbles in a row, make multiple send_text calls.',
 	parameters: {
 		type: 'object',
 		properties: {
-			content: { type: 'string', description: 'The text body for this one message.' }
+			content: { type: 'string', description: 'The text body for this one bubble. May contain newlines for multi-line formatting.' }
 		},
 		required: ['content']
 	},
@@ -30,7 +30,7 @@ export const sendText = {
 		// Defensive: drop obvious placeholder leakage (F1 strict-template guard).
 		// Cheap to apply universally — placeholders are never valid output.
 		if (/\{[a-z_]+\}/i.test(text)) return { ok: true, skipped: 'unfilled placeholder' };
-		if (/Should we send\s*\??$/i.test(text)) return { ok: true, skipped: 'empty vendor slot' };
+		if (/Should I send\s*\??$/im.test(text)) return { ok: true, skipped: 'empty vendor slot' };
 
 		if (ctx.sendMode === 'draft') {
 			ctx.drafts = ctx.drafts ?? [];
@@ -48,14 +48,12 @@ export const sendText = {
 					`send_text refused: safety guard — cannot live-send to a known PM handle (${ctx.handle ?? 'unknown'}). All PM-handle paths must use sendMode='draft'.`
 				);
 			}
-			// Split on newlines defensively — the prompt forbids them but if the
-			// model slips, treat each segment as its own bubble.
-			const parts = text.split(/\n+/).map((s) => s.trim()).filter(Boolean);
-			for (const part of parts) {
-				if (ctx.outbox) ctx.outbox.push(part);
-				if (ctx.onEvent) await ctx.onEvent({ type: 'message', content: part });
-			}
-			return { ok: true, assistantContent: parts.join('\n') };
+			// One call = one bubble. Newlines stay inside. Skills that want
+			// multiple bubbles call send_text multiple times (e.g. demo's
+			// one-thought-per-bubble rule lives in its SKILL.md prompt).
+			if (ctx.outbox) ctx.outbox.push(text);
+			if (ctx.onEvent) await ctx.onEvent({ type: 'message', content: text });
+			return { ok: true, assistantContent: text };
 		}
 
 		throw new Error(`send_text: ctx.sendMode required ('live' | 'draft'), got ${JSON.stringify(ctx.sendMode)}`);

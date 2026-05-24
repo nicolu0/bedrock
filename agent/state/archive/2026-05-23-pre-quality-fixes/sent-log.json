@@ -1,0 +1,164 @@
+[
+  {
+    "sent_at": "2026-05-12T19:33:54.732Z",
+    "message_guid": null,
+    "bundle_id": "drf_998f4838a4a3e332",
+    "part_index": 0,
+    "issue_id": "66843a99-9e2f-4611-887a-df6878906254",
+    "channel": "groupchat",
+    "body": "Unit 2 at 50 Rose Ave has a clogged shower drain draining slowly."
+  },
+  {
+    "sent_at": "2026-05-12T19:33:54.734Z",
+    "message_guid": null,
+    "bundle_id": "drf_998f4838a4a3e332",
+    "part_index": 1,
+    "issue_id": "66843a99-9e2f-4611-887a-df6878906254",
+    "channel": "groupchat",
+    "body": "Should we send Kori?"
+  },
+  {
+    "sent_at": "2026-05-13T16:04:50.410Z",
+    "message_guid": null,
+    "bundle_id": "drf_3a7027abc8393cb5",
+    "part_index": 0,
+    "issue_id": "766f41a8-7eb6-48ef-9b67-9a2b51226474",
+    "channel": "groupchat",
+    "body": "Unit 1 at 829 Ocean Park Blvd. has a broken garbage disposal."
+  },
+  {
+    "sent_at": "2026-05-13T16:04:50.411Z",
+    "message_guid": null,
+    "bundle_id": "drf_3a7027abc8393cb5",
+    "part_index": 1,
+    "issue_id": "766f41a8-7eb6-48ef-9b67-9a2b51226474",
+    "channel": "groupchat",
+    "body": "Should we send Yonic?"
+  },
+  {
+    "sent_at": "2026-05-13T16:05:35.387Z",
+    "message_guid": null,
+    "bundle_id": "drf_5f5fedd3454a0314",
+    "part_index": 0,
+    "issue_id": "c2539005-5c9f-484d-9d72-aa863d2f43b1",
+    "channel": "groupchat",
+    "body": "Unit 3 at 1951 22nd St has a clogged bathtub drain that is draining slowly."
+  },
+  {
+    "sent_at": "2026-05-13T16:05:35.388Z",
+    "message_guid": null,
+    "bundle_id": "drf_5f5fedd3454a0314",
+    "part_index": 1,
+    "issue_id": "c2539005-5c9f-484d-9d72-aa863d2f43b1",
+    "channel": "groupchat",
+    "body": "Should we send Yonic for this too?"
+  },
+  {
+    "sent_at": "2026-05-14T00:39:31.360Z",
+    "message_guid": null,
+    "bundle_id": "drf_d4d162abd9fe6336",
+    "part_index": 0,
+    "issue_id": "53033638-ebb5-4be3-973d-e56cab90a6a8",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "body": "Unit 4 at 828 11th St has dryer not working."
+  },
+  {
+    "sent_at": "2026-05-14T00:39:31.361Z",
+    "message_guid": null,
+    "bundle_id": "drf_d4d162abd9fe6336",
+    "part_index": 1,
+    "issue_id": "53033638-ebb5-4be3-973d-e56cab90a6a8",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "body": "Should we send Cross Appliance Inc?"
+  },
+  {
+    "sent_at": "2026-05-14T00:58:05.378Z",
+    "message_guid": null,
+    "bundle_id": "drf_cdd44f806894450f",
+    "part_index": 0,
+    "issue_id": "9606c80a-7df2-4278-8873-1ddcffe7f69b",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "body": "Unit 16 at 6337 Primrose Ave is also reporting a rat infestation in the complex. \n\n\"As someone who is currently undergoing cancer treatment and who is severely immunocompromised, I need to know ASAP what efforts are being made to resolve this issue. With hantavirus in the news, I can’t risk being exposed. Some trees were cut, but there is still access for rats to climb from limbs to the roof and balconies.\""
+  },
+  {
+    "sent_at": "2026-05-14T00:58:05.381Z",
+    "message_guid": null,
+    "bundle_id": "drf_cdd44f806894450f",
+    "part_index": 1,
+    "issue_id": "9606c80a-7df2-4278-8873-1ddcffe7f69b",
+    "channel": "groupchat",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "body": "Should we send Primex since this tenant seems more sensitive?"
+  },
+  {
+    "sent_at": "2026-05-16T05:23:42.338Z",
+    "message_guid": null,
+    "bundle_id": "drf_44cbbe7992a9a64b",
+    "part_index": 0,
+    "issue_id": "f74a266b-7a1d-430c-9dd6-a98753406eda",
+    "channel": "groupchat",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "body": "Unit 701 at Hub Champaign has a kitchen sink leaking and water collecting on the floor."
+  },
+  {
+    "sent_at": "2026-05-16T05:23:42.338Z",
+    "message_guid": null,
+    "bundle_id": "drf_44cbbe7992a9a64b",
+    "part_index": 1,
+    "issue_id": "f74a266b-7a1d-430c-9dd6-a98753406eda",
+    "channel": "groupchat",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "body": "Should we send Yonic Herrera?"
+  },
+  {
+    "sent_at": "2026-05-16T06:39:16.928Z",
+    "message_guid": null,
+    "bundle_id": "drf_de1233e4a809bc81",
+    "part_index": 0,
+    "issue_id": "c75e1379-92f3-41a3-a41e-901bfd0b3305",
+    "channel": "groupchat",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "body": "Unit 5 at Hub Champaign's dryer is not heating."
+  },
+  {
+    "sent_at": "2026-05-16T06:39:16.932Z",
+    "message_guid": null,
+    "bundle_id": "drf_de1233e4a809bc81",
+    "part_index": 1,
+    "issue_id": "c75e1379-92f3-41a3-a41e-901bfd0b3305",
+    "channel": "groupchat",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "body": "Should we send Cross Appliance Inc?"
+  },
+  {
+    "sent_at": "2026-05-16T06:39:16.935Z",
+    "message_guid": null,
+    "bundle_id": "drf_de1233e4a809bc81",
+    "part_index": 2,
+    "issue_id": "c75e1379-92f3-41a3-a41e-901bfd0b3305",
+    "channel": "groupchat",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "body": "Should we send Cross Appliance Inc?"
+  }
+]

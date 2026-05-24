@@ -291,6 +291,19 @@ async function checkExpected(scenario, result, ctx) {
 		}
 	}
 
+	// drafts_excludes: substrings that must NOT appear in any draft body
+	if (exp.drafts_excludes) {
+		const stagedBody = joinBodies(stagedDrafts);
+		const allDrafts = JSON.parse(await fs.readFile(path.join(STATE_DIR, 'drafts.json'), 'utf8'));
+		const directBody = allDrafts.flatMap((d) => d.messages?.map((m) => m.body) ?? []).join('\n');
+		const combined = (stagedBody + '\n' + directBody).toLowerCase();
+		for (const needle of exp.drafts_excludes) {
+			if (combined.includes(needle.toLowerCase())) {
+				fails.push(`drafts_excludes substring ${JSON.stringify(needle)} unexpectedly present`);
+			}
+		}
+	}
+
 	if (exp.outbox_count !== undefined && (ctx.outbox?.length ?? 0) !== exp.outbox_count) {
 		fails.push(`outbox_count expected ${exp.outbox_count}, got ${ctx.outbox?.length ?? 0}`);
 	}
