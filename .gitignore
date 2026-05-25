@@ -36,3 +36,9 @@ agent/appfolio/*.png
 
 # AppFolio saved auth state — cookies, login-equivalent. NEVER commit.
 agent/appfolio/.state.json
+
+# Agent runtime state — live data the server rewrites constantly, not source.
+# (helpers.mjs is code and stays tracked; state/archive/ snapshots stay tracked.)
+agent/.imessage-state.json
+agent/state/*.json
+agent/state/*.jsonl

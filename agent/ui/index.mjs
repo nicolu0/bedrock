@@ -51,14 +51,20 @@ async function listChatSessions(workspace_id) {
 	});
 	if (!res.ok) throw new Error(`listChatSessions: ${res.status} ${await res.text()}`);
 	const rows = await res.json();
-	// Apply the is_agent overlay (raw is_from_me OR a configured agent_handle)
-	// to every embedded message so the UI doesn't need to know workspace config.
+	// Resolve display identity per message so the UI doesn't need workspace
+	// config: is_agent (raw is_from_me OR a configured agent_handle) and a
+	// human sender label (agent / the PM's label / else the raw handle).
+	const w = WORKSPACES[workspace_id];
+	const pmLabel = w?.pm_label ?? 'jose';
+	const pmSet = new Set((w?.pm_handles ?? []).map(normalizeHandle));
 	return rows.map((s) => ({
 		...s,
-		messages: (s.messages ?? []).map((m) => ({
-			...m,
-			is_agent: m.is_from_me || isAgentHandleForWorkspace(m.workspace_id, m.handle)
-		}))
+		messages: (s.messages ?? []).map((m) => {
+			const is_agent = m.is_from_me || isAgentHandleForWorkspace(m.workspace_id, m.handle);
+			const nh = normalizeHandle(m.handle);
+			const sender = is_agent ? 'agent' : nh && pmSet.has(nh) ? pmLabel : m.handle || 'unknown';
+			return { ...m, is_agent, sender };
+		})
 	}));
 }
 
@@ -208,6 +214,43 @@ async function listChatMessagesForSession(session_id) {
 		...m,
 		is_agent: m.is_from_me || isAgentHandleForWorkspace(m.workspace_id, m.handle)
 	}));
+}
+
+// All work orders for a workspace, newest first. issues_v2 has no status
+// column — the route derives status from the local draft/response logs.
+async function listIssuesForWorkspace(workspace_id) {
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select:
+			'id,workspace_id,created_at,appfolio_srn,name,description,urgent,property_id,unit_id,tenant_id,vendor_id',
+		workspace_id: `eq.${workspace_id}`,
+		order: 'created_at.desc'
+	});
+	const res = await fetch(`${url}/rest/v1/issues_v2?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listIssuesForWorkspace: ${res.status} ${await res.text()}`);
+	return res.json();
+}
+
+// Map chat.db ROWID -> session_id for a workspace, so the live thread (which
+// is read straight from chat.db) can render real sessionizer boundaries. Only
+// rows the sessionizer has ingested AND assigned to a session appear here.
+async function sessionIdByRowid(workspace_id) {
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'source_rowid,session_id',
+		workspace_id: `eq.${workspace_id}`,
+		session_id: 'not.is.null',
+		source_rowid: 'not.is.null'
+	});
+	const res = await fetch(`${url}/rest/v1/chat_messages?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`sessionIdByRowid: ${res.status} ${await res.text()}`);
+	const map = {};
+	for (const r of await res.json()) if (r.source_rowid != null) map[r.source_rowid] = r.session_id;
+	return map;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -518,6 +561,75 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 					.filter(Boolean);
 				if (ws) items = items.filter((t) => t.workspace_label === ws);
 				items = items.slice(-limit).reverse();
+
+				// Fold in the human outcome (the old History column). A turn's draft
+				// is reviewed later; the response-log row carries the disposition
+				// (send/copy/dismiss), edits/diffs, and notes. Join on issue_id —
+				// the only id both sides share (turns don't carry draft_id). Use the
+				// latest matching response so a re-drafted issue shows its newest
+				// action. pm_reply turns have no issue_id and so stay outcome-less.
+				const responses = await db.loadResponses();
+				const byIssue = new Map();
+				for (const r of responses) {
+					if (!r.issue_id) continue;
+					const prev = byIssue.get(r.issue_id);
+					if (!prev || new Date(r.timestamp) >= new Date(prev.timestamp)) byIssue.set(r.issue_id, r);
+				}
+				items = items.map((t) => {
+					if (!t.issue_id) return t;
+					const r = byIssue.get(t.issue_id);
+					if (!r) return t;
+					return {
+						...t,
+						outcome: {
+							action: r.action,
+							edited: !!r.edited,
+							forced_send: !!r.forced_send,
+							draft_id: r.draft_id ?? null,
+							timestamp: r.timestamp,
+							messages_original: r.messages_original ?? [],
+							messages_final: r.messages_final ?? [],
+							notes: r.notes ?? ''
+						}
+					};
+				});
+				return json(res, 200, items);
+			}
+
+			if (req.method === 'GET' && pathname === '/api/issues') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const [issues, drafts, responses] = await Promise.all([
+					listIssuesForWorkspace(workspace_id),
+					db.loadDrafts(),
+					db.loadResponses()
+				]);
+				// issues_v2 has no status column. Derive a lifecycle status from the
+				// local logs: latest response action wins (sent/copied/dismissed);
+				// else a pending draft means 'drafted'; else 'new'.
+				const respByIssue = new Map();
+				for (const r of responses) {
+					if (!r.issue_id) continue;
+					const prev = respByIssue.get(r.issue_id);
+					if (!prev || new Date(r.timestamp) >= new Date(prev.timestamp))
+						respByIssue.set(r.issue_id, r);
+				}
+				const drafted = new Set(drafts.map((d) => d.issue_id).filter(Boolean));
+				const items = issues.map((i) => {
+					let status = 'new';
+					const r = respByIssue.get(i.id);
+					if (r)
+						status =
+							r.action === 'send'
+								? 'sent'
+								: r.action === 'copy'
+									? 'copied'
+									: r.action === 'dismiss'
+										? 'dismissed'
+										: r.action;
+					else if (drafted.has(i.id)) status = 'drafted';
+					return { ...i, status };
+				});
 				return json(res, 200, items);
 			}
 
@@ -532,6 +644,15 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				if (!chat_guid) return json(res, 200, { messages: [], pm_handles: [], agent_handles: [], pm_label });
 				const pmSet = new Set((w.pm_handles ?? []).map(normalizeHandle));
 				const agentSet = new Set((w.agent_handles ?? []).map(normalizeHandle));
+				// Best-effort session_id overlay (chat.db ROWID -> session_id). A
+				// Supabase hiccup must not blank the thread, so default to empty.
+				const workspace_id = resolveWorkspaceId(wsLabel);
+				let sessionMap = {};
+				try {
+					if (workspace_id) sessionMap = await sessionIdByRowid(workspace_id);
+				} catch {
+					sessionMap = {};
+				}
 				try {
 					const rows = getChatDb()
 						.prepare(
@@ -566,7 +687,8 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 								handle: handle || null,
 								is_from_me: isFromMe,
 								text,
-								side
+								side,
+								session_id: sessionMap[r.rowid] ?? null
 							};
 						})
 						.filter(Boolean)
