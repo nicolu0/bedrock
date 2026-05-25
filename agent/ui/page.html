@@ -963,12 +963,59 @@
 			}
 
 			/* ── Sessions tab ───────────────────────────────────────────── */
+
+			/* Activity view: interleaved agent steps + sticky detail pane */
+			/* Stream keeps a fixed width: centered alone, shifts LEFT when the detail
+			   opens (it does NOT shrink). Detail fills the space to its right. */
+			.sx-layout { display: flex; gap: 16px; align-items: flex-start; justify-content: center; }
+			.sx-layout #sessions-list { flex: 0 0 900px; min-width: 0; }
+			.sx-detail {
+				flex: 1 1 0; min-width: 0; display: none;
+				background: #1c1917; border: 1px solid #292524; border-radius: 12px;
+				padding: 14px 16px; max-height: 86vh; overflow: auto;
+			}
+			.sx-layout.has-detail { justify-content: flex-start; }
+			.sx-layout.has-detail .sx-detail { display: block; }
+			.sx-steps { display: flex; flex-direction: column; align-items: flex-end; margin: 6px 0 4px; }
+			.sx-status { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; margin: 4px 0 12px; }
+			.sx-st { font-size: 10.5px; }
+			.sx-st.agent { color: #a8a29e; }
+			.sx-st.you { color: #6bbf8a; }
+			.sx-st.learn { color: #a8a4d8; }
+			.sx-trow {
+				font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: #a8a29e;
+				cursor: pointer; display: flex; align-items: center; justify-content: flex-end; gap: 7px;
+				padding: 2px 6px; border-radius: 6px; margin: 1px 0; border: 1px solid transparent;
+			}
+			.sx-trow:hover { background: #1c1917; color: #e7e5e4; }
+			.sx-trow.active { background: #292524; border-color: #3a3531; color: #e7e5e4; }
+			.sx-trow.mem { color: #a8a4d8; }
+			.sx-trow.trigger { color: #9db8ff; }
+			.sx-trow.trigger.active { color: #e7e5e4; }
+			.sx-urg { background: #3a1a1f; color: #f08089; border-radius: 4px; padding: 0 5px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; }
+			.sxd-urg { background: #2a1518; border: 1px solid #5a2a30; color: #f08089; border-radius: 6px; padding: 8px 11px; font-size: 12px; }
+			.sxd-text { font-size: 12.5px; color: #e7e5e4; }
+			.sx-dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; }
+			.sx-dot.dt { background: #9db8ff; box-shadow: 0 0 0 2px rgba(157,184,255,0.25); }
+			.sx-dot.dr { background: #9db8ff; } .sx-dot.dm { background: #a8a4d8; }
+			.sx-dot.dv { background: #d4a855; } .sx-dot.dd { background: #6bbf8a; } .sx-dot.ds { background: #a8a29e; }
+			.sx-chev { font-size: 8px; opacity: 0.4; }
+			.sxd-head { display: flex; align-items: center; gap: 8px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: #e7e5e4; border-bottom: 1px solid #292524; padding-bottom: 10px; margin-bottom: 10px; }
+			.sxd-meta { font-size: 11px; color: #a8a29e; margin-bottom: 10px; }
+			.sxd-sec { margin: 10px 0; }
+			.sxd-sec .lbl { font-size: 10px; color: #a8a29e; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+			.sxd-sec pre { margin: 0; padding: 9px 11px; background: #0f0d0b; border: 1px solid #292524; border-radius: 6px; font-size: 11px; color: #cfcbc6; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
+			.sxd-link { display: inline-block; margin-top: 8px; color: #a8a4d8; text-decoration: none; border-bottom: 1px dashed rgba(168,164,216,0.45); font-size: 12px; }
+
 			.sessions-view {
 				padding: 14px 20px 60px;
 				overflow-y: auto;
 				max-width: 980px;
 				margin: 0 auto;
 			}
+			/* When a tool-call detail is open the stream shifts left and the detail
+			   fills the space to its right — so the view needs the full width. */
+			.sessions-view:has(.sx-layout.has-detail) { max-width: 1480px; }
 			.sessions-empty {
 				color: #a8a29e;
 				text-align: center;
@@ -1819,7 +1866,10 @@
 		</section>
 
 		<section id="view-sessions" class="view sessions-view">
-			<div id="sessions-list"></div>
+			<div class="sx-layout">
+				<div id="sessions-list"></div>
+				<div id="session-detail" class="sx-detail"></div>
+			</div>
 		</section>
 
 		<section id="view-turns" class="view turns-view">
@@ -2688,6 +2738,12 @@
 			const sessionsList = document.getElementById('sessions-list');
 			let sessionsCache = []; // { id -> session row }
 			let sessionsLoading = false;
+			let turnByReply = {};    // normalized agent reply body -> turn (Activity interleave)
+			let turnByTrigger = {};  // normalized inbound trigger text -> turn (no-reply turns)
+			let turnById = {};
+			let callById = {};       // "turnId:idx" -> { call, event } for the detail pane
+			let usedTurns = new Set();
+			const sessionDetailPane = () => document.getElementById('session-detail');
 
 			function sessionsWorkspace() {
 				return workspaceFilter;
@@ -2701,6 +2757,26 @@
 					const res = await fetch('/api/sessions?workspace=' + sessionsWorkspace());
 					if (!res.ok) throw new Error(await res.text());
 					sessionsCache = await res.json();
+					// Activity view: pull turns, group by session so the agent's steps
+					// can be interleaved into each session's transcript. Best-effort.
+					// Match turns to the message they produced (send_text content) so steps
+					// attach correctly even when the turn carries no/other session_id —
+					// e.g. new_issue turns run before the chat session exists.
+					turnByReply = {}; turnByTrigger = {}; turnById = {};
+					try {
+						const tr = await fetch('/api/turns');
+						if (tr.ok) {
+							const norm = (s) => (s || '').trim();
+							for (const t of await tr.json()) {
+								if (t.turn_id) turnById[t.turn_id] = t;
+								const sends = (t.steps || [])
+									.flatMap((s) => (s.tool_calls || []).filter((c) => c.name === 'send_text'))
+									.map((c) => c.args && c.args.content).filter(Boolean);
+								if (sends.length) { for (const c of sends) turnByReply[norm(c)] = t; }
+								else { const tt = t.trigger && t.trigger.payload && t.trigger.payload.text; if (tt) turnByTrigger[norm(tt)] = t; }
+							}
+						}
+					} catch (e) { /* turns optional */ }
 					renderSessions();
 				} catch (err) {
 					sessionsList.innerHTML =
@@ -2752,6 +2828,7 @@
 					return;
 				}
 				const total = sessionsCache.length;
+				callById = {}; usedTurns = new Set(); // rebuilt as we render each session's steps
 				const html = sessionsCache
 					.map((s, i) => {
 						// Sessions arrive newest-first; number chronologically so
@@ -2767,7 +2844,7 @@
 						const extracted = s.observations_extracted_at
 							? '<span class="extracted">obs ✓</span>'
 							: '<span class="extracted pending">obs pending</span>';
-						const transcript = renderTranscript(s.messages ?? []);
+						const transcript = renderActivity(s.messages ?? []);
 						return `
 							<div class="session-card" data-id="${s.id}">
 								<div class="head">
@@ -2821,6 +2898,147 @@
 				}
 				return html;
 			}
+
+			// Activity view: interleave the session's messages with the agent's
+			// turns (matched by session_id), steps before each agent reply. Each
+			// step row opens its full args/result in the sticky detail pane.
+			function sxDot(name) {
+				if (name === 'read_memory' || name === 'read_profile') return 'dr';
+				if (name === 'write_memory') return 'dm';
+				if (name === 'set_vendor') return 'dv';
+				if (name === 'draft_tenant' || name === 'draft_vendor') return 'dd';
+				return 'ds';
+			}
+			// Steps render ABOVE the message; status renders BELOW it (matching the mock).
+			function turnSteps(t) {
+				const flat = [];
+				for (const s of (t.steps || [])) for (const c of (s.tool_calls || [])) flat.push(c);
+				// send_text is the agent bubble itself; use_skill is mechanics — skip both.
+				const shown = flat.filter((c) => c.name && c.name !== 'send_text' && c.name !== 'use_skill');
+				let rows = '';
+				// Trigger row: what went INTO the agent (event + urgency; the detail
+				// pane carries the conversation history and the full prompt it saw).
+				const trigCid = t.turn_id + ':trigger';
+				callById[trigCid] = { trigger: t, event: t.event };
+				const urgent = t.trigger && t.trigger.payload && t.trigger.payload.issue && t.trigger.payload.issue.urgent;
+				rows +=
+					'<div class="sx-trow trigger" data-cid="' + escapeHtml(trigCid) + '">' +
+						'<span class="sx-dot dt"></span>' + escapeHtml(t.event || 'trigger') +
+						(urgent ? ' <span class="sx-urg">URGENT</span>' : '') +
+						'<span class="sx-chev">▶</span>' +
+					'</div>';
+				for (const c of shown) {
+					const cid = t.turn_id + ':' + flat.indexOf(c);
+					callById[cid] = { call: c, event: t.event };
+					const mem = c.name === 'write_memory' ? ' mem' : '';
+					rows +=
+						'<div class="sx-trow' + mem + '" data-cid="' + escapeHtml(cid) + '">' +
+							'<span class="sx-dot ' + sxDot(c.name) + '"></span>' + escapeHtml(c.name) +
+							'<span class="sx-chev">▶</span>' +
+						'</div>';
+				}
+				return '<div class="sx-steps">' + rows + '</div>';
+			}
+			function turnStatus(kind) {
+				if (kind === 'learn') {
+					return '<div class="sx-status"><div class="sx-st agent">no reply drafted</div>' +
+						'<div class="sx-st learn">learned</div></div>';
+				}
+				return '<div class="sx-status"><div class="sx-st agent">drafted by agent</div>' +
+					'<div class="sx-st you">sent by you</div></div>';
+			}
+			function renderActivity(msgs) {
+				const list = (msgs || []).filter((m) => m.body);
+				const norm = (s) => (s || '').trim();
+				let html = '';
+				let lastSender = null;
+				const bubble = (m) => {
+					const isAgent = m.is_agent ?? m.is_from_me;
+					const side = isAgent ? 'right' : 'left';
+					const sender = m.sender || (isAgent ? 'agent' : m.handle || 'unknown');
+					const senderChanged = sender !== lastSender;
+					const showSender = senderChanged && side === 'left';
+					const avatarHtml = side === 'left'
+						? (senderChanged ? chatAvatar(side, sender) : '<div class="avatar placeholder"></div>')
+						: '';
+					lastSender = sender;
+					return '<div class="row ' + side + '">' + avatarHtml + '<div class="stack">' +
+						(showSender ? '<div class="who">' + escapeHtml(sender) + '</div>' : '') +
+						'<div class="bubble">' + escapeHtml(m.body) + '</div></div></div>';
+				};
+				for (const m of list) {
+					const isAgent = m.is_agent ?? m.is_from_me;
+					if (isAgent) {
+						// steps that produced this reply render ABOVE it; status BELOW.
+						const reply = turnByReply[norm(m.body)];
+						if (reply && !usedTurns.has(reply)) {
+							usedTurns.add(reply);
+							html += turnSteps(reply);
+							html += bubble(m);
+							html += turnStatus('reply');
+							continue;
+						}
+						html += bubble(m);
+						continue;
+					}
+					html += bubble(m);
+					// a turn triggered by this inbound message that produced no reply (learn-only)
+					const trig = turnByTrigger[norm(m.body)];
+					if (trig && !usedTurns.has(trig)) { usedTurns.add(trig); html += turnSteps(trig); html += turnStatus('learn'); lastSender = 'agent'; }
+				}
+				return html;
+			}
+			// Detail-pane content for a trigger row: the event, urgency, the prior
+			// turns the model was given, and the exact prompt it saw. Mirrors the
+			// Turns tab's trigger block; turnTriggerSummary() is shared.
+			function renderTriggerDetailHtml(t) {
+				const trg = t.trigger || {};
+				const issue = trg.payload && trg.payload.issue;
+				const urgencyReason = issue && issue.urgency_reason;
+				const hist = Array.isArray(trg.history) ? trg.history : [];
+				let h =
+					'<div class="sxd-head"><span class="sx-dot dt"></span>' + escapeHtml(t.event || 'trigger') + '</div>' +
+					'<div class="sxd-meta">trigger' + (t.skill ? ' · ' + escapeHtml(t.skill) : '') + '</div>' +
+					'<div class="sxd-sec"><div class="lbl">summary</div><div class="sxd-text">' + escapeHtml(turnTriggerSummary(t)) + '</div></div>';
+				if (urgencyReason)
+					h += '<div class="sxd-sec"><div class="lbl">' + (issue.urgent ? 'urgent' : 'not urgent') + '</div><div class="sxd-urg">' + escapeHtml(urgencyReason) + '</div></div>';
+				if (hist.length)
+					h += '<div class="sxd-sec"><div class="lbl">conversation history (' + hist.length + ' prior turns)</div><pre>' +
+						escapeHtml(hist.map((m) => (m.role === 'assistant' ? 'agent' : 'pm') + ': ' + m.content).join('\n')) + '</pre></div>';
+				if (trg.user_content)
+					h += '<div class="sxd-sec"><div class="lbl">prompt the model saw</div><pre>' + escapeHtml(trg.user_content) + '</pre></div>';
+				return h;
+			}
+			function renderSessionDetail(cid) {
+				const e = callById[cid];
+				const pane = sessionDetailPane();
+				if (!e || !pane) return;
+				if (e.trigger) { pane.innerHTML = renderTriggerDetailHtml(e.trigger); return; }
+				const c = e.call;
+				const obs = c.name === 'write_memory' && c.result && c.result.observation_id;
+				pane.innerHTML =
+					'<div class="sxd-head"><span class="sx-dot ' + sxDot(c.name) + '"></span>' + escapeHtml(c.name) + '</div>' +
+					'<div class="sxd-meta">' + escapeHtml(e.event || '') + (c.ok === false ? ' · error' : '') + '</div>' +
+					'<div class="sxd-sec"><div class="lbl">args in</div><pre>' + escapeHtml(JSON.stringify(c.args ?? {}, null, 2)) + '</pre></div>' +
+					'<div class="sxd-sec"><div class="lbl">result out</div><pre>' + escapeHtml(JSON.stringify(c.result ?? {}, null, 2)) + '</pre></div>' +
+					(obs ? '<a class="sxd-link" href="#" data-obs="' + escapeHtml(c.result.observation_id) + '">↗ open in memory graph</a>' : '');
+			}
+			sessionsList.addEventListener('click', (e) => {
+				const row = e.target.closest('.sx-trow');
+				if (!row) return;
+				const layout = document.querySelector('.sx-layout');
+				const wasActive = row.classList.contains('active');
+				sessionsList.querySelectorAll('.sx-trow.active').forEach((x) => x.classList.remove('active'));
+				if (wasActive) {
+					if (layout) layout.classList.remove('has-detail');
+					const p = sessionDetailPane();
+					if (p) p.innerHTML = '';
+					return;
+				}
+				row.classList.add('active');
+				if (layout) layout.classList.add('has-detail');
+				renderSessionDetail(row.dataset.cid);
+			});
 
 			sessionsList.addEventListener('click', async (e) => {
 				const delBtn = e.target.closest('button[data-action="delete"]');
@@ -3336,6 +3554,42 @@
 					}
 				}, 100);
 			}
+
+			// "open in memory graph" from a session tool-call detail (write_memory).
+			// Switch to the memory tab + graph mode, then once the graph has loaded
+			// select + highlight the observation node and open its detail panel.
+			function focusObservation(obsId) {
+				if (!obsId) return;
+				memoryView = 'graph';
+				localStorage.setItem(MEMORY_VIEW_KEY, memoryView);
+				activeTab = 'memory';
+				localStorage.setItem(TAB_KEY, activeTab);
+				applyTab(); // kicks loadMemoryGraph() (async)
+				applyMemoryView(); // force graph (not list) mode
+				let tries = 0;
+				const iv = setInterval(() => {
+					const obs = (memoryState.observations || []).find((o) => o.id === obsId);
+					// Wait for both the data AND the rendered nodes — highlight reads
+					// the d3-bound DOM, which only exists after renderGraph().
+					if (obs && svgEl.querySelector('.node')) {
+						clearInterval(iv);
+						selectedNodeId = obsId;
+						highlightNeighborhood(obsId);
+						showDetail(obs);
+					} else if (++tries > 30) {
+						clearInterval(iv);
+					}
+				}, 100);
+			}
+
+			// The link lives inside the (persistent) session-detail pane; its
+			// innerHTML is rebuilt per click, so delegate off the stable container.
+			document.getElementById('session-detail').addEventListener('click', (e) => {
+				const link = e.target.closest('.sxd-link[data-obs]');
+				if (!link) return;
+				e.preventDefault();
+				focusObservation(link.dataset.obs);
+			});
 
 			// Session links in the thread's boundary headers.
 			chatThreadEl.addEventListener('click', (e) => {
