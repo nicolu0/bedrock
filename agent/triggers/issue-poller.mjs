@@ -30,6 +30,12 @@ import { nextSendTime } from '../core/work-hours.mjs';
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_PROCESSED_IDS = 1000;
+// On a fresh/cleared cursor, seed the baseline this far in the past instead of
+// "now". A WO that lands between shutdown and the next start is older than
+// "now", so a now-baseline drops it forever (created_at < lastCheckedAt). Kept
+// short so clearing the cursor still avoids replaying old backlog; the
+// processedIds dedup absorbs anything already drafted inside the window.
+const STARTUP_LOOKBACK_MS = 15 * 60 * 1000; // 15 min
 const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db');
 
 // chat.db handle (readonly) for resolving recipient handles from a chat GUID.
@@ -229,9 +235,11 @@ async function pollOnce() {
 			}
 
 			// Off-hours arrivals get held to the next work-hours open (the
-			// "Send later" path). Inside work hours, or agent-judged
-				// urgent (see enrich triage), no hold.
-			const hold = issue.urgent ? null : nextSendTime();
+			// "Send later" path) — including urgent ones, so the PM still sees
+			// the "Send at 7 AM" option. Urgency no longer suppresses the hold;
+			// the human taps "Send" to override and fire now. Inside work hours
+			// nextSendTime() returns null, so there's no hold either way.
+			const hold = nextSendTime();
 			const draft = await db.createDraft({
 				trigger: 'new_issue',
 				channel: 'groupchat',
@@ -260,7 +268,7 @@ async function pollOnce() {
 export async function startIssuePoller() {
 	const cursor = await db.loadCursor('issues');
 	if (!cursor.lastCheckedAt) {
-		cursor.lastCheckedAt = new Date().toISOString();
+		cursor.lastCheckedAt = new Date(Date.now() - STARTUP_LOOKBACK_MS).toISOString();
 		cursor.processedIds = {};
 		await db.saveCursor('issues', cursor);
 	}
