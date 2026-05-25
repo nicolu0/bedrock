@@ -1805,76 +1805,220 @@
 			.af-runner .af-bar { display: flex; gap: 8px; margin-bottom: 12px; }
 			.af-runner .af-status { font-size: 12px; color: #a8a29e; }
 			.af-runner .af-status.err { color: #f08089; }
+
+			/* ============================================================ */
+			/* IDE layout (Issues | Chat | Drawer) — overrides the tab shell */
+			/* ============================================================ */
+			#zoomwrap { display: flex; flex-direction: column; transform: scale(1.28); transform-origin: top left; width: calc(100% / 1.28); height: calc(100vh / 1.28); }
+			.ide { flex: 1 1 auto; min-height: 0; display: flex; }
+			.pane-issues { flex: 0 0 440px; width: 440px; border-right: 1px solid #292524; display: flex; flex-direction: column; min-height: 0; background: #0c0a09; }
+			.pane-chat { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: #0c0a09; }
+			.pane-right { flex: 0 0 520px; width: 520px; border-left: 1px solid #292524; display: flex; flex-direction: column; min-height: 0; background: #0c0a09; }
+
+			.pane-head { flex: 0 0 auto; display: flex; align-items: center; gap: 9px; height: 40px; padding: 0 14px; border-bottom: 1px solid #292524; }
+			.pane-head .htitle { display: flex; align-items: center; gap: 8px; line-height: 1; }
+			.pane-head .htitle .ttl { font-size: 13px; font-weight: 600; color: #f5f5f4; line-height: 1; }
+			.pane-head .htitle .ct { font-size: 11px; color: #78716c; font-family: ui-monospace, Menlo, monospace; line-height: 1; }
+			.pane-head .back { display: flex; align-items: center; gap: 5px; background: transparent; border: 0; color: #a8a29e; cursor: pointer; font: inherit; font-size: 12px; padding: 4px 7px; border-radius: 6px; }
+			.pane-head .back:hover { background: #1c1917; color: #fafaf9; }
+
+			.rtabs { display: flex; gap: 3px; }
+			.rtabs[hidden], .rcrumb[hidden] { display: none; }
+			.rtab { background: transparent; border: 0; color: #a8a29e; padding: 5px 11px; border-radius: 6px; font: inherit; font-size: 12.5px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+			.rtab:hover { background: #1c1917; color: #fafaf9; }
+			.rtab.on { background: #292524; color: #fafaf9; }
+			.rcrumb { display: flex; align-items: center; gap: 8px; }
+			.rcrumb .ttl { font-size: 13px; font-weight: 600; color: #f5f5f4; }
+
+			/* left: issues list fills the pane (neutralize the old centered view) */
+			.ide-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+			.ide .issues-view { max-width: none; margin: 0; padding: 10px 12px 50px; overflow: visible; height: auto; }
+			.ide .issue-row { grid-template-columns: 64px 1fr; cursor: pointer; }
+			.ide .issue-row .imeta { display: none; }
+			.ide .issue-row.sel { border-color: #3a4a63; background: #161a22; }
+
+			/* center: KPI strip + thread + bottom bar */
+			.kpi-wrap { flex: 0 0 auto; padding: 12px 16px 0; }
+			.kpi-wrap .turns-kpi { margin-bottom: 0; }
+			.chat-scroll { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+			.ide-chat { height: auto; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+			.ide-chat .chat-thread { height: auto; flex: 1 1 auto; min-height: 0; overflow-y: auto; max-width: 720px; width: 100%; margin: 0 auto; padding: 18px 18px 24px; }
+			/* AppFolio runner takes over the center pane — let runner-mode win over the thread overrides */
+			.ide-chat .chat-thread.runner-mode { max-width: none; margin: 0; padding: 0; overflow: hidden; }
+			.chat-bottom { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-top: 1px solid #292524; }
+			.chat-bottom .ws-toggle { margin-left: 0; }
+			.chat-bottom .mem-btn { display: flex; align-items: center; gap: 7px; background: #1c1917; border: 1px solid #292524; color: #a8a29e; border-radius: 7px; padding: 5px 11px; font: inherit; font-size: 12px; cursor: pointer; }
+			.chat-bottom .mem-btn:hover { background: #292524; color: #fafaf9; }
+			.chat-bottom .clear-test-btn { margin-left: auto; }
+
+			/* right drawer: drafts / turns / session swap */
+			.right-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+			.ide-rail { flex: none; border-right: 0; background: transparent; height: auto; padding: 14px 14px 60px; }
+			.ide .turns-view, .ide .sessions-view { max-width: none; margin: 0; padding: 10px 12px 50px; overflow: visible; height: auto; }
+			.right-body > [hidden] { display: none; }
+
+			/* memory graph: full-screen overlay (not a tab) */
+			.memback { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 320; display: none; }
+			.memback.show { display: block; }
+			.memov { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 330; background: #0c0a09; display: none; flex-direction: column; overflow: hidden; }
+			.memov.show { display: flex; }
+			.memov .mhd { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #292524; }
+			.memov .mhd .t { font-size: 14px; font-weight: 650; color: #f5f5f4; }
+			.memov .mhd .memory-search { display: inline-block; margin-left: 4px; }
+			.memov .mclose { margin-left: auto; background: transparent; border: 0; color: #a8a29e; font-size: 22px; cursor: pointer; padding: 2px 8px; line-height: 1; }
+			.memov .mclose:hover { color: #fafaf9; }
+			.memov .mbody { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+			.memov #memory-graph-pane { position: absolute; inset: 0; }
+			.memov #memory-list-pane { position: absolute; inset: 0; }
+
+			/* Turns → timeline entries (drawer) */
+			.stc { font-size: 10.5px; font-weight: 600; border-radius: 5px; padding: 1px 7px; border: 1px solid transparent; white-space: nowrap; }
+			.stc.good { color: #74c99a; background: rgba(116,201,154,.12); border-color: rgba(116,201,154,.3); }
+			.stc.none { color: #a8a29e; background: rgba(138,139,144,.12); border-color: rgba(138,139,144,.28); }
+			.stc.fail { color: #f08089; background: rgba(240,128,137,.12); border-color: rgba(240,128,137,.3); }
+			.turns-view .tl-entry { position: relative; padding: 4px 8px 22px 30px; cursor: pointer; }
+			/* continuous vertical spine running through the dots (no horizontal separators) */
+			.turns-view .tl-entry::before { content: ''; position: absolute; left: 7px; top: 4px; bottom: -10px; width: 1px; background: #33302d; }
+			.turns-view .tl-item:last-child .tl-entry::before { display: none; }
+			.turns-view .tl-node { position: absolute; left: 1px; top: 4px; width: 13px; height: 13px; border-radius: 50%; background: #0c0a09; border: 2px solid #78716c; }
+			.turns-view .tl-node.ev-new { border-color: #9db8ff; }
+			.turns-view .tl-node.ev-user { border-color: #c7a3ff; }
+			.turns-view .tl-node.ev-anon { border-color: #d9a366; }
+			.turns-view .tl-item.failure .tl-node { border-color: #f08089; }
+			.turns-view .tl-hd { display: flex; align-items: center; gap: 8px; }
+			.turns-view .tl-time { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #78716c; }
+			.turns-view .tl-ev { font-size: 12.5px; }
+			.turns-view .tl-ev.new { color: #9db8ff; }
+			.turns-view .tl-ev.user { color: #c7a3ff; }
+			.turns-view .tl-ev.anon { color: #d9a366; }
+			.turns-view .tl-hd .stc { margin-left: auto; }
+			.turns-view .tl-ref { font-size: 13px; color: #f5f5f4; margin: 6px 0 0; cursor: pointer; }
+			.turns-view .tl-ref:hover { color: #9db8ff; }
+			.turns-view .tl-ref .sub { color: #78716c; font-weight: 400; }
+			.turns-view .tl-prev { font-size: 12px; color: #a8a29e; font-style: italic; border-left: 2px solid #33302d; padding: 1px 0 1px 9px; margin: 6px 0 0; cursor: pointer; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+			.turns-view .tl-prev:hover { color: #d6d3d1; border-left-color: #1d6ee2; }
+			.turns-view .tl-steps { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 0; }
+			.turns-view .tl-steps .step { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: #a8a29e; display: flex; align-items: center; gap: 8px; }
+			.turns-view .tl-steps .step::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #44403c; flex: 0 0 auto; }
+			.turns-view .tl-steps .step.err { color: #f08089; }
+			.turns-view .tl-steps .step.err::before { background: #f08089; }
+			.turns-view .tl-steps .step.mem { color: #c7a3ff; }
+			.turns-view .tl-steps .step.mem::before { background: #c7a3ff; }
+			.turns-view .tl-meta { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: #78716c; margin: 8px 0 0; }
+			.turns-view .turn-detail { margin: 0 8px 10px 26px; }
+			.chat-thread .day-sep.tl-flash { border-radius: 8px; animation: tlFlash 1.7s ease-out; }
+			@keyframes tlFlash { 0% { background: rgba(110,168,254,.2); box-shadow: 0 0 0 7px rgba(110,168,254,.16); } 100% { background: transparent; box-shadow: 0 0 0 0 transparent; } }
+			.turns-view .tl-hd, .turns-view .tl-sum { cursor: pointer; }
+			.turns-view .tl-sum { font-size: 13.5px; color: #f5f5f4; margin: 6px 0 0; }
+			.turns-view .tl-ref { font-size: 12.5px; color: #9db8ff; margin: 5px 0 0; cursor: pointer; display: block; }
+			.turns-view .tl-ref:hover { text-decoration: underline; }
+			.turns-view .tl-ref .sub { color: #78716c; }
+			.turns-view .tl-steps .step { cursor: pointer; }
+			.turns-view .tl-steps .step:hover { color: #e7e5e4; }
+			.turns-view .tl-steps .step.muted { color: #78716c; cursor: default; }
+			/* turns drill-in modal */
+			.turn-modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 340; display: none; }
+			.turn-modal-back.show { display: block; }
+			.turn-modal { position: fixed; top: 6vh; left: 50%; transform: translateX(-50%); width: min(680px, 92vw); max-height: 86vh; z-index: 350; background: #0c0a09; border: 1px solid #44403c; border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.55); display: none; flex-direction: column; overflow: hidden; }
+			.turn-modal.show { display: flex; }
+			.turn-modal .tm-close { position: absolute; top: 9px; right: 12px; background: transparent; border: 0; color: #a8a29e; font-size: 22px; cursor: pointer; line-height: 1; padding: 2px 8px; z-index: 2; }
+			.turn-modal .tm-close:hover { color: #fafaf9; }
+			.turn-modal .tm-body { overflow-y: auto; padding: 16px 18px 18px; }
+			.turn-modal .tm-body .sxd-head { margin-top: 0; padding-right: 26px; }
+			.turn-modal .tm-body .sxd-sec:last-child { margin-bottom: 0; }
+			/* single session in the drawer (session → link): one column, no side pane */
+			.ide .sessions-view { max-width: none; margin: 0; padding: 14px 14px 50px; overflow: visible; }
+			.ide .sessions-view .sx-layout { display: block; }
+			.ide .sessions-view #sessions-list { flex: none; width: 100%; }
+			.ide .sessions-view #session-detail { display: none; }
+			.ide .sessions-view .session-card { border: 0; background: transparent; padding: 0; margin: 0; }
 		</style>
 	</head>
 	<body>
-		<header>
-			<nav class="tab-nav" id="tab-nav">
-				<button data-tab="issues" class="active">Issues</button>
-				<button data-tab="chat">Chat</button>
-				<button data-tab="memory">Memory</button>
-				<button data-tab="sessions">Sessions</button>
-				<button data-tab="turns">Turns</button>
-			</nav>
-			<div class="ws-toggle" id="ws-toggle">
-				<button data-ws="prod">Prod</button>
-				<button data-ws="test">Test</button>
-			</div>
-			<input id="memory-search" class="memory-search" type="search" placeholder="search memory…" />
-			<button class="clear-test-btn" id="clear-test-btn" title="Wipe test workspace drafts, logs, and Supabase issues">Clear Test</button>
-		</header>
-		<section id="view-issues" class="view issues-view active">
-			<div id="issues-list"></div>
-		</section>
-
-		<section id="view-memory" class="view memory-view">
-			<div id="memory-graph-pane">
-				<svg id="memory-graph"></svg>
-				<aside id="memory-detail" class="memory-detail" hidden>
-					<button class="memory-detail-close" id="memory-detail-close" aria-label="close">×</button>
-					<div id="memory-detail-body"></div>
-				</aside>
-			</div>
-			<div id="memory-list-pane" class="three-col" hidden>
-				<div class="list-col">
-					<div class="list-col-header"><h3>Observations</h3><span class="count" id="memory-obs-count"></span></div>
-					<div class="list-col-body" id="memory-obs-list"></div>
+		<div id="zoomwrap">
+			<div class="ide">
+				<!-- LEFT: issues -->
+				<div class="pane-issues">
+					<div class="pane-head"><div class="htitle"><span class="ttl">Issues</span><span class="ct" id="issues-count"></span></div></div>
+					<div class="ide-scroll">
+						<section id="view-issues" class="issues-view"><div id="issues-list"></div></section>
+					</div>
 				</div>
-				<div class="list-col">
-					<div class="list-col-header"><h3>Beliefs</h3><span class="count" id="memory-list-count"></span></div>
-					<div class="list-col-body" id="memory-list"></div>
+				<!-- CENTER: KPI + chat thread + bottom bar -->
+				<div class="pane-chat">
+					<div class="kpi-wrap" id="kpi-strip"></div>
+					<div class="chat-scroll">
+						<section id="view-chat" class="chat-view ide-chat"><div id="chat-thread" class="chat-thread"></div></section>
+					</div>
+					<div class="chat-bottom">
+						<div class="ws-toggle" id="ws-toggle">
+							<button data-ws="prod">Prod</button>
+							<button data-ws="test">Test</button>
+						</div>
+						<button class="mem-btn" id="open-memory">⟜ Memory graph</button>
+						<button class="clear-test-btn" id="clear-test-btn" title="Wipe test workspace drafts, logs, and Supabase issues">Clear Test</button>
+					</div>
 				</div>
-				<div class="list-col">
-					<div class="list-col-header"><h3>Entities</h3><span class="count" id="memory-entities-count"></span></div>
-					<div class="list-col-body" id="memory-entities-list"></div>
-				</div>
-			</div>
-			<!-- Legacy entities-pane removed; entity click in list mode reuses
-			     the graph's detail panel via renderEntityDetail. -->
-			<div id="memory-entities-detail" hidden style="display:none"></div>
-			<div class="memory-controls">
-				<div class="memory-view-toggle" id="memory-view-toggle">
-					<button data-view="graph" class="active">Graph</button>
-					<button data-view="list">List</button>
+				<!-- RIGHT: drawer (drafts / turns / session) -->
+				<div class="pane-right">
+					<div class="pane-head" id="right-head">
+						<div class="rtabs" id="right-tabs">
+							<button class="rtab on" data-drawer="drafts">Drafts</button>
+							<button class="rtab" data-drawer="turns">Turns</button>
+						</div>
+						<div class="rcrumb" id="right-crumb" hidden><button class="back" id="right-back">‹ back</button><span class="ttl" id="right-title">Session</span></div>
+					</div>
+					<div class="right-body" id="right-body">
+						<aside id="chat-drafts-rail" class="chat-drafts-rail ide-rail"></aside>
+						<section id="view-turns" class="turns-view" hidden><div id="turns-list"></div></section>
+						<section id="view-sessions" class="sessions-view" hidden>
+							<div class="sx-layout">
+								<div id="sessions-list"></div>
+								<div id="session-detail" class="sx-detail"></div>
+							</div>
+						</section>
+					</div>
 				</div>
 			</div>
-		</section>
 
-		<section id="view-chat" class="view chat-view">
-			<aside id="chat-drafts-rail" class="chat-drafts-rail"></aside>
-			<div id="chat-thread" class="chat-thread"></div>
-		</section>
-
-		<section id="view-sessions" class="view sessions-view">
-			<div class="sx-layout">
-				<div id="sessions-list"></div>
-				<div id="session-detail" class="sx-detail"></div>
+			<!-- Memory graph: full-screen overlay -->
+			<div class="memback" id="memback"></div>
+			<div class="memov" id="memov">
+				<div class="mhd">
+					<span class="t">Memory graph</span>
+					<div class="memory-view-toggle" id="memory-view-toggle">
+						<button data-view="graph" class="active">Graph</button>
+						<button data-view="list">List</button>
+					</div>
+					<input id="memory-search" class="memory-search" type="search" placeholder="search memory…" />
+					<button class="mclose" id="memclose" aria-label="close">×</button>
+				</div>
+				<div class="mbody">
+					<div id="memory-graph-pane">
+						<svg id="memory-graph"></svg>
+						<aside id="memory-detail" class="memory-detail" hidden>
+							<button class="memory-detail-close" id="memory-detail-close" aria-label="close">×</button>
+							<div id="memory-detail-body"></div>
+						</aside>
+					</div>
+					<div id="memory-list-pane" class="three-col" hidden>
+						<div class="list-col">
+							<div class="list-col-header"><h3>Observations</h3><span class="count" id="memory-obs-count"></span></div>
+							<div class="list-col-body" id="memory-obs-list"></div>
+						</div>
+						<div class="list-col">
+							<div class="list-col-header"><h3>Beliefs</h3><span class="count" id="memory-list-count"></span></div>
+							<div class="list-col-body" id="memory-list"></div>
+						</div>
+						<div class="list-col">
+							<div class="list-col-header"><h3>Entities</h3><span class="count" id="memory-entities-count"></span></div>
+							<div class="list-col-body" id="memory-entities-list"></div>
+						</div>
+					</div>
+					<div id="memory-entities-detail" hidden style="display:none"></div>
+				</div>
 			</div>
-		</section>
-
-		<section id="view-turns" class="view turns-view">
-			<div id="turns-list"></div>
-		</section>
+		</div>
 
 		<dialog id="new-belief-dialog" class="belief-dialog">
 			<form id="new-belief-form" method="dialog">
@@ -1931,14 +2075,16 @@
 				renderedChatIds = '';
 				renderedIssuesKey = '';
 				refresh();
-				if (activeTab === 'sessions') loadSessions();
-				turnsSig = '';
-				if (activeTab === 'turns') loadTurns();
+				if (drawer === 'sessions') loadSessions();
+				turnsSig = null;
+				if (drawer === 'turns') loadTurns();
 				// Chat thread has its own cache + 4s poller and isn't covered by
 				// refresh(); bust the render guard and reload now so the switch
 				// is instant instead of waiting on the next poll tick.
 				renderedChatThreadKey = '';
-				if (activeTab === 'chat') loadChatThread();
+				loadChatThread();
+				loadKpi();
+				if (memOpen) loadMemoryGraph();
 			});
 			applyWsToggleStyle();
 
@@ -2312,11 +2458,7 @@
 				startAppfolioRunner(`${APPFOLIO_RUNNER}/?${qs}`);
 				// If launched from the Work Orders pane, jump to Chat so the right
 				// pane (where the runner now lives) is on screen.
-				if (activeTab !== 'chat') {
-					activeTab = 'chat';
-					localStorage.setItem(TAB_KEY, activeTab);
-					applyTab();
-				}
+				// chat thread is always visible in the IDE layout — no tab switch needed
 			}
 
 			function openAppfolioVendorRunner(d, body) {
@@ -2324,11 +2466,7 @@
 				if (d.appfolio_srn) params.srn = String(d.appfolio_srn);
 				else params.issue_id = d.issue_id ?? '';
 				startAppfolioRunner(`${APPFOLIO_RUNNER}/?${new URLSearchParams(params)}`);
-				if (activeTab !== 'chat') {
-					activeTab = 'chat';
-					localStorage.setItem(TAB_KEY, activeTab);
-					applyTab();
-				}
+				// chat thread is always visible in the IDE layout — no tab switch needed
 			}
 
 			async function startAppfolioRunner(startUrl) {
@@ -2602,13 +2740,7 @@
 					renderedChatThreadKey = '';
 				}
 				pendingFocusIssueId = issueId;
-				if (activeTab !== 'issues') {
-					activeTab = 'issues';
-					localStorage.setItem(TAB_KEY, activeTab);
-					applyTab(); // loads issues, then applyPendingIssueFocus runs
-				} else {
-					loadIssues();
-				}
+				loadIssues(); // issues pane is always visible; loadIssues applies the pending focus
 			}
 
 			function applyPendingIssueFocus() {
@@ -2685,49 +2817,88 @@
 
 			refresh();
 			const issuesPoller = setInterval(() => {
-				if (activeTab === 'issues') loadIssues();
+				loadIssues();
 			}, 6000);
 
 			/* ─── Memory tab: D3 force-directed graph + CRUD ──────────────── */
 
-			const TAB_KEY = 'bedrock.activeTab';
-			let activeTab = localStorage.getItem(TAB_KEY) || 'issues';
-			// The old "Work Orders" tab became "Issues"; migrate a stored value.
-			if (activeTab === 'work-orders') activeTab = 'issues';
+			// ── IDE orchestration (replaces the old tab bar) ──────────────
+			// Issues (left) and Chat (center) are always visible. The right
+			// pane is a drawer: drafts | turns | sessions. Memory is a
+			// full-screen overlay, not a drawer/tab.
+			const DRAWER_KEY = 'bedrock.drawer';
+			let drawer = localStorage.getItem(DRAWER_KEY) || 'drafts';
+			if (!['drafts', 'turns', 'sessions'].includes(drawer)) drawer = 'drafts';
+			let activeTab = 'chat'; // legacy alias; kept defined so stray refs never throw
 
-			function applyTab() {
-				document.body.classList.toggle('memory-mode', activeTab === 'memory');
-				for (const btn of document.querySelectorAll('#tab-nav button')) {
-					btn.classList.toggle('active', btn.dataset.tab === activeTab);
+			const railEl = document.getElementById('chat-drafts-rail');
+			const turnsView = document.getElementById('view-turns');
+			const sessionsView = document.getElementById('view-sessions');
+			const rightTabsEl = document.getElementById('right-tabs');
+			const rightCrumbEl = document.getElementById('right-crumb');
+			let lastDrawerTab = 'drafts';
+			let sessionFocusId = null; // the one session shown in the drawer (via a session → link)
+
+			function applyDrawer() {
+				railEl.hidden = drawer !== 'drafts';
+				turnsView.hidden = drawer !== 'turns';
+				sessionsView.hidden = drawer !== 'sessions';
+				const isSession = drawer === 'sessions';
+				rightTabsEl.hidden = isSession;
+				rightCrumbEl.hidden = !isSession;
+				if (!isSession) {
+					lastDrawerTab = drawer;
+					for (const b of rightTabsEl.children) b.classList.toggle('on', b.dataset.drawer === drawer);
 				}
-				for (const v of document.querySelectorAll('.view')) {
-					v.classList.toggle('active', v.id === `view-${activeTab}`);
-				}
-				if (activeTab === 'memory') {
-					loadMemoryGraph();
-				} else if (activeTab === 'chat') {
-					loadChatThread();
-					// Always scroll to bottom when entering the tab, even if the
-					// cache is fresh and renderChatThread skips the rebuild.
-					requestAnimationFrame(() => {
-						chatThreadEl.scrollTop = chatThreadEl.scrollHeight;
-						resizeAllDraftTextareas();
-					});
-				} else if (activeTab === 'issues') {
-					loadIssues();
-				} else if (activeTab === 'sessions') {
-					loadSessions();
-				} else if (activeTab === 'turns') {
-					loadTurns();
-				}
+				if (drawer === 'turns') loadTurns();
+				else if (drawer === 'sessions') loadSessions();
 			}
-			document.getElementById('tab-nav').addEventListener('click', (e) => {
-				const btn = e.target.closest('button[data-tab]');
-				if (!btn) return;
-				activeTab = btn.dataset.tab;
-				localStorage.setItem(TAB_KEY, activeTab);
-				applyTab();
+			function setDrawer(name) {
+				drawer = name;
+				if (name !== 'sessions') { localStorage.setItem(DRAWER_KEY, name); sessionFocusId = null; }
+				applyDrawer();
+			}
+			rightTabsEl.addEventListener('click', (e) => {
+				const btn = e.target.closest('button[data-drawer]');
+				if (btn) setDrawer(btn.dataset.drawer);
 			});
+			document.getElementById('right-back').addEventListener('click', () => setDrawer(lastDrawerTab));
+
+			// Memory graph — full-screen overlay opened from the center bottom bar.
+			const memBackEl = document.getElementById('memback');
+			const memOvEl = document.getElementById('memov');
+			let memOpen = false;
+			function openMemory() {
+				memOpen = true;
+				memBackEl.classList.add('show');
+				memOvEl.classList.add('show');
+				loadMemoryGraph();
+			}
+			function closeMemory() {
+				memOpen = false;
+				memBackEl.classList.remove('show');
+				memOvEl.classList.remove('show');
+			}
+			document.getElementById('open-memory').addEventListener('click', openMemory);
+			memBackEl.addEventListener('click', closeMemory);
+			document.getElementById('memclose').addEventListener('click', closeMemory);
+			document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && memOpen) closeMemory(); });
+
+			// KPI strip (center top) — from /kpi (prod-scoped).
+			async function loadKpi() {
+				try {
+					const res = await fetch('/kpi');
+					if (!res.ok) return;
+					const k = await res.json();
+					const pct = k.send_without_edit_rate == null ? '—' : Math.round(k.send_without_edit_rate * 100) + '%';
+					document.getElementById('kpi-strip').innerHTML =
+						'<div class="turns-kpi">' +
+						'<div class="stat"><span class="v">' + pct + '</span><span class="l">send-without-edit · ' + k.window_days + 'd</span></div>' +
+						'<div class="stat"><span class="v">' + k.sent_total + '</span><span class="l">messages sent</span></div>' +
+						'<div class="stat"><span class="v">' + k.recent_responses + '</span><span class="l">actions · ' + k.window_days + 'd</span></div>' +
+						'</div>';
+				} catch {}
+			}
 			// Initial applyTab() runs at the very END of the script — see below.
 			// On reload it may activate the chat/memory/sessions tab, whose loaders
 			// read const/let module state declared further down; calling it here
@@ -2829,11 +3000,14 @@
 				}
 				const total = sessionsCache.length;
 				callById = {}; usedTurns = new Set(); // rebuilt as we render each session's steps
-				const html = sessionsCache
-					.map((s, i) => {
-						// Sessions arrive newest-first; number chronologically so
-						// the oldest session is #1 and the newest is #N.
-						const num = total - i;
+				// In the IDE the drawer shows ONE session (the clicked `session →`).
+				const list = sessionFocusId ? sessionsCache.filter((s) => s.id === sessionFocusId) : sessionsCache;
+				const rt = document.getElementById('right-title');
+				if (sessionFocusId && list[0] && rt) rt.textContent = 'Session #' + (total - sessionsCache.indexOf(list[0]));
+				const html = list
+					.map((s) => {
+						// Number chronologically so the oldest session is #1, newest #N.
+						const num = total - sessionsCache.indexOf(s);
 						const tags = (s.tags ?? [])
 							.map((t) => `<span class="pill tag">${escapeHtml(t)}</span>`)
 							.join('');
@@ -2861,7 +3035,7 @@
 						`;
 					})
 					.join('');
-				sessionsList.innerHTML = html;
+				sessionsList.innerHTML = html || '<div class="sessions-empty">Session not found.</div>';
 			}
 
 			// Same bubble structure as renderChatThread (avatar + stack + who +
@@ -3026,18 +3200,11 @@
 			sessionsList.addEventListener('click', (e) => {
 				const row = e.target.closest('.sx-trow');
 				if (!row) return;
-				const layout = document.querySelector('.sx-layout');
-				const wasActive = row.classList.contains('active');
-				sessionsList.querySelectorAll('.sx-trow.active').forEach((x) => x.classList.remove('active'));
-				if (wasActive) {
-					if (layout) layout.classList.remove('has-detail');
-					const p = sessionDetailPane();
-					if (p) p.innerHTML = '';
-					return;
-				}
-				row.classList.add('active');
-				if (layout) layout.classList.add('has-detail');
-				renderSessionDetail(row.dataset.cid);
+				const ent = callById[row.dataset.cid];
+				if (!ent) return;
+				// Drill into a step via the shared modal (same overlay as Turns).
+				if (ent.trigger) openTurnModal(renderTriggerDetailHtml(ent.trigger));
+				else if (ent.call) openTurnModal(turnToolDetailHtml(ent.call));
 			});
 
 			sessionsList.addEventListener('click', async (e) => {
@@ -3070,13 +3237,13 @@
 
 			const turnsList = document.getElementById('turns-list');
 			let turnsLoading = false;
-			let turnsSig = ''; // cheap change-detector so the poller only rebuilds on a new turn
+			let turnsSig = null; // cheap change-detector; null (not '') so an empty turn list still renders its empty state once
 			const turnsById = new Map(); // turn_id -> full turn row, for the expandable trace
 
 			async function loadTurns({ silent = false } = {}) {
 				if (turnsLoading) return;
 				turnsLoading = true;
-				if (!silent && !turnsList.querySelector('.turn-row')) {
+				if (!silent && !turnsList.querySelector('.turn-item')) {
 					turnsList.innerHTML = '<div class="turns-empty">Loading turns…</div>';
 				}
 				try {
@@ -3133,18 +3300,8 @@
 			}
 
 			function renderTurns(turns, kpi) {
-				// KPI strip (prod only) — the old History header, folded in here.
-				let kpiHtml = '';
-				if (kpi) {
-					const rate = kpi.send_without_edit_rate;
-					const pct = rate == null ? '—' : Math.round(rate * 100) + '%';
-					kpiHtml =
-						'<div class="turns-kpi">' +
-							'<div class="stat"><span class="v">' + pct + '</span><span class="l">send-without-edit · ' + kpi.window_days + 'd</span></div>' +
-							'<div class="stat"><span class="v">' + kpi.sent_total + '</span><span class="l">messages sent</span></div>' +
-							'<div class="stat"><span class="v">' + kpi.recent_responses + '</span><span class="l">actions · ' + kpi.window_days + 'd</span></div>' +
-						'</div>';
-				}
+				// KPI now lives in the center top strip (loadKpi) — not duplicated here.
+				const kpiHtml = '';
 				if (!turns.length) {
 					turnsList.innerHTML =
 						kpiHtml + '<div class="turns-empty">No turns logged yet for ' + escapeHtml(workspaceFilter) + '.</div>';
@@ -3203,24 +3360,63 @@
 								'<span class="turn-link issue" title="' + escapeHtml(String(t.issue_id)) + '">issue ' +
 								escapeHtml(String(t.issue_id).slice(0, 8)) + '</span>';
 						}
-						const rowCls = 'turn-row clickable' + (failed ? ' failure' : '') + (skipped ? ' skipped' : '');
+						// ── timeline entry (event → summary → reference → preview → steps) ──
+						const evLabel = { new_issue: 'new issue', incoming_user_message: 'PM message', incoming_anon_message: 'unknown #' }[ev] || ev;
+						const evCls = { new_issue: 'new', incoming_user_message: 'user', incoming_anon_message: 'anon' }[ev] || 'ds';
+						const issue = t.trigger && t.trigger.payload && t.trigger.payload.issue;
+						const refSub = issue ? ((issue.unit && issue.unit.name) || (issue.property && issue.property.name) || '') : '';
+						// preview = the message it produced (or the inbound that triggered it)
+						let preview = '';
+						const draftCall = (t.tool_calls || []).find((c) => c.args && /^draft_/.test(c.name || ''));
+						if (t.outcome && Array.isArray(t.outcome.messages_final) && t.outcome.messages_final[0]) preview = t.outcome.messages_final[0];
+						else if (draftCall) preview = draftCall.args.content || draftCall.args.body || '';
+						else if (t.trigger && t.trigger.payload && t.trigger.payload.text) preview = t.trigger.payload.text;
+						// status chip
+						let chip = '';
+						if (failed) chip = '<span class="stc fail">failed</span>';
+						else if (skipped) chip = '<span class="stc none">skipped</span>';
+						else if (t.outcome) {
+							const a = t.outcome.action;
+							const lbl = a === 'send' ? 'sent' : a === 'copy' ? 'copied' : a === 'dismiss' ? 'dismissed' : a;
+							chip = '<span class="stc ' + (a === 'dismiss' ? 'none' : 'good') + '">' + escapeHtml(lbl) + (t.outcome.edited ? ' · edited' : '') + '</span>';
+						} else if (t.drafts_count && ev === 'new_issue') {
+							chip = '<span class="stc good">pending review</span>';
+						}
+						// steps = meaningful tool calls (skip send_text/use_skill), plain-English; click → modal
+						const flat = (Array.isArray(t.steps) && t.steps.length) ? t.steps.flatMap((s) => s.tool_calls || []) : (t.tool_calls || []);
+						const shown = flat.filter((c) => c.name && c.name !== 'send_text' && c.name !== 'use_skill');
+						t._calls = shown;
+						let stepsHtml = '';
+						if (skipped) stepsHtml = '<div class="step muted">precheck · short-circuit</div>';
+						else if (shown.length) {
+							stepsHtml = shown.map((c, i) => {
+								const ok = c.ok !== false;
+								const label = STEP_LABEL[c.name] || c.name;
+								return '<div class="step' + (ok ? '' : ' err') + (c.name === 'write_memory' ? ' mem' : '') + '" data-call="' + i + '">' +
+									escapeHtml(label) + (ok ? '' : ' — failed') + '</div>';
+							}).join('');
+						}
+						const jumpAttr =
+							(t.session_id ? ' data-jump-session="' + escapeHtml(t.session_id) + '"' : '') +
+							(t.issue_id ? ' data-jump-issue="' + escapeHtml(t.issue_id) + '"' : '');
+						const urgent = issue && issue.urgent;
+						const metaTxt = dur + iters + (counts.length ? ' · ' + counts.join(' · ') : '');
 						return (
-							'<div class="turn-item" data-turn-id="' + escapeHtml(tid) + '">' +
-							'<div class="' + rowCls + '">' +
-								'<span class="ts" title="' + escapeHtml(fmtTurnFull(t.ts)) + '">' + escapeHtml(fmtTurnTime(t.ts)) + '</span>' +
-								'<span class="evcol">' +
-									'<span class="turn-ev ' + escapeHtml(ev) + '">' + escapeHtml(ev) + '</span>' +
-									(t.skill ? '<span class="skill">' + escapeHtml(t.skill) + '</span>' : '') +
-								'</span>' +
-								'<span class="turn-tools">' + toolsHtml + '</span>' +
-								'<span class="turn-right">' +
-									outcomeHtml +
-									'<span class="dur">' + escapeHtml(dur) + iters + '</span>' +
-									(counts.length ? '<span class="counts">' + escapeHtml(counts.join(' · ')) + '</span>' : '') +
-									link +
-								'</span>' +
-							'</div>' +
-							'<div class="turn-detail" hidden></div>' +
+							'<div class="turn-item tl-item' + (failed ? ' failure' : '') + '" data-turn-id="' + escapeHtml(tid) + '">' +
+								'<div class="tl-entry">' +
+									'<div class="tl-node ev-' + evCls + '"></div>' +
+									'<div class="tl-hd">' +
+										'<span class="tl-time" title="' + escapeHtml(fmtTurnFull(t.ts)) + '">' + escapeHtml(fmtTurnTime(t.ts)) + '</span>' +
+										'<span class="tl-ev ' + evCls + '">' + escapeHtml(evLabel) + '</span>' +
+										(urgent ? '<span class="iurgent">urgent</span>' : '') +
+										chip +
+									'</div>' +
+									'<div class="tl-sum">' + escapeHtml(turnSummary(t)) + '</div>' +
+									(issue && issue.name ? '<div class="tl-ref"' + jumpAttr + '>↳ ' + escapeHtml(issue.name) + (refSub ? ' <span class="sub">· ' + escapeHtml(refSub) + '</span>' : '') + '</div>' : '') +
+									(preview ? '<div class="tl-prev"' + jumpAttr + '>' + escapeHtml(preview) + '</div>' : '') +
+									(stepsHtml ? '<div class="tl-steps">' + stepsHtml + '</div>' : '') +
+									'<div class="tl-meta">' + escapeHtml(metaTxt) + '</div>' +
+								'</div>' +
 							'</div>'
 						);
 					})
@@ -3352,60 +3548,95 @@
 
 			// Turn → session deep-link: jump to the Sessions tab, then scroll to
 			// and flash the matching card once loadSessions() has rendered it.
-			turnsList.addEventListener('click', (e) => {
-				// Session deep-link button takes precedence and must not also expand.
-				const btn = e.target.closest('button[data-session]');
-				if (btn) {
-					e.stopPropagation();
-					const sid = btn.dataset.session;
-					activeTab = 'sessions';
-					localStorage.setItem(TAB_KEY, activeTab);
-					applyTab(); // kicks loadSessions() (async)
-					const sel = '.session-card[data-id="' + (window.CSS?.escape ? CSS.escape(sid) : sid) + '"]';
-					let tries = 0;
-					const iv = setInterval(() => {
-						const card = sessionsList.querySelector(sel);
-						if (card) {
-							clearInterval(iv);
-							card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-							card.classList.add('flash');
-							setTimeout(() => card.classList.remove('flash'), 1800);
-						} else if (++tries > 25) {
-							clearInterval(iv);
-						}
-					}, 100);
-					return;
+			function jumpFromTurn(sid, issueId) {
+				if (sid) {
+					const el = document.querySelector('.chat-thread [data-session="' + (window.CSS?.escape ? CSS.escape(sid) : sid) + '"]');
+					const sep = el && (el.closest('.day-sep') || el);
+					if (sep) {
+						sep.scrollIntoView({ behavior: 'smooth', block: 'center' });
+						sep.classList.remove('tl-flash'); void sep.offsetWidth; sep.classList.add('tl-flash');
+						setTimeout(() => sep.classList.remove('tl-flash'), 1700);
+					}
 				}
-				// A <details> toggle inside an open trace shouldn't collapse the row.
-				if (e.target.closest('.turn-detail')) return;
-				// Otherwise: row click toggles its trace detail (lazy-rendered).
+				if (issueId) {
+					document.querySelectorAll('.issue-row.sel').forEach((x) => x.classList.remove('sel'));
+					const ir = document.querySelector('.issue-row[data-issue-id="' + (window.CSS?.escape ? CSS.escape(issueId) : issueId) + '"]');
+					if (ir) { ir.classList.add('sel'); ir.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+				}
+			}
+			// Plain-English labels for the timeline steps (raw tool names → readable).
+			const STEP_LABEL = {
+				read_memory: 'checked memory', read_profile: 'read profile', write_memory: 'saved a belief',
+				set_vendor: 'set the vendor', draft_tenant: 'drafted tenant text', draft_vendor: 'drafted vendor dispatch',
+				read_thread: 'read the thread'
+			};
+			function turnSummary(t) {
+				const ev = t.event;
+				const sent = t.outcome && t.outcome.action === 'send';
+				const drafted = (t.drafts_count || 0) > 0;
+				const vendor = (t.tool_calls || []).some((c) => c.name === 'draft_vendor');
+				if (ev === 'new_issue') {
+					if (sent) return 'New work order → drafted & sent';
+					if (drafted) return 'New work order → drafted ' + (vendor ? 'vendor dispatch' : 'tenant text');
+					if (t.kind === 'precheck_short_circuit') return 'New work order → skipped (precheck)';
+					return 'New work order → triaged, no message';
+				}
+				if (ev === 'incoming_user_message') {
+					if (sent) return 'PM replied → drafted & sent';
+					if (drafted) return 'PM replied → drafted a reply';
+					return 'PM replied → no action needed';
+				}
+				if (ev === 'incoming_anon_message') return t.kind === 'failure' ? 'Unknown number → reply failed' : 'Unknown number → handled';
+				return ev || 'turn';
+			}
+			function turnToolDetailHtml(c) {
+				return '<div class="sxd-head"><span class="sx-dot ' + sxDot(c.name) + '"></span>' + escapeHtml(c.name || '?') + (c.ok === false ? ' · error' : '') + '</div>' +
+					(c.error ? '<div class="sxd-meta" style="color:#f08089">' + escapeHtml(c.error) + '</div>' : '') +
+					'<div class="sxd-sec"><div class="lbl">args in</div><pre>' + escapeHtml(JSON.stringify(c.args ?? {}, null, 2)) + '</pre></div>' +
+					'<div class="sxd-sec"><div class="lbl">result out</div><pre>' + escapeHtml(JSON.stringify(c.result ?? {}, null, 2)) + '</pre></div>';
+			}
+
+			// Drill-in modal (the approved mock): a centered overlay, not an inline expand.
+			const turnModalBack = document.createElement('div'); turnModalBack.className = 'turn-modal-back';
+			const turnModal = document.createElement('div'); turnModal.className = 'turn-modal';
+			turnModal.innerHTML = '<button class="tm-close" aria-label="close">×</button><div class="tm-body"></div>';
+			const zoomwrapEl = document.getElementById('zoomwrap');
+			zoomwrapEl.appendChild(turnModalBack);
+			zoomwrapEl.appendChild(turnModal);
+			const turnModalBody = turnModal.querySelector('.tm-body');
+			function openTurnModal(html) { turnModalBody.innerHTML = html; turnModalBack.classList.add('show'); turnModal.classList.add('show'); turnModalBody.scrollTop = 0; }
+			function closeTurnModal() { turnModalBack.classList.remove('show'); turnModal.classList.remove('show'); }
+			turnModalBack.addEventListener('click', closeTurnModal);
+			turnModal.querySelector('.tm-close').addEventListener('click', closeTurnModal);
+			document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && turnModal.classList.contains('show')) closeTurnModal(); });
+			turnModalBody.addEventListener('click', (e) => {
+				const l = e.target.closest('.sxd-link[data-obs]');
+				if (l) { e.preventDefault(); closeTurnModal(); focusObservation(l.dataset.obs); }
+			});
+
+			turnsList.addEventListener('click', (e) => {
+				// Reference / preview → jump to the chat session + issue (no drill-in).
+				const jp = e.target.closest('[data-jump-session],[data-jump-issue]');
+				if (jp) { e.stopPropagation(); jumpFromTurn(jp.dataset.jumpSession, jp.dataset.jumpIssue); return; }
 				const item = e.target.closest('.turn-item');
 				if (!item) return;
-				const detail = item.querySelector('.turn-detail');
-				if (!detail) return;
-				if (detail.hidden) {
-					if (!detail.dataset.rendered) {
-						const t = turnsById.get(item.dataset.turnId);
-						detail.innerHTML = t ? renderTurnDetail(t) : '<div class="td-empty">trace unavailable</div>';
-						detail.dataset.rendered = '1';
-						// Wire the folded-in History notes editor onto the outcome, if any.
-						const nw = detail.querySelector('.td-notes');
-						if (nw && t && t.outcome) {
-							renderNotes(nw, { draft_id: t.outcome.draft_id, notes: t.outcome.notes });
-						}
-					}
-					detail.hidden = false;
-					item.classList.add('open');
-				} else {
-					detail.hidden = true;
-					item.classList.remove('open');
+				const t = turnsById.get(item.dataset.turnId);
+				if (!t) return;
+				// A step opens that tool call's args/output; the rest of the entry opens
+				// the trigger detail (event + system prompt + history + the prompt it saw).
+				const step = e.target.closest('[data-call]');
+				if (step) {
+					const c = (t._calls || [])[Number(step.dataset.call)];
+					if (c) openTurnModal(turnToolDetailHtml(c));
+					return;
 				}
+				openTurnModal(renderTriggerDetailHtml(t));
 			});
 
 			// Live-ish refresh while the Turns tab is open. Silent so it only
 			// rebuilds the DOM when a genuinely new turn lands (turnsSig guard).
 			setInterval(() => {
-				if (activeTab === 'turns') loadTurns({ silent: true });
+				if (drawer === 'turns') loadTurns({ silent: true });
 			}, 3000);
 
 			/* ─── Chat tab: drafts rail + iMessage thread ─────────────── */
@@ -3457,7 +3688,7 @@
 				}
 				if (!chatThreadPoller) {
 					chatThreadPoller = setInterval(() => {
-						if (activeTab === 'chat') loadChatThread();
+						loadChatThread();
 					}, 4000);
 				}
 			}
@@ -3537,22 +3768,8 @@
 			// Open the Sessions tab and scroll/flash a specific session card.
 			function focusSession(sid) {
 				if (!sid) return;
-				activeTab = 'sessions';
-				localStorage.setItem(TAB_KEY, activeTab);
-				applyTab(); // kicks loadSessions() (async)
-				const sel = '.session-card[data-id="' + (window.CSS?.escape ? CSS.escape(sid) : sid) + '"]';
-				let tries = 0;
-				const iv = setInterval(() => {
-					const card = sessionsList.querySelector(sel);
-					if (card) {
-						clearInterval(iv);
-						card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-						card.classList.add('flash');
-						setTimeout(() => card.classList.remove('flash'), 1800);
-					} else if (++tries > 25) {
-						clearInterval(iv);
-					}
-				}, 100);
+				sessionFocusId = sid; // renderSessions renders just this one into the drawer
+				setDrawer('sessions');
 			}
 
 			// "open in memory graph" from a session tool-call detail (write_memory).
@@ -3562,9 +3779,7 @@
 				if (!obsId) return;
 				memoryView = 'graph';
 				localStorage.setItem(MEMORY_VIEW_KEY, memoryView);
-				activeTab = 'memory';
-				localStorage.setItem(TAB_KEY, activeTab);
-				applyTab(); // kicks loadMemoryGraph() (async)
+				openMemory(); // opens the full-screen overlay + loadMemoryGraph()
 				applyMemoryView(); // force graph (not list) mode
 				let tries = 0;
 				const iv = setInterval(() => {
@@ -4720,13 +4935,16 @@
 
 			// Reload graph when workspace toggle changes (memory view only).
 			wsToggle.addEventListener('click', () => {
-				if (activeTab === 'memory') loadMemoryGraph();
+				if (memOpen) loadMemoryGraph();
 			});
 
-			// Activate the restored tab now that every loader and its module state
-			// (chat thread, sessions, memory graph) is initialized. Must stay at the
-			// bottom — see the note by the tab-nav click handler.
-			applyTab();
+			// Initial loads now that every loader + module state is initialized.
+			// Issues (left) and Chat (center) are always on; the drawer defaults to
+			// drafts; memory is lazy (opens on demand). Must stay at the bottom.
+			loadIssues();
+			loadChatThread();
+			loadKpi();
+			applyDrawer();
 		</script>
 	</body>
 </html>
