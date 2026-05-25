@@ -178,7 +178,7 @@ export function composeUserContent(event, reminderBlocks) {
 	// the rules above" cue.
 	const framing =
 		event.type === 'incoming_user_message'
-			? `The PM just sent: "${userText}"\n\nApply the incoming_user_message phase of the active skill. If the recent-sends list contains more than one candidate and the reply doesn't uniquely identify one (e.g. a bare "yes" with multiple candidates), do NOT dispatch — draft a clarifying question instead (send_text with draft:true), per the skill.`
+			? `The PM just sent: "${userText}"\n\nApply the incoming_user_message phase. The open-candidate count in the recent-sends list governs DISPATCH and clarifying ONLY — it does NOT gate learning:\n- NONE: never dispatch and never ask "which one" (a bare "yes"/"ok" approves nothing that isn't listed).\n- EXACTLY ONE: an approval confirms that one — dispatch it, don't ask which.\n- TWO OR MORE: dispatch if the reply identifies one, otherwise draft ONE clarifying question (send_text draft:true).\nSeparately and regardless of candidate count: still write_memory for any preference/correction/decision, and read_memory when you need prior context.`
 			: userText;
 	return `${reminderBody}\n\n${framing}`;
 }

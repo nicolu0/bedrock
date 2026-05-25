@@ -196,7 +196,7 @@ export const scenarios = [
 	// ─── Chat (8) ──────────────────────────────────────────────────────────
 
 	{
-		name: 'chat: clear "yes" with one candidate → ack + tenant + vendor drafts',
+		name: 'chat: clear "yes" with one candidate → ack + tenant + vendor drafts + observation',
 		skill: 'chat',
 		setup: {
 			sent_log: sentBundle(ISSUE_FAUCET),
@@ -208,16 +208,21 @@ export const scenarios = [
 			text: 'yes'
 		},
 		expected: {
-			tool_calls_set: ['send_text', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 2,
+			// Confirmation now also logs an observation of the dispatch decision.
+			// Everything drafts (ack included), so nothing hits the outbox.
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
 			drafts_include: ['Anna', 'Mario', 'kitchen faucet leaking'],
-			outbox_count: 1
+			outbox_count: 0
 		}
 	},
 
 	{
-		name: 'chat: "yes" with two open candidates → no_match (ambiguous)',
+		// Ambiguous approval: bare "yes" while TWO work orders are open. The agent
+		// must NOT guess/dispatch — it drafts ONE clarifying question (send_text
+		// draft:true → staged, not live) for the human to review and send.
+		name: 'chat: "yes" with two open candidates → drafts a clarifying question',
 		skill: 'chat',
 		setup: {
 			sent_log: [
@@ -228,9 +233,15 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
 		expected: {
-			no_tools: true,
-			drafts_count: 0,
-			outbox_count: 0
+			tool_calls_set_includes: ['send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			drafts_count: 1,
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A single clarifying question asking which of the two open work orders (the faucet vs. the AC) the PM meant. It must NOT pick one or dispatch.'
+			}
 		}
 	},
 
@@ -247,11 +258,11 @@ export const scenarios = [
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'no send Luigi instead' },
 		expected: {
 			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
-			drafts_count: 2,
+			// Everything drafts now (ack+question included), so nothing is live.
+			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
 			drafts_include: ['Anna', 'Luigi', 'kitchen faucet leaking'],
-			drafts_excludes: ['Mario'],
-			outbox_count: 1
+			outbox_count: 0
 		}
 	},
 
@@ -268,11 +279,37 @@ export const scenarios = [
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'send Yonic' },
 		expected: {
 			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
-			drafts_count: 2,
+			// Everything drafts now (ack+question included), so nothing is live.
+			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
 			drafts_include: ['Anna', 'Yonic', 'kitchen faucet leaking'],
-			drafts_excludes: ['Mario'],
-			outbox_count: 1
+			outbox_count: 0
+		}
+	},
+
+	{
+		// Follow-up answer: the conversation history shows we asked WHY the PM
+		// swapped to Luigi; their reply gives the reason. Capture it with
+		// write_memory and nothing else — dispatch already happened on the
+		// override turn, so no ack and no drafts. Recognition comes from history
+		// (injected via ctx.history in eval mode by buildSessionHistory).
+		name: "chat: follow-up answer (\"he's cheaper\") → write_memory only, no dispatch",
+		skill: 'chat',
+		setup: { sent_log: [], supabase: {} },
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: "he's cheaper for drain jobs",
+			history: [
+				{ role: 'user', content: 'no send Luigi instead' },
+				{ role: 'assistant', content: 'On it, sending Luigi. Any reason you prefer him over Yonic?' }
+			]
+		},
+		expected: {
+			tool_calls_set_includes: ['write_memory'],
+			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor'],
+			drafts_count: 0,
+			outbox_count: 0
 		}
 	},
 
@@ -308,8 +345,9 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yep send Mario' },
 		expected: {
-			tool_calls_set: ['send_text', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 2,
+			// Confirming our suggested vendor still logs the dispatch decision.
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
 		}
 	},
@@ -426,7 +464,7 @@ export const scenarios = [
 		},
 		expected: {
 			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
-			drafts_count: 2,
+			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
 		}
 	},
