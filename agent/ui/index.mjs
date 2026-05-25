@@ -6,6 +6,7 @@
 //   POST /api/drafts/:id/send     -> send each message in order via dylib, log, remove draft
 //   POST /api/drafts/:id/copy     -> log response (copy), remove draft
 //   POST /api/drafts/:id/dismiss  -> log response (dismiss), remove draft
+//   POST /api/drafts/:id/schedule -> toggle "Send later" (approved_at) on a held draft
 //   GET  /kpi                     -> rolled-up KPI numbers from the logs
 //
 // Each draft is a bundle: { id, messages: [{ body }, ...], ... }. Send replays
@@ -270,6 +271,77 @@ function normalizeMessages(input, fallback) {
 	return [];
 }
 
+// Shared terminal action for a draft: optionally send the bundle, write the
+// response-log row, drop the draft. The UI send/copy/dismiss route and the
+// server's scheduled auto-fire loop both go through here so the sent-log /
+// response-log / correlation stay byte-identical between a hand-tap and an
+// auto-fire. `finals`/`originals` are pre-normalized [{ body }]; `forcedSend`
+// flags a send that overrode an active hold (human clicked Send now).
+export async function dispatchDraft({
+	draft,
+	finals,
+	originals,
+	edited = false,
+	action,
+	forcedSend = false,
+	sendIMessage,
+	log = () => {}
+}) {
+	if (action === 'send') {
+		if (!finals.length) return { ok: false, error: 'no messages to send' };
+		if (!sendIMessage) return { ok: false, error: 'sendIMessage not configured' };
+		const sentEntries = [];
+		for (let i = 0; i < finals.length; i++) {
+			const body = finals[i].body;
+			if (!body) continue;
+			const result = await sendIMessage({ chatGuid: draft.to, body, draft });
+			if (!result?.ok) {
+				// Persist what made it out before surfacing the error. The draft is
+				// left in place so the failure is visible and retryable.
+				for (const e of sentEntries) await db.appendSent(e);
+				return {
+					ok: false,
+					error: `send failed at message ${i + 1}: ${result?.error ?? 'unknown'}`,
+					sent: sentEntries.length
+				};
+			}
+			sentEntries.push({
+				message_guid: result.guid ?? null,
+				bundle_id: draft.id,
+				part_index: i,
+				issue_id: draft.issue_id,
+				channel: draft.channel,
+				workspace_id: draft.workspace_id ?? null,
+				workspace_label: draft.workspace_label ?? null,
+				chat_guid: draft.channel === 'groupchat' ? draft.to ?? null : null,
+				body
+			});
+			if (i < finals.length - 1) await sleep(SEND_GAP_MS);
+		}
+		for (const e of sentEntries) await db.appendSent(e);
+	}
+
+	await db.appendResponse({
+		draft_id: draft.id,
+		issue_id: draft.issue_id,
+		channel: draft.channel,
+		trigger: draft.trigger,
+		workspace_id: draft.workspace_id ?? null,
+		workspace_label: draft.workspace_label ?? null,
+		to: draft.to ?? null,
+		to_participants: draft.to_participants ?? [],
+		action,
+		messages_original: originals.map((m) => m.body),
+		messages_final: finals.map((m) => m.body),
+		edited,
+		diffs: finals.map((m, i) => diffText(originals[i]?.body ?? '', m.body)),
+		forced_send: forcedSend
+	});
+
+	await db.removeDraft(draft.id);
+	return { ok: true, count: finals.length };
+}
+
 export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, log = console.log } = {}) {
 	// Verify the page file exists at boot but read it on every request so edits
 	// to page.html show up on browser refresh without a server restart.
@@ -318,6 +390,21 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				const updated = await db.updateDraft(id, { messages });
 				if (!updated) return text(res, 404, 'draft not found');
 				return json(res, 200, { ok: true });
+			}
+
+			// Toggle the "Send later" schedule on a held draft. Setting approved_at
+			// queues it — the auto-fire loop sends it at hold_until. Clicking again
+			// clears it (back to "Send at <time>"). The loop only ever fires drafts
+			// with approved_at set, so approval always precedes any send.
+			const scheduleMatch = pathname.match(/^\/api\/drafts\/([^/]+)\/schedule$/);
+			if (req.method === 'POST' && scheduleMatch) {
+				const [, id] = scheduleMatch;
+				const drafts = await db.loadDrafts();
+				const draft = drafts.find((d) => d.id === id);
+				if (!draft) return text(res, 404, 'draft not found');
+				const approved_at = draft.approved_at ? null : new Date().toISOString();
+				await db.updateDraft(id, { approved_at });
+				return json(res, 200, { ok: true, approved_at });
 			}
 
 			const historyPatchMatch = pathname.match(/^\/api\/history\/([^/]+)$/);
@@ -646,57 +733,22 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				const editedFlags = finals.map((m, i) => m.body !== originals[i].body);
 				const anyEdited = editedFlags.some(Boolean);
 
-				if (action === 'send') {
-					if (!finals.length) return text(res, 400, 'no messages to send');
-					if (!sendIMessage) return text(res, 500, 'sendIMessage not configured');
-					const sentEntries = [];
-					for (let i = 0; i < finals.length; i++) {
-						const body = finals[i].body;
-						if (!body) continue;
-						const result = await sendIMessage({ chatGuid: draft.to, body, draft });
-						if (!result?.ok) {
-							// Persist what we got so far; surface error.
-							for (const e of sentEntries) await db.appendSent(e);
-							return text(res, 500, `send failed at message ${i + 1}: ${result?.error ?? 'unknown'}`);
-						}
-						sentEntries.push({
-							message_guid: result.guid ?? null,
-							bundle_id: draft.id,
-							part_index: i,
-							issue_id: draft.issue_id,
-							channel: draft.channel,
-							workspace_id: draft.workspace_id ?? null,
-							workspace_label: draft.workspace_label ?? null,
-							// For groupchat sends, draft.to is the chat GUID. F2's chat
-							// skill filters recent sends by this to keep candidates
-							// scoped to the chat the PM is replying in.
-							chat_guid: draft.channel === 'groupchat' ? draft.to ?? null : null,
-							body
-						});
-						if (i < finals.length - 1) await sleep(SEND_GAP_MS);
-					}
-					for (const e of sentEntries) await db.appendSent(e);
-				}
-
-				await db.appendResponse({
-					draft_id: draft.id,
-					issue_id: draft.issue_id,
-					channel: draft.channel,
-					trigger: draft.trigger,
-					workspace_id: draft.workspace_id ?? null,
-					workspace_label: draft.workspace_label ?? null,
-					to: draft.to ?? null,
-					to_participants: draft.to_participants ?? [],
-					action,
-					messages_original: originals.map((m) => m.body),
-					messages_final: finals.map((m) => m.body),
+				const result = await dispatchDraft({
+					draft,
+					finals,
+					originals,
 					edited: anyEdited,
-					diffs: finals.map((m, i) => diffText(originals[i].body, m.body)),
-					forced_send: action === 'send' && draft.hold_until ? true : false
+					action,
+					// Send while a hold is active = the human clicked "Send now" to
+					// override the schedule.
+					forcedSend: action === 'send' && !!draft.hold_until,
+					sendIMessage,
+					log
 				});
-
-				await db.removeDraft(id);
-				return json(res, 200, { ok: true, count: finals.length });
+				if (!result.ok) {
+					return text(res, result.error === 'no messages to send' ? 400 : 500, result.error);
+				}
+				return json(res, 200, { ok: true, count: result.count });
 			}
 
 			text(res, 404, 'not found');
