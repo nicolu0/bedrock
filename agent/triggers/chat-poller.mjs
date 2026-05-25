@@ -1,9 +1,9 @@
 // Trigger: polls macOS Messages chat.db for new inbound iMessages, routes each
 // new row to the orchestrator as one of two AgentEvents:
 //
-//   - pm_reply       — message from a mapped groupchat's PM handle
+//   - incoming_user_message       — message from a mapped groupchat's PM handle
 //                      (workspace lookup hits chatGuidIndex)
-//   - demo_message   — message from an unknown 1:1 handle (style 45,
+//   - incoming_anon_message   — message from an unknown 1:1 handle (style 45,
 //                      no room_name, not in knownNumbers)
 //
 // Side-effects per turn:
@@ -31,7 +31,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { runTurn } from '../core/orchestrator.mjs';
-import { appendChatMessage, updateChatMessage } from '../state/helpers.mjs';
+import { appendChatMessage, updateChatMessage, createDraft } from '../state/helpers.mjs';
 import * as sessionizer from '../core/sessionizer.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -318,7 +318,7 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 		};
 
 		try {
-			const event = { type: 'demo_message', payload: { text, handle, msg_guid: row.guid } };
+			const event = { type: 'incoming_anon_message', payload: { text, handle, msg_guid: row.guid } };
 			await runTurn(event, {
 				handle,
 				text,
@@ -340,7 +340,7 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 	}
 
 	// Mapped groupchat: append to chat-log (permanent record), fire read
-	// receipt, run the pm_reply event, then patch the chat-log row with the
+	// receipt, run the incoming_user_message event, then patch the chat-log row with the
 	// agent's resulting action (drafted/no_match/failure).
 	async function handleGroupchatMessage(row, ws) {
 		const handle = normalizeHandle(row.handle);
@@ -393,17 +393,18 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 			workspace_id: ws.workspace_id,
 			workspace_label: ws.label,
 			onEvent,
-			sendMode: 'live', // ack texts go live; draft_tenant/draft_vendor still write drafts
-			// Groupchat with a PM is NOT a 1:1 with a PM. The send_text safety
-			// guard (refuse live + isPmHandle) is about preventing direct DMs;
-			// short ack phrases ("got it", "on it") are explicitly intended here.
+			// Draft, never live: the agent stages everything it would say to the PM
+			// (acks, the "why" follow-up, clarifying questions) as drafts for the
+			// human to review and send. Nothing is auto-texted to the PM. draft_tenant
+			// /draft_vendor already write drafts; send_text now drafts too via this mode.
+			sendMode: 'draft',
 			isPmHandle: false,
 			session_id,
 			source_message_id: row.guid ?? null
 		};
 
 		const event = {
-			type: 'pm_reply',
+			type: 'incoming_user_message',
 			payload: { text, chat_guid: chatGuid, sender_handle: handle, msg_guid: row.guid ?? null }
 		};
 		let result;
@@ -412,26 +413,57 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 			result = await runTurn(event, ctx);
 		} catch (err) {
 			runError = err;
-			log(`pm_reply error: ${err.message}`);
+			log(`incoming_user_message error: ${err.message}`);
 		} finally {
 			await setTyping(chatGuid, false);
 		}
 
-		const draftIds = ctx.draftIds ?? [];
-		const draftsCreated = draftIds.length;
+		// Dispatch drafts (tenant/vendor) come back as ctx.draftIds. A clarifying
+		// question comes back as a staged ctx.drafts entry (send_text draft:true) —
+		// persist it as a groupchat draft row for the dashboard, exactly like the
+		// new-issue summary path (issue-poller).
+		const dispatchDraftIds = ctx.draftIds ?? [];
+		const staged = ctx.drafts ?? [];
+		let clarificationId = null;
+		if (!runError && staged.length) {
+			try {
+				const cdraft = await createDraft({
+					trigger: 'groupchat_clarification',
+					channel: 'groupchat',
+					workspace_id: ws.workspace_id,
+					workspace_label: ws.label,
+					issue_id: null, // ambiguous — we don't yet know which issue
+					to: chatGuid,
+					to_participants: [],
+					messages: staged,
+					hold_until: null
+				});
+				clarificationId = cdraft.id;
+			} catch (err) {
+				log(`clarification draft persist failed: ${err.message}`);
+			}
+		}
+
+		const allDraftIds = clarificationId ? [...dispatchDraftIds, clarificationId] : dispatchDraftIds;
+		const draftsCreated = allDraftIds.length;
+		const calledWriteMemory = (result?.toolCalls ?? []).some((t) => t.name === 'write_memory');
 		const action = runError
 			? 'failure'
 			: result?.failure
 				? 'failure'
-				: draftsCreated > 0
+				: dispatchDraftIds.length > 0
 					? 'drafted'
-					: 'no_match';
+					: clarificationId
+						? 'clarify'
+						: calledWriteMemory
+							? 'learned'
+							: 'no_match';
 
 		await updateChatMessage(row.guid, {
 			agent_action: action,
 			agent_runs_at: new Date().toISOString(),
 			agent_drafts_count: draftsCreated,
-			agent_draft_ids: draftIds,
+			agent_draft_ids: allDraftIds,
 			agent_error: runError?.message ?? result?.failure?.error ?? null
 		});
 		log(`◉ ${ws.label} agent: ${action}${draftsCreated ? ` (${draftsCreated} drafts)` : ''}`);
@@ -448,7 +480,10 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 	const sessionizerInflight = new Map();
 
 	function shouldSessionize(ws) {
-		return ws?.label === 'prod';
+		// History now feeds every incoming_user_message turn (buildSessionHistory
+		// reads the open session), so any workspace we converse in needs a session
+		// — not just prod. Test included so follow-up recognition works there too.
+		return ws?.label === 'prod' || ws?.label === 'test';
 	}
 
 	function queueSessionize(workItem, ws) {

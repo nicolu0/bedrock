@@ -246,6 +246,10 @@ export async function recentSentForChat({ chat_guid, withinMs = 7 * 24 * 60 * 60
 	const matches = all.filter((row) => {
 		if (row.channel !== 'groupchat') return false;
 		if (row.chat_guid !== chat_guid) return false;
+		// Only work-order summaries are candidates. Clarifying questions / acks we
+		// sent are also channel 'groupchat' but carry no issue_id — they must not
+		// show up as phantom candidates the PM could be "replying to".
+		if (!row.issue_id) return false;
 		const sentAt = row.sent_at ? new Date(row.sent_at).getTime() : 0;
 		return sentAt >= cutoff;
 	});
@@ -259,10 +263,16 @@ export async function recentSentForChat({ chat_guid, withinMs = 7 * 24 * 60 * 60
 		}
 		seen.get(key).bodies.push(row.body);
 	}
-	return [...seen.values()]
+	const bundles = [...seen.values()]
 		.filter((b) => !drafted.has(b.issue_id))
 		.sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime())
 		.slice(0, limit);
+	// Present oldest-first so the candidate list mirrors the order the PM sees the
+	// work orders in the chat. Keeps positional references ("the second one")
+	// consistent across what the PM reads, the clarifying question we list, and
+	// the candidate numbering — they'd otherwise disagree (newest-first vs chat).
+	bundles.reverse();
+	return bundles;
 }
 
 export async function updateResponse(draftId, patch) {

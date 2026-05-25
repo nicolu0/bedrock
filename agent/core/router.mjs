@@ -11,6 +11,7 @@
 // full event AND ctx through to hooks so they can inspect payload fields.
 
 import { ingestDemoUserMessage, demoPreCheck, demoCommit } from './demo-state.mjs';
+import { buildSessionHistory } from './history.mjs';
 
 // Resolution shape:
 //   {
@@ -42,13 +43,16 @@ const RESOLUTIONS = {
 		maxTokens: 500,
 		allowPlainContentSend: true
 	},
-	pm_reply: {
+	incoming_user_message: {
 		// No skill preload — heterogeneous trigger. Model decides via use_skill.
 		model: process.env.CHAT_MODEL || 'gpt-5.4-2026-03-05',
 		maxIterations: 6,
-		allowPlainContentSend: false
+		allowPlainContentSend: false,
+		// Feed the open-session transcript as prior turns so the model can see the
+		// conversation (and its own earlier messages), not just the latest line.
+		buildHistory: buildSessionHistory
 	},
-	demo_message: {
+	incoming_anon_message: {
 		skill: 'demo',
 		model: process.env.OPENAI_MODEL || 'gpt-5.4-2026-03-05',
 		maxIterations: 8,

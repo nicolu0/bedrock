@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Live test for the pm_reply event against real Supabase + OpenAI. Synthesizes
+// Live test for the incoming_user_message event against real Supabase + OpenAI. Synthesizes
 // one PM reply, runs runTurn(event, ctx), then polls observations/beliefs for
 // the workspace to see what landed. Use this to sanity-check that learning
 // actually fires end-to-end before deploying to the Mac mini.
@@ -108,10 +108,10 @@ const ctx = {
 console.log(`\nworkspace : ${wsArg} (${workspace_id})`);
 console.log(`text      : "${text}"`);
 console.log(`beliefs before: ${beliefsBefore.length} | observations before: ${obsCountBefore}\n`);
-console.log(`▷ running pm_reply event...`);
+console.log(`▷ running incoming_user_message event...`);
 
 const event = {
-	type: 'pm_reply',
+	type: 'incoming_user_message',
 	payload: { text, chat_guid: ctx.chat_guid, sender_handle: null, msg_guid: null }
 };
 const result = await runTurn(event, ctx);

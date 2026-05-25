@@ -1,7 +1,7 @@
 // Per-handle conversation log + canned opener for the demo flow.
 //
 // Lives outside the orchestrator so the orchestrator stays event-agnostic.
-// The router wires this in as the demo_message event's preCheck and commit
+// The router wires this in as the incoming_anon_message event's preCheck and commit
 // hooks. State stays in-process for now (lost on restart); the layered-memory
 // PR will move conversation history to Supabase.
 

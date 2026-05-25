@@ -15,15 +15,16 @@
 export const sendText = {
 	name: 'send_text',
 	description:
-		'Send one customer-visible message. Each call becomes one bubble. Newlines INSIDE the content stay within that bubble — use them to format multi-line bubbles when the skill calls for it. To send several separate bubbles in a row, make multiple send_text calls.',
+		'Send one customer-visible message. Each call becomes one bubble. Newlines INSIDE the content stay within that bubble — use them to format multi-line bubbles when the skill calls for it. To send several separate bubbles in a row, make multiple send_text calls. Pass draft:true to stage this message for human review instead of sending it live — use this for clarifying questions the human should approve before the PM sees them (it routes to the drafts queue exactly like a new-issue summary).',
 	parameters: {
 		type: 'object',
 		properties: {
-			content: { type: 'string', description: 'The text body for this one bubble. May contain newlines for multi-line formatting.' }
+			content: { type: 'string', description: 'The text body for this one bubble. May contain newlines for multi-line formatting.' },
+			draft: { type: 'boolean', description: 'When true, stage this message as a draft for human review instead of sending it live, regardless of the turn default. Use for clarifying questions to the PM.' }
 		},
 		required: ['content']
 	},
-	async run({ content }, ctx) {
+	async run({ content, draft }, ctx) {
 		const text = String(content ?? '').trim();
 		if (!text) return { ok: true, skipped: 'empty' };
 
@@ -32,7 +33,12 @@ export const sendText = {
 		if (/\{[a-z_]+\}/i.test(text)) return { ok: true, skipped: 'unfilled placeholder' };
 		if (/Should I send\s*\??$/im.test(text)) return { ok: true, skipped: 'empty vendor slot' };
 
-		if (ctx.sendMode === 'draft') {
+		// Per-call draft override: a single message can be drafted even inside an
+		// otherwise-live turn (e.g. a clarifying question in a groupchat turn whose
+		// acks normally go live). Falls back to the turn's ctx.sendMode.
+		const mode = draft === true ? 'draft' : ctx.sendMode;
+
+		if (mode === 'draft') {
 			ctx.drafts = ctx.drafts ?? [];
 			ctx.drafts.push({ body: text });
 			// assistantContent: the orchestrator concatenates this into the
@@ -42,7 +48,7 @@ export const sendText = {
 			return { ok: true, assistantContent: text };
 		}
 
-		if (ctx.sendMode === 'live') {
+		if (mode === 'live') {
 			if (ctx.isPmHandle) {
 				throw new Error(
 					`send_text refused: safety guard — cannot live-send to a known PM handle (${ctx.handle ?? 'unknown'}). All PM-handle paths must use sendMode='draft'.`
@@ -56,6 +62,6 @@ export const sendText = {
 			return { ok: true, assistantContent: text };
 		}
 
-		throw new Error(`send_text: ctx.sendMode required ('live' | 'draft'), got ${JSON.stringify(ctx.sendMode)}`);
+		throw new Error(`send_text: sendMode required ('live' | 'draft'), got ${JSON.stringify(mode)}`);
 	}
 };
