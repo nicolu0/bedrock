@@ -327,10 +327,15 @@ export async function dispatchDraft({
 	edited = false,
 	action,
 	forcedSend = false,
+	// `external` send: the message already went out out-of-band (the AppFolio
+	// runner clicked Send/Save in the AppFolio UI via Playwright). Log it as a
+	// real send for KPIs/history, but skip the dylib + sent-log — there's no
+	// iMessage to fire and AppFolio texts never land in chat.db.
+	external = false,
 	sendIMessage,
 	log = () => {}
 }) {
-	if (action === 'send') {
+	if (action === 'send' && !external) {
 		if (!finals.length) return { ok: false, error: 'no messages to send' };
 		if (!sendIMessage) return { ok: false, error: 'sendIMessage not configured' };
 		const sentEntries = [];
@@ -731,6 +736,27 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				if (!chat_guid) return json(res, 200, { messages: [], pm_handles: [], agent_handles: [], pm_label });
 				const pmSet = new Set((w.pm_handles ?? []).map(normalizeHandle));
 				const agentSet = new Set((w.agent_handles ?? []).map(normalizeHandle));
+				// Overlay "edited before send" onto outbound messages so the thread
+				// shows at a glance which sends diverged from the agent's draft. The
+				// send path's message_guid is unreliable (often null), so we match on
+				// the exact sent body, scoped to this workspace to avoid collisions.
+				const editedBodies = new Set();
+				try {
+					for (const r of await db.loadResponses()) {
+						if (r.action !== 'send' || !r.edited) continue;
+						if ((r.workspace_label ?? null) !== wsLabel) continue;
+						const orig = r.messages_original ?? [];
+						const fin = r.messages_final ?? [];
+						for (let i = 0; i < fin.length; i++) {
+							if ((orig[i] ?? '') !== (fin[i] ?? '')) {
+								const body = (fin[i] ?? '').trim();
+								if (body) editedBodies.add(body);
+							}
+						}
+					}
+				} catch {
+					// Best-effort overlay — a read failure must not blank the thread.
+				}
 				// Best-effort session_id overlay (chat.db ROWID -> session_id). A
 				// Supabase hiccup must not blank the thread, so default to empty.
 				const workspace_id = resolveWorkspaceId(wsLabel);
@@ -775,6 +801,7 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 								is_from_me: isFromMe,
 								text,
 								side,
+								edited: side === 'right' && editedBodies.has(text.trim()),
 								session_id: sessionMap[r.rowid] ?? null
 							};
 						})
@@ -833,6 +860,39 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 					send_without_edit_rate: sends.length ? cleanSends.length / sends.length : null,
 					by_channel: byChannel
 				});
+			}
+
+			// The AppFolio step runner finished a flow with a LIVE Send/Save. The
+			// message already went out via the AppFolio UI, so resolve the draft as
+			// a (external) send: log + remove, no dylib.
+			const afDoneMatch = pathname.match(/^\/api\/drafts\/([^/]+)\/appfolio-done$/);
+			if (req.method === 'POST' && afDoneMatch) {
+				const [, id] = afDoneMatch;
+				const payload = await readBody(req);
+				const drafts = await db.loadDrafts();
+				const draft = drafts.find((d) => d.id === id);
+				if (!draft) return text(res, 404, 'draft not found');
+
+				const draftMessages = draft.messages ?? (draft.body ? [{ body: draft.body }] : []);
+				const draftOriginals = draft.original_messages ?? draftMessages;
+				const finals = normalizeMessages(payload.messages, draftMessages);
+				const originals = normalizeMessages(draftOriginals, draftMessages);
+				while (originals.length < finals.length) originals.push({ body: '' });
+				while (finals.length < originals.length) finals.push({ body: '' });
+				const anyEdited = finals.some((m, i) => m.body !== originals[i].body);
+
+				const result = await dispatchDraft({
+					draft,
+					finals,
+					originals,
+					edited: anyEdited,
+					action: 'send',
+					external: true,
+					sendIMessage,
+					log
+				});
+				if (!result.ok) return text(res, 500, result.error);
+				return json(res, 200, { ok: true });
 			}
 
 			const actionMatch = pathname.match(/^\/api\/drafts\/([^/]+)\/(send|copy|dismiss)$/);

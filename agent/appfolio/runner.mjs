@@ -95,15 +95,16 @@ const sendStep = () => ({
 	}
 });
 
-// Standalone messaging: final Send stays GATED (no-op) so this can't text a real
-// tenant/vendor by accident. The vendor-dispatch flow below sends for real.
+// Standalone messaging: open → expand Texts → pick the conversation → fill →
+// SEND (LIVE). Like the vendor flow, the final Send genuinely texts the
+// recipient; every step still needs an explicit approval before it runs.
 function textFlow({ srn, to, message }) {
 	return [
 		openStep(srn),
 		expandTextsStep(),
 		selectConversationStep(to),
 		fillMessageStep(message),
-		{ name: 'Send (GATED — will not fire)', gate: true, run: async () => {} }
+		sendStep()
 	];
 }
 
@@ -320,7 +321,7 @@ const SHELL = `<!doctype html><meta charset=utf-8><title>AppFolio step runner</t
 </style>
 <div class=wrap>
  <h1 id=title>AppFolio step runner</h1>
- <p class=sub>Approve each step. The final Send/Save is gated and will not fire.</p>
+ <p class=sub>Approve each step. The final Send/Save is LIVE and will fire.</p>
  <img id=shot src="/shot?t=0">
  <ol id=steps></ol>
  <div class=bar><button class=ap id=ap>Approve next step</button><button class=rj id=rj>Reject / stop</button></div>
@@ -338,7 +339,7 @@ async function tick(){
  const stop=['idle','gated','done','error','running'].includes(s.status);
  const ap=document.getElementById('ap');
  ap.disabled=stop; ap.textContent=s.status==='running'?'running…':'Approve next step';
- const msg={idle:'No active run.',ready:'Ready — click Approve to run step 1.',paused:'Step done — approve the next.',running:'Running…',gated:'Reached the gated final step. Nothing sent/saved.',done:'Done. Nothing sent/saved.',error:'Error: '+s.error}[s.status]||s.status;
+ const msg={idle:'No active run.',ready:'Ready — click Approve to run step 1.',paused:'Step done — approve the next.',running:'Running…',gated:'Reached the gated final step. Nothing sent/saved.',done:'Done — sent/saved via AppFolio.',error:'Error: '+s.error}[s.status]||s.status;
  document.getElementById('st').innerHTML='<span class="'+(s.status==='error'?'err':'')+'">'+msg+'</span>';
  document.getElementById('shot').src='/shot?t='+s.shotTs;
 }

@@ -1691,6 +1691,20 @@
 				color: #ffffff;
 				border-bottom-right-radius: 4px;
 			}
+			/* "edited" tag on outbound messages the operator changed before
+			   sending — mirrors the drafts rail's .bubble.edited label. */
+			.chat-view .row.right .bubble.edited { position: relative; }
+			.chat-view .row.right .bubble.edited::after {
+				content: 'edited';
+				position: absolute;
+				top: 50%;
+				right: calc(100% + 8px);
+				transform: translateY(-50%);
+				font-size: 10px;
+				color: #d9a366;
+				letter-spacing: 0.05em;
+				white-space: nowrap;
+			}
 			.chat-view .empty {
 				color: #a8a29e;
 				text-align: center;
@@ -2446,8 +2460,14 @@
 			const APPFOLIO_RUNNER = 'http://127.0.0.1:9773';
 			let afRunnerActive = false;
 			let afRunnerPoller = null;
+			// The draft this run came from + the body that was actually sent, so we
+			// can resolve the draft once the runner reaches its LIVE Send (status
+			// 'done'). afRunnerResolved guards against firing the resolve twice.
+			let afRunnerDraft = null;
+			let afRunnerResolved = false;
 
 			function openAppfolioRunner(d, body) {
+				afRunnerDraft = { id: d.id, messages: [{ body }] };
 				const to = d.channel === 'vendor_appfolio' ? 'Vendor' : 'Tenant';
 				const params = { flow: 'text', to, message: body };
 				// A draft may pin the AppFolio SRN directly (test WOs whose issue row
@@ -2462,7 +2482,11 @@
 			}
 
 			function openAppfolioVendorRunner(d, body) {
-				const params = { flow: 'vendor', vendor: d.vendor ?? '', message: body ?? '' };
+				afRunnerDraft = { id: d.id, messages: [{ body: body ?? '' }] };
+				// Vendor drafts carry the vendor name in `to`/`to_participants`, not a
+				// `vendor` field — read those (legacy `d.vendor` first, just in case).
+				const vendor = d.vendor ?? d.to ?? (d.to_participants && d.to_participants[0]) ?? '';
+				const params = { flow: 'vendor', vendor, message: body ?? '' };
 				if (d.appfolio_srn) params.srn = String(d.appfolio_srn);
 				else params.issue_id = d.issue_id ?? '';
 				startAppfolioRunner(`${APPFOLIO_RUNNER}/?${new URLSearchParams(params)}`);
@@ -2471,6 +2495,7 @@
 
 			async function startAppfolioRunner(startUrl) {
 				afRunnerActive = true;
+				afRunnerResolved = false;
 				chatThreadEl.classList.add('runner-mode');
 				chatThreadEl.innerHTML =
 					'<div class="af-runner">' +
@@ -2481,7 +2506,7 @@
 					'  </div>' +
 					'  <div class="af-body">' +
 					'    <div class="af-side">' +
-					'      <p class="af-sub">Approve each step. The final Send/Save is gated and will not fire.</p>' +
+					'      <p class="af-sub">Approve each step. The final Send/Save is LIVE and will fire.</p>' +
 					'      <ol class="af-steps" id="af-steps"></ol>' +
 					'      <div class="af-bar">' +
 					'        <button class="primary" id="af-approve">Approve next step</button>' +
@@ -2528,6 +2553,17 @@
 						);
 					})
 					.join('');
+				// The flow finished a LIVE Send/Save — resolve the originating draft
+				// (log it as a send + drop it). The send already happened in AppFolio,
+				// so this never re-sends; the server's appfolio-done route skips the dylib.
+				if (s.status === 'done' && afRunnerDraft && !afRunnerResolved) {
+					afRunnerResolved = true;
+					fetch('/api/drafts/' + afRunnerDraft.id + '/appfolio-done', {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ messages: afRunnerDraft.messages })
+					}).then(() => loadChatThread()).catch(() => {});
+				}
 				const ap = document.getElementById('af-approve');
 				ap.disabled = ['idle', 'gated', 'done', 'error', 'running'].includes(s.status);
 				ap.textContent = s.status === 'running' ? 'running…' : 'Approve next step';
@@ -2539,7 +2575,7 @@
 						paused: 'Step done — approve the next.',
 						running: 'Running…',
 						gated: 'Reached the gated final step. Nothing sent/saved.',
-						done: 'Done. Nothing sent/saved.',
+						done: 'Done — sent/saved via AppFolio.',
 						error: 'Error: ' + s.error
 					}[s.status] || s.status;
 				const stEl = document.getElementById('af-status');
@@ -2551,6 +2587,7 @@
 
 			function closeAppfolioRunner() {
 				afRunnerActive = false;
+				afRunnerDraft = null;
 				if (afRunnerPoller) { clearInterval(afRunnerPoller); afRunnerPoller = null; }
 				fetch(`${APPFOLIO_RUNNER}/reject`, { method: 'POST' }).catch(() => {});
 				chatThreadEl.classList.remove('runner-mode');
@@ -3881,7 +3918,7 @@
 						avatarHtml +
 						`<div class="stack">` +
 						(showSender ? `<div class="who">${escapeHtml(sender)}</div>` : '') +
-						`<div class="bubble">${escapeHtml(text)}</div>` +
+						`<div class="bubble${m.edited ? ' edited' : ''}">${escapeHtml(text)}</div>` +
 						`</div>`;
 					frag.appendChild(row);
 					lastSender = sender;

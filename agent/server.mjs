@@ -132,6 +132,9 @@ async function main() {
 	// scheduled sender: fires "Send later" drafts when their hold elapses.
 	startScheduledSender({ sendIMessage });
 
+	// appfolio runner: Playwright service the drafts UI streams from on :9773.
+	startAppfolioRunner();
+
 	log('agent server started');
 }
 
@@ -185,6 +188,68 @@ function startScheduledSender({ sendIMessage }) {
 		}
 	}, SCHEDULED_POLL_MS);
 	return { stop: () => clearInterval(timer) };
+}
+
+// AppFolio step runner. A Playwright-backed HTTP service (appfolio/runner.mjs)
+// that drives AppFolio and streams the browser to the drafts UI's "Send via
+// AppFolio" panel on 127.0.0.1:9773. It launches a browser on boot and has its
+// own top-level await, so we run it as an isolated CHILD PROCESS rather than
+// importing it — that keeps a missing Playwright/Chromium (or a crashed browser)
+// from blocking startup or taking down the agent. Set APPFOLIO_RUNNER_DISABLED=1
+// to skip it (e.g. a host without Playwright installed).
+const APPFOLIO_RUNNER_ENABLED = process.env.APPFOLIO_RUNNER_DISABLED !== '1';
+const APPFOLIO_RUNNER_MAX_RESTARTS = 3;
+
+function startAppfolioRunner() {
+	if (!APPFOLIO_RUNNER_ENABLED) {
+		log('appfolio runner disabled (APPFOLIO_RUNNER_DISABLED=1)');
+		return;
+	}
+	const script = path.join(SCRIPT_DIR, 'appfolio', 'runner.mjs');
+	let child = null;
+	let restarts = 0;
+
+	const spawnOne = () => {
+		// env: process.env so the child inherits the dotenv we loaded (Supabase creds
+		// for srn lookup) + APPFOLIO_HEADED. Same process group → Ctrl-C hits both.
+		child = spawn(process.execPath, [script], { cwd: SCRIPT_DIR, env: process.env });
+		const pipe = (stream) => {
+			stream.setEncoding('utf8');
+			stream.on('data', (chunk) => {
+				for (const line of chunk.split('\n')) if (line.trim()) log(`[appfolio] ${line.trim()}`);
+			});
+		};
+		pipe(child.stdout);
+		pipe(child.stderr);
+		child.on('error', (err) => log(`appfolio runner spawn error: ${err.message}`));
+		child.on('exit', (code, signal) => {
+			if (signal) return; // killed on shutdown — don't restart
+			log(`appfolio runner exited (code=${code})`);
+			if (code !== 0 && restarts < APPFOLIO_RUNNER_MAX_RESTARTS) {
+				restarts++;
+				log(`restarting appfolio runner (${restarts}/${APPFOLIO_RUNNER_MAX_RESTARTS})…`);
+				setTimeout(spawnOne, 2000);
+			} else if (code !== 0) {
+				log(
+					'appfolio runner keeps failing — likely Playwright is not installed in this checkout ' +
+						'(cd agent && npm i, then npx playwright install chromium) or appfolio/.state.json is missing. ' +
+						'Set APPFOLIO_RUNNER_DISABLED=1 to silence.'
+				);
+			}
+		});
+	};
+
+	spawnOne();
+	const kill = () => {
+		try {
+			child?.kill();
+		} catch {
+			/* already gone */
+		}
+	};
+	process.on('exit', kill);
+	process.on('SIGINT', () => { kill(); process.exit(0); });
+	process.on('SIGTERM', () => { kill(); process.exit(0); });
 }
 
 main().catch((err) => {
