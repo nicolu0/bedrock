@@ -104,7 +104,7 @@ function deriveEvent(scenario) {
 	}
 	if (scenario.skill === 'chat') {
 		return {
-			type: 'pm_reply',
+			type: 'incoming_user_message',
 			payload: {
 				text: c.text,
 				chat_guid: c.chat_guid,
@@ -115,7 +115,7 @@ function deriveEvent(scenario) {
 	}
 	if (scenario.skill === 'demo') {
 		return {
-			type: 'demo_message',
+			type: 'incoming_anon_message',
 			payload: { text: c.text, handle: c.handle }
 		};
 	}
@@ -376,15 +376,18 @@ for (const scenario of scenarios) {
 
 	const ctx = {
 		...scenario.ctx,
-		// Live events (demo_message) emit messages via onEvent → capture in outbox.
+		// Live events (incoming_anon_message) emit messages via onEvent → capture in outbox.
 		onEvent: async (ev) => {
 			// outbox is auto-populated by tool implementations; orchestrator emits
 			// tool_call events which we ignore here.
 		},
 		// Default sendMode if not specified by the scenario.
-		// pm_reply / demo_message are live (acks go to the groupchat, demo bot
-		// streams to the prospect); new_issue drafts for human review.
-		sendMode: scenario.ctx?.sendMode ?? (event.type === 'new_issue' ? 'draft' : 'live'),
+		// new_issue AND incoming_user_message draft for human review — the
+		// groupchat agent never auto-sends to the PM. Only the demo path
+		// (incoming_anon_message) is live (the demo bot streams to the prospect).
+		sendMode:
+			scenario.ctx?.sendMode ??
+			(event.type === 'new_issue' || event.type === 'incoming_user_message' ? 'draft' : 'live'),
 		isPmHandle: scenario.ctx?.isPmHandle ?? false
 	};
 

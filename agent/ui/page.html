@@ -412,6 +412,16 @@
 				color: #74c99a;
 				border: 1px solid rgba(60, 200, 120, 0.32);
 			}
+			.chat-item .agent-action.clarify {
+				background: rgba(217, 163, 102, 0.14);
+				color: #d4a855;
+				border: 1px solid rgba(217, 163, 102, 0.32);
+			}
+			.chat-item .agent-action.learned {
+				background: rgba(199, 163, 255, 0.14);
+				color: #c7a3ff;
+				border: 1px solid rgba(199, 163, 255, 0.32);
+			}
 			.chat-item .agent-action.no_match,
 			.chat-item .agent-action.no_action {
 				background: rgba(126, 130, 140, 0.14);
@@ -1273,8 +1283,8 @@
 				width: fit-content;
 			}
 			.turn-ev.new_issue { color: #9db8ff; border-color: rgba(157, 184, 255, 0.4); }
-			.turn-ev.pm_reply { color: #c7a3ff; border-color: rgba(199, 163, 255, 0.4); }
-			.turn-ev.demo_message { color: #d9a366; border-color: rgba(217, 163, 102, 0.4); }
+			.turn-ev.incoming_user_message { color: #c7a3ff; border-color: rgba(199, 163, 255, 0.4); }
+			.turn-ev.incoming_anon_message { color: #d9a366; border-color: rgba(217, 163, 102, 0.4); }
 			.turn-row .skill {
 				font-size: 10.5px;
 				color: #a8a29e;
@@ -2427,6 +2437,8 @@
 					const n = m.agent_drafts_count ?? 0;
 					return n ? `✓ drafted (${n})` : '✓ drafted';
 				}
+				if (action === 'clarify') return '? clarifying Q drafted';
+				if (action === 'learned') return '⇒ learned';
 				if (action === 'no_match') return 'no match';
 				if (action === 'failure') {
 					return m.agent_error ? `✗ failure: ${m.agent_error}` : '✗ failure';
@@ -3009,7 +3021,7 @@
 					if (i.urgent) bits.push('urgent');
 					return bits.filter(Boolean).join(' · ');
 				}
-				if (t.event === 'pm_reply' && p && p.text) return '“' + p.text + '”';
+				if (t.event === 'incoming_user_message' && p && p.text) return '“' + p.text + '”';
 				return t.event || 'turn';
 			}
 
@@ -3049,6 +3061,13 @@
 								? '<div class="td-urgency' + (issue.urgent ? ' on' : '') + '">' +
 								  '<span class="ulbl">' + (issue.urgent ? 'urgent' : 'not urgent') + '</span>' +
 								  escapeHtml(urgencyReason) + '</div>'
+								: '') +
+							(Array.isArray(t.trigger.history) && t.trigger.history.length
+								? '<details class="td-det"><summary>conversation history (' +
+								  t.trigger.history.length + ' prior turns)</summary><pre>' +
+								  escapeHtml(t.trigger.history.map(function (m) {
+									return (m.role === 'assistant' ? 'agent' : 'pm') + ': ' + m.content;
+								  }).join('\n')) + '</pre></details>'
 								: '') +
 							(t.trigger.user_content
 								? '<details class="td-det"><summary>prompt the model saw</summary><pre>' +

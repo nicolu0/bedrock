@@ -59,7 +59,7 @@ if (!process.env.OPENAI_API_KEY) {
 
 async function main() {
 	// Build the chat-guid index from env. Used by chat-poller to route mapped
-	// groupchat rows to chat-log + pm_reply event (vs. 1:1 demo_message).
+	// groupchat rows to chat-log + incoming_user_message event (vs. 1:1 incoming_anon_message).
 	const chatGuidIndex = buildChatGuidIndex();
 	for (const [guid, w] of chatGuidIndex.entries()) {
 		log(`listening on ${w.label}: ${guid} (pm: ${[...w.pm_handles].join(', ') || '(none)'})`);
@@ -123,7 +123,7 @@ async function main() {
 		sendIMessage
 	});
 
-	// chat-poller: chat.db → pm_reply (mapped groupchats) or demo_message (1:1).
+	// chat-poller: chat.db → incoming_user_message (mapped groupchats) or incoming_anon_message (1:1).
 	await startChatPoller({ helper, chatGuidIndex, log });
 
 	// issue-poller: issues_v2 → new_issue events → drafts.

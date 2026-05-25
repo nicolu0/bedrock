@@ -2,7 +2,7 @@
 //
 //   runTurn(event, ctx)
 //
-// event = { type: 'new_issue' | 'pm_reply' | 'demo_message', payload: {...} }
+// event = { type: 'new_issue' | 'incoming_user_message' | 'incoming_anon_message', payload: {...} }
 // ctx   = transport hooks + per-turn state (handle, chat_guid, workspace_id,
 //         workspace_label, onEvent, sendMode, outbox, drafts, ...)
 //
@@ -94,7 +94,7 @@ export async function runTurn(event, ctx) {
 	// Turns UI can link a turn back to its session / work order. ctx carries
 	// handle/chat_guid/workspace/session_id (set by the trigger that built it);
 	// issue_id rides on the new_issue payload. Anything absent for an event
-	// type is null (e.g. new_issue has no handle; pm_reply has no issue_id).
+	// type is null (e.g. new_issue has no handle; incoming_user_message has no issue_id).
 	const turnIdentity = {
 		turn_id: `turn_${randomBytes(8).toString('hex')}`,
 		workspace_id: ctx.workspace_id ?? null,
@@ -135,18 +135,26 @@ export async function runTurn(event, ctx) {
 	const reminderBlocks = await buildReminders(event, ctx, resolution.skill);
 	const userContent = composeUserContent(event, reminderBlocks);
 
-	// Full trigger record for the turn trace: the literal prompt the model saw
-	// (reminders + verbatim trigger text) plus the raw event payload — i.e. what
-	// kicked this turn off. Stored verbatim; nothing flattened.
+	// Per-event conversation history (prior turns) spliced in front of the user
+	// message. Computed up front so the turn trace can show exactly what context
+	// the model got — history was previously invisible in the trace.
+	const priorHistory = (typeof resolution.buildHistory === 'function')
+		? await resolution.buildHistory(event, ctx)
+		: [];
+
+	// Full trigger record for the turn trace: prior-turn history + the literal
+	// prompt the model saw (reminders + verbatim trigger text) + the raw event
+	// payload — i.e. everything that kicked this turn off. Stored verbatim.
 	const trigger = {
 		event: event.type,
+		history: priorHistory,
 		user_content: userContent,
 		payload: event.payload ?? null
 	};
 
 	// Skill body loaded from <skill>/SKILL.md and concatenated with
 	// identityPrompt to form the system message — but only when the event's
-	// resolution opts into preload. For heterogeneous events (e.g. pm_reply),
+	// resolution opts into preload. For heterogeneous events (e.g. incoming_user_message),
 	// resolution.skill is undefined; the system prompt is identity alone and
 	// the model is expected to call use_skill if a workflow match is obvious.
 	let systemContent = identityPrompt;
@@ -154,10 +162,6 @@ export async function runTurn(event, ctx) {
 		const skill = await loadSkill(resolution.skill);
 		systemContent = `${identityPrompt}\n\n${skill.body}`;
 	}
-
-	const priorHistory = (typeof resolution.buildHistory === 'function')
-		? await resolution.buildHistory(event, ctx)
-		: [];
 
 	const userMessages = [
 		...priorHistory,

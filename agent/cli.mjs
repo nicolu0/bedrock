@@ -84,7 +84,7 @@ function onEvent(ev) {
 
 async function turnAndPrint(line) {
 	try {
-		const event = { type: 'demo_message', payload: { text: line, handle } };
+		const event = { type: 'incoming_anon_message', payload: { text: line, handle } };
 		await runTurn(event, {
 			handle,
 			text: line,

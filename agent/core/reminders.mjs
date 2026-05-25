@@ -4,9 +4,9 @@
 // drop blocks conditionally and to read in logs.
 //
 // Per spec §6. Block list:
-//   <event>                  — always: names the trigger (new_issue/pm_reply/demo_message)
+//   <event>                  — always: names the trigger (new_issue/incoming_user_message/incoming_anon_message)
 //   # issue context          — new_issue: issue block + candidate vendors
-//   # recent sends in chat   — pm_reply: numbered list of recent groupchat sends
+//   # recent sends in chat   — incoming_user_message: numbered list of recent groupchat sends
 //   # available skills       — always: skill menu (name + 1-line description)
 //   # environment            — always: today's date + workspace label
 //
@@ -106,10 +106,10 @@ function formatMenu(menu, loadedNames) {
 // Note (PR8.2): skill bodies are NOT injected here. They reach the model two
 // ways:
 //   - Preloaded (orchestrator concatenates the body with identityPrompt in
-//     the system message) for unambiguous events like new_issue / demo_message.
+//     the system message) for unambiguous events like new_issue / incoming_anon_message.
 //   - Mid-turn (model calls use_skill → body comes back as a tool result
 //     wrapped in <skill_name>...</skill_name>) for heterogeneous events like
-//     pm_reply, where the model decides whether the message warrants a skill.
+//     incoming_user_message, where the model decides whether the message warrants a skill.
 // skillName: optional. If the event preloads a skill, pass the name so the
 // menu can mark it (loaded) and the cache is warmed for the system-prompt
 // loader. If the event has no preload, pass undefined — menu shows all skills
@@ -133,14 +133,14 @@ export async function buildReminders(event, ctx, skillName) {
 		blocks.push(reminder(formatIssueContext(issue, candidate_vendors)));
 	}
 
-	if (event.type === 'pm_reply') {
+	if (event.type === 'incoming_user_message') {
 		const chat_guid = event.payload?.chat_guid ?? ctx.chat_guid;
-		if (!chat_guid) throw new Error('reminders: pm_reply requires payload.chat_guid');
+		if (!chat_guid) throw new Error('reminders: incoming_user_message requires payload.chat_guid');
 		const bundles = await recentSentForChat({ chat_guid });
 		blocks.push(reminder(formatRecentSends(bundles)));
 	}
 
-	if (event.type === 'demo_message') {
+	if (event.type === 'incoming_anon_message') {
 		// Per-handle profile slugs — the demo skill stages key off `system/stage`
 		// and other slugs (user/name, property/<slug>, vendor/<trade>/<prop>).
 		// Surfacing them as a reminder block lets the skill pick the right
@@ -177,8 +177,8 @@ export function composeUserContent(event, reminderBlocks) {
 	// + ambiguity reminder restores the old chat.mjs's "Decide and act per
 	// the rules above" cue.
 	const framing =
-		event.type === 'pm_reply'
-			? `The PM just replied: "${userText}"\n\nApply the pm_reply phase of the active skill. If the recent-sends list contains more than one candidate and the reply doesn't uniquely identify one (e.g. a bare "yes" with multiple candidates), treat it as ambiguous and make NO dispatch tool calls.`
+		event.type === 'incoming_user_message'
+			? `The PM just sent: "${userText}"\n\nApply the incoming_user_message phase. The open-candidate count in the recent-sends list governs DISPATCH and clarifying ONLY — it does NOT gate learning:\n- NONE: never dispatch and never ask "which one" (a bare "yes"/"ok" approves nothing that isn't listed).\n- EXACTLY ONE: an approval confirms that one — dispatch it, don't ask which.\n- TWO OR MORE: dispatch if the reply identifies one, otherwise draft ONE clarifying question (send_text draft:true).\nSeparately and regardless of candidate count: still write_memory for any preference/correction/decision, and read_memory when you need prior context.`
 			: userText;
 	return `${reminderBody}\n\n${framing}`;
 }
