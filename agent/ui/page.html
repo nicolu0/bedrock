@@ -670,18 +670,6 @@
 				z-index: 4;
 			}
 			.memory-controls > * { pointer-events: auto; }
-			.memory-filters {
-				margin-left: auto;
-				display: flex;
-				gap: 14px;
-				background: #1c1917;
-				border: 1px solid #292524;
-				border-radius: 6px;
-				padding: 6px 12px;
-				font-size: 12px;
-				color: #d6d3d1;
-			}
-			.memory-filters label { cursor: pointer; user-select: none; display: flex; gap: 6px; align-items: center; }
 
 			/* Empty state */
 			.memory-empty {
@@ -861,7 +849,6 @@
 			/* When in list view, the graph filters / detail pane don't apply. */
 			body.memory-list-mode #memory-graph-pane { display: none; }
 			body.memory-list-mode #memory-entities-pane { display: none; }
-			body.memory-list-mode .memory-filters { display: none; }
 			body.memory-list-mode #memory-list-pane { display: grid; }
 			#memory-list-pane.three-col {
 				grid-template-columns: 1fr 1fr 1fr;
@@ -1503,13 +1490,6 @@
 				<div class="memory-view-toggle" id="memory-view-toggle">
 					<button data-view="graph" class="active">Graph</button>
 					<button data-view="list">List</button>
-				</div>
-				<div class="memory-filters">
-					<label><input type="checkbox" id="show-obs" checked /> observations</label>
-					<label><input type="checkbox" id="show-bel" checked /> beliefs</label>
-					<label><input type="checkbox" id="show-vendors" checked /> vendors</label>
-					<label><input type="checkbox" id="show-properties" checked /> properties</label>
-					<label><input type="checkbox" id="show-owners" checked /> owners</label>
 				</div>
 			</div>
 		</section>
@@ -2769,11 +2749,6 @@
 			const detailEl = document.getElementById('memory-detail');
 			const detailBodyEl = document.getElementById('memory-detail-body');
 			const detailCloseEl = document.getElementById('memory-detail-close');
-			const showObsEl = document.getElementById('show-obs');
-			const showBelEl = document.getElementById('show-bel');
-			const showVendorsEl = document.getElementById('show-vendors');
-			const showPropertiesEl = document.getElementById('show-properties');
-			const showOwnersEl = document.getElementById('show-owners');
 			const searchEl = document.getElementById('memory-search');
 			const newBeliefBtn = document.getElementById('new-belief-btn');
 			const dialogEl = document.getElementById('new-belief-dialog');
@@ -3057,17 +3032,9 @@
 				const svg = d3.select(svgEl);
 				svg.selectAll('*').remove();
 
-				const obs = showObsEl.checked ? memoryState.observations : [];
-				const bel = showBelEl.checked ? memoryState.beliefs : [];
-				// Entity-kind filters
-				const allEnts = memoryState.entities ?? [];
-				const visibleEnts = allEnts.filter((e) =>
-					(e.kind === 'vendor' && showVendorsEl.checked) ||
-					(e.kind === 'property' && showPropertiesEl.checked) ||
-					(e.kind === 'owner' && showOwnersEl.checked)
-				);
-				// Use the kind-filtered entity set (vendors/properties/owners toggles).
-				const ents = visibleEnts;
+				const obs = memoryState.observations;
+				const bel = memoryState.beliefs;
+				const ents = memoryState.entities ?? [];
 
 				if (!obs.length && !bel.length && !ents.length) {
 					const empty = document.createElement('div');
@@ -3168,7 +3135,7 @@
 				const g = svg.append('g').attr('class', 'graph-root');
 
 				// Zoom + pan (capture the behavior so we can drive it programmatically
-				// for the load-in animation).
+				// to set the initial centered view).
 				const zoomBehavior = d3.zoom()
 					.scaleExtent([0.2, 4])
 					.on('zoom', (ev) => g.attr('transform', ev.transform));
@@ -3386,17 +3353,12 @@
 				node.attr('transform', (d) => `translate(${d.x},${d.y})`);
 				simulation.alpha(0.05).restart();
 
-				// Animated zoom-in: start slightly zoomed-out (0.7×) and animate to a
-				// centered, more-readable view (1.05×). Center around the centroid of
-				// the entity cluster so the camera lands on the dense middle.
+				// Center the view on the entity cluster at a readable scale (1.05×).
 				const cx = w / 2;
 				const cy = h / 2;
-				const startScale = 0.45;
 				const endScale = 1.05;
-				const startTransform = d3.zoomIdentity.translate(cx * (1 - startScale), cy * (1 - startScale)).scale(startScale);
 				const endTransform = d3.zoomIdentity.translate(cx * (1 - endScale), cy * (1 - endScale)).scale(endScale);
-				svg.call(zoomBehavior.transform, startTransform);
-				svg.transition().duration(1400).ease(d3.easeCubicInOut).call(zoomBehavior.transform, endTransform);
+				svg.call(zoomBehavior.transform, endTransform);
 			}
 
 			function highlightNeighborhood(id) {
@@ -3766,11 +3728,6 @@
 			}
 
 			// ─ Filter toggles + search ─────────────────────────────────────
-			showObsEl.addEventListener('change', () => renderGraph());
-			showBelEl.addEventListener('change', () => renderGraph());
-			showVendorsEl.addEventListener('change', () => renderGraph());
-			showPropertiesEl.addEventListener('change', () => renderGraph());
-			showOwnersEl.addEventListener('change', () => renderGraph());
 
 			let searchTimer = null;
 			searchEl.addEventListener('input', () => {

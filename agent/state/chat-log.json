@@ -41,13 +41,53 @@
     "text": "No send Mario",
     "is_from_me": false,
     "db_date": 801356761908051700,
-    "agent_action": "drafted",
-    "agent_runs_at": "2026-05-24T23:06:10.703Z",
-    "agent_drafts_count": 2,
-    "agent_draft_ids": [
-      "drf_df5be41818920e2d",
-      "drf_8d168736084bb3ed"
-    ],
+    "agent_action": "no_match",
+    "agent_runs_at": "2026-05-24T23:23:30.758Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-24T23:23:28.159Z",
+    "message_guid": "18A3E99D-2D99-42AC-92FD-ED58338A3FAA",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "handle": "andrew51@illinois.edu",
+    "text": "No send Mario",
+    "is_from_me": false,
+    "db_date": 801356761908051700
+  },
+  {
+    "received_at": "2026-05-25T00:54:46.188Z",
+    "message_guid": "648CFC31-2F22-46BD-8E98-99ADA44DB678",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "handle": "andrew51@illinois.edu",
+    "text": "Yes",
+    "is_from_me": false,
+    "db_date": 801361849901309000,
+    "agent_action": "no_match",
+    "agent_runs_at": "2026-05-25T00:54:48.996Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-25T00:54:48.997Z",
+    "message_guid": "3DD7F9F7-7AE7-4996-8427-AF14EDB3DB9C",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "handle": "andrew51@illinois.edu",
+    "text": "Yes",
+    "is_from_me": false,
+    "db_date": 801362805893867800,
+    "agent_action": "no_match",
+    "agent_runs_at": "2026-05-25T00:54:50.733Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
     "agent_error": null
   }
 ]
