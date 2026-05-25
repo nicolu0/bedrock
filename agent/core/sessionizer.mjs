@@ -230,6 +230,26 @@ export async function getOpenSession(chat_guid) {
 	return state;
 }
 
+// Authoritative recent transcript for a chat's open session, read straight from
+// chat_messages — NOT the in-memory cache. getOpenSession().recent is a
+// latency-optimized cache that can drift from the DB (a message ingested in
+// another process, hydration timing), which silently drops turns from
+// conversation history. History correctness beats the saved round-trip, so this
+// always hits the DB. Oldest-first; sender mapping is identical to getOpenSession's
+// DB-hydrate path — our sends (is_from_me) → 'agent', everyone else → their handle
+// — so this is purely "read the DB, not the stale cache", no relabeling.
+export async function getRecentMessagesForChat(chat_guid, n = RECENT_MSG_COUNT) {
+	if (!chat_guid) return [];
+	const row = await fetchOpenSessionRow(chat_guid);
+	if (!row) return [];
+	const rows = await fetchRecentMessages(row.id, n);
+	return rows.map((m) => ({
+		ts: m.ts,
+		sender: m.is_from_me ? 'agent' : m.handle,
+		body: m.body
+	}));
+}
+
 // ── internals: boundary decision ─────────────────────────────────────────────
 
 // macOS Messages tapbacks ("Liked X", "Loved Y", etc.) are acknowledgments

@@ -6,8 +6,8 @@
 // recognizing a follow-up answer it asked for last turn).
 //
 // Source of truth is the sessionizer's open-session transcript (both directions
-// are captured there — the poller re-ingests our own sends). We read the cached
-// `recent` window, map senders to roles, and drop the just-arrived message(s)
+// are captured there — the poller re-ingests our own sends). We read the recent
+// DB window, map senders to roles, and drop the just-arrived message(s)
 // (the poller sessionizes each row BEFORE the turn, so the current message is
 // already in `recent` — it's the live user content, not history).
 //
@@ -36,8 +36,10 @@ export async function buildSessionHistory(event, ctx) {
 	const currentText = String(event?.payload?.text ?? ctx?.text ?? '').trim();
 
 	try {
-		const session = await sessionizer.getOpenSession(chat_guid);
-		const recent = session?.recent;
+		// Read the authoritative DB transcript, not getOpenSession().recent — that
+		// cache can drift and silently drop a prior turn (e.g. a PM reply that's in
+		// chat_messages but missing from the cached window).
+		const recent = await sessionizer.getRecentMessagesForChat(chat_guid, MAX_HISTORY);
 		if (!Array.isArray(recent) || recent.length === 0) return [];
 
 		const messages = [];
