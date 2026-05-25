@@ -27,7 +27,7 @@ export const WORKSPACES = {
 		chatEnv: 'JOSE_CHAT_GUID',
 		pm_handles: ['+13106990643', '+13102663152'],
 		agent_handles: ['+19496566275', '+15109358199'],
-		pm_label: 'jose'
+		pm_label: 'Jose'
 	}
 };
 

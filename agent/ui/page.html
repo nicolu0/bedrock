@@ -80,17 +80,12 @@
 				max-width: 1480px;
 				margin: 0 auto;
 				display: grid;
-				grid-template-columns: minmax(380px, 1.1fr) minmax(340px, 1fr) minmax(300px, 0.85fr);
+				grid-template-columns: minmax(420px, 1fr) minmax(360px, 1fr);
 				gap: 22px;
 				align-items: start;
 			}
-			@media (max-width: 1200px) {
-				main { grid-template-columns: minmax(420px, 1.1fr) minmax(360px, 1fr); }
-				#chat-col { grid-column: 1 / -1; }
-			}
 			@media (max-width: 900px) {
 				main { grid-template-columns: 1fr; }
-				#chat-col { grid-column: auto; }
 			}
 			.col-header {
 				font-size: 11px;
@@ -142,6 +137,8 @@
 			.meta .tag.workspace.prod { background: #3a1a1f; color: #f08089; }
 			.meta .tag.urgent { background: #3a1a1f; color: #f08089; }
 			.meta .tag.hold { background: #2a221a; color: #d9a366; }
+			.meta .tag.issue-link { cursor: pointer; }
+			.meta .tag.issue-link:hover { background: #3a3531; color: #fafaf9; }
 			.meta .edited {
 				margin-left: auto;
 				color: #d9a366;
@@ -1050,35 +1047,186 @@
 			}
 			.session-card .transcript {
 				margin-top: 12px;
-				padding-top: 10px;
+				padding-top: 14px;
 				border-top: 1px solid #292524;
 				display: flex;
 				flex-direction: column;
-				gap: 4px;
+				gap: 8px;
 				max-height: 540px;
 				overflow-y: auto;
 			}
-			.session-card .transcript .msg {
+			/* Mirror the Chat thread's iMessage bubbles (same values as the
+			   .chat-view .row/.bubble/.avatar rules) so sessions read identically. */
+			.session-card .transcript .row {
+				display: flex;
+				gap: 8px;
+				align-items: flex-end;
+				max-width: 100%;
+			}
+			.session-card .transcript .row.left { justify-content: flex-start; }
+			.session-card .transcript .row.right { justify-content: flex-end; }
+			.session-card .transcript .row.right + .row.left,
+			.session-card .transcript .row.left + .row.right { margin-top: 6px; }
+			.session-card .transcript .avatar {
+				width: 24px;
+				height: 24px;
+				border-radius: 50%;
+				background: #44403c;
+				color: #fafaf9;
+				font-size: 11px;
+				font-weight: 600;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				flex-shrink: 0;
+				margin-bottom: 2px;
+			}
+			.session-card .transcript .avatar.placeholder { visibility: hidden; }
+			.session-card .transcript .stack {
 				display: flex;
 				flex-direction: column;
-				max-width: 80%;
-				padding: 6px 11px;
-				border-radius: 14px;
-				font-size: 13px;
-				line-height: 1.35;
-				white-space: pre-wrap;
-				word-wrap: break-word;
+				gap: 2px;
+				max-width: calc(100% - 40px);
 			}
-			.session-card .transcript .msg .who {
-				font-size: 9.5px;
+			.session-card .transcript .row.right .stack { align-items: flex-end; }
+			.session-card .transcript .stack .who {
 				color: #a8a29e;
-				margin-bottom: 1px;
-				font-family: ui-monospace, Menlo, monospace;
+				font-size: 11px;
+				padding: 0 12px 2px;
 			}
-			.session-card .transcript .msg.them { align-self: flex-start; background: #292524; color: #fafaf9; }
-			.session-card .transcript .msg.me { align-self: flex-end; background: #1f3a5a; color: #cfe2ff; }
+			.session-card .transcript .bubble {
+				padding: 8px 13px;
+				border-radius: 18px;
+				font-size: 14px;
+				line-height: 1.35;
+				word-wrap: break-word;
+				overflow-wrap: anywhere;
+				white-space: pre-wrap;
+				max-width: 100%;
+			}
+			.session-card .transcript .row.left .bubble {
+				background: #292524;
+				color: #fafaf9;
+				border-bottom-left-radius: 4px;
+			}
+			.session-card .transcript .row.right .bubble {
+				background: #1d6ee2;
+				color: #ffffff;
+				border-bottom-right-radius: 4px;
+			}
 
 			/* ── Turns tab: orchestrator turn log ───────────────────────── */
+			/* ── Issues view (work orders from issues_v2) ──────────────── */
+			.issues-view {
+				padding: 14px 20px 60px;
+				overflow-y: auto;
+				max-width: 980px;
+				margin: 0 auto;
+			}
+			.issues-empty {
+				color: #a8a29e;
+				text-align: center;
+				padding: 80px 20px;
+				font-size: 13px;
+			}
+			.issue-row {
+				display: grid;
+				grid-template-columns: 92px 1fr auto;
+				gap: 14px;
+				align-items: start;
+				background: #1c1917;
+				border: 1px solid #292524;
+				border-radius: 8px;
+				padding: 11px 14px;
+				margin-bottom: 7px;
+			}
+			.issue-row .icol { min-width: 0; }
+			.issue-row .iname {
+				font-size: 13.5px;
+				font-weight: 600;
+				color: #f5f5f4;
+				display: flex;
+				align-items: center;
+				gap: 7px;
+			}
+			.issue-row .idesc {
+				font-size: 12px;
+				color: #a8a29e;
+				margin-top: 3px;
+				display: -webkit-box;
+				-webkit-line-clamp: 2;
+				-webkit-box-orient: vertical;
+				overflow: hidden;
+			}
+			.issue-row .imeta {
+				display: flex;
+				flex-direction: column;
+				align-items: flex-end;
+				gap: 3px;
+				white-space: nowrap;
+			}
+			.issue-row .isrn {
+				font-size: 11px;
+				color: #78716c;
+				font-family: ui-monospace, Menlo, monospace;
+			}
+			.issue-row .iwhen { font-size: 11px; color: #a8a29e; }
+			.issue-row .idt {
+				display: flex;
+				flex-direction: column;
+				gap: 1px;
+				padding-top: 1px;
+			}
+			.issue-row .idate { font-size: 12.5px; font-weight: 600; color: #d6d3d1; }
+			.issue-row .itime {
+				font-size: 11px;
+				color: #a8a29e;
+				font-variant-numeric: tabular-nums;
+			}
+			.issue-row.focused { animation: issueFlash 2s ease; }
+			@keyframes issueFlash {
+				0%   { background: #2a2538; border-color: #4a4566; }
+				60%  { background: #221f2e; border-color: #3a3550; }
+				100% { background: #1c1917; border-color: #292524; }
+			}
+			.iurgent {
+				font-size: 9.5px;
+				font-weight: 700;
+				text-transform: uppercase;
+				letter-spacing: 0.04em;
+				color: #f08089;
+				background: rgba(240, 128, 137, 0.12);
+				border: 1px solid rgba(240, 128, 137, 0.3);
+				border-radius: 4px;
+				padding: 1px 6px;
+			}
+			.inormal {
+				font-size: 9.5px;
+				font-weight: 700;
+				text-transform: uppercase;
+				letter-spacing: 0.04em;
+				color: #a8a29e;
+				background: rgba(138, 139, 144, 0.12);
+				border: 1px solid rgba(138, 139, 144, 0.3);
+				border-radius: 4px;
+				padding: 1px 6px;
+			}
+			.istat {
+				font-size: 11px;
+				font-weight: 600;
+				border-radius: 4px;
+				padding: 2px 0;
+				text-align: center;
+				height: fit-content;
+				text-transform: capitalize;
+				border: 1px solid #44403c;
+				color: #a8a29e;
+			}
+			.istat.new { color: #9db8ff; border-color: rgba(157, 184, 255, 0.4); }
+			.istat.drafted { color: #d9a366; border-color: rgba(217, 163, 102, 0.4); background: rgba(217, 163, 102, 0.1); }
+			.istat.sent { color: #74c99a; border-color: rgba(60, 200, 120, 0.4); background: rgba(60, 200, 120, 0.1); }
+			.istat.copied { color: #9db8ff; border-color: rgba(157, 184, 255, 0.4); }
+			.istat.dismissed { color: #8a8b90; border-color: rgba(138, 139, 144, 0.3); }
 			.turns-view {
 				padding: 14px 20px 60px;
 				overflow-y: auto;
@@ -1238,6 +1386,28 @@
 				max-height: 280px; overflow: auto;
 			}
 
+			/* ── Turns tab: folded-in History (KPI strip, outcome pills, diff) ── */
+			.turns-kpi {
+				display: flex; gap: 28px; padding: 12px 16px 13px; margin-bottom: 10px;
+				border: 1px solid #292524; border-radius: 8px; background: #1c1917;
+			}
+			.turns-kpi .stat { display: flex; flex-direction: column; gap: 2px; }
+			.turns-kpi .v { font-size: 19px; font-weight: 600; color: #fafaf9; font-variant-numeric: tabular-nums; }
+			.turns-kpi .l { font-size: 10.5px; color: #a8a29e; }
+			.oc { font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 7px; white-space: nowrap; }
+			.oc.send { color: #74c99a; background: rgba(60,200,120,0.12); border: 1px solid rgba(60,200,120,0.3); }
+			.oc.dismiss { color: #a8a29e; background: rgba(138,139,144,0.12); border: 1px solid rgba(138,139,144,0.3); }
+			.oc.copy { color: #9db8ff; background: rgba(157,184,255,0.12); border: 1px solid rgba(157,184,255,0.3); }
+			.oc.pending { color: #d9a366; background: rgba(217,163,102,0.12); border: 1px solid rgba(217,163,102,0.3); }
+			.td-outcome { margin-top: 10px; padding: 10px 12px; border: 1px solid #292524; border-radius: 7px; background: #14110e; }
+			.td-olbl { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+			.td-owhen { margin-left: auto; font-size: 11px; color: #78716c; }
+			.td-olbl .edited-pill { font-size: 10px; color: #d9a366; border: 1px solid rgba(217,163,102,0.32); background: rgba(217,163,102,0.12); border-radius: 4px; padding: 1px 6px; }
+			.td-olbl .edited-pill.forced { color: #f08089; border-color: rgba(240,128,137,0.32); background: rgba(240,128,137,0.12); }
+			.td-bubble { font-size: 13px; color: #e7e5e4; background: #1c1917; border: 1px solid #292524; border-radius: 7px; padding: 8px 11px; margin: 4px 0; white-space: pre-wrap; }
+			.td-bubble .strike { text-decoration: line-through; color: #78716c; }
+			.td-outcome .notes { margin-top: 8px; }
+
 			/* ── Chat tab: drafts rail (left) + iMessage thread (right) ── */
 			.chat-view {
 				flex-direction: row;
@@ -1254,6 +1424,24 @@
 			/* Display rule must live on .chat-view.active so the base
 			   `.view { display: none }` actually hides it on other tabs. */
 			.chat-view.active { display: flex; }
+			/* Dark scrollbars across all scrollable panes — the default macOS
+			   bar reads light against these near-black backgrounds. The
+			   transparent border + background-clip keeps the thumb inset and
+			   bg-agnostic so it looks right on every pane. */
+			::-webkit-scrollbar { width: 12px; height: 12px; }
+			::-webkit-scrollbar-track { background: transparent; }
+			::-webkit-scrollbar-thumb {
+				background: #44403c;
+				border-radius: 10px;
+				border: 3px solid transparent;
+				background-clip: padding-box;
+			}
+			::-webkit-scrollbar-thumb:hover {
+				background: #57534e;
+				background-clip: padding-box;
+			}
+			* { scrollbar-color: #44403c transparent; }
+
 			.chat-drafts-rail {
 				flex: 0 0 420px;
 				border-right: 1px solid #292524;
@@ -1350,12 +1538,23 @@
 			.chat-thread .day-sep {
 				align-self: stretch;
 				text-align: center;
-				color: #a8a29e;
+				color: #78716c;
 				font-size: 11px;
-				font-weight: 600;
+				font-weight: 400;
 				letter-spacing: 0.04em;
 				margin: 22px 0 10px;
 			}
+			.chat-thread .day-sep .ds-session {
+				margin-left: 8px;
+				background: none;
+				border: none;
+				padding: 0;
+				font: inherit;
+				letter-spacing: inherit;
+				color: #a8a4d8;
+				cursor: pointer;
+			}
+			.chat-thread .day-sep .ds-session:hover { color: #c7b8ff; text-decoration: underline; }
 
 			@media (max-width: 900px) {
 				.chat-view { flex-direction: column; }
@@ -1541,7 +1740,7 @@
 	<body>
 		<header>
 			<nav class="tab-nav" id="tab-nav">
-				<button data-tab="work-orders" class="active">Work Orders</button>
+				<button data-tab="issues" class="active">Issues</button>
 				<button data-tab="chat">Chat</button>
 				<button data-tab="memory">Memory</button>
 				<button data-tab="sessions">Sessions</button>
@@ -1554,20 +1753,9 @@
 			<input id="memory-search" class="memory-search" type="search" placeholder="search memory…" />
 			<button class="clear-test-btn" id="clear-test-btn" title="Wipe test workspace drafts, logs, and Supabase issues">Clear Test</button>
 		</header>
-		<main id="view-work-orders" class="view active">
-			<section id="drafts-col">
-				<h2 class="col-header">Drafts <span class="count" id="drafts-count"></span></h2>
-				<div id="drafts-list"></div>
-			</section>
-			<section id="history-col">
-				<h2 class="col-header">History <span class="count" id="history-count"></span></h2>
-				<div id="history-list"></div>
-			</section>
-			<section id="chat-col">
-				<h2 class="col-header">Chat <span class="count" id="chat-count"></span></h2>
-				<div id="chat-list"></div>
-			</section>
-		</main>
+		<section id="view-issues" class="view issues-view active">
+			<div id="issues-list"></div>
+		</section>
 
 		<section id="view-memory" class="view memory-view">
 			<div id="memory-graph-pane">
@@ -1667,12 +1855,17 @@
 				applyWsToggleStyle();
 				// Bust the id-set guards so render actually rebuilds.
 				renderedDraftIds = '';
-				renderedHistoryIds = '';
 				renderedChatIds = '';
+				renderedIssuesKey = '';
 				refresh();
 				if (activeTab === 'sessions') loadSessions();
 				turnsSig = '';
 				if (activeTab === 'turns') loadTurns();
+				// Chat thread has its own cache + 4s poller and isn't covered by
+				// refresh(); bust the render guard and reload now so the switch
+				// is instant instead of waiting on the next poll tick.
+				renderedChatThreadKey = '';
+				if (activeTab === 'chat') loadChatThread();
 			});
 			applyWsToggleStyle();
 
@@ -1692,7 +1885,6 @@
 					const data = await res.json();
 					toast(`cleared (Supabase: ${data.supabase?.issues_deleted ?? 0} issues)`);
 					renderedDraftIds = '';
-					renderedHistoryIds = '';
 					renderedChatIds = '';
 					await refresh();
 				} catch (err) {
@@ -1704,10 +1896,8 @@
 			});
 
 			const draftsList = document.getElementById('drafts-list');
-			const historyList = document.getElementById('history-list');
 			const chatList = document.getElementById('chat-list');
 			const draftsCount = document.getElementById('drafts-count');
-			const historyCount = document.getElementById('history-count');
 			const chatCount = document.getElementById('chat-count');
 			const toastEl = document.getElementById('toast');
 
@@ -1716,7 +1906,6 @@
 			// stomp on edits the user is currently making).
 			const cardRefs = new Map();
 			let renderedDraftIds = '';
-			let renderedHistoryIds = '';
 			let renderedChatIds = '';
 			const chatRefs = new Map();
 			// Pending save timer per draft id, for debounced auto-save on input.
@@ -1776,12 +1965,17 @@
 				meta.innerHTML =
 					`<span class="tag ${wsClass}">${escapeHtml(wsLabel)}</span>` +
 					`<span class="tag channel ${escapeHtml(d.channel ?? '')}">${escapeHtml(d.channel)}</span>` +
-					`<span class="tag" title="${escapeHtml(d.issue_id ?? '')}">issue ${escapeHtml(shortIssue(d.issue_id))}</span>` +
+					(d.issue_id
+						? `<span class="tag issue-link" data-issue="${escapeHtml(d.issue_id)}" data-ws="${escapeHtml(wsLabel)}" title="open issue ${escapeHtml(d.issue_id)}">issue ${escapeHtml(shortIssue(d.issue_id))} ↗</span>`
+						: `<span class="tag">issue —</span>`) +
 					`<span class="age">${fmtAge(d.created_at)}</span>` +
 					(d.hold_until ? `<span class="tag hold">hold</span>` : '');
 				card.appendChild(meta);
 				const ageEl = meta.querySelector('.age');
 				if (refsMap) refsMap.set(d.id, { ageEl });
+				const issueLink = meta.querySelector('.issue-link');
+				if (issueLink)
+					issueLink.onclick = () => focusIssue(issueLink.dataset.issue, issueLink.dataset.ws);
 
 				const recipients = d.to_participants?.length ? d.to_participants : d.to ? [d.to] : [];
 				const recip = document.createElement('div');
@@ -2082,117 +2276,6 @@
 				renderChatThread();
 			}
 
-			// ─── history rendering ──────────────────────────────────────────────
-
-			function updateKpiStrip(kpi) {
-				const k = historyList.querySelector('.kpi');
-				if (!k) return;
-				const rate = kpi.send_without_edit_rate;
-				const pct = rate == null ? '—' : `${Math.round(rate * 100)}%`;
-				k.innerHTML =
-					`<div class="stat"><span class="label">send-without-edit</span><span class="value"><span class="pct">${pct}</span></span><span class="sub">last ${kpi.window_days}d</span></div>` +
-					`<div class="stat"><span class="label">sent</span><span class="value">${kpi.sent_total}</span><span class="sub">total messages shipped</span></div>` +
-					`<div class="stat"><span class="label">actions</span><span class="value">${kpi.recent_responses}</span><span class="sub">last ${kpi.window_days}d</span></div>`;
-			}
-
-			function fmtAbsolute(iso) {
-				const d = new Date(iso);
-				const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-				const day = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-				return `${day} ${t}`;
-			}
-
-			function renderHistory(items, kpi) {
-				// Same guard as drafts: only re-render when the set of items
-				// changes, so notes/textarea edits in progress aren't stomped.
-				const idsKey = items.map((r) => r.draft_id).join('|');
-				if (idsKey === renderedHistoryIds && historyList.querySelector('.kpi')) {
-					updateKpiStrip(kpi);
-					return;
-				}
-				renderedHistoryIds = idsKey;
-				historyList.innerHTML = '';
-
-				const k = document.createElement('div');
-				k.className = 'kpi';
-				const rate = kpi.send_without_edit_rate;
-				const pct = rate == null ? '—' : `${Math.round(rate * 100)}%`;
-				k.innerHTML =
-					`<div class="stat"><span class="label">send-without-edit</span><span class="value"><span class="pct">${pct}</span></span><span class="sub">last ${kpi.window_days}d</span></div>` +
-					`<div class="stat"><span class="label">sent</span><span class="value">${kpi.sent_total}</span><span class="sub">total messages shipped</span></div>` +
-					`<div class="stat"><span class="label">actions</span><span class="value">${kpi.recent_responses}</span><span class="sub">last ${kpi.window_days}d</span></div>`;
-				historyList.appendChild(k);
-
-				if (!items.length) {
-					const e = document.createElement('div');
-					e.className = 'empty';
-					e.textContent = 'no actions yet';
-					historyList.appendChild(e);
-					return;
-				}
-
-				for (const r of items) {
-					const card = document.createElement('div');
-					card.className = 'history-item ' + r.action;
-
-					const wsLabel = r.workspace_label ?? null;
-					const wsClass = wsLabel === 'prod' ? 'tag workspace prod' : 'tag workspace';
-
-					const top = document.createElement('div');
-					top.className = 'top';
-					top.innerHTML =
-						`<span class="action-tag ${r.action}">${escapeHtml(r.action)}</span>` +
-						(wsLabel ? `<span class="${wsClass}">${escapeHtml(wsLabel)}</span>` : '') +
-						`<span class="tag channel">${escapeHtml(r.channel ?? '')}</span>` +
-						`<span class="tag" title="${escapeHtml(r.issue_id ?? '')}">issue ${escapeHtml(shortIssue(r.issue_id))}</span>` +
-						(r.edited ? `<span class="edited-pill">edited</span>` : '') +
-						(r.forced_send ? `<span class="edited-pill" style="color:#f08089;border-color:rgba(240,128,137,0.32);background:rgba(240,128,137,0.12)">forced</span>` : '') +
-						`<span class="when">${fmtAbsolute(r.timestamp)}</span>`;
-					card.appendChild(top);
-
-					if (r.to_participants?.length || r.to) {
-						const recipients = r.to_participants?.length ? r.to_participants : [r.to];
-						const recip = document.createElement('div');
-						recip.className = 'recipients';
-						recip.innerHTML =
-							`<div class="handles"><span class="label">to</span>` +
-							recipients.map((h) => `<span class="handle">${escapeHtml(h)}</span>`).join('') +
-							`</div>`;
-						card.appendChild(recip);
-					}
-
-					const finals = Array.isArray(r.messages_final) ? r.messages_final : [];
-					const origs = Array.isArray(r.messages_original) ? r.messages_original : [];
-					const bubbles = document.createElement('div');
-					bubbles.className = 'bubbles';
-					const count = Math.max(finals.length, origs.length);
-					for (let i = 0; i < count; i++) {
-						const b = document.createElement('div');
-						b.className = 'bubble';
-						const o = origs[i] ?? '';
-						const f = finals[i] ?? '';
-						if (o && f && o !== f) {
-							const s = document.createElement('span');
-							s.className = 'strike';
-							s.textContent = o;
-							b.appendChild(s);
-							b.appendChild(document.createTextNode(f));
-						} else {
-							b.textContent = f || o;
-						}
-						bubbles.appendChild(b);
-					}
-					card.appendChild(bubbles);
-
-					const notesWrap = document.createElement('div');
-					notesWrap.className = 'notes';
-					renderNotes(notesWrap, r);
-					card.appendChild(notesWrap);
-
-					historyList.appendChild(card);
-				}
-			}
-
 			function renderNotes(wrap, r) {
 				wrap.innerHTML = '';
 				const existing = (r.notes ?? '').trim();
@@ -2328,36 +2411,142 @@
 				}
 			}
 
-			async function refresh() {
+			// The Issues tab is the default landing view. refresh() reloads it;
+			// it's wired to the workspace toggle, Clear Test, and draft actions
+			// (a send flips an issue drafted→sent) so the list stays current.
+			const issuesList = document.getElementById('issues-list');
+			let issuesLoading = false;
+			let renderedIssuesKey = '';
+			// Set when a draft's issue chip is clicked; applied after the next
+			// issues render to scroll the row into view and flash it.
+			let pendingFocusIssueId = null;
+
+			async function loadIssues() {
+				if (issuesLoading) return;
+				issuesLoading = true;
+				if (!issuesList.querySelector('.issue-row'))
+					issuesList.innerHTML = '<div class="issues-empty">Loading issues…</div>';
 				try {
-					const [dRes, hRes, kRes, cRes] = await Promise.all([
-						fetch('/api/drafts'),
-						fetch('/api/history'),
-						fetch('/kpi'),
-						fetch('/api/chat-log')
-					]);
-					const drafts = (await dRes.json()).filter((d) => passesFilter(d.workspace_label));
-					const items = (await hRes.json()).filter((r) => passesFilter(r.workspace_label));
-					const kpi = await kRes.json();
-					const chats = (await cRes.json()).filter((m) => passesFilter(m.workspace_label));
-					render(drafts);
-					renderHistory(items, kpi);
-					renderChat(chats);
-					draftsCount.textContent = drafts.length ? `${drafts.length}` : '';
-					historyCount.textContent = items.length ? `${items.length}` : '';
-					chatCount.textContent = chats.length ? `${chats.length}` : '';
-				} catch {
-					// network or server error — silently skip this poll
+					const res = await fetch('/api/issues?workspace=' + workspaceFilter);
+					if (!res.ok) throw new Error(await res.text());
+					renderIssues(await res.json());
+					applyPendingIssueFocus();
+				} catch (err) {
+					if (!issuesList.querySelector('.issue-row'))
+						issuesList.innerHTML =
+							'<div class="issues-empty">Failed to load issues: ' + escapeHtml(err.message) + '</div>';
+				} finally {
+					issuesLoading = false;
 				}
 			}
 
+			// Jump from a draft (or anywhere) to its issue: switch workspace if the
+			// issue lives in the other one, open the Issues tab, then scroll to +
+			// flash the row once the list has rendered.
+			function focusIssue(issueId, wsLabel) {
+				if (!issueId) return;
+				if (wsLabel && wsLabel !== 'unknown' && wsLabel !== workspaceFilter) {
+					workspaceFilter = wsLabel;
+					localStorage.setItem(WS_KEY, workspaceFilter);
+					applyWsToggleStyle();
+					renderedDraftIds = '';
+					renderedChatIds = '';
+					renderedIssuesKey = '';
+					renderedChatThreadKey = '';
+				}
+				pendingFocusIssueId = issueId;
+				if (activeTab !== 'issues') {
+					activeTab = 'issues';
+					localStorage.setItem(TAB_KEY, activeTab);
+					applyTab(); // loads issues, then applyPendingIssueFocus runs
+				} else {
+					loadIssues();
+				}
+			}
+
+			function applyPendingIssueFocus() {
+				if (!pendingFocusIssueId) return;
+				const row = issuesList.querySelector(
+					'.issue-row[data-issue-id="' + pendingFocusIssueId + '"]'
+				);
+				pendingFocusIssueId = null;
+				if (!row) return;
+				row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				row.classList.remove('focused');
+				void row.offsetWidth; // reflow so the flash animation restarts
+				row.classList.add('focused');
+			}
+
+			function fmtIssueDate(iso) {
+				return new Date(iso).toLocaleDateString('en-US', {
+					month: 'short',
+					day: 'numeric',
+					timeZone: PT
+				});
+			}
+			function fmtIssueTime(iso) {
+				return new Date(iso).toLocaleTimeString('en-US', {
+					hour: 'numeric',
+					minute: '2-digit',
+					timeZone: PT
+				});
+			}
+
+			function renderIssues(items) {
+				// Cheap guard: only rebuild when the row set changed, so the poll
+				// doesn't churn the DOM every tick.
+				const key = items.map((i) => i.id + ':' + (i.created_at || '')).join('|');
+				if (key === renderedIssuesKey && issuesList.querySelector('.issue-row')) return;
+				renderedIssuesKey = key;
+				if (!items.length) {
+					issuesList.innerHTML =
+						'<div class="issues-empty">No issues for ' + escapeHtml(workspaceFilter) + '.</div>';
+					return;
+				}
+				let html = '';
+				for (const i of items) {
+					html +=
+						'<div class="issue-row" data-issue-id="' + escapeHtml(i.id) + '">' +
+							'<div class="idt">' +
+								'<span class="idate">' + escapeHtml(fmtIssueDate(i.created_at)) + '</span>' +
+								'<span class="itime">' + escapeHtml(fmtIssueTime(i.created_at)) + '</span>' +
+							'</div>' +
+							'<div class="icol">' +
+								'<div class="iname">' +
+									(i.urgent
+										? '<span class="iurgent">urgent</span>'
+										: '<span class="inormal">normal</span>') +
+									escapeHtml(i.name || '(untitled)') +
+								'</div>' +
+								(i.description
+									? '<div class="idesc">' + escapeHtml(i.description) + '</div>'
+									: '') +
+							'</div>' +
+							'<div class="imeta">' +
+								(i.appfolio_srn
+									? '<span class="isrn">#' + escapeHtml(i.appfolio_srn) + '</span>'
+									: '') +
+							'</div>' +
+						'</div>';
+				}
+				issuesList.innerHTML = html;
+			}
+
+			async function refresh() {
+				await loadIssues();
+			}
+
 			refresh();
-			const workOrdersPoller = setInterval(refresh, 2000);
+			const issuesPoller = setInterval(() => {
+				if (activeTab === 'issues') loadIssues();
+			}, 6000);
 
 			/* ─── Memory tab: D3 force-directed graph + CRUD ──────────────── */
 
 			const TAB_KEY = 'bedrock.activeTab';
-			let activeTab = localStorage.getItem(TAB_KEY) || 'work-orders';
+			let activeTab = localStorage.getItem(TAB_KEY) || 'issues';
+			// The old "Work Orders" tab became "Issues"; migrate a stored value.
+			if (activeTab === 'work-orders') activeTab = 'issues';
 
 			function applyTab() {
 				document.body.classList.toggle('memory-mode', activeTab === 'memory');
@@ -2377,10 +2566,8 @@
 						chatThreadEl.scrollTop = chatThreadEl.scrollHeight;
 						resizeAllDraftTextareas();
 					});
-				} else if (activeTab === 'work-orders') {
-					// Textareas created while the tab was hidden have scrollHeight=0
-					// and collapse to a single row. Reflow them now that they're visible.
-					requestAnimationFrame(resizeAllDraftTextareas);
+				} else if (activeTab === 'issues') {
+					loadIssues();
 				} else if (activeTab === 'sessions') {
 					loadSessions();
 				} else if (activeTab === 'turns') {
@@ -2503,24 +2690,39 @@
 				sessionsList.innerHTML = html;
 			}
 
+			// Same bubble structure as renderChatThread (avatar + stack + who +
+			// bubble, sender-run grouping) so a session reads like the Chat tab.
+			// agent → right ("me", unlabeled); everyone else → left, labeled once
+			// per run.
 			function renderTranscript(msgs) {
-				return msgs
-					.map((m) => {
-						const isAgent = m.is_agent ?? m.is_from_me;
-						const tail = m.handle ? ` (${m.handle.slice(-4)})` : '';
-						const who = isAgent ? `agent${tail}` : m.handle || 'unknown';
-						const ts = new Date(m.ts).toLocaleString(undefined, {
-							month: 'short',
-							day: 'numeric',
-							hour: 'numeric',
-							minute: '2-digit'
-						});
-						return `<div class="msg ${isAgent ? 'me' : 'them'}">
-							<span class="who">${escapeHtml(who)} · ${escapeHtml(ts)}</span>
-							${escapeHtml(m.body)}
-						</div>`;
-					})
-					.join('');
+				let html = '';
+				let lastSender = null;
+				for (const m of msgs) {
+					const text = m.body || '';
+					if (!text) continue;
+					const isAgent = m.is_agent ?? m.is_from_me;
+					const side = isAgent ? 'right' : 'left';
+					// sender is resolved server-side (agent / PM label / raw handle).
+					const sender = m.sender || (isAgent ? 'agent' : m.handle || 'unknown');
+					const senderChanged = sender !== lastSender;
+					const showSender = senderChanged && side === 'left';
+					const avatarHtml =
+						side === 'left'
+							? senderChanged
+								? chatAvatar(side, sender)
+								: '<div class="avatar placeholder"></div>'
+							: '';
+					html +=
+						'<div class="row ' + side + '">' +
+							avatarHtml +
+							'<div class="stack">' +
+								(showSender ? '<div class="who">' + escapeHtml(sender) + '</div>' : '') +
+								'<div class="bubble">' + escapeHtml(text) + '</div>' +
+							'</div>' +
+						'</div>';
+					lastSender = sender;
+				}
+				return html;
 			}
 
 			sessionsList.addEventListener('click', async (e) => {
@@ -2563,13 +2765,20 @@
 					turnsList.innerHTML = '<div class="turns-empty">Loading turns…</div>';
 				}
 				try {
-					const res = await fetch('/api/turns?workspace=' + workspaceFilter + '&limit=300');
-					if (!res.ok) throw new Error(await res.text());
-					const turns = await res.json();
-					const sig = turns.length + ':' + (turns[0]?.turn_id ?? turns[0]?.ts ?? '');
+					// KPI strip is prod-only (the /kpi endpoint scopes to prod traffic).
+					const reqs = [fetch('/api/turns?workspace=' + workspaceFilter + '&limit=300')];
+					if (workspaceFilter === 'prod') reqs.push(fetch('/kpi'));
+					const resps = await Promise.all(reqs);
+					if (!resps[0].ok) throw new Error(await resps[0].text());
+					const turns = await resps[0].json();
+					const kpi = resps[1] ? await resps[1].json() : null;
+					// Sig also tracks outcomes (so a late send/dismiss re-renders) and KPI.
+					const sig =
+						turns.map((t) => t.turn_id + '|' + (t.outcome ? t.outcome.action + (t.outcome.edited ? '*' : '') : '')).join(',') +
+						(kpi ? '#' + kpi.sent_total + ':' + kpi.send_without_edit_rate : '');
 					if (sig !== turnsSig) {
 						turnsSig = sig;
-						renderTurns(turns);
+						renderTurns(turns, kpi);
 					}
 				} catch (err) {
 					if (!silent) {
@@ -2608,14 +2817,26 @@
 				});
 			}
 
-			function renderTurns(turns) {
+			function renderTurns(turns, kpi) {
+				// KPI strip (prod only) — the old History header, folded in here.
+				let kpiHtml = '';
+				if (kpi) {
+					const rate = kpi.send_without_edit_rate;
+					const pct = rate == null ? '—' : Math.round(rate * 100) + '%';
+					kpiHtml =
+						'<div class="turns-kpi">' +
+							'<div class="stat"><span class="v">' + pct + '</span><span class="l">send-without-edit · ' + kpi.window_days + 'd</span></div>' +
+							'<div class="stat"><span class="v">' + kpi.sent_total + '</span><span class="l">messages sent</span></div>' +
+							'<div class="stat"><span class="v">' + kpi.recent_responses + '</span><span class="l">actions · ' + kpi.window_days + 'd</span></div>' +
+						'</div>';
+				}
 				if (!turns.length) {
 					turnsList.innerHTML =
-						'<div class="turns-empty">No turns logged yet for ' + escapeHtml(workspaceFilter) + '.</div>';
+						kpiHtml + '<div class="turns-empty">No turns logged yet for ' + escapeHtml(workspaceFilter) + '.</div>';
 					return;
 				}
 				turnsById.clear();
-				turnsList.innerHTML = turns
+				turnsList.innerHTML = kpiHtml + turns
 					.map((t, idx) => {
 						const tid = t.turn_id || ('idx-' + idx);
 						turnsById.set(tid, t);
@@ -2646,6 +2867,18 @@
 						const counts = [];
 						if (t.outbox_count) counts.push(t.outbox_count + ' sent');
 						if (t.drafts_count) counts.push(t.drafts_count + ' draft' + (t.drafts_count === 1 ? '' : 's'));
+						// Human outcome (folded-in History): disposition of the draft.
+						let outcomeHtml = '';
+						if (t.outcome) {
+							const a = t.outcome.action;
+							const label = a === 'send' ? 'sent' : a === 'copy' ? 'copied' : a === 'dismiss' ? 'dismissed' : a;
+							const ocls = a === 'send' ? 'oc send' : a === 'dismiss' ? 'oc dismiss' : 'oc copy';
+							outcomeHtml =
+								'<span class="' + ocls + '">→ ' + escapeHtml(label) +
+								(t.outcome.edited ? ' · edited' : '') + '</span>';
+						} else if (t.drafts_count && t.event === 'new_issue') {
+							outcomeHtml = '<span class="oc pending">pending review</span>';
+						}
 						let link = '';
 						if (t.session_id) {
 							link =
@@ -2666,6 +2899,7 @@
 								'</span>' +
 								'<span class="turn-tools">' + toolsHtml + '</span>' +
 								'<span class="turn-right">' +
+									outcomeHtml +
 									'<span class="dur">' + escapeHtml(dur) + iters + '</span>' +
 									(counts.length ? '<span class="counts">' + escapeHtml(counts.join(' · ')) + '</span>' : '') +
 									link +
@@ -2700,12 +2934,22 @@
 				return '<div class="td-kv"><span class="k">' + label + '</span>' + escapeHtml(s) + '</div>';
 			}
 
+			// Absolute timestamp for the outcome line. (Was the History column's;
+			// now only used here, so rendered in Pacific to match the rest of Turns.)
+			function fmtAbsolute(iso) {
+				const d = new Date(iso);
+				const tm = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: PT });
+				const day = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: PT });
+				return `${day} ${tm}`;
+			}
+
 			function renderTurnDetail(t) {
 				if (t.kind === 'precheck_short_circuit') {
 					return '<div class="td-empty">Short-circuited by a pre-check before the model ran.</div>';
 				}
 				const steps = t.steps;
-				if (!Array.isArray(steps) || !steps.length) {
+				const hasSteps = Array.isArray(steps) && steps.length;
+				if (!hasSteps && !t.outcome) {
 					return '<div class="td-empty">No trace captured — this turn predates trace logging.</div>';
 				}
 				let html = '';
@@ -2720,27 +2964,59 @@
 								: '') +
 						'</div>';
 				}
-				for (const s of steps) {
-					const calls = s.tool_calls ?? [];
-					html += '<div class="td-step"><div class="td-dot">' + escapeHtml(String(s.i ?? '·')) + '</div><div class="td-sbody">';
-					if (s.reasoning) html += '<div class="td-reason">“' + escapeHtml(s.reasoning) + '”</div>';
-					if (s.dropped_plain_content)
-						html += '<div class="td-drop">⚠ model spoke without calling a tool — output dropped</div>';
-					for (const c of calls) {
-						const ok = c.ok !== false;
-						html +=
-							'<details class="td-tcall' + (ok ? '' : ' err') + '">' +
-								'<summary><span class="tname' + (ok ? '' : ' err') + '">' + escapeHtml(c.name || '?') +
-								(ok ? '' : ' ✕') + '</span>' +
-								(c.error ? '<span class="td-cerr">' + escapeHtml(c.error) + '</span>' : '') +
-								'</summary>' +
-								turnJsonBlock('args in', c.args ?? {}) +
-								turnJsonBlock('result out', c.result ?? {}) +
-							'</details>';
+				if (hasSteps) {
+					for (const s of steps) {
+						const calls = s.tool_calls ?? [];
+						html += '<div class="td-step"><div class="td-dot">' + escapeHtml(String(s.i ?? '·')) + '</div><div class="td-sbody">';
+						if (s.reasoning) html += '<div class="td-reason">“' + escapeHtml(s.reasoning) + '”</div>';
+						if (s.dropped_plain_content)
+							html += '<div class="td-drop">⚠ model spoke without calling a tool — output dropped</div>';
+						for (const c of calls) {
+							const ok = c.ok !== false;
+							html +=
+								'<details class="td-tcall' + (ok ? '' : ' err') + '">' +
+									'<summary><span class="tname' + (ok ? '' : ' err') + '">' + escapeHtml(c.name || '?') +
+									(ok ? '' : ' ✕') + '</span>' +
+									(c.error ? '<span class="td-cerr">' + escapeHtml(c.error) + '</span>' : '') +
+									'</summary>' +
+									turnJsonBlock('args in', c.args ?? {}) +
+									turnJsonBlock('result out', c.result ?? {}) +
+								'</details>';
+						}
+						if (!s.reasoning && !calls.length && !s.dropped_plain_content)
+							html += '<div class="td-reason muted">(no output this step)</div>';
+						html += '</div></div>';
 					}
-					if (!s.reasoning && !calls.length && !s.dropped_plain_content)
-						html += '<div class="td-reason muted">(no output this step)</div>';
-					html += '</div></div>';
+				}
+				// Human outcome (folded-in History): disposition + edit diff + notes.
+				if (t.outcome) {
+					const o = t.outcome;
+					const a = o.action;
+					const label = a === 'send' ? 'sent' : a === 'copy' ? 'copied' : a === 'dismiss' ? 'dismissed' : a;
+					const acls = a === 'send' ? 'send' : a === 'dismiss' ? 'dismiss' : 'copy';
+					const finals = o.messages_final || [];
+					const origs = o.messages_original || [];
+					let bubbles = '';
+					const n = Math.max(finals.length, origs.length);
+					for (let i = 0; i < n; i++) {
+						const orig = origs[i] || '';
+						const fin = finals[i] || '';
+						bubbles +=
+							orig && fin && orig !== fin
+								? '<div class="td-bubble"><span class="strike">' + escapeHtml(orig) + '</span>' + escapeHtml(fin) + '</div>'
+								: '<div class="td-bubble">' + escapeHtml(fin || orig) + '</div>';
+					}
+					html +=
+						'<div class="td-outcome">' +
+							'<div class="td-olbl">' +
+								'<span class="oc ' + acls + '">→ ' + escapeHtml(label) + '</span>' +
+								(o.edited ? '<span class="edited-pill">edited</span>' : '') +
+								(o.forced_send ? '<span class="edited-pill forced">forced</span>' : '') +
+								'<span class="td-owhen">' + escapeHtml(fmtAbsolute(o.timestamp)) + '</span>' +
+							'</div>' +
+							bubbles +
+							(o.draft_id ? '<div class="notes td-notes" data-draft-id="' + escapeHtml(o.draft_id) + '"></div>' : '') +
+						'</div>';
 				}
 				return html;
 			}
@@ -2783,6 +3059,11 @@
 						const t = turnsById.get(item.dataset.turnId);
 						detail.innerHTML = t ? renderTurnDetail(t) : '<div class="td-empty">trace unavailable</div>';
 						detail.dataset.rendered = '1';
+						// Wire the folded-in History notes editor onto the outcome, if any.
+						const nw = detail.querySelector('.td-notes');
+						if (nw && t && t.outcome) {
+							renderNotes(nw, { draft_id: t.outcome.draft_id, notes: t.outcome.notes });
+						}
 					}
 					detail.hidden = false;
 					item.classList.add('open');
@@ -2888,10 +3169,10 @@
 			}
 
 			function chatSenderLabel(msg) {
-				// Left side = the PM persona (per-workspace label: 'jose' for
+				// Left side = the PM persona (per-workspace label: 'Jose' for
 				// prod, 'Test User' for test). Right side ("me") is implicit
 				// and never shown.
-				const pmLabel = chatThreadCache?.pm_label ?? 'jose';
+				const pmLabel = chatThreadCache?.pm_label ?? 'Jose';
 				return msg.side === 'left' ? pmLabel : 'me';
 			}
 
@@ -2924,11 +3205,42 @@
 				return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
 			}
 
+			// Open the Sessions tab and scroll/flash a specific session card.
+			function focusSession(sid) {
+				if (!sid) return;
+				activeTab = 'sessions';
+				localStorage.setItem(TAB_KEY, activeTab);
+				applyTab(); // kicks loadSessions() (async)
+				const sel = '.session-card[data-id="' + (window.CSS?.escape ? CSS.escape(sid) : sid) + '"]';
+				let tries = 0;
+				const iv = setInterval(() => {
+					const card = sessionsList.querySelector(sel);
+					if (card) {
+						clearInterval(iv);
+						card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+						card.classList.add('flash');
+						setTimeout(() => card.classList.remove('flash'), 1800);
+					} else if (++tries > 25) {
+						clearInterval(iv);
+					}
+				}, 100);
+			}
+
+			// Session links in the thread's boundary headers.
+			chatThreadEl.addEventListener('click', (e) => {
+				const btn = e.target.closest('button[data-session]');
+				if (!btn) return;
+				e.stopPropagation();
+				focusSession(btn.dataset.session);
+			});
+
 			function renderChatThread() {
 				if (afRunnerActive) return; // runner owns the right pane
 				if (!chatThreadCache) return;
 				const msgs = chatThreadCache.messages ?? [];
-				const key = msgs.map((m) => m.guid).join('|');
+				// session_id in the key so boundaries repaint when the sessionizer
+				// (re)assigns sessions, even if the message set is unchanged.
+				const key = msgs.map((m) => m.guid + ':' + (m.session_id || '')).join('|');
 				// Skip rebuild only if the same set of rows is already painted.
 				// Empty-msgs case must not match the initial empty key, otherwise
 				// the "Loading conversation…" placeholder never gets cleared.
@@ -2942,28 +3254,35 @@
 				}
 
 				const frag = document.createDocumentFragment();
-				let lastTs = null;
-				let lastDayKey = null;
+				let lastSessionId = null;
+				let drewHeader = false;
 				let lastSender = null;
 				for (const m of msgs) {
 					const ts = m.ts ? new Date(m.ts) : null;
-					const tsMs = ts ? ts.getTime() : null;
 					const sender = chatSenderLabel(m);
 					const text = cleanChatText(m.text);
 					if (!text) continue;
 
-					const dayKey = ts
-						? `${ts.getFullYear()}-${ts.getMonth()}-${ts.getDate()}`
-						: null;
-					const dayChanged = dayKey && dayKey !== lastDayKey;
-					const bigGap =
-						tsMs != null && lastTs != null && tsMs - lastTs > 4 * 60 * 60 * 1000;
-					if (ts && (dayChanged || bigGap)) {
+					// Break the thread on sessionizer boundaries (a new session_id),
+					// not on the clock. Keep the same centered day+time look, and
+					// hang a "session →" link off it. The very first message also
+					// gets a header so the top isn't bare.
+					const sid = m.session_id || null;
+					const newSession = sid && sid !== lastSessionId;
+					if (ts && (newSession || !drewHeader)) {
 						const sep = document.createElement('div');
 						sep.className = 'day-sep';
-						sep.textContent = fmtDayHeader(ts);
+						if (sid) {
+							sep.innerHTML =
+								'<span class="ds-when">' + escapeHtml(fmtDayHeader(ts)) + '</span>' +
+								'<button class="ds-session" data-session="' + escapeHtml(sid) + '">session →</button>';
+						} else {
+							sep.textContent = fmtDayHeader(ts);
+						}
 						frag.appendChild(sep);
+						drewHeader = true;
 					}
+					if (sid) lastSessionId = sid;
 
 					const senderChanged = sender !== lastSender;
 					// Only label the LEFT side (jose). Right side ("me") is
@@ -2985,8 +3304,6 @@
 						`<div class="bubble">${escapeHtml(text)}</div>` +
 						`</div>`;
 					frag.appendChild(row);
-					if (tsMs != null) lastTs = tsMs;
-					if (dayKey) lastDayKey = dayKey;
 					lastSender = sender;
 				}
 
