@@ -1428,6 +1428,114 @@
 				padding: 80px 20px;
 				font-size: 13px;
 			}
+
+			/* AppFolio step runner — takes over the right pane (replaces the
+			   iMessage thread) while a run is active. Palette matches the app:
+			   stone surfaces, #1d6ee2 primary, #f08089 danger. */
+			.chat-thread.runner-mode {
+				max-width: none;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+			}
+			.af-runner {
+				display: flex;
+				flex-direction: column;
+				height: 100%;
+				width: 100%;
+				background: #0c0a09;
+			}
+			.af-runner .af-head {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				padding: 13px 18px;
+				border-bottom: 1px solid #292524;
+				flex: 0 0 auto;
+			}
+			.af-runner .af-head h3 {
+				margin: 0;
+				font-size: 14px;
+				font-weight: 600;
+				color: #fafaf9;
+			}
+			.af-runner .af-head .af-flow {
+				font-size: 11px;
+				color: #a8a29e;
+				text-transform: uppercase;
+				letter-spacing: 0.06em;
+			}
+			.af-runner .af-head .af-close { margin-left: auto; }
+			.af-runner .af-body {
+				flex: 1 1 auto;
+				display: flex;
+				flex-direction: row;
+				gap: 16px;
+				padding: 16px 18px;
+				min-height: 0;
+				overflow: hidden;
+			}
+			.af-runner .af-shotwrap {
+				flex: 1 1 auto;
+				min-width: 0;
+				display: flex;
+				align-items: flex-start;
+				justify-content: center;
+				overflow: auto;
+			}
+			.af-runner .af-side {
+				flex: 0 0 340px;
+				display: flex;
+				flex-direction: column;
+				min-height: 0;
+				overflow-y: auto;
+			}
+			.af-runner .af-sub { color: #a8a29e; font-size: 12px; margin: 0 0 14px; }
+			.af-runner .af-shot {
+				max-width: 100%;
+				max-height: 100%;
+				object-fit: contain;
+				border: 1px solid #292524;
+				border-radius: 9px;
+				display: block;
+				background: #1c1917;
+				min-height: 120px;
+			}
+			.af-runner ol.af-steps { list-style: none; margin: 0 0 14px; padding: 0; }
+			.af-runner ol.af-steps li {
+				display: flex;
+				gap: 10px;
+				align-items: center;
+				padding: 8px 11px;
+				border: 1px solid #292524;
+				border-radius: 8px;
+				margin-bottom: 6px;
+				background: #1c1917;
+				font-size: 13px;
+				color: #d6d3d1;
+			}
+			.af-runner ol.af-steps li .af-dot {
+				width: 19px;
+				height: 19px;
+				border-radius: 50%;
+				display: grid;
+				place-items: center;
+				font-size: 11px;
+				font-weight: 700;
+				flex: 0 0 19px;
+				background: #292524;
+				color: #78716c;
+			}
+			.af-runner ol.af-steps li.done { border-color: rgba(116, 201, 154, 0.3); }
+			.af-runner ol.af-steps li.done .af-dot { background: #1f6f43; color: #fafaf9; }
+			.af-runner ol.af-steps li.cur { border-color: #1d6ee2; }
+			.af-runner ol.af-steps li.cur .af-dot { background: #1d6ee2; color: #fff; }
+			.af-runner ol.af-steps li.gate { border-color: rgba(217, 163, 102, 0.4); }
+			.af-runner ol.af-steps li.gate .af-dot { background: #d9a366; color: #1c1917; }
+			.af-runner ol.af-steps li.gate .af-nm { color: #d9a366; }
+			.af-runner .af-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+			.af-runner .af-status { font-size: 12px; color: #a8a29e; }
+			.af-runner .af-status.err { color: #f08089; }
 		</style>
 	</head>
 	<body>
@@ -1725,6 +1833,25 @@
 					actions.appendChild(sendBtn);
 				}
 
+				// AppFolio drafts: launch the step-gated runner embedded in the page.
+				// Never auto-sends — you approve each step. Routing is by channel:
+				// every vendor_appfolio draft runs the full vendor-dispatch flow
+				// (Edit → pick vendor → tick secure-link boxes → Save → text → Send);
+				// tenant_appfolio runs the text/message flow.
+				if (d.channel === 'vendor_appfolio') {
+					const vbtn = document.createElement('button');
+					vbtn.className = 'primary';
+					vbtn.textContent = 'Assign vendor via AppFolio';
+					vbtn.onclick = () => openAppfolioVendorRunner(d, tas.map((t) => t.value).join('\n'));
+					actions.appendChild(vbtn);
+				} else if ((d.channel ?? '').endsWith('_appfolio')) {
+					const afBtn = document.createElement('button');
+					afBtn.className = 'primary';
+					afBtn.textContent = 'Send via AppFolio';
+					afBtn.onclick = () => openAppfolioRunner(d, tas.map((t) => t.value).join('\n'));
+					actions.appendChild(afBtn);
+				}
+
 				const dismissBtn = document.createElement('button');
 				dismissBtn.className = 'danger';
 				dismissBtn.textContent = 'Dismiss';
@@ -1823,6 +1950,136 @@
 					toast(`${action} failed: ${err.message}`, 'error');
 					btn.disabled = false;
 				}
+			}
+
+			// ─── AppFolio step runner (embedded in the right pane) ──────────────
+			// "Send via AppFolio" takes over the chat thread's right column with a
+			// native step panel and drives the runner service (agent/appfolio/
+			// runner.mjs on :9773) through its JSON endpoints (CORS is open). The
+			// runner resolves the WO from the draft's issue_id and pauses for
+			// approval at each step; the final Send/Save is gated and never fires.
+			const APPFOLIO_RUNNER = 'http://127.0.0.1:9773';
+			let afRunnerActive = false;
+			let afRunnerPoller = null;
+
+			function openAppfolioRunner(d, body) {
+				const to = d.channel === 'vendor_appfolio' ? 'Vendor' : 'Tenant';
+				const params = { flow: 'text', to, message: body };
+				// A draft may pin the AppFolio SRN directly (test WOs whose issue row
+				// has no appfolio_srn); otherwise the runner resolves it from issue_id.
+				if (d.appfolio_srn) params.srn = String(d.appfolio_srn);
+				else params.issue_id = d.issue_id ?? '';
+				const qs = new URLSearchParams(params);
+				startAppfolioRunner(`${APPFOLIO_RUNNER}/?${qs}`);
+				// If launched from the Work Orders pane, jump to Chat so the right
+				// pane (where the runner now lives) is on screen.
+				if (activeTab !== 'chat') {
+					activeTab = 'chat';
+					localStorage.setItem(TAB_KEY, activeTab);
+					applyTab();
+				}
+			}
+
+			function openAppfolioVendorRunner(d, body) {
+				const params = { flow: 'vendor', vendor: d.vendor ?? '', message: body ?? '' };
+				if (d.appfolio_srn) params.srn = String(d.appfolio_srn);
+				else params.issue_id = d.issue_id ?? '';
+				startAppfolioRunner(`${APPFOLIO_RUNNER}/?${new URLSearchParams(params)}`);
+				if (activeTab !== 'chat') {
+					activeTab = 'chat';
+					localStorage.setItem(TAB_KEY, activeTab);
+					applyTab();
+				}
+			}
+
+			async function startAppfolioRunner(startUrl) {
+				afRunnerActive = true;
+				chatThreadEl.classList.add('runner-mode');
+				chatThreadEl.innerHTML =
+					'<div class="af-runner">' +
+					'  <div class="af-head">' +
+					'    <h3>AppFolio step runner</h3>' +
+					'    <span class="af-flow" id="af-flow"></span>' +
+					'    <button class="af-close" id="af-close">Close</button>' +
+					'  </div>' +
+					'  <div class="af-body">' +
+					'    <div class="af-side">' +
+					'      <p class="af-sub">Approve each step. The final Send/Save is gated and will not fire.</p>' +
+					'      <ol class="af-steps" id="af-steps"></ol>' +
+					'      <div class="af-bar">' +
+					'        <button class="primary" id="af-approve">Approve next step</button>' +
+					'        <button class="danger" id="af-reject">Reject / stop</button>' +
+					'      </div>' +
+					'      <div class="af-status" id="af-status"></div>' +
+					'    </div>' +
+					'    <div class="af-shotwrap"><img class="af-shot" id="af-shot" src="' +
+					APPFOLIO_RUNNER + '/stream" alt=""></div>' +
+					'  </div>' +
+					'</div>';
+				document.getElementById('af-close').onclick = closeAppfolioRunner;
+				document.getElementById('af-approve').onclick = async () => {
+					await fetch(`${APPFOLIO_RUNNER}/approve`, { method: 'POST' }).catch(() => {});
+					afTick();
+				};
+				document.getElementById('af-reject').onclick = async () => {
+					await fetch(`${APPFOLIO_RUNNER}/reject`, { method: 'POST' }).catch(() => {});
+					afTick();
+				};
+				// GET with the run params triggers startRun server-side.
+				try { await fetch(startUrl); } catch {}
+				afTick();
+				if (!afRunnerPoller) afRunnerPoller = setInterval(afTick, 1000);
+			}
+
+			async function afTick() {
+				if (!afRunnerActive) return;
+				let s;
+				try { s = await (await fetch(`${APPFOLIO_RUNNER}/state`)).json(); } catch { return; }
+				const flowEl = document.getElementById('af-flow');
+				if (!flowEl) return; // panel closed mid-flight
+				flowEl.textContent = (s.flowName || '') + ' flow';
+				document.getElementById('af-steps').innerHTML = (s.steps || [])
+					.map((st, i) => {
+						let cls = 'pend';
+						let mark = i + 1;
+						if (i < s.idx) { cls = 'done'; mark = '✓'; }
+						else if (st.gate) { cls = 'gate'; mark = '!'; }
+						else if (i === s.idx) { cls = 'cur'; }
+						return (
+							'<li class="' + cls + '"><span class="af-dot">' + mark +
+							'</span><span class="af-nm">' + escapeHtml(st.name) + '</span></li>'
+						);
+					})
+					.join('');
+				const ap = document.getElementById('af-approve');
+				ap.disabled = ['idle', 'gated', 'done', 'error', 'running'].includes(s.status);
+				ap.textContent = s.status === 'running' ? 'running…' : 'Approve next step';
+				const msg =
+					{
+						idle: 'No active run.',
+						starting: 'Starting…',
+						ready: 'Ready — click Approve to run step 1.',
+						paused: 'Step done — approve the next.',
+						running: 'Running…',
+						gated: 'Reached the gated final step. Nothing sent/saved.',
+						done: 'Done. Nothing sent/saved.',
+						error: 'Error: ' + s.error
+					}[s.status] || s.status;
+				const stEl = document.getElementById('af-status');
+				stEl.textContent = msg;
+				stEl.classList.toggle('err', s.status === 'error');
+				// The shot <img> is a live MJPEG stream set once at start — don't
+				// reassign src here or it would tear down and restart the stream.
+			}
+
+			function closeAppfolioRunner() {
+				afRunnerActive = false;
+				if (afRunnerPoller) { clearInterval(afRunnerPoller); afRunnerPoller = null; }
+				fetch(`${APPFOLIO_RUNNER}/reject`, { method: 'POST' }).catch(() => {});
+				chatThreadEl.classList.remove('runner-mode');
+				renderedChatThreadKey = ''; // force a fresh thread paint
+				chatThreadEl.innerHTML = '<div class="empty">Loading conversation…</div>';
+				renderChatThread();
 			}
 
 			// ─── history rendering ──────────────────────────────────────────────
@@ -2558,7 +2815,7 @@
 			async function loadChatThread() {
 				if (chatThreadLoading) return;
 				chatThreadLoading = true;
-				if (!chatThreadCache) {
+				if (!chatThreadCache && !afRunnerActive) {
 					chatThreadEl.innerHTML = '<div class="empty">Loading conversation…</div>';
 				}
 				try {
@@ -2668,6 +2925,7 @@
 			}
 
 			function renderChatThread() {
+				if (afRunnerActive) return; // runner owns the right pane
 				if (!chatThreadCache) return;
 				const msgs = chatThreadCache.messages ?? [];
 				const key = msgs.map((m) => m.guid).join('|');
