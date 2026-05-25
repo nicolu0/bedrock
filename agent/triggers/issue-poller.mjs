@@ -23,9 +23,10 @@ import Database from 'better-sqlite3';
 
 import * as db from '../state/helpers.mjs';
 import { runTurn } from '../core/orchestrator.mjs';
-import { enrichIssue } from '../tools/enrich_issue.mjs';
+import { enrichIssue } from './enrich-issue.mjs';
 import { WORKSPACES } from '../core/workspaces.mjs';
 import { supabaseEnv } from '../core/supabase.mjs';
+import { nextSendTime } from '../core/work-hours.mjs';
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_PROCESSED_IDS = 1000;
@@ -115,18 +116,6 @@ async function fetchWorkspaceVendors(workspace_id, cache) {
 	return rows;
 }
 
-// ── Weekend hold ────────────────────────────────────────────────────────────
-
-function weekendHold(now = new Date()) {
-	const day = now.getDay(); // 0 Sun, 6 Sat
-	if (day !== 0 && day !== 6) return null;
-	const monday = new Date(now);
-	const daysUntilMonday = (8 - day) % 7 || 1;
-	monday.setDate(monday.getDate() + daysUntilMonday);
-	monday.setHours(9, 0, 0, 0);
-	return monday.toISOString();
-}
-
 // ── Poll loop ───────────────────────────────────────────────────────────────
 
 async function saveCursor(cursor) {
@@ -201,6 +190,11 @@ async function pollOnce() {
 				if (enriched.property) issue.property = enriched.property;
 				if (enriched.name) issue.name = enriched.name;
 				if (enriched.description) issue.description = enriched.description;
+				// Urgency is the agent's call now (triaged in enrich), with the PMS
+				// flag as one input. It drives the hold below and rides the
+				// new_issue payload into the turn log for the Turns tab.
+				if (typeof enriched.urgent === 'boolean') issue.urgent = enriched.urgent;
+				if (enriched.urgency_reason) issue.urgency_reason = enriched.urgency_reason;
 			}
 
 			const event = {
@@ -234,7 +228,10 @@ async function pollOnce() {
 				continue;
 			}
 
-			const hold = issue.urgent ? null : weekendHold();
+			// Off-hours arrivals get held to the next work-hours open (the
+			// "Send later" path). Inside work hours, or agent-judged
+				// urgent (see enrich triage), no hold.
+			const hold = issue.urgent ? null : nextSendTime();
 			const draft = await db.createDraft({
 				trigger: 'new_issue',
 				channel: 'groupchat',
@@ -250,7 +247,9 @@ async function pollOnce() {
 				draft_id: draft.id,
 				workspace: ws.label,
 				message_count: messages.length,
-				hold_until: hold
+				hold_until: hold,
+				urgent: !!issue.urgent,
+				urgency_reason: issue.urgency_reason ?? null
 			});
 		} catch (err) {
 			log(`error processing ${issue.id}: ${err.message}`);

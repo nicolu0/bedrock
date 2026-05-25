@@ -4,15 +4,18 @@
 // the intake shim) and fills in the rest:
 //
 //   - AppFolio reports API: unit_id + a cleaner job_description
-//   - Mini LLM: a 3–7 word title (`name`)
+//   - Mini LLM: a 3–7 word title (`name`) + an urgency call (`urgent` +
+//     `urgency_reason`) from the same one-shot triage
 //   - PATCH issues_v2 with all of the above
 //
 // Returns the enriched display fields { property, unit, tenant, name,
-// description } so the poller can merge them into the new_issue payload — the
-// agent reads them inline instead of spending a tool round-trip. This is setup,
-// not a decision, so it lives outside the tool registry. Ported from the old
-// intake-agent edge function; deletes the AppFolio call + LLM out of the edge
-// surface.
+// description, urgent, urgency_reason } so the poller can merge them into the
+// new_issue payload — the agent reads them inline instead of spending a tool
+// round-trip, and the urgency call rides into the turn log (trigger.payload.
+// issue) so the Turns tab can show why the agent judged it urgent. This is
+// setup, not a decision, so it lives outside the tool registry. Ported from the
+// old intake-agent edge function; deletes the AppFolio call + LLM out of the
+// edge surface.
 
 import { supabaseEnv } from '../core/supabase.mjs';
 
@@ -52,14 +55,21 @@ export async function enrichIssue(issue_id) {
 		}
 	}
 
-	// 3. LLM: extract a short title from the cleanest description we have.
+	// 3. LLM: one-shot triage of the cleanest description we have — a short
+	//    title plus the urgency call (urgent + a one-line reason). The PMS
+	//    `urgent` flag is fed in as a signal the model can confirm or override.
 	const descriptionForLlm = cleanDescription || row.description || '';
 	let name = row.name ?? null;
+	let urgent = !!row.urgent; // PMS flag as the fallback if triage fails
+	let urgency_reason = null;
 	if (descriptionForLlm) {
 		try {
-			name = await extractName(descriptionForLlm);
+			const triage = await triageIssue(descriptionForLlm, !!row.urgent);
+			name = triage.name;
+			urgent = triage.urgent;
+			urgency_reason = triage.urgency_reason;
 		} catch (err) {
-			console.error(`enrich_issue: LLM extract failed for ${issue_id}: ${err.message}`);
+			console.error(`enrich_issue: LLM triage failed for ${issue_id}: ${err.message}`);
 		}
 	}
 
@@ -86,7 +96,9 @@ export async function enrichIssue(issue_id) {
 		unit: unit ? { id: unit.id, name: unit.name } : null,
 		tenant: tenant ? { id: tenant.id, name: tenant.name } : null,
 		name,
-		description: cleanDescription || row.description || null
+		description: cleanDescription || row.description || null,
+		urgent,
+		urgency_reason
 	};
 }
 
@@ -105,7 +117,7 @@ function supabaseHeaders() {
 async function fetchIssueRow(issue_id) {
 	const { url } = supabaseEnv();
 	const params = new URLSearchParams({
-		select: 'id,workspace_id,appfolio_srn,description,property_id,tenant_id,unit_id,name',
+		select: 'id,workspace_id,appfolio_srn,description,property_id,tenant_id,unit_id,name,urgent',
 		id: `eq.${issue_id}`,
 		limit: '1'
 	});
@@ -261,7 +273,11 @@ async function fetchAppfolioWorkOrder({ appfolio_property_id, srn }) {
 
 // ─── Mini LLM ──────────────────────────────────────────────────────────────
 
-async function extractName(description) {
+// One-shot triage: title + urgency call + a one-line reason for the urgency.
+// `pmsUrgent` is the incoming PMS flag, fed in as a signal — the model decides
+// the final call and may override it. The reason is logged with the turn so
+// the Turns tab can show WHY the agent judged the work order (not) urgent.
+async function triageIssue(description, pmsUrgent) {
 	const res = await fetch('https://api.openai.com/v1/chat/completions', {
 		method: 'POST',
 		headers: {
@@ -275,8 +291,13 @@ async function extractName(description) {
 				{
 					role: 'system',
 					content:
-						'You are a maintenance ticket triager. Given a work order description, return JSON with one field:\n' +
-						'- name: a 3-7 word title summarizing the issue (e.g. "Leaking kitchen faucet", "Broken bedroom window"). No quotes, no period.'
+						'You are a maintenance ticket triager. Given a work order description, return JSON with three fields:\n' +
+						'- name: a 3-7 word title summarizing the issue (e.g. "Leaking kitchen faucet", "Broken bedroom window"). No quotes, no period.\n' +
+						'- urgent: boolean. true ONLY when the issue risks safety, health, or property damage if it waits hours rather than being handled the next business day — e.g. active leak or flooding, no heat in cold weather, gas smell, electrical hazard/sparking, sewage backup, no working toilet in a single-bath unit, lockout, break-in. Routine wear, cosmetic issues, a single non-essential appliance, or a slow drain are NOT urgent.\n' +
+						'- urgency_reason: one short plain-English sentence explaining the urgent decision — what makes it urgent, or why it can wait. If you disagree with the PMS flag, say so.\n' +
+						'The PMS flagged this work order as ' +
+						(pmsUrgent ? 'URGENT' : 'not urgent') +
+						' — treat that as one signal, not the final answer.'
 				},
 				{ role: 'user', content: description }
 			]
@@ -286,5 +307,9 @@ async function extractName(description) {
 	const json = await res.json();
 	const content = json.choices?.[0]?.message?.content ?? '{}';
 	const parsed = JSON.parse(content);
-	return String(parsed.name ?? '').slice(0, 120) || 'Work order';
+	return {
+		name: String(parsed.name ?? '').slice(0, 120) || 'Work order',
+		urgent: typeof parsed.urgent === 'boolean' ? parsed.urgent : !!pmsUrgent,
+		urgency_reason: parsed.urgency_reason ? String(parsed.urgency_reason).slice(0, 300) : null
+	};
 }
