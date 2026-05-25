@@ -301,52 +301,6 @@ if (cli.flow) startRun(cli).catch((e) => { error = e.message; status = 'error'; 
 
 // ---- panel + control endpoints -------------------------------------------
 
-const SHELL = `<!doctype html><meta charset=utf-8><title>AppFolio step runner</title>
-<style>
- body{margin:0;background:#16161a;color:#e8e8e6;font:14px/1.5 -apple-system,system-ui,sans-serif}
- .wrap{max-width:560px;margin:0 auto;padding:16px}
- h1{font-size:15px;margin:0 0 2px} .sub{color:#9a9a96;margin:0 0 14px;font-size:12px}
- ol{padding:0;list-style:none;margin:0 0 14px}
- li{display:flex;gap:9px;align-items:center;padding:7px 10px;border:1px solid #2c2c32;border-radius:8px;margin-bottom:5px;background:#1d1d22;font-size:13px}
- .dot{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;flex:0 0 18px}
- .done .dot{background:#1f883d;color:#fff}.cur .dot{background:#a48bff;color:#fff}
- .gate .dot{background:#d29922;color:#16161a}.pend .dot{background:#2c2c32;color:#9a9a96}
- .cur{border-color:#a48bff}.gate{border-color:#d29922} .nm{flex:1}.gate .nm{color:#d29922}
- img{width:100%;border:1px solid #2c2c32;border-radius:9px;display:block;margin-bottom:10px}
- .bar{display:flex;gap:8px;margin:12px 0}
- button{font:600 13px system-ui;padding:9px 16px;border-radius:8px;border:0;cursor:pointer}
- .ap{background:#7a5cff;color:#fff}.ap:disabled{opacity:.4;cursor:not-allowed}
- .rj{background:#2c2c32;color:#f85149} .st{font-size:12px;color:#9a9a96}.err{color:#f85149}
-</style>
-<div class=wrap>
- <h1 id=title>AppFolio step runner</h1>
- <p class=sub>Approve each step. The final Send/Save is gated and will not fire.</p>
- <img id=shot src="/shot?t=0">
- <ol id=steps></ol>
- <div class=bar><button class=ap id=ap>Approve next step</button><button class=rj id=rj>Reject / stop</button></div>
- <div class=st id=st></div>
-</div>
-<script>
-async function tick(){
- let s; try{ s=await (await fetch('/state')).json(); }catch{ return; }
- document.getElementById('title').textContent='AppFolio step runner — '+s.flowName+' flow';
- document.getElementById('steps').innerHTML=(s.steps||[]).map((st,i)=>{
-  let cls='pend',d=i+1;
-  if(i<s.idx){cls='done';d='✓';}else if(st.gate){cls='gate';d='!';}else if(i===s.idx){cls='cur';}
-  return '<li class='+cls+'><span class=dot>'+d+'</span><span class=nm>'+st.name+'</span></li>';
- }).join('');
- const stop=['idle','gated','done','error','running'].includes(s.status);
- const ap=document.getElementById('ap');
- ap.disabled=stop; ap.textContent=s.status==='running'?'running…':'Approve next step';
- const msg={idle:'No active run.',ready:'Ready — click Approve to run step 1.',paused:'Step done — approve the next.',running:'Running…',gated:'Reached the gated final step. Nothing sent/saved.',done:'Done. Nothing sent/saved.',error:'Error: '+s.error}[s.status]||s.status;
- document.getElementById('st').innerHTML='<span class="'+(s.status==='error'?'err':'')+'">'+msg+'</span>';
- document.getElementById('shot').src='/shot?t='+s.shotTs;
-}
-document.getElementById('ap').onclick=async()=>{await fetch('/approve',{method:'POST'});};
-document.getElementById('rj').onclick=async()=>{await fetch('/reject',{method:'POST'});};
-setInterval(tick,1000);tick();
-</script>`;
-
 http
 	.createServer(async (req, res) => {
 		const u = new URL(req.url, `http://localhost:${PORT}`);
@@ -354,6 +308,8 @@ http
 
 		if (u.pathname === '/') {
 			// Start a new run if query params describe one we're not already running.
+			// The agent UI hits this with ?flow=… and ignores the body — the live
+			// panel lives in agent/ui, so there's no standalone HTML page here.
 			if (u.searchParams.get('flow')) {
 				const params = Object.fromEntries(u.searchParams.entries());
 				const nextSig = JSON.stringify(params);
@@ -362,8 +318,8 @@ http
 					try { await startRun(params); } catch (e) { error = e.message; status = 'error'; }
 				}
 			}
-			res.writeHead(200, { 'content-type': 'text/html' });
-			return res.end(SHELL);
+			res.writeHead(200, { 'content-type': 'text/plain' });
+			return res.end('AppFolio step runner — driven by agent/ui. Endpoints: /state /stream /shot /approve /reject');
 		}
 		if (u.pathname === '/state') {
 			res.writeHead(200, { 'content-type': 'application/json' });
