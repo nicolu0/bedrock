@@ -1091,6 +1091,166 @@
 			.session-card .transcript .msg.them { align-self: flex-start; background: #292524; color: #fafaf9; }
 			.session-card .transcript .msg.me { align-self: flex-end; background: #1f3a5a; color: #cfe2ff; }
 
+			/* ── Turns tab: orchestrator turn log ───────────────────────── */
+			.turns-view {
+				padding: 14px 20px 60px;
+				overflow-y: auto;
+				max-width: 980px;
+				margin: 0 auto;
+			}
+			.turns-empty {
+				color: #a8a29e;
+				text-align: center;
+				padding: 80px 20px;
+				font-size: 13px;
+			}
+			.turn-row {
+				display: grid;
+				grid-template-columns: 74px 130px 1fr auto;
+				gap: 12px;
+				align-items: start;
+				background: #1c1917;
+				border: 1px solid #292524;
+				border-left: 3px solid #292524;
+				border-radius: 8px;
+				padding: 9px 13px;
+				margin-bottom: 7px;
+			}
+			.turn-row.failure { border-left-color: #f08089; }
+			.turn-row.skipped { opacity: 0.6; }
+			.turn-row .ts {
+				font-family: ui-monospace, Menlo, monospace;
+				font-size: 11.5px;
+				color: #a8a29e;
+				padding-top: 1px;
+			}
+			.turn-row .evcol { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+			.turn-ev {
+				font-size: 11px;
+				font-weight: 600;
+				border-radius: 4px;
+				padding: 1px 7px;
+				border: 1px solid #44403c;
+				width: fit-content;
+			}
+			.turn-ev.new_issue { color: #9db8ff; border-color: rgba(157, 184, 255, 0.4); }
+			.turn-ev.pm_reply { color: #c7a3ff; border-color: rgba(199, 163, 255, 0.4); }
+			.turn-ev.demo_message { color: #d9a366; border-color: rgba(217, 163, 102, 0.4); }
+			.turn-row .skill {
+				font-size: 10.5px;
+				color: #a8a29e;
+				font-family: ui-monospace, Menlo, monospace;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+			.turn-tools { display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+			.turn-tools .none { font-size: 11px; color: #78716c; font-style: italic; }
+			.tc {
+				font-family: ui-monospace, Menlo, monospace;
+				font-size: 10.5px;
+				border-radius: 4px;
+				padding: 1px 6px;
+				background: rgba(60, 200, 120, 0.13);
+				color: #74c99a;
+				border: 1px solid rgba(60, 200, 120, 0.28);
+			}
+			.tc.err {
+				background: rgba(240, 128, 137, 0.13);
+				color: #f08089;
+				border-color: rgba(240, 128, 137, 0.34);
+				cursor: help;
+			}
+			.tc .skipbadge { color: #78716c; }
+			.turn-right {
+				display: flex;
+				flex-direction: column;
+				align-items: flex-end;
+				gap: 3px;
+				text-align: right;
+				white-space: nowrap;
+			}
+			.turn-right .dur { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #a8a29e; }
+			.turn-right .counts { font-size: 10.5px; color: #78716c; }
+			.turn-link {
+				font-size: 11px;
+				color: #6ea8fe;
+				cursor: pointer;
+				background: none;
+				border: none;
+				padding: 0;
+				font-family: inherit;
+			}
+			.turn-link:hover { text-decoration: underline; }
+			.turn-link.issue { color: #a8a29e; cursor: help; }
+			.turn-link.issue:hover { text-decoration: none; }
+			.session-card.flash { animation: sessionFlash 1.7s ease-out; }
+			@keyframes sessionFlash {
+				0% { box-shadow: 0 0 0 2px #6ea8fe; }
+				100% { box-shadow: 0 0 0 2px transparent; }
+			}
+
+			/* ── Turns tab: expandable trace detail ─────────────────────── */
+			.turn-item { margin-bottom: 7px; }
+			.turn-item .turn-row { margin-bottom: 0; }
+			.turn-row.clickable { cursor: pointer; }
+			.turn-row.clickable:hover { background: #211f1c; }
+			.turn-item.open .turn-row { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; }
+			.turn-detail {
+				background: #161310;
+				border: 1px solid #292524;
+				border-top: none;
+				border-radius: 0 0 8px 8px;
+				padding: 12px 14px 14px;
+				margin-left: 3px; /* align under the event-type column accent */
+			}
+			.td-empty { color: #78716c; font-size: 12.5px; font-style: italic; }
+			.td-trigger {
+				background: rgba(157,184,255,0.06);
+				border: 1px solid rgba(157,184,255,0.22);
+				border-radius: 7px;
+				padding: 9px 12px;
+				margin-bottom: 12px;
+			}
+			.td-trigger .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: #9db8ff; margin-bottom: 4px; }
+			.td-trigger .body { font-size: 13px; color: #e7e5e4; }
+			.td-step { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 4px 0; }
+			.td-dot {
+				width: 20px; height: 20px; border-radius: 50%;
+				background: #1c1917; border: 1px solid #44403c; color: #a8a29e;
+				font-size: 10px; font-family: ui-monospace, Menlo, monospace;
+				display: flex; align-items: center; justify-content: center;
+			}
+			.td-sbody { min-width: 0; }
+			.td-reason { font-size: 13px; color: #d6d3d1; font-style: italic; margin: 1px 0 6px; line-height: 1.45; }
+			.td-reason.muted { color: #78716c; font-style: normal; }
+			.td-drop { font-size: 12px; color: #d9a366; margin: 2px 0 6px; }
+			.td-tcall { border: 1px solid #292524; border-radius: 6px; margin: 4px 0; background: #1c1917; overflow: hidden; }
+			.td-tcall[open] { border-color: #44403c; }
+			.td-tcall.err { border-color: rgba(240,128,137,0.35); }
+			.td-tcall summary {
+				list-style: none; cursor: pointer; padding: 6px 10px;
+				display: flex; align-items: center; gap: 10px; font-size: 12px;
+			}
+			.td-tcall summary::-webkit-details-marker { display: none; }
+			.td-tcall summary::before { content: '▸'; color: #78716c; font-size: 10px; }
+			.td-tcall[open] summary::before { content: '▾'; }
+			.td-tcall .tname { font-family: ui-monospace, Menlo, monospace; color: #74c99a; }
+			.td-tcall .tname.err { color: #f08089; }
+			.td-tcall .td-cerr { color: #f08089; font-size: 11px; margin-left: auto; font-family: ui-monospace, Menlo, monospace; }
+			.td-kv {
+				font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #cfcbc6;
+				white-space: pre-wrap; word-break: break-word;
+				padding: 8px 10px; border-top: 1px solid #292524; background: #0f0d0b;
+			}
+			.td-kv .k { display: block; color: #9db8ff; margin-bottom: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+			.td-det { margin-top: 7px; }
+			.td-det summary { cursor: pointer; font-size: 11.5px; color: #a8a29e; }
+			.td-det pre {
+				margin: 6px 0 0; padding: 9px 11px; background: #0f0d0b; border: 1px solid #292524;
+				border-radius: 6px; font-size: 11px; color: #cfcbc6; white-space: pre-wrap; word-break: break-word;
+				max-height: 280px; overflow: auto;
+			}
+
 			/* ── Chat tab: drafts rail (left) + iMessage thread (right) ── */
 			.chat-view {
 				flex-direction: row;
@@ -1290,6 +1450,7 @@
 				<button data-tab="chat">Chat</button>
 				<button data-tab="memory">Memory</button>
 				<button data-tab="sessions">Sessions</button>
+				<button data-tab="turns">Turns</button>
 			</nav>
 			<div class="ws-toggle" id="ws-toggle">
 				<button data-ws="prod">Prod</button>
@@ -1362,6 +1523,10 @@
 			<div id="sessions-list"></div>
 		</section>
 
+		<section id="view-turns" class="view turns-view">
+			<div id="turns-list"></div>
+		</section>
+
 		<dialog id="new-belief-dialog" class="belief-dialog">
 			<form id="new-belief-form" method="dialog">
 				<h3 id="belief-dialog-title">New belief</h3>
@@ -1418,6 +1583,8 @@
 				renderedChatIds = '';
 				refresh();
 				if (activeTab === 'sessions') loadSessions();
+				turnsSig = '';
+				if (activeTab === 'turns') loadTurns();
 			});
 			applyWsToggleStyle();
 
@@ -1979,6 +2146,8 @@
 					requestAnimationFrame(resizeAllDraftTextareas);
 				} else if (activeTab === 'sessions') {
 					loadSessions();
+				} else if (activeTab === 'turns') {
+					loadTurns();
 				}
 			}
 			document.getElementById('tab-nav').addEventListener('click', (e) => {
@@ -2142,6 +2311,255 @@
 					alert('Delete failed: ' + err.message);
 				}
 			});
+
+			/* ─── Turns tab: orchestrator turn log ─────────────────────── */
+
+			const turnsList = document.getElementById('turns-list');
+			let turnsLoading = false;
+			let turnsSig = ''; // cheap change-detector so the poller only rebuilds on a new turn
+			const turnsById = new Map(); // turn_id -> full turn row, for the expandable trace
+
+			async function loadTurns({ silent = false } = {}) {
+				if (turnsLoading) return;
+				turnsLoading = true;
+				if (!silent && !turnsList.querySelector('.turn-row')) {
+					turnsList.innerHTML = '<div class="turns-empty">Loading turns…</div>';
+				}
+				try {
+					const res = await fetch('/api/turns?workspace=' + workspaceFilter + '&limit=300');
+					if (!res.ok) throw new Error(await res.text());
+					const turns = await res.json();
+					const sig = turns.length + ':' + (turns[0]?.turn_id ?? turns[0]?.ts ?? '');
+					if (sig !== turnsSig) {
+						turnsSig = sig;
+						renderTurns(turns);
+					}
+				} catch (err) {
+					if (!silent) {
+						turnsList.innerHTML =
+							'<div class="turns-empty">Failed to load turns: ' + escapeHtml(err.message) + '</div>';
+					}
+				} finally {
+					turnsLoading = false;
+				}
+			}
+
+			// Turn timestamps are stored UTC (ISO Z); render them in Pacific so
+			// they match the wall clock we work against, regardless of host tz.
+			const PT = 'America/Los_Angeles';
+			function fmtTurnTime(iso) {
+				if (!iso) return '—';
+				return new Date(iso).toLocaleTimeString('en-US', {
+					hour: '2-digit',
+					minute: '2-digit',
+					second: '2-digit',
+					hour12: false,
+					timeZone: PT
+				});
+			}
+			function fmtTurnFull(iso) {
+				if (!iso) return '';
+				return new Date(iso).toLocaleString('en-US', {
+					month: 'short',
+					day: 'numeric',
+					hour: '2-digit',
+					minute: '2-digit',
+					second: '2-digit',
+					hour12: false,
+					timeZone: PT,
+					timeZoneName: 'short'
+				});
+			}
+
+			function renderTurns(turns) {
+				if (!turns.length) {
+					turnsList.innerHTML =
+						'<div class="turns-empty">No turns logged yet for ' + escapeHtml(workspaceFilter) + '.</div>';
+					return;
+				}
+				turnsById.clear();
+				turnsList.innerHTML = turns
+					.map((t, idx) => {
+						const tid = t.turn_id || ('idx-' + idx);
+						turnsById.set(tid, t);
+						const failed = t.kind === 'failure';
+						const skipped = t.kind === 'precheck_short_circuit';
+						const ev = t.event || 'turn';
+						const tools = t.tool_calls ?? [];
+						let toolsHtml;
+						if (skipped) {
+							toolsHtml = '<span class="tc"><span class="skipbadge">precheck · short-circuit</span></span>';
+						} else if (!tools.length) {
+							toolsHtml = '<span class="none">no tool calls</span>';
+						} else {
+							toolsHtml = tools
+								.map((c) => {
+									const ok = c.ok !== false;
+									const title = ok ? '' : ' title="' + escapeHtml(c.error || 'error') + '"';
+									const mark = ok ? '' : ' ✕';
+									return (
+										'<span class="' + (ok ? 'tc' : 'tc err') + '"' + title + '>' +
+										escapeHtml(c.name || '?') + mark + '</span>'
+									);
+								})
+								.join('');
+						}
+						const iters = t.iterations != null ? ' · ' + t.iterations + 'it' : '';
+						const dur = t.duration_ms != null ? (t.duration_ms / 1000).toFixed(1) + 's' : '—';
+						const counts = [];
+						if (t.outbox_count) counts.push(t.outbox_count + ' sent');
+						if (t.drafts_count) counts.push(t.drafts_count + ' draft' + (t.drafts_count === 1 ? '' : 's'));
+						let link = '';
+						if (t.session_id) {
+							link =
+								'<button class="turn-link" data-session="' + escapeHtml(t.session_id) + '">session →</button>';
+						} else if (t.issue_id) {
+							link =
+								'<span class="turn-link issue" title="' + escapeHtml(String(t.issue_id)) + '">issue ' +
+								escapeHtml(String(t.issue_id).slice(0, 8)) + '</span>';
+						}
+						const rowCls = 'turn-row clickable' + (failed ? ' failure' : '') + (skipped ? ' skipped' : '');
+						return (
+							'<div class="turn-item" data-turn-id="' + escapeHtml(tid) + '">' +
+							'<div class="' + rowCls + '">' +
+								'<span class="ts" title="' + escapeHtml(fmtTurnFull(t.ts)) + '">' + escapeHtml(fmtTurnTime(t.ts)) + '</span>' +
+								'<span class="evcol">' +
+									'<span class="turn-ev ' + escapeHtml(ev) + '">' + escapeHtml(ev) + '</span>' +
+									(t.skill ? '<span class="skill">' + escapeHtml(t.skill) + '</span>' : '') +
+								'</span>' +
+								'<span class="turn-tools">' + toolsHtml + '</span>' +
+								'<span class="turn-right">' +
+									'<span class="dur">' + escapeHtml(dur) + iters + '</span>' +
+									(counts.length ? '<span class="counts">' + escapeHtml(counts.join(' · ')) + '</span>' : '') +
+									link +
+								'</span>' +
+							'</div>' +
+							'<div class="turn-detail" hidden></div>' +
+							'</div>'
+						);
+					})
+					.join('');
+			}
+
+			// Build the expandable trace for one turn: trigger + per-iteration steps.
+			function turnTriggerSummary(t) {
+				const p = t.trigger && t.trigger.payload;
+				if (t.event === 'new_issue' && p && p.issue) {
+					const i = p.issue;
+					const bits = [i.name];
+					if (i.unit && i.unit.name) bits.push(i.unit.name);
+					else if (i.property && i.property.name) bits.push(i.property.name);
+					if (i.tenant && i.tenant.name) bits.push('tenant ' + i.tenant.name);
+					if (i.urgent) bits.push('urgent');
+					return bits.filter(Boolean).join(' · ');
+				}
+				if (t.event === 'pm_reply' && p && p.text) return '“' + p.text + '”';
+				return t.event || 'turn';
+			}
+
+			function turnJsonBlock(label, obj) {
+				let s;
+				try { s = JSON.stringify(obj, null, 2); } catch { s = String(obj); }
+				return '<div class="td-kv"><span class="k">' + label + '</span>' + escapeHtml(s) + '</div>';
+			}
+
+			function renderTurnDetail(t) {
+				if (t.kind === 'precheck_short_circuit') {
+					return '<div class="td-empty">Short-circuited by a pre-check before the model ran.</div>';
+				}
+				const steps = t.steps;
+				if (!Array.isArray(steps) || !steps.length) {
+					return '<div class="td-empty">No trace captured — this turn predates trace logging.</div>';
+				}
+				let html = '';
+				if (t.trigger) {
+					html +=
+						'<div class="td-trigger">' +
+							'<div class="lbl">▸ trigger · ' + escapeHtml(t.event || '') + '</div>' +
+							'<div class="body">' + escapeHtml(turnTriggerSummary(t)) + '</div>' +
+							(t.trigger.user_content
+								? '<details class="td-det"><summary>prompt the model saw</summary><pre>' +
+								  escapeHtml(t.trigger.user_content) + '</pre></details>'
+								: '') +
+						'</div>';
+				}
+				for (const s of steps) {
+					const calls = s.tool_calls ?? [];
+					html += '<div class="td-step"><div class="td-dot">' + escapeHtml(String(s.i ?? '·')) + '</div><div class="td-sbody">';
+					if (s.reasoning) html += '<div class="td-reason">“' + escapeHtml(s.reasoning) + '”</div>';
+					if (s.dropped_plain_content)
+						html += '<div class="td-drop">⚠ model spoke without calling a tool — output dropped</div>';
+					for (const c of calls) {
+						const ok = c.ok !== false;
+						html +=
+							'<details class="td-tcall' + (ok ? '' : ' err') + '">' +
+								'<summary><span class="tname' + (ok ? '' : ' err') + '">' + escapeHtml(c.name || '?') +
+								(ok ? '' : ' ✕') + '</span>' +
+								(c.error ? '<span class="td-cerr">' + escapeHtml(c.error) + '</span>' : '') +
+								'</summary>' +
+								turnJsonBlock('args in', c.args ?? {}) +
+								turnJsonBlock('result out', c.result ?? {}) +
+							'</details>';
+					}
+					if (!s.reasoning && !calls.length && !s.dropped_plain_content)
+						html += '<div class="td-reason muted">(no output this step)</div>';
+					html += '</div></div>';
+				}
+				return html;
+			}
+
+			// Turn → session deep-link: jump to the Sessions tab, then scroll to
+			// and flash the matching card once loadSessions() has rendered it.
+			turnsList.addEventListener('click', (e) => {
+				// Session deep-link button takes precedence and must not also expand.
+				const btn = e.target.closest('button[data-session]');
+				if (btn) {
+					e.stopPropagation();
+					const sid = btn.dataset.session;
+					activeTab = 'sessions';
+					localStorage.setItem(TAB_KEY, activeTab);
+					applyTab(); // kicks loadSessions() (async)
+					const sel = '.session-card[data-id="' + (window.CSS?.escape ? CSS.escape(sid) : sid) + '"]';
+					let tries = 0;
+					const iv = setInterval(() => {
+						const card = sessionsList.querySelector(sel);
+						if (card) {
+							clearInterval(iv);
+							card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+							card.classList.add('flash');
+							setTimeout(() => card.classList.remove('flash'), 1800);
+						} else if (++tries > 25) {
+							clearInterval(iv);
+						}
+					}, 100);
+					return;
+				}
+				// A <details> toggle inside an open trace shouldn't collapse the row.
+				if (e.target.closest('.turn-detail')) return;
+				// Otherwise: row click toggles its trace detail (lazy-rendered).
+				const item = e.target.closest('.turn-item');
+				if (!item) return;
+				const detail = item.querySelector('.turn-detail');
+				if (!detail) return;
+				if (detail.hidden) {
+					if (!detail.dataset.rendered) {
+						const t = turnsById.get(item.dataset.turnId);
+						detail.innerHTML = t ? renderTurnDetail(t) : '<div class="td-empty">trace unavailable</div>';
+						detail.dataset.rendered = '1';
+					}
+					detail.hidden = false;
+					item.classList.add('open');
+				} else {
+					detail.hidden = true;
+					item.classList.remove('open');
+				}
+			});
+
+			// Live-ish refresh while the Turns tab is open. Silent so it only
+			// rebuilds the DOM when a genuinely new turn lands (turnsSig guard).
+			setInterval(() => {
+				if (activeTab === 'turns') loadTurns({ silent: true });
+			}, 3000);
 
 			/* ─── Chat tab: drafts rail + iMessage thread ─────────────── */
 

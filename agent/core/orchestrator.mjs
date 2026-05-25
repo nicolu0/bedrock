@@ -29,6 +29,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomBytes } from 'node:crypto';
 import { identityPrompt } from './identity.mjs';
 import { ALL_TOOLS } from '../tools/registry.mjs';
 import { resolveEvent } from './router.mjs';
@@ -89,6 +90,21 @@ export async function runTurn(event, ctx) {
 
 	const resolution = resolveEvent(event);
 
+	// Identifying fields stamped on every turn-log row for this turn, so the
+	// Turns UI can link a turn back to its session / work order. ctx carries
+	// handle/chat_guid/workspace/session_id (set by the trigger that built it);
+	// issue_id rides on the new_issue payload. Anything absent for an event
+	// type is null (e.g. new_issue has no handle; pm_reply has no issue_id).
+	const turnIdentity = {
+		turn_id: `turn_${randomBytes(8).toString('hex')}`,
+		workspace_id: ctx.workspace_id ?? null,
+		workspace_label: ctx.workspace_label ?? null,
+		handle: ctx.handle ?? null,
+		chat_guid: ctx.chat_guid ?? null,
+		session_id: ctx.session_id ?? null,
+		issue_id: event.payload?.issue?.id ?? null
+	};
+
 	// preCheck — optional per-event short-circuit before any LLM call.
 	if (typeof resolution.preCheck === 'function') {
 		const early = await resolution.preCheck(event, ctx);
@@ -97,7 +113,10 @@ export async function runTurn(event, ctx) {
 				ts: new Date().toISOString(),
 				event: event.type,
 				skill: resolution.skill,
+				...turnIdentity,
 				kind: 'precheck_short_circuit',
+				trigger: { event: event.type, user_content: null, payload: event.payload ?? null },
+				steps: [],
 				outbox_count: ctx.outbox.length,
 				drafts_count: ctx.drafts.length,
 				duration_ms: Date.now() - startTime
@@ -115,6 +134,15 @@ export async function runTurn(event, ctx) {
 	// assembly below); otherwise the model loads it via use_skill mid-turn.
 	const reminderBlocks = await buildReminders(event, ctx, resolution.skill);
 	const userContent = composeUserContent(event, reminderBlocks);
+
+	// Full trigger record for the turn trace: the literal prompt the model saw
+	// (reminders + verbatim trigger text) plus the raw event payload — i.e. what
+	// kicked this turn off. Stored verbatim; nothing flattened.
+	const trigger = {
+		event: event.type,
+		user_content: userContent,
+		payload: event.payload ?? null
+	};
 
 	// Skill body loaded from <skill>/SKILL.md and concatenated with
 	// identityPrompt to form the system message — but only when the event's
@@ -141,6 +169,9 @@ export async function runTurn(event, ctx) {
 
 	const working = [...userMessages];
 	const toolCallsLog = [];
+	// Per-iteration trace: each loop pass records the model's narration
+	// (plainContent) and the full tool calls it fired (name + args + result).
+	const steps = [];
 	const maxIterations = resolution.maxIterations ?? DEFAULT_MAX_ITERATIONS;
 	let failure = null;
 	let endTurn = false;
@@ -283,6 +314,18 @@ export async function runTurn(event, ctx) {
 				});
 			}
 
+			steps.push({
+				i: lastIter,
+				reasoning: plainContent.trim() || null,
+				tool_calls: orderedCalls.map((c) => ({
+					name: c.name,
+					args: c.parsedArgs ?? {},
+					result: c.result ?? {},
+					ok: !c.result?.error,
+					error: c.result?.error ?? null
+				}))
+			});
+
 			if (endTurn) break iter;
 			if (failure) break iter;
 			continue iter;
@@ -298,6 +341,7 @@ export async function runTurn(event, ctx) {
 		// event (demo, process_work_order — prompts haven't been tightened to
 		// always route through send_text). New event resolutions should NOT
 		// opt in; tighten the prompt instead.
+		let plainSent = false;
 		if (plainContent.trim()) {
 			const text = plainContent.trim();
 			if (
@@ -307,6 +351,7 @@ export async function runTurn(event, ctx) {
 			) {
 				await ctx.onEvent({ type: 'message', content: text });
 				ctx.outbox.push(text);
+				plainSent = true;
 			} else {
 				const preview = text.slice(0, 120);
 				console.warn(
@@ -314,6 +359,14 @@ export async function runTurn(event, ctx) {
 				);
 			}
 		}
+		// Final pass with no tool calls: record the narration and whether it was
+		// emitted as a message or dropped (the model spoke without routing to a tool).
+		steps.push({
+			i: lastIter,
+			reasoning: plainContent.trim() || null,
+			tool_calls: [],
+			dropped_plain_content: !!(plainContent.trim() && !plainSent)
+		});
 		break iter;
 	}
 
@@ -347,6 +400,7 @@ export async function runTurn(event, ctx) {
 		event: event.type,
 		skill: resolution.skill,
 		model: resolution.model,
+		...turnIdentity,
 		kind: failure ? 'failure' : 'completed',
 		iterations: lastIter,
 		tool_calls: toolCallsLog.map((t) => ({
@@ -354,6 +408,8 @@ export async function runTurn(event, ctx) {
 			ok: !t.result?.error,
 			error: t.result?.error
 		})),
+		trigger,
+		steps,
 		outbox_count: ctx.outbox.length,
 		drafts_count: ctx.drafts.length,
 		failure,

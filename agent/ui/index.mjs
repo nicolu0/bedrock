@@ -212,6 +212,8 @@ async function listChatMessagesForSession(session_id) {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAGE_PATH = path.join(__dirname, 'page.html');
+const STATE_DIR = process.env.BEDROCK_STATE_DIR || path.join(__dirname, '..', 'state');
+const TURNS_LOG_PATH = path.join(STATE_DIR, 'turns.jsonl');
 
 const SEND_GAP_MS = 700; // delay between consecutive bubbles in a bundle
 
@@ -491,6 +493,30 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				const all = await db.loadChatMessages();
 				let items = all;
 				if (ws) items = items.filter((m) => m.workspace_label === ws);
+				items = items.slice(-limit).reverse();
+				return json(res, 200, items);
+			}
+
+			// Orchestrator turn log. One JSONL row per runTurn (see
+			// core/orchestrator.mjs appendTurnLog). Read the whole file, slice
+			// last-N, newest-first. Rows predating the identity enrichment lack
+			// workspace_label and so are dropped by the ?workspace filter.
+			if (req.method === 'GET' && pathname === '/api/turns') {
+				const limit = Math.max(1, Math.min(1000, Number(url.searchParams.get('limit')) || 200));
+				const ws = url.searchParams.get('workspace'); // optional filter
+				const raw = await fs.readFile(TURNS_LOG_PATH, 'utf8').catch(() => '');
+				let items = raw
+					.split('\n')
+					.filter(Boolean)
+					.map((line) => {
+						try {
+							return JSON.parse(line);
+						} catch {
+							return null;
+						}
+					})
+					.filter(Boolean);
+				if (ws) items = items.filter((t) => t.workspace_label === ws);
 				items = items.slice(-limit).reverse();
 				return json(res, 200, items);
 			}
