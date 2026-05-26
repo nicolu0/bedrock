@@ -1692,18 +1692,14 @@
 				border-bottom-right-radius: 4px;
 			}
 			/* "edited" tag on outbound messages the operator changed before
-			   sending — mirrors the drafts rail's .bubble.edited label. */
-			.chat-view .row.right .bubble.edited { position: relative; }
-			.chat-view .row.right .bubble.edited::after {
-				content: 'edited';
-				position: absolute;
-				top: 50%;
-				right: calc(100% + 8px);
-				transform: translateY(-50%);
+			   sending. Rendered under the bubble, right-aligned, like iMessage's
+			   own "Edited" label. align-items:flex-end on the right stack pins it
+			   under the bubble's right edge. */
+			.chat-view .row.right .stack .edited-tag {
 				font-size: 10px;
 				color: #d9a366;
 				letter-spacing: 0.05em;
-				white-space: nowrap;
+				padding: 1px 4px 0;
 			}
 			.chat-view .empty {
 				color: #a8a29e;
@@ -1920,6 +1916,11 @@
 			.turns-view .tl-steps .step.mem::before { background: #c7a3ff; }
 			.turns-view .tl-meta { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: #78716c; margin: 8px 0 0; }
 			.turns-view .turn-detail { margin: 0 8px 10px 26px; }
+			/* Turns are grouped into threads (one work order + its follow-ups). The first
+			   item of each thread gets a gap + divider, and the spine from the item above
+			   is cut so threads read as distinct blocks. */
+			.turns-view .tl-item.tl-thread-start { margin-top: 18px; padding-top: 16px; border-top: 1px solid #1c1917; }
+			.turns-view .tl-item:has(+ .tl-item.tl-thread-start) .tl-entry::before { display: none; }
 			.chat-thread .day-sep.tl-flash { border-radius: 8px; animation: tlFlash 1.7s ease-out; }
 			@keyframes tlFlash { 0% { background: rgba(110,168,254,.2); box-shadow: 0 0 0 7px rgba(110,168,254,.16); } 100% { background: transparent; box-shadow: 0 0 0 0 transparent; } }
 			.turns-view .tl-hd, .turns-view .tl-sum { cursor: pointer; }
@@ -1946,6 +1947,10 @@
 			.ide .sessions-view #sessions-list { flex: none; width: 100%; }
 			.ide .sessions-view #session-detail { display: none; }
 			.ide .sessions-view .session-card { border: 0; background: transparent; padding: 0; margin: 0; }
+			/* In the single-session drawer the transcript should flow full-length and let
+			   .right-body be the only scroller — the 540px inner cap (meant for the
+			   multi-card list) was leaving dead space below a short-looking scroll box. */
+			.ide .sessions-view .session-card .transcript { max-height: none; overflow: visible; }
 		</style>
 	</head>
 	<body>
@@ -2948,6 +2953,11 @@
 			let sessionsLoading = false;
 			let turnByReply = {};    // normalized agent reply body -> turn (Activity interleave)
 			let turnByTrigger = {};  // normalized inbound trigger text -> turn (no-reply turns)
+			let turnsBySession = {}; // session_id -> [reply turns, ts asc] — fallback when the
+			                         // sent text was edited away from the drafted send_text
+			let newIssueByGuid = {}; // chat_guid -> [new_issue turns] — attaches the WO-summary
+			                         // steps to the session's opening message (session_id is null
+			                         // on new_issue turns, and the summary text is often edited)
 			let turnById = {};
 			let callById = {};       // "turnId:idx" -> { call, event } for the detail pane
 			let usedTurns = new Set();
@@ -2970,7 +2980,7 @@
 					// Match turns to the message they produced (send_text content) so steps
 					// attach correctly even when the turn carries no/other session_id —
 					// e.g. new_issue turns run before the chat session exists.
-					turnByReply = {}; turnByTrigger = {}; turnById = {};
+					turnByReply = {}; turnByTrigger = {}; turnById = {}; turnsBySession = {}; newIssueByGuid = {};
 					try {
 						const tr = await fetch('/api/turns');
 						if (tr.ok) {
@@ -2980,9 +2990,19 @@
 								const sends = (t.steps || [])
 									.flatMap((s) => (s.tool_calls || []).filter((c) => c.name === 'send_text'))
 									.map((c) => c.args && c.args.content).filter(Boolean);
-								if (sends.length) { for (const c of sends) turnByReply[norm(c)] = t; }
+								if (sends.length) {
+									for (const c of sends) turnByReply[norm(c)] = t;
+									// Reply turns also indexed by session so renderActivity can attach
+									// them by position when the sent text was edited off the draft.
+									if (t.session_id) (turnsBySession[t.session_id] ||= []).push(t);
+									// new_issue turns run before the session exists (session_id null);
+									// index by chat_guid so the opener message can claim its steps.
+									else if (t.event === 'new_issue' && t.chat_guid) (newIssueByGuid[t.chat_guid] ||= []).push(t);
+								}
 								else { const tt = t.trigger && t.trigger.payload && t.trigger.payload.text; if (tt) turnByTrigger[norm(tt)] = t; }
 							}
+							for (const sid of Object.keys(turnsBySession))
+								turnsBySession[sid].sort((a, b) => new Date(a.ts) - new Date(b.ts));
 						}
 					} catch (e) { /* turns optional */ }
 					renderSessions();
@@ -3055,7 +3075,7 @@
 						const extracted = s.observations_extracted_at
 							? '<span class="extracted">obs ✓</span>'
 							: '<span class="extracted pending">obs pending</span>';
-						const transcript = renderActivity(s.messages ?? []);
+						const transcript = renderActivity(s.messages ?? [], s.id, s.chat_guid);
 						return `
 							<div class="session-card" data-id="${s.id}">
 								<div class="head">
@@ -3158,11 +3178,30 @@
 				return '<div class="sx-status"><div class="sx-st agent">drafted by agent</div>' +
 					'<div class="sx-st you">sent by you</div></div>';
 			}
-			function renderActivity(msgs) {
+			function renderActivity(msgs, sessionId, chatGuid) {
 				const list = (msgs || []).filter((m) => m.body);
 				const norm = (s) => (s || '').trim();
+				// Reply turns for this session, consumed in order as a fallback when an
+				// agent bubble's text was edited off its drafted send_text (so the exact
+				// turnByReply lookup misses). new_issue turns carry no session_id and stay
+				// on the text-match path.
+				const sessReplies = (turnsBySession[sessionId] || []).filter((t) => !usedTurns.has(t));
+				const trigOf = (t) => norm(t && t.trigger && t.trigger.payload && t.trigger.payload.text);
+				const firstLine = (s) => norm((s || '').split('\n')[0]);
+				const sendTextOf = (t) => {
+					for (const s of (t.steps || [])) for (const c of (s.tool_calls || []))
+						if (c.name === 'send_text' && c.args) return c.args.content || '';
+					return '';
+				};
+				// The opening WO-summary message ↔ its new_issue turn. ts/issue_id are
+				// unreliable (turn predates the session, summary text gets edited), but the
+				// first line "Unit X Address" survives edits — match on that within the guid.
+				const openerTurn = (m) => (newIssueByGuid[chatGuid] || []).find(
+					(t) => !usedTurns.has(t) && firstLine(sendTextOf(t)) && firstLine(sendTextOf(t)) === firstLine(m.body)
+				);
 				let html = '';
 				let lastSender = null;
+				let lastInbound = null; // norm text of the PM message immediately above the cursor
 				const bubble = (m) => {
 					const isAgent = m.is_agent ?? m.is_from_me;
 					const side = isAgent ? 'right' : 'left';
@@ -3181,8 +3220,24 @@
 					const isAgent = m.is_agent ?? m.is_from_me;
 					if (isAgent) {
 						// steps that produced this reply render ABOVE it; status BELOW.
-						const reply = turnByReply[norm(m.body)];
-						if (reply && !usedTurns.has(reply)) {
+						// Exact text first (covers new_issue + unedited replies); then fall
+						// back to the next unconsumed reply turn for this session — the agent
+						// sends at most one reply per turn, so position is a safe match even
+						// after the draft was edited.
+						let reply = turnByReply[norm(m.body)];
+						if (reply && usedTurns.has(reply)) reply = null;
+						// Fallback only when this bubble directly answers the PM message above
+						// it AND the next pending reply turn was triggered by that same message
+						// — so the new_issue opener and tapbacks can't steal a reply turn.
+						if (!reply && lastInbound) {
+							while (sessReplies.length && usedTurns.has(sessReplies[0])) sessReplies.shift();
+							if (sessReplies.length && trigOf(sessReplies[0]) === lastInbound) reply = sessReplies.shift();
+						}
+						// Opener: the session's first agent bubble is the WO summary; show its
+						// new_issue steps (read_memory → "checked memory", set_vendor) above it.
+						if (!reply) reply = openerTurn(m);
+						lastInbound = null;
+						if (reply) {
 							usedTurns.add(reply);
 							html += turnSteps(reply);
 							html += bubble(m);
@@ -3193,9 +3248,10 @@
 						continue;
 					}
 					html += bubble(m);
+					lastInbound = norm(m.body);
 					// a turn triggered by this inbound message that produced no reply (learn-only)
 					const trig = turnByTrigger[norm(m.body)];
-					if (trig && !usedTurns.has(trig)) { usedTurns.add(trig); html += turnSteps(trig); html += turnStatus('learn'); lastSender = 'agent'; }
+					if (trig && !usedTurns.has(trig)) { usedTurns.add(trig); html += turnSteps(trig); html += turnStatus('learn'); lastSender = 'agent'; lastInbound = null; }
 				}
 				return html;
 			}
@@ -3336,6 +3392,27 @@
 				});
 			}
 
+			// Reorder the flat turn log into threads: a new_issue opens a thread on its
+			// chat_guid; the PM's later replies on that guid sit beneath it. Within a
+			// thread we keep oldest→newest (new issue on top, follow-ups below); threads
+			// are ordered by most-recent activity so the freshest work order is at the top.
+			// Returns a flat array with the first turn of each thread tagged _threadStart.
+			function orderTurnsThreaded(turns) {
+				const chrono = [...turns].reverse(); // API gives newest-first → build oldest-first
+				const threadOf = new Map();
+				const threads = [];
+				for (const t of chrono) {
+					const key = t.chat_guid || ('solo:' + (t.turn_id || threads.length));
+					let cur = threadOf.get(key);
+					if (t.event === 'new_issue' || !cur) { cur = []; threads.push(cur); threadOf.set(key, cur); }
+					cur.push(t);
+				}
+				threads.sort((a, b) => new Date(b[b.length - 1].ts) - new Date(a[a.length - 1].ts));
+				const flat = [];
+				for (const th of threads) th.forEach((t, i) => { t._threadStart = i === 0; flat.push(t); });
+				return flat;
+			}
+
 			function renderTurns(turns, kpi) {
 				// KPI now lives in the center top strip (loadKpi) — not duplicated here.
 				const kpiHtml = '';
@@ -3345,7 +3422,7 @@
 					return;
 				}
 				turnsById.clear();
-				turnsList.innerHTML = kpiHtml + turns
+				turnsList.innerHTML = kpiHtml + orderTurnsThreaded(turns)
 					.map((t, idx) => {
 						const tid = t.turn_id || ('idx-' + idx);
 						turnsById.set(tid, t);
@@ -3439,7 +3516,7 @@
 						const urgent = issue && issue.urgent;
 						const metaTxt = dur + iters + (counts.length ? ' · ' + counts.join(' · ') : '');
 						return (
-							'<div class="turn-item tl-item' + (failed ? ' failure' : '') + '" data-turn-id="' + escapeHtml(tid) + '">' +
+							'<div class="turn-item tl-item' + (failed ? ' failure' : '') + (t._threadStart && idx > 0 ? ' tl-thread-start' : '') + '" data-turn-id="' + escapeHtml(tid) + '">' +
 								'<div class="tl-entry">' +
 									'<div class="tl-node ev-' + evCls + '"></div>' +
 									'<div class="tl-hd">' +
@@ -3918,7 +3995,8 @@
 						avatarHtml +
 						`<div class="stack">` +
 						(showSender ? `<div class="who">${escapeHtml(sender)}</div>` : '') +
-						`<div class="bubble${m.edited ? ' edited' : ''}">${escapeHtml(text)}</div>` +
+						`<div class="bubble">${escapeHtml(text)}</div>` +
+						(m.edited ? `<div class="edited-tag">edited</div>` : '') +
 						`</div>`;
 					frag.appendChild(row);
 					lastSender = sender;
