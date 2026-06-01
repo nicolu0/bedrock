@@ -383,10 +383,16 @@ export const scenarios = [
 			]
 		},
 		expected: {
-			tool_calls_set_includes: ['write_memory'],
-			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 0,
-			outbox_count: 0
+			// Dispatch already happened on the override turn (no re-dispatch). Record
+			// the reason AND give a brief natural ack of the answer (option-2 reply).
+			tool_calls_set_includes: ['write_memory', 'send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief reply that takes in the reason the PM gave. Both a plain "makes sense, thanks" and a restatement like "got it, Luigi for drains then" are fine. It must only NOT re-dispatch a vendor/tenant and NOT ask a clarifying question.'
+			}
 		}
 	},
 
@@ -402,12 +408,17 @@ export const scenarios = [
 			workspace_label: 'test',
 			text: 'what is the lockbox code for hub champaign?'
 		},
-		// A read_memory lookup is fine (it finds nothing and stays silent). What
-		// matters: no dispatch and no outgoing message to the PM.
+		// It's a direct question, so answer it (option-2). read_memory may fire and
+		// finds nothing; the reply says it's not on file. No dispatch, no invented code.
 		expected: {
-			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor', 'update_issue'],
-			drafts_count: 0,
-			outbox_count: 0
+			tool_calls_set_includes: ['send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'The reply must NOT provide, invent, or guess a specific code. Acceptable: it says it does not have the code on file, and/or asks the PM where to find it or to provide it. A vague "let me check / I will look into it" promise (it has no way to look it up) is NOT acceptable. It must not dispatch a vendor or tenant.'
+			}
 		}
 	},
 
@@ -416,7 +427,17 @@ export const scenarios = [
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'ok' },
-		expected: { no_tools: true, drafts_count: 0, outbox_count: 0 }
+		// A bare "ok" out of nowhere is the genuinely-ambiguous edge: a brief reply
+		// ("all good?") is fine, and so is staying quiet. Hard line: no dispatch.
+		expected: {
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'Acceptable: either no message at all (empty), OR one brief natural reply such as acknowledging or asking what they are referring to. It must NOT be a "which work order did you mean?" clarifying question, since none are open.'
+			}
+		}
 	},
 
 	{
@@ -440,7 +461,18 @@ export const scenarios = [
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes go ahead' },
-		expected: { no_tools: true, drafts_count: 0 }
+		// The case Andrew cares about: an affirmative that maps to nothing. Don't
+		// ghost: reply and surface the gap. No dispatch.
+		expected: {
+			tool_calls_set_includes: ['send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'The reply acknowledges the PM and surfaces that nothing is currently pending (e.g. asks what they are referring to). It must NOT dispatch any vendor or tenant and must NOT invent a work order.'
+			}
+		}
 	},
 
 	{
@@ -462,10 +494,17 @@ export const scenarios = [
 			workspace_label: 'test',
 			text: "Assigned plumbing to guox and I'll talk to them about the filter tomorrow"
 		},
+		// Option-2: acknowledge the PM's own update with a brief reply (may also close
+		// the faucet WO via update_issue). 2026-05-18 guard still holds: outbox empty,
+		// and the reply must NOT be the robotic "No action taken."
 		expected: {
-			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 0,
-			outbox_count: 0
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief, natural acknowledgment that the PM is handling it themselves (e.g. "got it, thanks"). It must NOT be "No action taken." or similar robotic text, must NOT dispatch a vendor/tenant, and must NOT claim the agent is taking the action.'
+			}
 		}
 	},
 
@@ -491,7 +530,17 @@ export const scenarios = [
 			supabase: {}
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
-		expected: { no_tools: true, drafts_count: 0 }
+		// Isolation test: the only send is in a DIFFERENT (prod) chat, so this chat has
+		// nothing pending. Reply must surface that and must NOT touch the prod WO.
+		expected: {
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'Treats this chat as having nothing pending: the reply asks what the PM is referring to or surfaces that nothing is open. It must NOT dispatch or reference the prod work order (829 Ocean Park / Yonic), which belongs to a different chat.'
+			}
+		}
 	},
 
 	// ─── Chat wo_status: lifecycle closure + the 2026-05-30 clarify bug ─────
@@ -520,8 +569,12 @@ export const scenarios = [
 		expected: {
 			tool_args: { update_issue: { status: 'pm_handling' } },
 			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
-			drafts_count: 0,
-			outbox_count: 0
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief, natural acknowledgment that the PM handled the work orders themselves (e.g. "great, thanks"). It must NOT claim the agent is dispatching or taking the action. (Whether the WOs were closed via update_issue is asserted separately.)'
+			}
 		}
 	},
 
@@ -541,7 +594,13 @@ export const scenarios = [
 		},
 		expected: {
 			tool_args: { update_issue: { status: 'triaging' } },
-			drafts_count: 0
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'Moves the WO to triaging AND replies with a brief, natural acknowledgment that it will gather the info first (e.g. "will do, getting a photo"). It must NOT dispatch a vendor yet.'
+			}
 		}
 	},
 
@@ -610,10 +669,15 @@ export const scenarios = [
 			text: 'btw always use Yonic for plumbing at the Hub Champaign building'
 		},
 		expected: {
-			tool_calls_set_includes: ['write_memory'],
-			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 0,
-			outbox_count: 0
+			// Record the preference AND give a brief ack (option-2). No dispatch.
+			tool_calls_set_includes: ['write_memory', 'send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief, natural acknowledgment that the preference is noted (e.g. "noted" / "got it, will use Yonic for plumbing there"). It must NOT dispatch a vendor or tenant.'
+			}
 		}
 	},
 
@@ -627,10 +691,15 @@ export const scenarios = [
 			text: 'fyi the elevator vendor for 1234 Main St is Acme Elevators, they have a contract'
 		},
 		expected: {
-			tool_calls_set_includes: ['write_memory'],
-			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 0,
-			outbox_count: 0
+			// Record the per-property quirk AND give a brief ack (option-2). No dispatch.
+			tool_calls_set_includes: ['write_memory', 'send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief, natural acknowledgment that the elevator-vendor note for 1234 Main St is recorded (e.g. "good to know, noted"). It must NOT dispatch a vendor or tenant.'
+			}
 		}
 	},
 
@@ -852,10 +921,15 @@ export const scenarios = [
 			text: 'always use Yonic for plumbing at Hub Champaign'
 		},
 		expected: {
-			tool_calls_set_includes: ['write_memory'],
-			tool_calls_excludes: ['recall_beliefs', 'recall_observations'],
-			drafts_count: 0,
-			outbox_count: 0
+			// Record the preference AND give a brief ack (option-2). No recall, no dispatch.
+			tool_calls_set_includes: ['write_memory', 'send_text'],
+			tool_calls_excludes: ['recall_beliefs', 'recall_observations', 'draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief, natural acknowledgment that the preference is noted. It must NOT dispatch a vendor or tenant.'
+			}
 		}
 	},
 
