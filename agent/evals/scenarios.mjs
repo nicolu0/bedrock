@@ -59,6 +59,57 @@ const ISSUE_AC = {
 	description: 'tenant says the AC will not cool the unit'
 };
 
+// ── Incident fixtures (2026-05-30 "Yes, please → clarify" bug) ───────────────
+// Four work orders the agent texted Jose about. dryer+light+fridge were sent
+// days earlier and Jose ALREADY answered each (self-handled / triage); laundry
+// was the lone fresh send he replied "Yes, please" to. Base status is
+// 'awaiting_pm' (open) so they appear as candidates; sim2 overrides the
+// answered three to resolved states via the supabase mock.
+const ISSUE_DRYER = {
+	id: 'iss-dryer-026',
+	workspace_id: TEST_WS,
+	property: { name: '1447 Harvard St' },
+	unit: { name: 'Unit 1 1447 Harvard St' },
+	tenant: { name: 'Marisol' },
+	vendor: { name: 'Cross Appliance' },
+	name: 'dryer with a burning smell',
+	description: 'tenant reports the dryer smells like it is burning',
+	status: 'awaiting_pm'
+};
+const ISSUE_LIGHT = {
+	id: 'iss-light-026',
+	workspace_id: TEST_WS,
+	property: { name: '1829 11th St' },
+	unit: { name: 'Unit 2 1829 11th St' },
+	tenant: { name: 'Priya' },
+	vendor: { name: 'Abraham' },
+	name: 'bathroom light fixture that needs replacement',
+	description: 'the bathroom light fixture needs replacement',
+	status: 'awaiting_pm'
+};
+const ISSUE_FRIDGE = {
+	id: 'iss-fridge-026',
+	workspace_id: TEST_WS,
+	property: { name: '205 Horizon Ave' },
+	unit: { name: 'Unit 3 205 Horizon Ave' },
+	tenant: { name: 'Sam' },
+	vendor: { name: 'Cross Appliance' },
+	name: 'broken refrigerator drawer',
+	description: 'the refrigerator drawer is broken',
+	status: 'awaiting_pm'
+};
+const ISSUE_LAUNDRY = {
+	id: 'iss-laundry-030',
+	workspace_id: TEST_WS,
+	property: { name: '824 11th St' },
+	unit: { name: 'Unit 4 824 11th St' },
+	tenant: { name: 'Lena' },
+	vendor: { name: 'Cross Appliance' },
+	name: 'laundry machine that is not draining',
+	description: 'the laundry machine is not draining',
+	status: 'awaiting_pm'
+};
+
 // Helper: build a sent-log bundle for the test chat referring to one issue.
 // Line 1 = unit.name verbatim (canonical address from the normalized units table).
 function sentBundle(issue, { ago_min = 5 } = {}) {
@@ -409,6 +460,110 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
 		expected: { no_tools: true, drafts_count: 0 }
+	},
+
+	// ─── Chat wo_status: lifecycle closure + the 2026-05-30 clarify bug ─────
+	// Sim 1 — each kind of PM reply must advance the addressed WO's status via
+	// update_issue. Sim 2 — once the answered WOs are resolved, a lone fresh
+	// "Yes, please" dispatches instead of asking a clarifying question.
+
+	{
+		// Sim 1a — self-handle. Jose answered the dryer+light days ago with "I
+		// already took care of those". Both are listed candidates; the reply must
+		// close them (pm_handling), NOT dispatch and NOT clarify.
+		name: 'chat wo_status: "I already took care of those" → update_issue pm_handling, no dispatch',
+		skill: 'chat',
+		setup: {
+			sent_log: [
+				...sentBundle(ISSUE_DRYER, { ago_min: 90 }),
+				...sentBundle(ISSUE_LIGHT, { ago_min: 88 })
+			],
+			supabase: { [ISSUE_DRYER.id]: ISSUE_DRYER, [ISSUE_LIGHT.id]: ISSUE_LIGHT }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: 'I already took care of those work orders'
+		},
+		expected: {
+			tool_args: { update_issue: { status: 'pm_handling' } },
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			drafts_count: 0,
+			outbox_count: 0
+		}
+	},
+
+	{
+		// Sim 1b — triage. Jose redirects the fridge WO to gathering tenant info
+		// rather than dispatching. Status must move to triaging.
+		name: 'chat wo_status: "have the tenant send a photo first" → update_issue triaging',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_FRIDGE, { ago_min: 45 }),
+			supabase: { [ISSUE_FRIDGE.id]: ISSUE_FRIDGE }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: 'Have the resident send a photo of the drawer and the model number of the fridge first'
+		},
+		expected: {
+			tool_args: { update_issue: { status: 'triaging' } },
+			drafts_count: 0
+		}
+	},
+
+	{
+		// Sim 1c — dispatch. Lone open WO, clean approval. Dispatch AND advance
+		// status to dispatched so it leaves the candidate list.
+		name: 'chat wo_status: lone "Yes, please" → dispatch + update_issue dispatched',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_LAUNDRY, { ago_min: 20 }),
+			supabase: { [ISSUE_LAUNDRY.id]: ISSUE_LAUNDRY }
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'Yes, please' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'update_issue'],
+			tool_args: { update_issue: { status: 'dispatched' } },
+			drafts_count: 3,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
+		}
+	},
+
+	{
+		// Sim 2 — the incident replay. All four WOs are in the sent-log, but the
+		// three Jose already answered are resolved in issues_v2 (pm_handling /
+		// triaging). recentSentForChat filters them out, leaving laundry as the
+		// ONLY open candidate — so "Yes, please" dispatches it instead of asking
+		// "which one?". This is the exact bug from 2026-05-30.
+		name: 'chat wo_status: resolved WOs excluded → lone "Yes, please" dispatches, not clarifies',
+		skill: 'chat',
+		setup: {
+			sent_log: [
+				...sentBundle(ISSUE_DRYER, { ago_min: 6000 }),
+				...sentBundle(ISSUE_LIGHT, { ago_min: 6000 }),
+				...sentBundle(ISSUE_FRIDGE, { ago_min: 5800 }),
+				...sentBundle(ISSUE_LAUNDRY, { ago_min: 30 })
+			],
+			supabase: {
+				[ISSUE_DRYER.id]: { ...ISSUE_DRYER, status: 'pm_handling' },
+				[ISSUE_LIGHT.id]: { ...ISSUE_LIGHT, status: 'pm_handling' },
+				[ISSUE_FRIDGE.id]: { ...ISSUE_FRIDGE, status: 'triaging' },
+				[ISSUE_LAUNDRY.id]: { ...ISSUE_LAUNDRY, status: 'awaiting_pm' }
+			}
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'Yes, please' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
+			drafts_count: 3,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			judge: {
+				target: 'drafts',
+				criteria:
+					'An ack confirming dispatch of the laundry machine work order (e.g. "got it" / "on it") plus tenant and vendor dispatch drafts. It must NOT be a clarifying question asking which work order the PM meant.'
+			}
+		}
 	},
 
 	// ─── Chat: learning behavior (new tools) ───────────────────────────────

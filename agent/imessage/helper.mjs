@@ -18,6 +18,18 @@ let nextId = 1;
 const pending = new Map(); // id -> { resolve, timer }
 let serverStarted = false;
 let connectedOnce = false;
+const connectListeners = new Set();
+const disconnectListeners = new Set();
+
+function emit(listeners) {
+	for (const cb of listeners) {
+		try {
+			cb();
+		} catch {
+			/* a listener throwing must not break the IPC loop */
+		}
+	}
+}
 
 function startServer() {
 	if (serverStarted) return;
@@ -33,6 +45,7 @@ function startServer() {
 		buf = '';
 		connectedOnce = true;
 		console.log('[helper] Messages.app helper connected');
+		emit(connectListeners);
 
 		sock.on('data', (chunk) => {
 			buf += chunk.toString('utf8');
@@ -52,14 +65,20 @@ function startServer() {
 		});
 
 		sock.on('close', () => {
-			if (helperSocket === sock) helperSocket = null;
+			// A replaced-stale socket closes after the new one is already live;
+			// only treat it as a real disconnect if this was the active socket.
+			const wasActive = helperSocket === sock;
+			if (wasActive) helperSocket = null;
 			// Reject any in-flight requests so callers don't hang.
 			for (const [id, p] of pending) {
 				clearTimeout(p.timer);
 				p.resolve({ ok: false, error: 'helper disconnected' });
 				pending.delete(id);
 			}
-			console.log('[helper] Messages.app helper disconnected');
+			if (wasActive) {
+				console.log('[helper] Messages.app helper disconnected');
+				emit(disconnectListeners);
+			}
 		});
 
 		sock.on('error', () => {});
@@ -110,6 +129,17 @@ export const helper = {
 	react: (chatGuid, messageGuid, reactionType, summaryText) =>
 		call({ op: 'react', chatGuid, messageGuid, reactionType, summaryText: summaryText ?? '' }),
 	send: (chatGuid, text) => call({ op: 'send', chatGuid, text }),
+	// Lifecycle hooks for the supervisor (see server.mjs watchdog). onConnect
+	// fires when the injected dylib dials in; onDisconnect the moment it drops
+	// its socket. Each returns an unsubscribe fn.
+	onConnect: (cb) => {
+		connectListeners.add(cb);
+		return () => connectListeners.delete(cb);
+	},
+	onDisconnect: (cb) => {
+		disconnectListeners.add(cb);
+		return () => disconnectListeners.delete(cb);
+	}
 };
 
 // Auto-start the listener on import — callers don't need to do anything.

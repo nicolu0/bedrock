@@ -10,7 +10,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { helper } from './imessage/helper.mjs';
 import { startUi, dispatchDraft } from './ui/index.mjs';
@@ -55,6 +55,101 @@ if (!process.env.OPENAI_API_KEY) {
 	process.exit(1);
 }
 
+// ── iMessage helper supervision ──────────────────────────────────────────────
+// Messages.app (with the injected dylib) is the agent's only mouth — it sends,
+// marks read, and shows typing. When it's gone the agent is silently mute, so a
+// stray ⌘-Q on the host takes the whole product down. These helpers launch it
+// and keep it up.
+
+// Keep Messages.app up. The discriminator that makes this loop-proof is the
+// *process*, not the socket: we relaunch only when no Messages process is
+// running. A socket drop while Messages is still alive is a transient flap (the
+// dylib re-handshakes during boot) and we ignore it — otherwise every flap would
+// trigger a relaunch, run-messages.sh would pkill the healthy instance, and that
+// kill would generate the next flap: an infinite spawn loop.
+//
+// run-messages.sh pkills every Messages instance, then `exec`s into one fresh
+// instance with the dylib injected. Combined with launching only when none is
+// running, that guarantees exactly one instance — no duplicates fighting over
+// the socket.
+//
+// Set HELPER_WATCHDOG_DISABLED=1 to opt out (e.g. a dev worktree that must not
+// fight prod over the singleton Messages.app).
+const HELPER_WATCHDOG_MS = Number(process.env.HELPER_WATCHDOG_MS ?? 4000);
+// Never relaunch more than once per this window — a hard floor against any
+// tight loop, even if Messages crashes on boot.
+const RELAUNCH_MIN_INTERVAL_MS = Number(process.env.RELAUNCH_MIN_INTERVAL_MS ?? 5000);
+
+let booting = false; // launched but not yet confirmed connected
+let lastLaunchAt = 0;
+
+// Is a Messages.app process alive right now? (pgrep -x matches the exact name.)
+function messagesRunning() {
+	return new Promise((resolve) => {
+		execFile('pgrep', ['-x', 'Messages'], (err, stdout) => {
+			resolve(!err && stdout.trim().length > 0);
+		});
+	});
+}
+
+function launchMessages(reason) {
+	if (booting) return; // a launch is already coming up
+	if (Date.now() - lastLaunchAt < RELAUNCH_MIN_INTERVAL_MS) return; // throttle
+	booting = true;
+	lastLaunchAt = Date.now();
+	if (reason) log(`${reason} — launching Messages.app with dylib injected`);
+	const script = path.join(SCRIPT_DIR, 'imessage', 'run-messages.sh');
+	const proc = spawn(script, [], { stdio: 'ignore' });
+	proc.on('error', (err) => log(`Messages.app spawn error: ${err.message}`));
+	proc.on('exit', (code, sig) => {
+		// If the launcher exited and the dylib never dialed in, the boot failed —
+		// clear the flag so the watchdog retries (throttled). If it connected,
+		// onConnect already cleared `booting`.
+		if (!helper.isConnected()) booting = false;
+		if (code && code !== 0) log(`Messages.app exited (code=${code}, sig=${sig})`);
+	});
+}
+
+function startHelperWatchdog() {
+	if (process.env.HELPER_WATCHDOG_DISABLED === '1') {
+		log('helper watchdog disabled (HELPER_WATCHDOG_DISABLED=1)');
+		return;
+	}
+	// A real connect means the boot finished: clear `booting` so the next quit
+	// can relaunch.
+	helper.onConnect(() => {
+		booting = false;
+	});
+	// Fast path: the moment the socket drops, reopen — but ONLY if Messages is
+	// actually gone (a real ⌘-Q / crash). A flap while the process lives is
+	// transient; ignoring it is what stops the spawn loop.
+	helper.onDisconnect(async () => {
+		if (await messagesRunning()) return;
+		launchMessages('Messages.app quit');
+	});
+	// Backstop poll. Handles the no-event cases and a wedged dylib (process up
+	// but never connects). We require the helper to be down across two polls
+	// before replacing a running-but-silent instance, to ride out boot flaps.
+	let downPolls = 0;
+	const timer = setInterval(async () => {
+		if (booting || helper.isConnected()) {
+			downPolls = 0;
+			return;
+		}
+		if (!(await messagesRunning())) {
+			downPolls = 0;
+			launchMessages('Messages.app not running');
+			return;
+		}
+		if (++downPolls >= 2) {
+			downPolls = 0;
+			launchMessages('helper unresponsive — replacing instance');
+		}
+	}, HELPER_WATCHDOG_MS);
+	timer.unref?.();
+	return { stop: () => clearInterval(timer) };
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -66,17 +161,18 @@ async function main() {
 	}
 
 	if (HELPER_ENABLED) {
+		// Register the watchdog FIRST so its onConnect hook is listening before we
+		// launch — otherwise the boot-time connect wouldn't clear `booting` and the
+		// first ⌘-Q would be swallowed. It keeps Messages.app alive for the life of
+		// the process: if the operator ⌘-Q's it (or it crashes), the helper socket
+		// drops and the watchdog relaunches it until it dials back in.
+		startHelperWatchdog();
+
 		// Launch Messages.app with the helper dylib injected so it dials back
 		// into our IPC listener. Skip if the dylib is already connected — e.g.
 		// you ran run-messages.sh by hand in another terminal.
 		if (!helper.isConnected()) {
-			const script = path.join(SCRIPT_DIR, 'imessage', 'run-messages.sh');
-			log('launching Messages.app with helper dylib injected');
-			const proc = spawn(script, [], { stdio: 'ignore' });
-			proc.on('error', (err) => log(`Messages.app spawn error: ${err.message}`));
-			proc.on('exit', (code, sig) => {
-				if (code !== 0) log(`Messages.app exited (code=${code}, sig=${sig})`);
-			});
+			launchMessages('boot');
 		}
 
 		// Wait up to ~10s for the helper to dial in. Messages.app needs to

@@ -19,6 +19,7 @@ function authHeaders(key) {
 // One place to add fields when we need more.
 const ISSUE_SELECT =
 	'id,workspace_id,appfolio_srn,name,description,urgent,created_at,property_id,vendor_id,' +
+	'status,status_reason,status_updated_at,' +
 	'tenant:tenants!tenant_id(name),' +
 	'property:properties!property_id(name),' +
 	'unit:units!unit_id(name),' +
@@ -34,6 +35,31 @@ export async function fetchIssueById(id) {
 	});
 	const res = await fetch(`${url}/rest/v1/issues_v2?${params}`, { headers: authHeaders(key) });
 	if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+	const rows = await res.json();
+	return rows[0] ?? null;
+}
+
+// Patch a single issues_v2 row and return the updated representation. The
+// agent's one write path into the work-order record — used by update_issue
+// (and, transitionally, set_vendor). Callers pass an already-whitelisted patch;
+// the DB's issues_v2_status_check rejects any out-of-enum status. Throws on
+// HTTP error; returns null if no row matched the id.
+export async function patchIssue(id, patch) {
+	if (!id) throw new Error('patchIssue: id required');
+	const { url, key } = supabaseEnv();
+	const res = await fetch(`${url}/rest/v1/issues_v2?id=eq.${encodeURIComponent(id)}`, {
+		method: 'PATCH',
+		headers: {
+			...authHeaders(key),
+			'Content-Type': 'application/json',
+			Prefer: 'return=representation'
+		},
+		body: JSON.stringify(patch)
+	});
+	if (!res.ok) {
+		const detail = await res.text().catch(() => '');
+		throw new Error(`patchIssue ${res.status}: ${detail.slice(0, 200)}`);
+	}
 	const rows = await res.json();
 	return rows[0] ?? null;
 }

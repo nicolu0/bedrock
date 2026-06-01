@@ -10,6 +10,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { fetchIssueById } from '../core/supabase.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -235,6 +236,35 @@ export async function clearWorkspaceLocalState(workspace_label) {
 // (otherwise a later "yes" gets ambiguous between the new send and the
 // already-handled one).
 //
+// Work-order lifecycle states that mean "no longer an open candidate the PM
+// could be replying to". Mirrors the issues_v2 status enum written by
+// update_issue. `new` and `awaiting_pm` (and unknown) remain candidates.
+const RESOLVED_STATUSES = new Set([
+	'triaging',
+	'dispatched',
+	'scheduled',
+	'pm_handling',
+	'completed'
+]);
+
+// Filter candidate bundles to those whose issue is still open. Reads
+// issues_v2.status per candidate (parallel). Best-effort: a missing status
+// (eval fixtures without one) or a fetch error keeps the candidate — fail-open,
+// so this can only ever REMOVE known-resolved WOs, never hide an open one.
+async function filterOpenByStatus(bundles) {
+	const checked = await Promise.all(
+		bundles.map(async (b) => {
+			try {
+				const issue = await fetchIssueById(b.issue_id);
+				return RESOLVED_STATUSES.has(issue?.status ?? null) ? null : b;
+			} catch {
+				return b;
+			}
+		})
+	);
+	return checked.filter(Boolean);
+}
+
 // withinMs defaults to 7 days. limit defaults to 5.
 export async function recentSentForChat({ chat_guid, withinMs = 7 * 24 * 60 * 60 * 1000, limit = 5 } = {}) {
 	if (!chat_guid) return [];
@@ -263,8 +293,13 @@ export async function recentSentForChat({ chat_guid, withinMs = 7 * 24 * 60 * 60
 		}
 		seen.get(key).bodies.push(row.body);
 	}
-	const bundles = [...seen.values()]
-		.filter((b) => !drafted.has(b.issue_id))
+	let open = [...seen.values()].filter((b) => !drafted.has(b.issue_id));
+	// Drop work orders whose lifecycle has advanced past "open candidate". The PM
+	// has already responded to these (we dispatched, they self-handled, we're
+	// triaging, etc.), so a fresh "yes" can't be approving them — leaving them in
+	// is what produced phantom candidates and spurious clarifying questions.
+	open = await filterOpenByStatus(open);
+	const bundles = open
 		.sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime())
 		.slice(0, limit);
 	// Present oldest-first so the candidate list mirrors the order the PM sees the

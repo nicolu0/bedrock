@@ -259,6 +259,27 @@ async function checkExpected(scenario, result, ctx) {
 		}
 	}
 
+	// tool_args: for each { toolName: {k: v} }, assert SOME call to that tool had
+	// args matching all the listed key/values. Lets scenarios check what a tool
+	// was called WITH (e.g. update_issue status), not just that it fired.
+	if (exp.tool_args) {
+		for (const [toolName, wantArgs] of Object.entries(exp.tool_args)) {
+			const calls = (result.toolCalls ?? []).filter((t) => t.name === toolName);
+			if (!calls.length) {
+				fails.push(`tool_args: ${toolName} was not called`);
+				continue;
+			}
+			const ok = calls.some((c) =>
+				Object.entries(wantArgs).every(([k, v]) => (c.args?.[k] ?? null) === v)
+			);
+			if (!ok) {
+				fails.push(
+					`tool_args: no ${toolName} call matched ${JSON.stringify(wantArgs)}; got ${JSON.stringify(calls.map((c) => c.args))}`
+				);
+			}
+		}
+	}
+
 	// drafts_count: combine ctx.drafts (F1 staged) + ctx.draftIds (F2 direct writes)
 	const stagedDrafts = ctx.drafts ?? [];
 	const directDraftIds = ctx.draftIds ?? [];
