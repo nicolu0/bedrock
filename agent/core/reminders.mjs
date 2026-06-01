@@ -17,6 +17,7 @@
 import { loadSkill, getMenu } from './skills.mjs';
 import { recentSentForChat } from '../state/helpers.mjs';
 import * as memory from '../memory.mjs';
+import * as sessionizer from './sessionizer.mjs';
 
 function reminder(content) {
 	return `<system-reminder>\n${content}\n</system-reminder>`;
@@ -60,15 +61,46 @@ function formatIssueContext(issue, candidate_vendors) {
 	return `# issue context\n${issueBlock}\n\n${candidatesBlock}`;
 }
 
+function relativeAge(iso) {
+	const ms = Date.now() - new Date(iso).getTime();
+	if (!Number.isFinite(ms) || ms < 0) return 'just now';
+	const min = Math.round(ms / 60000);
+	if (min < 1) return 'just now';
+	if (min < 60) return `${min}m ago`;
+	const hr = Math.round(min / 60);
+	if (hr < 24) return `${hr}h ago`;
+	return `${Math.round(hr / 24)}d ago`;
+}
+
+// Two sends within this window of each other count as a "burst" — sent close
+// together, so a bare "yes" can't be pinned to one by recency (→ clarify).
+const BURST_WINDOW_MS = 10 * 60 * 1000;
+
 function formatRecentSends(bundles) {
 	if (!bundles.length) {
-		return '# recent sends in this chat\n(no recent work orders sent in this chat — nothing to correlate against)';
+		return '# open work orders in this chat\n(none open — nothing the reply could be approving)';
+	}
+	// Oldest first, newest last — the order the PM sees them. Each line shows its
+	// age. Mark a clear "← most recent" ONLY when the newest send is well clear of
+	// the next; if the top two went out close together it's a burst, left unmarked
+	// so a bare "yes" reads as ambiguous (→ clarify) rather than auto-newest.
+	const lastIdx = bundles.length - 1;
+	let clearLatest = bundles.length === 1;
+	if (bundles.length >= 2) {
+		const newest = new Date(bundles[lastIdx].sent_at).getTime();
+		const second = new Date(bundles[lastIdx - 1].sent_at).getTime();
+		clearLatest = newest - second > BURST_WINDOW_MS;
 	}
 	const lines = bundles.map((b, i) => {
 		const bodies = b.bodies.map((line) => `   ${line}`).join('\n');
-		return `${i + 1}. [issue_id: ${b.issue_id}]\n${bodies}`;
+		const age = b.sent_at ? relativeAge(b.sent_at) : 'unknown time';
+		const tag = i === lastIdx && clearLatest ? '  ← most recent' : '';
+		return `${i + 1}. [issue_id: ${b.issue_id}] (sent ${age})${tag}\n${bodies}`;
 	});
-	return ['# recent sends in this chat (last 7 days)', ...lines].join('\n\n');
+	const header = clearLatest
+		? '# open work orders in this chat (oldest first, newest last)'
+		: '# open work orders in this chat (oldest first; the most recent were sent close together)';
+	return [header, ...lines].join('\n\n');
 }
 
 function formatProfile(profile) {
@@ -136,7 +168,16 @@ export async function buildReminders(event, ctx, skillName) {
 	if (event.type === 'incoming_user_message') {
 		const chat_guid = event.payload?.chat_guid ?? ctx.chat_guid;
 		if (!chat_guid) throw new Error('reminders: incoming_user_message requires payload.chat_guid');
-		const bundles = await recentSentForChat({ chat_guid });
+		// Scope candidates to the live session: a fresh "yes" is about a work order
+		// we raised in THIS conversation, not a stale one from days/sessions ago.
+		// Eval mode (no live sessions) and a missing session fall open to the flat
+		// window, preserving test behavior.
+		let sessionStartedAt = null;
+		if (process.env.BEDROCK_EVAL_MODE !== '1') {
+			const session = await sessionizer.getOpenSession(chat_guid).catch(() => null);
+			sessionStartedAt = session?.started_at ?? null;
+		}
+		const bundles = await recentSentForChat({ chat_guid, sessionStartedAt });
 		blocks.push(reminder(formatRecentSends(bundles)));
 	}
 
@@ -178,7 +219,7 @@ export function composeUserContent(event, reminderBlocks) {
 	// the rules above" cue.
 	const framing =
 		event.type === 'incoming_user_message'
-			? `The PM just sent: "${userText}"\n\nApply the incoming_user_message phase. The recent-sends list already excludes work orders the PM has answered (status dispatched/self-handled/triaging) — so its count is the number of genuinely OPEN candidates. That count governs DISPATCH and clarifying ONLY — it does NOT gate learning:\n- NONE: never dispatch and never ask "which one" (a bare "yes"/"ok" approves nothing that isn't listed).\n- EXACTLY ONE: an approval confirms that one — dispatch it, don't ask which.\n- TWO OR MORE: dispatch if the reply identifies one, otherwise draft ONE clarifying question (send_text draft:true).\nWhenever a reply resolves a listed WO (dispatch, self-handle, defer, triage), call update_issue to advance its status so it leaves the list. Separately and regardless of candidate count: still write_memory for any preference/correction/decision, and read_memory when you need prior context.`
+			? `The PM just sent: "${userText}"\n\nApply the incoming_user_message phase. The "# open work orders" block is scoped to this conversation, oldest→newest, each tagged with its age and the newest marked "← most recent". Resolve the reply to ONE work order by confidence (Step 0):\n- NONE open: no dispatch, no clarifying question, no outgoing message of any kind (not even an "I have nothing to approve" note). A bare "yes"/"ok" with nothing open approves nothing. (read_memory/write_memory still fire if the message itself calls for it — they send no message.)\n- Reply names/points to one (issue, vendor, position): dispatch that one.\n- Exactly one open: an approval confirms it — dispatch, don't ask.\n- Exactly one open + approval: dispatch it. A "yes" right after the lone open work order is obvious — never ask "which one?".\n- Two or more genuinely open + a bare "yes" that names none: draft ONE clarifying question. This is the only case you ask, and it's rare — advancing status on each reply usually leaves just one open.\nWhenever a reply resolves a listed WO (dispatch, self-handle, defer, triage), call update_issue to advance its status so it leaves the list. Separately, regardless: write_memory for any preference/correction, read_memory when you need prior context.`
 			: userText;
 	return `${reminderBody}\n\n${framing}`;
 }

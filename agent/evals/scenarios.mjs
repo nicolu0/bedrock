@@ -134,7 +134,7 @@ function sentBundle(issue, { ago_min = 5 } = {}) {
 }
 
 export const scenarios = [
-	// ─── process_wo (read_memory → set_vendor → send_text) ──────────────────
+	// ─── process_wo (read_memory → update_issue → send_text) ────────────────
 	// The poller enriches the issue before runTurn, so the agent receives a
 	// populated issue (property/unit/title) and never calls an enrich tool.
 	// Scenario fixtures are already enriched to match.
@@ -150,7 +150,7 @@ export const scenarios = [
 			chat_guid: TEST_CHAT
 		},
 		expected: {
-			tool_calls_set_includes: ['read_memory', 'set_vendor', 'send_text'],
+			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign', 'Mario', 'Should I send']
 		}
@@ -167,7 +167,7 @@ export const scenarios = [
 		},
 		expected: {
 			tool_calls_set_includes: ['read_memory', 'send_text'],
-			tool_calls_excludes: ['set_vendor'],
+			tool_calls_excludes: ['update_issue'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign'],
 			drafts_excludes: ['Should I send', 'URGENT'],
@@ -189,7 +189,7 @@ export const scenarios = [
 			workspace_label: 'test'
 		},
 		expected: {
-			tool_calls_set_includes: ['read_memory', 'set_vendor', 'send_text'],
+			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
 			drafts_count: 1,
 			drafts_include: ['Hub Champaign', '\n\nShould I send Mario?'],
 			drafts_excludes: ['Unit ', 'URGENT']
@@ -206,7 +206,7 @@ export const scenarios = [
 			workspace_label: 'test'
 		},
 		expected: {
-			tool_calls_set_includes: ['read_memory', 'set_vendor', 'send_text'],
+			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign', '\n\nShould I send Mario?'],
 			drafts_excludes: ['has dryer not working', 'URGENT'],
@@ -232,7 +232,7 @@ export const scenarios = [
 			workspace_label: 'test'
 		},
 		expected: {
-			tool_calls_set_includes: ['read_memory', 'set_vendor', 'send_text'],
+			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign', '\n\nShould I send Mario?', 'faucet'],
 			drafts_excludes: ['URGENT', 'towels', 'cabinet', 'several days'],
@@ -270,15 +270,19 @@ export const scenarios = [
 	},
 
 	{
-		// Ambiguous approval: bare "yes" while TWO work orders are open. The agent
-		// must NOT guess/dispatch — it drafts ONE clarifying question (send_text
-		// draft:true → staged, not live) for the human to review and send.
-		name: 'chat: "yes" with two open candidates → drafts a clarifying question',
+		// Two work orders genuinely open at once (neither answered yet) + a bare
+		// "yes" that names neither → the agent can't be certain which one, so it
+		// asks ONE clarifying question. This is the SMART ask, not the dumb one:
+		// the dumb case is a lone open WO (which dispatches without asking). In
+		// practice status-closure keeps the open set to one; this fires only when
+		// two are genuinely pending together. The agent reliably clarifies here
+		// rather than gamble on recency — the safe call under full automation.
+		name: 'chat: two genuinely-open WOs + bare "yes" → one clarifying question',
 		skill: 'chat',
 		setup: {
 			sent_log: [
-				...sentBundle(ISSUE_FAUCET, { ago_min: 30 }),
-				...sentBundle(ISSUE_AC, { ago_min: 5 })
+				...sentBundle(ISSUE_FAUCET, { ago_min: 20 }),
+				...sentBundle(ISSUE_AC, { ago_min: 6 })
 			],
 			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET, [ISSUE_AC.id]: ISSUE_AC }
 		},
@@ -291,8 +295,30 @@ export const scenarios = [
 			judge: {
 				target: 'drafts',
 				criteria:
-					'A single clarifying question asking which of the two open work orders (the faucet vs. the AC) the PM meant. It must NOT pick one or dispatch.'
+					'A single clarifying question that does NOT dispatch — asking which of the two work orders the PM meant. Naming them by issue (faucet/AC) or by vendor (Mario / California Heat) is equally fine; the only requirement is that it asks rather than picks one.'
 			}
+		}
+	},
+
+	{
+		// Name beats recency: the AC is the most recent, but the PM names the
+		// faucet → dispatch the faucet (Mario), not the AC.
+		name: 'chat: names the older WO ("go ahead with the faucet") → dispatch that one, not the recent',
+		skill: 'chat',
+		setup: {
+			sent_log: [
+				...sentBundle(ISSUE_FAUCET, { ago_min: 35 }),
+				...sentBundle(ISSUE_AC, { ago_min: 4 })
+			],
+			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET, [ISSUE_AC.id]: ISSUE_AC }
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'go ahead with the faucet' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'update_issue'],
+			drafts_count: 3,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			drafts_include: ['Mario'],
+			drafts_excludes: ['California Heat', 'which one']
 		}
 	},
 
@@ -376,7 +402,13 @@ export const scenarios = [
 			workspace_label: 'test',
 			text: 'what is the lockbox code for hub champaign?'
 		},
-		expected: { no_tools: true, drafts_count: 0, outbox_count: 0 }
+		// A read_memory lookup is fine (it finds nothing and stays silent). What
+		// matters: no dispatch and no outgoing message to the PM.
+		expected: {
+			tool_calls_excludes: ['send_text', 'draft_tenant', 'draft_vendor', 'update_issue'],
+			drafts_count: 0,
+			outbox_count: 0
+		}
 	},
 
 	{

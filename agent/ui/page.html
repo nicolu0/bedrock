@@ -3136,7 +3136,7 @@
 			function sxDot(name) {
 				if (name === 'read_memory' || name === 'read_profile') return 'dr';
 				if (name === 'write_memory') return 'dm';
-				if (name === 'set_vendor') return 'dv';
+				if (name === 'set_vendor' || name === 'update_issue') return 'dv';
 				if (name === 'draft_tenant' || name === 'draft_vendor') return 'dd';
 				return 'ds';
 			}
@@ -3681,7 +3681,7 @@
 			// Plain-English labels for the timeline steps (raw tool names → readable).
 			const STEP_LABEL = {
 				read_memory: 'checked memory', read_profile: 'read profile', write_memory: 'saved a belief',
-				set_vendor: 'set the vendor', draft_tenant: 'drafted tenant text', draft_vendor: 'drafted vendor dispatch',
+				set_vendor: 'set the vendor', update_issue: 'updated the work order', draft_tenant: 'drafted tenant text', draft_vendor: 'drafted vendor dispatch',
 				read_thread: 'read the thread'
 			};
 			function turnSummary(t) {

@@ -8,7 +8,6 @@
 import { sendText } from './send_text.mjs';
 import { draftTenant } from './draft_tenant.mjs';
 import { draftVendor } from './draft_vendor.mjs';
-import { setVendor } from './set_vendor.mjs';
 import { updateIssue } from './update_issue.mjs';
 import { readProfile } from './read_profile.mjs';
 import { writeProfile } from './write_profile.mjs';
@@ -20,7 +19,6 @@ export const ALL_TOOLS = [
 	sendText,
 	draftTenant,
 	draftVendor,
-	setVendor,
 	updateIssue,
 	readProfile,
 	writeProfile,

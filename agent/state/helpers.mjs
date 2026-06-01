@@ -265,14 +265,23 @@ async function filterOpenByStatus(bundles) {
 	return checked.filter(Boolean);
 }
 
-// withinMs defaults to 7 days. limit defaults to 5.
-export async function recentSentForChat({ chat_guid, withinMs = 7 * 24 * 60 * 60 * 1000, limit = 5 } = {}) {
+// withinMs defaults to 7 days. limit defaults to 5. sessionStartedAt (ISO),
+// when provided, scopes candidates to the live session — only WOs sent at/after
+// the session opened count, so a fresh "yes" can't attach to a stale WO from a
+// prior conversation. Null/absent (eval, no open session) = flat 7-day window.
+export async function recentSentForChat({
+	chat_guid,
+	withinMs = 7 * 24 * 60 * 60 * 1000,
+	limit = 5,
+	sessionStartedAt = null
+} = {}) {
 	if (!chat_guid) return [];
 	const [all, drafted] = await Promise.all([
 		readJson(FILES.sent, []),
 		alreadyDraftedFollowupIds()
 	]);
 	const cutoff = Date.now() - withinMs;
+	const sessionCutoff = sessionStartedAt ? new Date(sessionStartedAt).getTime() : null;
 	const matches = all.filter((row) => {
 		if (row.channel !== 'groupchat') return false;
 		if (row.chat_guid !== chat_guid) return false;
@@ -281,7 +290,9 @@ export async function recentSentForChat({ chat_guid, withinMs = 7 * 24 * 60 * 60
 		// show up as phantom candidates the PM could be "replying to".
 		if (!row.issue_id) return false;
 		const sentAt = row.sent_at ? new Date(row.sent_at).getTime() : 0;
-		return sentAt >= cutoff;
+		if (sentAt < cutoff) return false;
+		if (sessionCutoff && sentAt < sessionCutoff) return false; // scope to live session
+		return true;
 	});
 	// Bundle by bundle_id (one F1 turn = one bundle = one issue), keep most
 	// recent N bundles. Caller wants candidate issues, not raw messages.

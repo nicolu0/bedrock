@@ -41,7 +41,8 @@ export async function fetchIssueById(id) {
 
 // Patch a single issues_v2 row and return the updated representation. The
 // agent's one write path into the work-order record — used by update_issue
-// (and, transitionally, set_vendor). Callers pass an already-whitelisted patch;
+// and by the awaiting_pm status flip when a WO summary is sent. Callers pass an
+// already-whitelisted patch;
 // the DB's issues_v2_status_check rejects any out-of-enum status. Throws on
 // HTTP error; returns null if no row matched the id.
 export async function patchIssue(id, patch) {

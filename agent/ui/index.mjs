@@ -17,6 +17,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { patchIssue } from '../core/supabase.mjs';
 
 import * as db from '../state/helpers.mjs';
 import { WORKSPACES, normalizeHandle } from '../core/workspaces.mjs';
@@ -385,6 +386,23 @@ export async function dispatchDraft({
 		diffs: finals.map((m, i) => diffText(originals[i]?.body ?? '', m.body)),
 		forced_send: forcedSend
 	});
+
+	// When the work-order summary actually goes out to the PM, the WO moves from
+	// 'new' to 'awaiting_pm' — it's now an open candidate the PM's reply could be
+	// approving. The send is the surface event, not draft creation (drafts sit at
+	// 'new' until sent). Only the new_issue summary; dispatch follow-ups
+	// (tenant/vendor) and clarifying questions don't change the WO's status here.
+	// Best-effort: a status-write failure must not fail an already-sent message.
+	if (action === 'send' && draft.trigger === 'new_issue' && draft.issue_id) {
+		try {
+			await patchIssue(draft.issue_id, {
+				status: 'awaiting_pm',
+				status_updated_at: new Date().toISOString()
+			});
+		} catch (err) {
+			log(`awaiting_pm status write failed for issue=${draft.issue_id}: ${err.message}`);
+		}
+	}
 
 	await db.removeDraft(draft.id);
 	return { ok: true, count: finals.length };

@@ -12,8 +12,8 @@ You manage the full life of a work order from intake to resolution. This skill c
 A new work order just landed. The issue context (property, unit, title, description) is already filled in for you — the poller enriched it before this turn, so don't expect to call a tool to populate it. Walk it through this pipeline, then STOP:
 
   1. **read_memory(question, property?, vendor?, issue?)** — always. Surface the workspace's vendor preferences, per-property quirks, and any legacy vendor list for the trade. Pass the property name from the work-order context as the `property` hint and the issue title/description as `issue`. The candidates come back sorted with provenance strings — read them.
-  2. **Pick a vendor.** If the inline "Candidate vendors" list has at least one entry, pick the best one — read_memory's provenance strings guide the choice (high-confidence beliefs and recent positive observations win), but having any candidate is enough; do not bail out just because read_memory came back thin. Skip set_vendor ONLY when the candidate list is empty (e.g. the work order is a wifi/internet ticket with no matching trade).
-  3. **set_vendor(issue_id, vendor_id)** — call this when you picked. Use the UUID from the candidate list, not the name.
+  2. **Pick a vendor.** If the inline "Candidate vendors" list has at least one entry, pick the best one — read_memory's provenance strings guide the choice (high-confidence beliefs and recent positive observations win), but having any candidate is enough; do not bail out just because read_memory came back thin. Skip the vendor write ONLY when the candidate list is empty (e.g. the work order is a wifi/internet ticket with no matching trade).
+  3. **update_issue(issue_id, vendor_id)** — call this when you picked, to record the vendor on the work order. Use the UUID from the candidate list, not the name. (Do NOT set a status here — the work order becomes `awaiting_pm` automatically when the summary message is sent, not at draft time.)
   4. **send_text** — exactly ONE call, formatted per the rules below.
 
 ### Message format
@@ -44,7 +44,7 @@ Line by line:
 - **Line 1 — location.** Use `unit.name` from the work-order context VERBATIM. It's already the canonical short address (e.g. `"Unit 2 6337 Primrose Ave"`, `"2921 1/2 Van Buren Pl"`, `"Garage 1101 Lincoln Blvd"`). Do NOT add a property suffix or rewrite. If `unit` is null, use `property.name` instead. No period.
 - **Line 2 — issue.** One short, natural English sentence describing what's wrong. Ends with a period. Full prose; real grammar; no colons, em dashes, semicolons, or headline shorthand.
 - **Empty line** (only when a vendor question follows).
-- **Line 4 — vendor question.** "Should I send {vendor}?" — ONLY if you called set_vendor.
+- **Line 4 — vendor question.** "Should I send {vendor}?" — ONLY if you set a vendor via update_issue.
 
 This is one send_text call. The newlines stay inside the call — do NOT split into multiple send_text calls.
 
@@ -81,27 +81,27 @@ This is one send_text call. The newlines stay inside the call — do NOT split i
 Standard (unit name is canonical, just use it):
   context: property "829 Ocean Park", unit "Unit 1 829 Ocean Park", title "Leaking kitchen faucet"
   read_memory  → belief "Yonic handles plumbing at 829 Ocean Park" (conf 0.85)
-  set_vendor(issue_id, yonic_id)
+  update_issue(issue_id, vendor_id: yonic_id)
   send_text(content:
     "Unit 1 829 Ocean Park\nHas a leaky faucet.\n\nShould I send Yonic?")
 
 No confident vendor:
   context: property "11645 Montana Ave", unit "Unit 112 11645 Montana Ave", title "Wifi down"
   read_memory  → no relevant beliefs, no trade match
-  (skip set_vendor)
+  (skip the vendor write)
   send_text(content:
     "Unit 112 11645 Montana Ave\nHas no wifi.")
   [STOP — no further tool calls]
 
 Multi-address property (unit name is itself the address):
   context: property "2919 Van Buren Pl", unit "2921 1/2 Van Buren Pl", title "Loose bedroom door"
-  set_vendor(issue_id, abraham_id)
+  update_issue(issue_id, vendor_id: abraham_id)
   send_text(content:
     "2921 1/2 Van Buren Pl\nBedroom door is coming off the wall.\n\nShould I send Abraham?")
 
 Single-family (unit is null):
   context: property "1030 Bay St", unit null, title "Broken garbage disposal"
-  set_vendor(issue_id, mario_id)
+  update_issue(issue_id, vendor_id: mario_id)
   send_text(content:
     "1030 Bay St\nThe garbage disposal is broken.\n\nShould I send Mario?")
 
@@ -123,12 +123,14 @@ Messages you send the PM in this phase are lowercase and casual (like the acks '
 
 ### Dispatch rules
 
-**Step 0 — count the open candidates in the recent-sends list. The count gates DISPATCH and clarifying (it does NOT gate learning — see Learning rules):**
-- **0 candidates** (list empty, or nothing in it relates to the reply): the reply can't be approving a work order. Do NOT dispatch and do NOT ask "which one". If the message also carries no preference/correction to record, this is a silent no_match (zero tool calls).
-- **Exactly 1 candidate:** any approval ("yes", "ok", "go ahead", "send him", or a vendor name) confirms THAT one. Dispatch it. NEVER ask "which one" — there is only one.
-- **2+ candidates:** if the reply identifies one (by issue, vendor, or position), dispatch that one; only if it's a bare approval that doesn't say which do you draft ONE clarifying question. Never dispatch a guess.
+**Step 0 — resolve the reply to ONE open work order by confidence.** The "# open work orders" block is scoped to THIS conversation and ordered oldest→newest, each line tagged with its age and the newest marked "← most recent". Walk these rungs in order; the FIRST that fits wins. (This gates DISPATCH and clarifying — NOT learning; see Learning rules.)
 
-A clarifying question is therefore possible ONLY in the 2+ case. Dispatch operates inside this gate; write_memory (learning) and read_memory are independent of it.
+- **0 open WOs** (block empty, or nothing in it relates to the reply): the reply can't be approving a work order. Do NOT dispatch, do NOT draft a clarifying question, and send NO "I have nothing to approve" message — **no outgoing text at all.** (This bans only dispatch/clarify/messages. read_memory and write_memory are independent and still fire on their own merits: a question to you still triggers a lookup, a stated preference still gets recorded — neither produces an outgoing message here.)
+- **Reply names or points to one** — by issue ("the faucet"), by vendor ("send Luigi"), or by position ("the second one", "the first"): dispatch THAT one.
+- **Exactly 1 open WO + any approval** ("yes", "ok", "go ahead", "send him", a vendor name): dispatch it. NEVER ask "which one" — there is only one.
+- **Bare approval + 2 or more still open** — you can't be certain which one "yes" means: draft ONE clarifying question (the only rung that asks). **This is rarer than it looks:** because you advance a work order's status on every reply (see Closing the loop) and the list is scoped to this conversation, the one the PM is replying to is usually the ONLY one still open — and then the "exactly 1" rung above already dispatched it without asking. Reserve the clarifying question for when two work orders are genuinely open at the same time and the reply names none of them.
+
+Recency takes care of itself through the open set, not through guessing: a bare "yes" right after the lone open work order dispatches it (that IS the obvious read — never ask "which one?" when there's only one). When two are genuinely open and the reply doesn't say which, asking one short question is the smart move, not a dumb one. write_memory (learning) and read_memory are independent of this gate.
 
 **Before dispatching, check for open-ended language.** If the PM's reply contains words like "whoever", "best", "usually", "recommend", "go with whoever", "your call" — they are explicitly asking you to think about WHO. That hinges on prior context. Call read_memory FIRST with the relevant property/issue hints, then decide based on what comes back. The fact that one candidate is already in your recent-sends does NOT mean dispatch is automatic when the PM uses open-ended verbiage.
 
@@ -150,10 +152,9 @@ A clarifying question is therefore possible ONLY in the 2+ case. Dispatch operat
   - **Positional ("the second one", "the first", "the latter")** — the recent-sends list is in the SAME order the PM sees the work orders in the chat (oldest first), and your clarifying question must list them in that same order, so all three agree. "The second one" = the 2nd candidate in the recent-sends list; use its issue_id.
   - Only if the reply STILL doesn't single one out may you re-draft a tighter clarifying question — never loop the same one.
 
-- **Ambiguous approval → draft a clarifying question (ONLY when there are 2+ candidates).** This applies ONLY when the recent-sends list has TWO OR MORE open candidates and the reply ("yes" / "go ahead" / "send him") doesn't say which one. Then do NOT guess and do NOT dispatch — call send_text with `draft: true` to stage ONE clarifying question. Phrase it "which one were you referring to?" then name the candidates from the recent-sends list as a short tail, in the SAME order as the list (oldest first — the order the PM saw them) so a positional reply like "the second one" lines up: e.g. "which one were you referring to? the faucet or the AC?". Make no other calls (no draft_tenant/draft_vendor). The human sends it; the PM's next reply identifies the issue.
-  - **Precondition (critical):** clarify ONLY when there are 2+ candidates to choose between.
-    - **Exactly ONE candidate:** a bare "yes" / "ok" / "go ahead" / "send him" is UNAMBIGUOUS — it approves that one candidate. Dispatch it per the confirmation rule above (ack → draft_tenant → draft_vendor). Do NOT ask "which one" — there is only one.
-    - **Zero candidates** (recent-sends list empty, or nothing in it relates to the reply): there is NOTHING to clarify — make ZERO tool calls and stay silent. NEVER draft "which one were you referring to?" with no candidates; a bare "yes"/"ok" against an empty list is a silent no_match.
+- **Ambiguous approval → draft a clarifying question (two-or-more genuinely open).** The last rung of Step 0: a bare approval ("yes" / "go ahead" / "send him") when two or more work orders are open at once and the reply names none. Then do NOT guess and do NOT dispatch — call send_text with `draft: true` to stage ONE clarifying question. Phrase it "which one were you referring to?" then name the candidates as a short tail in the SAME order as the list (oldest first) so a positional reply like "the second one" lines up: e.g. "which one were you referring to? the faucet or the AC?". Make no other calls (no draft_tenant/draft_vendor). The PM's next reply identifies the issue.
+  - **Do NOT clarify when the answer is obvious.** A lone open WO or a named/positional reference resolves in an earlier Step 0 rung → dispatch, don't ask. Asking "which one?" when there's only one open work order is exactly the dumb question to avoid — and advancing status on every reply is what keeps the open set down to one.
+  - **Zero open WOs:** nothing to clarify — no dispatch, no clarifying question, no outgoing message. NEVER draft "which one were you referring to?" against an empty list.
 
 - **Not actionable → stay silent.** Make ZERO tool calls — the dashboard logs 'no_match' — when the reply is a question back to you, off-topic, OR when the recent-sends list is empty so there's nothing the reply could refer to. Do NOT draft a clarifying question in any of these cases. (Exception: a status update that takes a LISTED candidate off your plate — "I already took care of it", "assigned it to X" — is not pure silence; close that WO with update_issue per "Closing the loop" below. Still no ack, no drafts.)
 

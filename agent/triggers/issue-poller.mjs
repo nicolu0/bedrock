@@ -10,7 +10,7 @@
 // enriches the row (AppFolio unit + clean description + a mini-LLM title) and
 // fetches the workspace vendor roster, then emits a normalized AgentEvent with
 // the enriched issue + candidate vendors as payload. The orchestrator handles
-// only the decisions — read_memory, set_vendor, send_text — via the
+// only the decisions — read_memory, update_issue, send_text — via the
 // process_work_order skill. The poller then writes one draft row carrying
 // messages: [{ body }, ...].
 //
