@@ -223,6 +223,16 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 	const replyToHeader = getHeader(headers, 'reply-to');
 	if (!fromHeader.includes(APPFOLIO_SENDER) && !replyToHeader.includes(APPFOLIO_SENDER)) return false;
 
+	// Vendor status-change emails ("A Vendor Changed the Status of WO#…") are NOT
+	// new work orders — they signal an existing WO moved (in practice always
+	// Assigned → Work Done). We don't act on them yet; drop here so they can't be
+	// mis-ingested as a new issue. TODO: route to a loop-closure handler — mark the
+	// issue done + confirm with the tenant. See vault/product/vendor-status-loop-closure.md.
+	if (/changed the status/i.test(subject)) {
+		console.log('pubsub-hook: dropping vendor status-change email (not handled yet)', { subject });
+		return false;
+	}
+
 	// Route by the per-customer alias in the headers. Aliases live in
 	// workspaces.alias (one Google Group address per workspace) — add a customer by
 	// inserting a row, not editing code. No alias match → no workspace → dropped
