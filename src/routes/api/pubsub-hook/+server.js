@@ -19,7 +19,8 @@ const TEST_WORKSPACE_ID = '2e4373a0-40b8-42c2-a873-b08c99dbf76a';
 // Every customer's AppFolio mail now lands in one inbox (andrew@usebedrock.co),
 // forwarded via per-customer Google Group aliases. The group rewrites From/To to
 // the alias, so each message is routed to its workspace by the alias present in
-// the headers; the gmail_connection's workspace_id is only the fallback.
+// the headers. Mail with NO recognized alias is dropped — never assigned to a
+// workspace — so stray mail can't pollute a customer's inbox.
 const WORKSPACE_BY_ALIAS = {
 	'lapm@usebedrock.co': '2e4373a0-40b8-42c2-a873-b08c99dbf76a',
 	'greenoakpropertymanagement@usebedrock.co': '5406e04f-8e22-4ed8-a54e-a6d08ff45ef7'
@@ -229,15 +230,15 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 	// substring so both pass; tenant/other mail is still dropped.
 	if (!fromHeader.includes(APPFOLIO_SENDER)) return false;
 
-	// Route by the per-customer alias in the headers; fall back to the
-	// connection's workspace_id only when no alias matches (e.g. legacy direct mail).
+	// Route by the per-customer alias in the headers. No alias match → no
+	// workspace → dropped below. We NEVER fall back to a workspace: an
+	// unrecognized alias is mail we don't own and must not pollute any customer.
 	const hdrHaystack = ['from', 'to', 'delivered-to', 'x-forwarded-to']
 		.map((n) => getHeader(headers, n))
 		.join(' ')
 		.toLowerCase();
 	const workspaceId =
-		Object.entries(WORKSPACE_BY_ALIAS).find(([alias]) => hdrHaystack.includes(alias))?.[1] ??
-		connectionWorkspaceId;
+		Object.entries(WORKSPACE_BY_ALIAS).find(([alias]) => hdrHaystack.includes(alias))?.[1] ?? null;
 
 	// internalDate = ms-since-epoch when Gmail received the message. Compare
 	// against arrival to see how much lag is upstream (AppFolio → Gmail → Pub/Sub).
