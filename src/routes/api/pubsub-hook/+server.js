@@ -252,7 +252,11 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 	});
 
 	const { serviceRequestNumber, appfolioPropertyId } = parseAppfolioSubject(subject);
-	if (!serviceRequestNumber || !appfolioPropertyId) {
+	// appfolioPropertyId is null for accounts that identify properties by ADDRESS
+	// rather than a number (e.g. Green Oak). intake-agent resolves those by
+	// matching the address from the subject/body, so the WO number alone gates
+	// dispatch — number-based accounts (LAPM) still send appfolioPropertyId.
+	if (!serviceRequestNumber) {
 		console.warn('pubsub-hook appfolio: could not parse subject', { subject });
 		return false;
 	}
