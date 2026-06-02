@@ -225,10 +225,12 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 	}
 
 	// AppFolio WO emails arrive either directly (From: donotreply@appfolio.com) or
-	// forwarded via a per-customer Google Group alias, which rewrites From to the
-	// alias but keeps "donotreply@appfolio.com" in the display name. Match the
-	// substring so both pass; tenant/other mail is still dropped.
-	if (!fromHeader.includes(APPFOLIO_SENDER)) return false;
+	// forwarded via a per-customer Google Group alias. The Group rewrites From to
+	// the alias and moves the real AppFolio address into Reply-To — the From
+	// display name only reads "(Do Not Reply)", NOT the address. Accept the message
+	// if either header carries donotreply@appfolio.com; tenant/other mail is dropped.
+	const replyToHeader = getHeader(headers, 'reply-to');
+	if (!fromHeader.includes(APPFOLIO_SENDER) && !replyToHeader.includes(APPFOLIO_SENDER)) return false;
 
 	// Route by the per-customer alias in the headers. No alias match → no
 	// workspace → dropped below. We NEVER fall back to a workspace: an
