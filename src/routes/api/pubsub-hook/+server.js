@@ -16,15 +16,6 @@ const APPFOLIO_SENDER = 'donotreply@appfolio.com';
 const TEST_SENDERS = new Set(['johnbedrocktest@gmail.com']);
 // Workspace used for test-mode emails (no AppFolio property to resolve from).
 const TEST_WORKSPACE_ID = '2e4373a0-40b8-42c2-a873-b08c99dbf76a';
-// Every customer's AppFolio mail now lands in one inbox (andrew@usebedrock.co),
-// forwarded via per-customer Google Group aliases. The group rewrites From/To to
-// the alias, so each message is routed to its workspace by the alias present in
-// the headers. Mail with NO recognized alias is dropped — never assigned to a
-// workspace — so stray mail can't pollute a customer's inbox.
-const WORKSPACE_BY_ALIAS = {
-	'lapm@usebedrock.co': '2e4373a0-40b8-42c2-a873-b08c99dbf76a',
-	'greenoakpropertymanagement@usebedrock.co': '5406e04f-8e22-4ed8-a54e-a6d08ff45ef7'
-};
 const agentSecretHeader = 'x-agent-secret';
 const pubsubSecretParam = 'secret';
 
@@ -232,15 +223,21 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 	const replyToHeader = getHeader(headers, 'reply-to');
 	if (!fromHeader.includes(APPFOLIO_SENDER) && !replyToHeader.includes(APPFOLIO_SENDER)) return false;
 
-	// Route by the per-customer alias in the headers. No alias match → no
-	// workspace → dropped below. We NEVER fall back to a workspace: an
-	// unrecognized alias is mail we don't own and must not pollute any customer.
+	// Route by the per-customer alias in the headers. Aliases live in
+	// workspaces.alias (one Google Group address per workspace) — add a customer by
+	// inserting a row, not editing code. No alias match → no workspace → dropped
+	// below. We NEVER fall back to a workspace: an unrecognized alias is mail we
+	// don't own and must not pollute any customer.
 	const hdrHaystack = ['from', 'to', 'delivered-to', 'x-forwarded-to']
 		.map((n) => getHeader(headers, n))
 		.join(' ')
 		.toLowerCase();
+	const { data: aliasRows } = await supabaseAdmin
+		.from('workspaces')
+		.select('id, alias')
+		.not('alias', 'is', null);
 	const workspaceId =
-		Object.entries(WORKSPACE_BY_ALIAS).find(([alias]) => hdrHaystack.includes(alias))?.[1] ?? null;
+		(aliasRows ?? []).find((w) => hdrHaystack.includes(String(w.alias).toLowerCase()))?.id ?? null;
 
 	// internalDate = ms-since-epoch when Gmail received the message. Compare
 	// against arrival to see how much lag is upstream (AppFolio → Gmail → Pub/Sub).
