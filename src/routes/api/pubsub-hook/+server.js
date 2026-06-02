@@ -16,6 +16,14 @@ const APPFOLIO_SENDER = 'donotreply@appfolio.com';
 const TEST_SENDERS = new Set(['johnbedrocktest@gmail.com']);
 // Workspace used for test-mode emails (no AppFolio property to resolve from).
 const TEST_WORKSPACE_ID = '2e4373a0-40b8-42c2-a873-b08c99dbf76a';
+// Every customer's AppFolio mail now lands in one inbox (andrew@usebedrock.co),
+// forwarded via per-customer Google Group aliases. The group rewrites From/To to
+// the alias, so each message is routed to its workspace by the alias present in
+// the headers; the gmail_connection's workspace_id is only the fallback.
+const WORKSPACE_BY_ALIAS = {
+	'lapm@usebedrock.co': '2e4373a0-40b8-42c2-a873-b08c99dbf76a',
+	'greenoakpropertymanagement@usebedrock.co': '5406e04f-8e22-4ed8-a54e-a6d08ff45ef7'
+};
 const agentSecretHeader = 'x-agent-secret';
 const pubsubSecretParam = 'secret';
 
@@ -197,7 +205,8 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 	const message = await fetchMessage(accessToken, messageId);
 	if (!message) return false;
 	const headers = message.payload?.headers ?? [];
-	const senderEmail = extractEmail(getHeader(headers, 'from'));
+	const fromHeader = getHeader(headers, 'from');
+	const senderEmail = extractEmail(fromHeader);
 	const subject = getHeader(headers, 'subject');
 	const body = extractPlainBody(message.payload);
 
@@ -214,7 +223,21 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 		});
 	}
 
-	if (senderEmail !== APPFOLIO_SENDER) return false; // tenant emails dropped in v2
+	// AppFolio WO emails arrive either directly (From: donotreply@appfolio.com) or
+	// forwarded via a per-customer Google Group alias, which rewrites From to the
+	// alias but keeps "donotreply@appfolio.com" in the display name. Match the
+	// substring so both pass; tenant/other mail is still dropped.
+	if (!fromHeader.includes(APPFOLIO_SENDER)) return false;
+
+	// Route by the per-customer alias in the headers; fall back to the
+	// connection's workspace_id only when no alias matches (e.g. legacy direct mail).
+	const hdrHaystack = ['from', 'to', 'delivered-to', 'x-forwarded-to']
+		.map((n) => getHeader(headers, n))
+		.join(' ')
+		.toLowerCase();
+	const workspaceId =
+		Object.entries(WORKSPACE_BY_ALIAS).find(([alias]) => hdrHaystack.includes(alias))?.[1] ??
+		connectionWorkspaceId;
 
 	// internalDate = ms-since-epoch when Gmail received the message. Compare
 	// against arrival to see how much lag is upstream (AppFolio → Gmail → Pub/Sub).
@@ -233,8 +256,8 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 		return false;
 	}
 
-	if (!connectionWorkspaceId) {
-		console.warn('pubsub-hook appfolio: gmail connection has no workspace_id', { messageId });
+	if (!workspaceId) {
+		console.warn('pubsub-hook appfolio: no workspace from alias or connection', { messageId });
 		return false;
 	}
 
@@ -242,11 +265,11 @@ const processMessage = async (accessToken, messageId, connectionWorkspaceId) => 
 		messageId,
 		serviceRequestNumber,
 		appfolioPropertyId,
-		workspaceId: connectionWorkspaceId
+		workspaceId
 	});
 
 	return await dispatchIntakeAgent({
-		workspaceId: connectionWorkspaceId,
+		workspaceId,
 		serviceRequestNumber,
 		appfolioPropertyId,
 		subject,
