@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Live test for the chat skill against real Supabase + OpenAI. Synthesizes
-// one PM reply, runs runTurn(chatSkill, ctx), then polls observations/beliefs
-// for the workspace to see what landed. Use this to sanity-check that
-// learning actually fires end-to-end before deploying to the Mac mini.
+// Live test for the incoming_user_message event against real Supabase + OpenAI. Synthesizes
+// one PM reply, runs runTurn(event, ctx), then polls observations/beliefs for
+// the workspace to see what landed. Use this to sanity-check that learning
+// actually fires end-to-end before deploying to the Mac mini.
 //
 // NOT under BEDROCK_EVAL_MODE — real writes happen. Default workspace is
 // TEST so prod isn't polluted with experiments. Pass --workspace=prod
@@ -83,7 +83,6 @@ if (!text) {
 const workspace_id = WORKSPACE_LABELS[wsArg] ?? wsArg;
 
 const { runTurn } = await import('../core/orchestrator.mjs');
-const { chatSkill } = await import('../skills/chat.mjs');
 const memory = await import('../core/memory.mjs');
 
 // Snapshot beliefs BEFORE so we can diff.
@@ -109,9 +108,13 @@ const ctx = {
 console.log(`\nworkspace : ${wsArg} (${workspace_id})`);
 console.log(`text      : "${text}"`);
 console.log(`beliefs before: ${beliefsBefore.length} | observations before: ${obsCountBefore}\n`);
-console.log(`▷ running chat skill...`);
+console.log(`▷ running incoming_user_message event...`);
 
-const result = await runTurn(chatSkill, ctx);
+const event = {
+	type: 'incoming_user_message',
+	payload: { text, chat_guid: ctx.chat_guid, sender_handle: null, msg_guid: null }
+};
+const result = await runTurn(event, ctx);
 const toolNames = (result.toolCalls ?? []).map((t) => t.name);
 console.log(`\nturn complete. tool calls: ${JSON.stringify(toolNames)}`);
 
@@ -165,7 +168,7 @@ if (changed.length) {
 	}
 }
 if (!newObs.length && !newBeliefs.length && !changed.length) {
-	console.log(`\nno memory changes — model did not call add_observation, or belief-former classified as noop.`);
+	console.log(`\nno memory changes — model did not call write_memory, or belief-former classified as noop.`);
 }
 
 console.log(`\nOpen the Memory tab to see the graph: http://127.0.0.1:7879/  (switch to ${wsArg} workspace)`);

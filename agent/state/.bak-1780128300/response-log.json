@@ -1,0 +1,551 @@
+[
+  {
+    "timestamp": "2026-05-25T10:46:57.156Z",
+    "draft_id": "drf_b5fab595e7cb67c9",
+    "issue_id": "72dbd7a6-d8ba-4710-b4a1-dcd79a8d806e",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "to": "iMessage;-;andrew51@illinois.edu",
+    "to_participants": [
+      "andrew51@illinois.edu"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 701 Hub Champaign\nHas a leaky faucet.\n\nShould I send Mario?"
+    ],
+    "messages_final": [
+      "Unit 701 Hub Champaign\nHas a leaky faucet.\n\nShould I send Mario?"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": true
+  },
+  {
+    "timestamp": "2026-05-25T18:04:42.870Z",
+    "draft_id": "drf_4b20758ed0e0797b",
+    "issue_id": "e64250db-99f3-48c2-87a0-53028c05919e",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 3 11963 Walnut Ln\nThe outlets are not working.\n\nShould I send Osalpa Electric, INC.?"
+    ],
+    "messages_final": [
+      "Unit 3 11963 Walnut Ln\nThe outlets are not working.\n\nShould I send Osalpa?"
+    ],
+    "edited": false,
+    "diffs": [
+      "--- original\nUnit 3 11963 Walnut Ln\nThe outlets are not working.\n\nShould I send Osalpa Electric, INC.?\n--- final\nUnit 3 11963 Walnut Ln\nThe outlets are not working.\n\nShould I send Osalpa?"
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-25T18:08:02.442Z",
+    "draft_id": "drf_52e22ad5bc488063",
+    "issue_id": null,
+    "channel": "groupchat",
+    "trigger": "groupchat_clarification",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "to": "iMessage;-;andrew51@illinois.edu",
+    "to_participants": [],
+    "action": "send",
+    "messages_original": [
+      "got it"
+    ],
+    "messages_final": [
+      "got it"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-25T18:08:05.968Z",
+    "draft_id": "drf_2e236239155e65f2",
+    "issue_id": "72dbd7a6-d8ba-4710-b4a1-dcd79a8d806e",
+    "channel": "tenant_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "to": "Andrew",
+    "to_participants": [
+      "Andrew"
+    ],
+    "action": "dismiss",
+    "messages_original": [
+      "Hi Andrew,\n\nI sent this to Mario. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "messages_final": [
+      "Hi Andrew,\n\nI sent this to Mario. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-25T18:08:07.894Z",
+    "draft_id": "drf_47e8f726fbc5e0d7",
+    "issue_id": "72dbd7a6-d8ba-4710-b4a1-dcd79a8d806e",
+    "channel": "vendor_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "to": "Mario",
+    "to_participants": [
+      "Mario"
+    ],
+    "action": "dismiss",
+    "messages_original": [
+      "Please schedule with the tenant for Leaking kitchen faucet. Their phone number is [phone]."
+    ],
+    "messages_final": [
+      "Please schedule with the tenant for Leaking kitchen faucet. Their phone number is [phone]."
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-25T18:19:32.464Z",
+    "draft_id": "drf_c3f31fdfab2d3baf",
+    "issue_id": null,
+    "channel": "groupchat",
+    "trigger": "groupchat_clarification",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [],
+    "action": "send",
+    "messages_original": [
+      "on it, sending Abraham. any reason you prefer him over Osalpa?"
+    ],
+    "messages_final": [
+      "got it. any reason you prefer him over Osalpa for this?"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\non it, sending Abraham. any reason you prefer him over Osalpa?\n--- final\ngot it. any reason you prefer him over Osalpa for this?"
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-25T18:51:20.167Z",
+    "draft_id": "drf_5dfab47b4d579ee1",
+    "issue_id": "e64250db-99f3-48c2-87a0-53028c05919e",
+    "channel": "vendor_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "Abraham",
+    "to_participants": [
+      "Abraham"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Please schedule with the tenant for Dead outlets after spark. Their phone number is [phone]."
+    ],
+    "messages_final": [
+      "Please schedule with the tenant for dead outlets after spark. Their phone number is (213) 305-2763."
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nPlease schedule with the tenant for Dead outlets after spark. Their phone number is [phone].\n--- final\nPlease schedule with the tenant for dead outlets after spark. Their phone number is (213) 305-2763."
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-25T18:53:01.865Z",
+    "draft_id": "drf_3128438f93d7492a",
+    "issue_id": "e64250db-99f3-48c2-87a0-53028c05919e",
+    "channel": "tenant_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "Cecilia Escobedo",
+    "to_participants": [
+      "Cecilia Escobedo"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Hi Cecilia Escobedo,\n\nI sent this to Abraham. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "messages_final": [
+      "I sent this to Abraham. Please expect a call from (310) 447-1680. They will schedule with you."
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nHi Cecilia Escobedo,\n\nI sent this to Abraham. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose\n--- final\nI sent this to Abraham. Please expect a call from (310) 447-1680. They will schedule with you."
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-26T01:08:26.021Z",
+    "draft_id": "drf_354b15b1ee524536",
+    "issue_id": "cbdd43be-bf46-4410-8fdb-176099ba25bf",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "213 1/2 S. Arnaz Dr\nThe bathroom sink drain is clogged.\n\nShould I send Yonic?"
+    ],
+    "messages_final": [
+      "213 1/2 S. Arnaz Dr\nThe bathroom sink drain is clogged.\n\nShould I send Yonic?"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-26T01:09:26.597Z",
+    "draft_id": "drf_22f97c2dda3871e0",
+    "issue_id": null,
+    "channel": "groupchat",
+    "trigger": "groupchat_clarification",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [],
+    "action": "send",
+    "messages_original": [
+      "got it"
+    ],
+    "messages_final": [
+      "got it"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-26T01:13:07.096Z",
+    "draft_id": "drf_5f73f9e889ffe062",
+    "issue_id": "cbdd43be-bf46-4410-8fdb-176099ba25bf",
+    "channel": "tenant_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "Tanya Simpson",
+    "to_participants": [
+      "Tanya Simpson"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Hi Tanya Simpson,\n\nI sent this to Yonic Herrera. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "messages_final": [
+      "Hi Tanya,\n\nI sent this to Yonic. Please expect a call from (323) 514-9510. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nHi Tanya Simpson,\n\nI sent this to Yonic Herrera. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose\n--- final\nHi Tanya,\n\nI sent this to Yonic. Please expect a call from (323) 514-9510. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-26T01:13:38.407Z",
+    "draft_id": "drf_6dc5e3ff6da9a8db",
+    "issue_id": "cbdd43be-bf46-4410-8fdb-176099ba25bf",
+    "channel": "vendor_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "Yonic Herrera",
+    "to_participants": [
+      "Yonic Herrera"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Please schedule with the tenant for Clogged bathroom sink drain. Their phone number is [phone]."
+    ],
+    "messages_final": [
+      "Please schedule with the tenant for Clogged bathroom sink drain. Their phone number is (310) 995-4858 ."
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nPlease schedule with the tenant for Clogged bathroom sink drain. Their phone number is [phone].\n--- final\nPlease schedule with the tenant for Clogged bathroom sink drain. Their phone number is (310) 995-4858 ."
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-26T17:29:48.699Z",
+    "draft_id": "drf_9b32327037f8b277",
+    "issue_id": "2c323f7e-25b6-4e76-bb8d-64a662a2aac7",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 1 1447 Harvard St\nThe dryer smells like it's burning.\n\nShould I send Cross Appliance Inc?"
+    ],
+    "messages_final": [
+      "Unit 1 1447 Harvard St\nThe dryer smells like it's burning.\n\nShould I send Cross Appliance?"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nUnit 1 1447 Harvard St\nThe dryer smells like it's burning.\n\nShould I send Cross Appliance Inc?\n--- final\nUnit 1 1447 Harvard St\nThe dryer smells like it's burning.\n\nShould I send Cross Appliance?"
+    ],
+    "forced_send": true
+  },
+  {
+    "timestamp": "2026-05-26T17:29:54.611Z",
+    "draft_id": "drf_bd2f48b807d9fa6a",
+    "issue_id": "f6f2dabf-1224-42ce-bc9b-54db8950d0c8",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 2 1829 11th St\nThe bathroom light fixture needs replacement.\n\nShould I send Abraham?"
+    ],
+    "messages_final": [
+      "Unit 2 1829 11th St\nThe bathroom light fixture needs replacement.\n\nShould I send Abraham?"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": true
+  },
+  {
+    "timestamp": "2026-05-26T20:31:51.305Z",
+    "draft_id": "drf_d257556ba0487358",
+    "issue_id": "69915fdf-b961-440f-a9f6-be7c9c1e2e70",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 3 205 Horizon Ave\nThe refrigerator drawer is broken.\n\nShould I send Cross Appliance Inc?"
+    ],
+    "messages_final": [
+      "Unit 3 205 Horizon Ave\nThe refrigerator drawer is broken.\n\nShould I send Cross Appliance Inc?"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-26T22:46:20.714Z",
+    "draft_id": "drf_29faa8ae23407174",
+    "issue_id": "7375275e-35b3-4401-b166-52ba703efcc6",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 1 824 11th St\nThe kitchen sink is clogged.\n\nShould I send Yonic?"
+    ],
+    "messages_final": [
+      "Unit 1 824 11th St\nThe kitchen sink is clogged.\n\nShould I send Yonic?"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-26T22:54:51.181Z",
+    "draft_id": "drf_5ed2dc73fa0ba69a",
+    "issue_id": null,
+    "channel": "groupchat",
+    "trigger": "groupchat_clarification",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [],
+    "action": "send",
+    "messages_original": [
+      "on it, sending drain specialist. any reason you prefer them over Yonic?"
+    ],
+    "messages_final": [
+      "got it. any reason you prefer them over Yonic for this?"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\non it, sending drain specialist. any reason you prefer them over Yonic?\n--- final\ngot it. any reason you prefer them over Yonic for this?"
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-26T22:56:18.454Z",
+    "draft_id": "drf_90b19c253ff8c8b6",
+    "issue_id": "7375275e-35b3-4401-b166-52ba703efcc6",
+    "channel": "tenant_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "Samantha Lea Spencer",
+    "to_participants": [
+      "Samantha Lea Spencer"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Hi Samantha Lea Spencer,\n\nI sent this to drain specialist. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "messages_final": [
+      "I sent your clogged sink issue to Drain Specialist. Please expect a call from (310) 505-6078. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nHi Samantha Lea Spencer,\n\nI sent this to drain specialist. Please expect a call from [phone]. They will schedule with you.\n\nBest,\nJose\n--- final\nI sent your clogged sink issue to Drain Specialist. Please expect a call from (310) 505-6078. They will schedule with you.\n\nBest,\nJose"
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-26T22:57:01.642Z",
+    "draft_id": "drf_b87222f832935109",
+    "issue_id": "7375275e-35b3-4401-b166-52ba703efcc6",
+    "channel": "vendor_appfolio",
+    "trigger": "groupchat_reply",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "drain specialist",
+    "to_participants": [
+      "drain specialist"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Please schedule with the tenant for Clogged kitchen sink. Their phone number is [phone]."
+    ],
+    "messages_final": [
+      "Please schedule with the tenant for Clogged kitchen sink. Their phone number is (818) 674-9870."
+    ],
+    "edited": true,
+    "diffs": [
+      "--- original\nPlease schedule with the tenant for Clogged kitchen sink. Their phone number is [phone].\n--- final\nPlease schedule with the tenant for Clogged kitchen sink. Their phone number is (818) 674-9870."
+    ],
+    "forced_send": false
+  },
+  {
+    "timestamp": "2026-05-30T07:03:21.968Z",
+    "draft_id": "drf_05896d34ae129662",
+    "issue_id": "5de959b0-b9ff-40a0-a66a-6f9c3108a60d",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "send",
+    "messages_original": [
+      "Unit 4 824 11th St\nThe laundry machine is not draining.\n\nShould I send Cross Appliance Inc?"
+    ],
+    "messages_final": [
+      "Unit 4 824 11th St\nThe laundry machine is not draining.\n\nShould I send Cross Appliance Inc?"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": true
+  },
+  {
+    "timestamp": "2026-05-30T07:53:57.514Z",
+    "draft_id": "drf_b461b2ad000db1f8",
+    "issue_id": "f9dd47ca-d150-4c55-97c1-30c1ff628873",
+    "channel": "groupchat",
+    "trigger": "new_issue",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "to": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "to_participants": [
+      "+19496566275",
+      "+13106990643",
+      "+16504443716",
+      "+15109358199",
+      "+13102663152"
+    ],
+    "action": "dismiss",
+    "messages_original": [
+      "General maintenance request\nHas a general maintenance request.\n\nShould I send Abraham?"
+    ],
+    "messages_final": [
+      "General maintenance request\nHas a general maintenance request.\n\nShould I send Abraham?"
+    ],
+    "edited": false,
+    "diffs": [
+      null
+    ],
+    "forced_send": false
+  }
+]

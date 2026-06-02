@@ -4,9 +4,11 @@
 // a pass/fail summary.
 //
 // Usage:
-//   node agent/evals/run.mjs                 # run all scenarios
-//   node agent/evals/run.mjs --filter f1     # run only scenarios whose name includes 'f1'
-//   node agent/evals/run.mjs --bail          # stop at first failure
+//   node agent/evals/run.mjs                          # run all scenarios
+//   node agent/evals/run.mjs --filter process_wo      # only scenarios whose name includes 'process_wo'
+//   node agent/evals/run.mjs --filter "yes,vendor"    # comma-separated → match ANY substring
+//   node agent/evals/run.mjs --skip "no_match,opener" # comma-separated → exclude matching names
+//   node agent/evals/run.mjs --bail                   # stop at first failure
 //
 // Isolation:
 //   - BEDROCK_STATE_DIR points at /tmp/bedrock-evals-<pid>/state — drafts,
@@ -23,10 +25,16 @@ import os from 'node:os';
 // ─── Argv ──────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
-const filter = (() => {
-	const i = args.indexOf('--filter');
-	return i >= 0 ? args[i + 1] : null;
-})();
+function parseListArg(flag) {
+	const i = args.indexOf(flag);
+	if (i < 0) return null;
+	return args[i + 1]
+		.split(',')
+		.map((s) => s.trim().toLowerCase())
+		.filter(Boolean);
+}
+const filters = parseListArg('--filter'); // run if name includes ANY filter
+const skips = parseListArg('--skip'); // skip if name includes ANY skip
 const bail = args.includes('--bail');
 
 // ─── Env: temp dirs FIRST, before any imports that read them ───────────────
@@ -38,7 +46,7 @@ await fs.mkdir(STATE_DIR, { recursive: true });
 await fs.mkdir(DATA_DIR, { recursive: true });
 process.env.BEDROCK_STATE_DIR = STATE_DIR;
 process.env.BEDROCK_DATA_DIR = DATA_DIR;
-// Memory tools (add_observation, read_memory) check this and short-circuit
+// Memory tools (write_memory, read_memory) check this and short-circuit
 // instead of writing to live Supabase / firing the belief-former. The eval
 // suite asserts tool-call behavior, not memory side effects. The dedicated
 // memory scenarios still see the calls happen — they just don't persist.
@@ -78,14 +86,43 @@ if (!process.env.OPENAI_API_KEY) {
 
 const { scenarios } = await import('./scenarios.mjs');
 const { runTurn } = await import('../core/orchestrator.mjs');
-const { demoSkill, resetConversation, _setConversationForTest } =
-	await import('../skills/demo.mjs');
-const { f1Skill } = await import('../skills/f1.mjs');
-const { chatSkill } = await import('../skills/chat.mjs');
+const { resetConversation, _setConversationForTest } = await import('../core/demo-state.mjs');
 const memory = await import('../memory.mjs');
 const { judge } = await import('./judge.mjs');
 
-const SKILLS = { demo: demoSkill, f1: f1Skill, chat: chatSkill };
+// Map legacy scenario.skill → AgentEvent for back-compat. New scenarios should
+// declare scenario.event directly; this shim lets existing entries keep working
+// while the suite migrates incrementally.
+function deriveEvent(scenario) {
+	if (scenario.event) return scenario.event;
+	const c = scenario.ctx ?? {};
+	if (scenario.skill === 'process_wo') {
+		return {
+			type: 'new_issue',
+			payload: { issue: c.issue, candidate_vendors: c.candidate_vendors }
+		};
+	}
+	if (scenario.skill === 'chat') {
+		return {
+			type: 'incoming_user_message',
+			payload: {
+				text: c.text,
+				chat_guid: c.chat_guid,
+				sender_handle: c.handle ?? null,
+				msg_guid: null
+			}
+		};
+	}
+	if (scenario.skill === 'demo') {
+		return {
+			type: 'incoming_anon_message',
+			payload: { text: c.text, handle: c.handle }
+		};
+	}
+	throw new Error(
+		`scenario "${scenario.name}" has no event and no recognized skill ("${scenario.skill}")`
+	);
+}
 
 // ─── State setup / teardown per scenario ──────────────────────────────────
 
@@ -177,7 +214,12 @@ async function checkExpected(scenario, result, ctx) {
 	const exp = scenario.expected ?? {};
 	const fails = [];
 
-	const toolNames = (result.toolCalls ?? []).map((t) => t.name);
+	// use_skill is orchestration mechanics, not behavior — it loads a skill
+	// for the model to follow. Strip it from the actual tool sequence so
+	// behavioral assertions stay clean. If a scenario specifically wants to
+	// assert use_skill firing, it can opt in via expected.assert_use_skill.
+	const allToolNames = (result.toolCalls ?? []).map((t) => t.name);
+	const toolNames = allToolNames.filter((n) => n !== 'use_skill');
 
 	if (exp.tool_calls) {
 		if (JSON.stringify(toolNames) !== JSON.stringify(exp.tool_calls)) {
@@ -217,6 +259,27 @@ async function checkExpected(scenario, result, ctx) {
 		}
 	}
 
+	// tool_args: for each { toolName: {k: v} }, assert SOME call to that tool had
+	// args matching all the listed key/values. Lets scenarios check what a tool
+	// was called WITH (e.g. update_issue status), not just that it fired.
+	if (exp.tool_args) {
+		for (const [toolName, wantArgs] of Object.entries(exp.tool_args)) {
+			const calls = (result.toolCalls ?? []).filter((t) => t.name === toolName);
+			if (!calls.length) {
+				fails.push(`tool_args: ${toolName} was not called`);
+				continue;
+			}
+			const ok = calls.some((c) =>
+				Object.entries(wantArgs).every(([k, v]) => (c.args?.[k] ?? null) === v)
+			);
+			if (!ok) {
+				fails.push(
+					`tool_args: no ${toolName} call matched ${JSON.stringify(wantArgs)}; got ${JSON.stringify(calls.map((c) => c.args))}`
+				);
+			}
+		}
+	}
+
 	// drafts_count: combine ctx.drafts (F1 staged) + ctx.draftIds (F2 direct writes)
 	const stagedDrafts = ctx.drafts ?? [];
 	const directDraftIds = ctx.draftIds ?? [];
@@ -245,6 +308,19 @@ async function checkExpected(scenario, result, ctx) {
 		for (const needle of exp.drafts_include) {
 			if (!combined.toLowerCase().includes(needle.toLowerCase())) {
 				fails.push(`drafts_include expected substring ${JSON.stringify(needle)} not found`);
+			}
+		}
+	}
+
+	// drafts_excludes: substrings that must NOT appear in any draft body
+	if (exp.drafts_excludes) {
+		const stagedBody = joinBodies(stagedDrafts);
+		const allDrafts = JSON.parse(await fs.readFile(path.join(STATE_DIR, 'drafts.json'), 'utf8'));
+		const directBody = allDrafts.flatMap((d) => d.messages?.map((m) => m.body) ?? []).join('\n');
+		const combined = (stagedBody + '\n' + directBody).toLowerCase();
+		for (const needle of exp.drafts_excludes) {
+			if (combined.includes(needle.toLowerCase())) {
+				fails.push(`drafts_excludes substring ${JSON.stringify(needle)} unexpectedly present`);
 			}
 		}
 	}
@@ -303,36 +379,43 @@ let pass = 0,
 const failures = [];
 
 for (const scenario of scenarios) {
-	if (filter && !scenario.name.toLowerCase().includes(filter.toLowerCase())) continue;
+	const lname = scenario.name.toLowerCase();
+	if (filters && !filters.some((f) => lname.includes(f))) continue;
+	if (skips && skips.some((s) => lname.includes(s))) continue;
 
 	process.stdout.write(`▷ ${scenario.name} `);
 	await resetState(scenario);
 	supabaseMock = scenario.setup?.supabase ?? {};
 
-	const skill = SKILLS[scenario.skill];
-	if (!skill) {
-		console.log(`SKIP — unknown skill: ${scenario.skill}`);
+	let event;
+	try {
+		event = deriveEvent(scenario);
+	} catch (err) {
+		console.log(`SKIP — ${err.message}`);
 		continue;
 	}
 
 	const ctx = {
 		...scenario.ctx,
-		// Live skills (demo) emit messages via onEvent → capture in outbox.
+		// Live events (incoming_anon_message) emit messages via onEvent → capture in outbox.
 		onEvent: async (ev) => {
 			// outbox is auto-populated by tool implementations; orchestrator emits
 			// tool_call events which we ignore here.
 		},
-		// Default sendMode if not specified by the scenario
+		// Default sendMode if not specified by the scenario.
+		// new_issue AND incoming_user_message draft for human review — the
+		// groupchat agent never auto-sends to the PM. Only the demo path
+		// (incoming_anon_message) is live (the demo bot streams to the prospect).
 		sendMode:
 			scenario.ctx?.sendMode ??
-			(scenario.skill === 'f1' || scenario.skill === 'chat' ? 'draft' : 'live'),
+			(event.type === 'new_issue' || event.type === 'incoming_user_message' ? 'draft' : 'live'),
 		isPmHandle: scenario.ctx?.isPmHandle ?? false
 	};
 
 	let result,
 		runError = null;
 	try {
-		result = await runTurn(skill, ctx);
+		result = await runTurn(event, ctx);
 	} catch (err) {
 		runError = err;
 	}

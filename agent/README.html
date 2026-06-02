@@ -199,7 +199,6 @@
 │   ├── acknowledge.mjs
 │   ├── draft_tenant.mjs
 │   ├── draft_vendor.mjs
-│   ├── react_to_message.mjs
 │   ├── set_demo_stage.mjs
 │   ├── get_profile.mjs
 │   ├── update_profile.mjs
@@ -337,7 +336,7 @@ A prospect texts the agent's number from an unknown 1:1 handle. The demo skill w
 <ul>
   <li><strong>Model:</strong> <code>gpt-5.4-2026-03-05</code>. Voice work; the smaller model drifts.</li>
   <li><strong>Send mode:</strong> <code>live</code>. The transport drives typing dots, read receipts, and dylib sends.</li>
-  <li><strong>Tools:</strong> <code>send_text</code>, <code>set_demo_stage</code>, <code>react_to_message</code>, plus the full memory surface (<code>get_profile</code>, <code>update_profile</code>, <code>add_observation</code>, <code>recall</code>, <code>list_properties</code>, <code>list_vendors</code>).</li>
+  <li><strong>Tools:</strong> <code>send_text</code>, <code>set_demo_stage</code>, plus the full memory surface (<code>get_profile</code>, <code>update_profile</code>, <code>add_observation</code>, <code>recall</code>, <code>list_properties</code>, <code>list_vendors</code>).</li>
   <li><strong>Stage machine:</strong> <code>intro → setup → dispatch → learning → followup → complete</code>, stored at <code>system/stage</code> in the per-handle profile. <code>taskPrompt</code> is a function that re-reads the stage every iteration so a mid-turn <code>set_demo_stage</code> applies on the next loop.</li>
   <li><strong>preCheck:</strong> on first contact, fires the canned opener (two lines) without an LLM call. Saves latency and rules out model variance on the entry message.</li>
   <li><strong>commit:</strong> appends the assistant's emitted bubbles to the in-process conversation log (per-handle <code>Map</code>; lost on restart for v1).</li>
@@ -347,7 +346,7 @@ A prospect texts the agent's number from an unknown 1:1 handle. The demo skill w
 <h2 id="tools">Tools</h2>
 
 <p>
-Each tool is a single file exporting <code>{ name, description, parameters, run(args, ctx) }</code>. The <code>description</code> is treated as part of the prompt — it carries behavioral rules the model needs at decision time. <code>run</code> reads anything it needs from <code>ctx</code> (handle, sendMode, onEvent, react, workspace_label, etc.) and returns a result object. Two reserved fields: <code>assistantContent</code> (text the orchestrator merges into the assistant message) and <code>endTurn</code> (break the loop).
+Each tool is a single file exporting <code>{ name, description, parameters, run(args, ctx) }</code>. The <code>description</code> is treated as part of the prompt — it carries behavioral rules the model needs at decision time. <code>run</code> reads anything it needs from <code>ctx</code> (handle, sendMode, onEvent, workspace_label, etc.) and returns a result object. Two reserved fields: <code>assistantContent</code> (text the orchestrator merges into the assistant message) and <code>endTurn</code> (break the loop).
 </p>
 
 <h3>send_text<span class="chip live">live</span><span class="chip draft">draft</span></h3>
@@ -384,14 +383,6 @@ Produces a tenant-facing draft for a given <code>issue_id</code>. Fetches the is
 Mirror of <code>draft_tenant</code> for the vendor side. Channel is <code>vendor_appfolio</code>; template uses the issue title (or description) in the "for X" slot. Same draft-id tracking, same Supabase fetch, same graceful failure when the recommended vendor is missing.
 </p>
 
-<h3>react_to_message<span class="chip live">live</span></h3>
-<p>
-Adds an iMessage tapback (heart, thumbs up/down, ha-ha, !!, ?) on the user's most recent message. Demo only.
-</p>
-<ul>
-  <li>Requires <code>ctx.react</code>, which the transport binds to the specific incoming message GUID — the model never sees GUIDs.</li>
-  <li>Description tells the model to use it sparingly, and gives intent guidance (love when something is exciting, laugh on a joke, emphasize to flag importance).</li>
-</ul>
 
 <h3>set_demo_stage<span class="chip live">live</span></h3>
 <p>

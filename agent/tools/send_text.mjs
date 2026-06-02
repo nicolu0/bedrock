@@ -15,24 +15,30 @@
 export const sendText = {
 	name: 'send_text',
 	description:
-		'Send one customer-visible message. Each call becomes its own message bubble — call multiple times for multiple separate messages back to back. Never include newlines or multiple thoughts inside a single call; split into separate calls instead.',
+		'Send one customer-visible message. Each call becomes one bubble. Newlines INSIDE the content stay within that bubble — use them to format multi-line bubbles when the skill calls for it. To send several separate bubbles in a row, make multiple send_text calls. Pass draft:true to stage this message for human review instead of sending it live — use this for clarifying questions the human should approve before the PM sees them (it routes to the drafts queue exactly like a new-issue summary).',
 	parameters: {
 		type: 'object',
 		properties: {
-			content: { type: 'string', description: 'The text body for this one message.' }
+			content: { type: 'string', description: 'The text body for this one bubble. May contain newlines for multi-line formatting.' },
+			draft: { type: 'boolean', description: 'When true, stage this message as a draft for human review instead of sending it live, regardless of the turn default. Use for clarifying questions to the PM.' }
 		},
 		required: ['content']
 	},
-	async run({ content }, ctx) {
+	async run({ content, draft }, ctx) {
 		const text = String(content ?? '').trim();
 		if (!text) return { ok: true, skipped: 'empty' };
 
 		// Defensive: drop obvious placeholder leakage (F1 strict-template guard).
 		// Cheap to apply universally — placeholders are never valid output.
 		if (/\{[a-z_]+\}/i.test(text)) return { ok: true, skipped: 'unfilled placeholder' };
-		if (/Should we send\s*\??$/i.test(text)) return { ok: true, skipped: 'empty vendor slot' };
+		if (/Should I send\s*\??$/im.test(text)) return { ok: true, skipped: 'empty vendor slot' };
 
-		if (ctx.sendMode === 'draft') {
+		// Per-call draft override: a single message can be drafted even inside an
+		// otherwise-live turn (e.g. a clarifying question in a groupchat turn whose
+		// acks normally go live). Falls back to the turn's ctx.sendMode.
+		const mode = draft === true ? 'draft' : ctx.sendMode;
+
+		if (mode === 'draft') {
 			ctx.drafts = ctx.drafts ?? [];
 			ctx.drafts.push({ body: text });
 			// assistantContent: the orchestrator concatenates this into the
@@ -42,22 +48,20 @@ export const sendText = {
 			return { ok: true, assistantContent: text };
 		}
 
-		if (ctx.sendMode === 'live') {
+		if (mode === 'live') {
 			if (ctx.isPmHandle) {
 				throw new Error(
 					`send_text refused: safety guard — cannot live-send to a known PM handle (${ctx.handle ?? 'unknown'}). All PM-handle paths must use sendMode='draft'.`
 				);
 			}
-			// Split on newlines defensively — the prompt forbids them but if the
-			// model slips, treat each segment as its own bubble.
-			const parts = text.split(/\n+/).map((s) => s.trim()).filter(Boolean);
-			for (const part of parts) {
-				if (ctx.outbox) ctx.outbox.push(part);
-				if (ctx.onEvent) await ctx.onEvent({ type: 'message', content: part });
-			}
-			return { ok: true, assistantContent: parts.join('\n') };
+			// One call = one bubble. Newlines stay inside. Skills that want
+			// multiple bubbles call send_text multiple times (e.g. demo's
+			// one-thought-per-bubble rule lives in its SKILL.md prompt).
+			if (ctx.outbox) ctx.outbox.push(text);
+			if (ctx.onEvent) await ctx.onEvent({ type: 'message', content: text });
+			return { ok: true, assistantContent: text };
 		}
 
-		throw new Error(`send_text: ctx.sendMode required ('live' | 'draft'), got ${JSON.stringify(ctx.sendMode)}`);
+		throw new Error(`send_text: sendMode required ('live' | 'draft'), got ${JSON.stringify(mode)}`);
 	}
 };

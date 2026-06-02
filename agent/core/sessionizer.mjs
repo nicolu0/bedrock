@@ -20,8 +20,8 @@
 // chat_guid holds open-session state. No locking needed.
 
 import { embed } from './memory.mjs';
-import { supabaseEnv } from '../supabase.mjs';
-import { WORKSPACES } from '../work-orders/workspaces.mjs';
+import { supabaseEnv } from './supabase.mjs';
+import { WORKSPACES } from './workspaces.mjs';
 
 // True if this handle is one of the configured agent personas for the
 // workspace (cofounders' phones). Pre-pivot the cofounders sent real human
@@ -228,6 +228,26 @@ export async function getOpenSession(chat_guid) {
 	};
 	openSessions.set(chat_guid, state);
 	return state;
+}
+
+// Authoritative recent transcript for a chat's open session, read straight from
+// chat_messages — NOT the in-memory cache. getOpenSession().recent is a
+// latency-optimized cache that can drift from the DB (a message ingested in
+// another process, hydration timing), which silently drops turns from
+// conversation history. History correctness beats the saved round-trip, so this
+// always hits the DB. Oldest-first; sender mapping is identical to getOpenSession's
+// DB-hydrate path — our sends (is_from_me) → 'agent', everyone else → their handle
+// — so this is purely "read the DB, not the stale cache", no relabeling.
+export async function getRecentMessagesForChat(chat_guid, n = RECENT_MSG_COUNT) {
+	if (!chat_guid) return [];
+	const row = await fetchOpenSessionRow(chat_guid);
+	if (!row) return [];
+	const rows = await fetchRecentMessages(row.id, n);
+	return rows.map((m) => ({
+		ts: m.ts,
+		sender: m.is_from_me ? 'agent' : m.handle,
+		body: m.body
+	}));
 }
 
 // ── internals: boundary decision ─────────────────────────────────────────────

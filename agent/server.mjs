@@ -1,63 +1,30 @@
 #!/usr/bin/env node
-// Main server entrypoint. Stands up the IPC listener (via the imessage helper),
-// watches chat.db for incoming messages from unknown numbers, hands each one to
-// the orchestrator, and maps the orchestrator's event stream to real iMessage
-// signals via the injected MessagesHelper bundle:
-//   read        -> markRead(chatGuid)        (Read receipt on the sender's phone)
-//   typing      -> setTyping(chatGuid, true) (the "..." dots)
-//   message     -> setTyping(false) + send via dylib
-//   tool_call   -> just log
+// Main server entrypoint. Wires together the iMessage helper dylib, the
+// drafts UI, and the two triggers (chat-poller for inbound iMessages,
+// issue-poller for new work orders in Supabase). Skill / tool / orchestrator
+// logic lives elsewhere — this file is pure boot orchestration.
 //
 // Setup prerequisites are documented in imessage/README.md. Run:
 //   agent/imessage/run-messages.sh    # in one terminal
 //   node agent/server.mjs             # in another
 
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
+import { spawn, execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import Database from 'better-sqlite3';
 import { helper } from './imessage/helper.mjs';
-import { runTurn } from './core/orchestrator.mjs';
-import { demoSkill } from './skills/demo.mjs';
-import { chatSkill } from './skills/chat.mjs';
-import { startUi } from './work-orders/ui/index.mjs';
-import { startIssuePoller } from './work-orders/issue-poller.mjs';
-import { buildChatGuidIndex } from './work-orders/workspaces.mjs';
-import { appendChatMessage, updateChatMessage } from './work-orders/state/helpers.mjs';
-import * as sessionizer from './core/sessionizer.mjs';
+import { startUi, dispatchDraft } from './ui/index.mjs';
+import { startChatPoller } from './triggers/chat-poller.mjs';
+import { startIssuePoller } from './triggers/issue-poller.mjs';
+import { buildChatGuidIndex } from './core/workspaces.mjs';
+import * as db from './state/helpers.mjs';
 
-const POLL_INTERVAL_MS = 1000;
 const HELPER_ENABLED = process.env.HELPER_DISABLED !== '1';
-const DEMO_HANDLE = process.env.DEMO_HANDLE ? normalizeHandle(process.env.DEMO_HANDLE) : null;
-
-// Simulated typing pace: dots stay on for this long before each message ships.
-// Scales with message length so a 4-word reply doesn't feel as instant as a
-// 30-word one. Tuned to feel snappy but not robotic — adjust to taste.
-const TYPING_MIN_MS = 300;
-const TYPING_PER_CHAR_MS = 25;
-const TYPING_MAX_MS = 2000;
-
-function typingDwellMs(text) {
-	const n = (text ?? '').length;
-	return Math.min(TYPING_MAX_MS, Math.max(TYPING_MIN_MS, n * TYPING_PER_CHAR_MS));
-}
-
-function sleep(ms) {
-	return new Promise((r) => setTimeout(r, ms));
-}
-
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db');
-const STATE_PATH = path.join(SCRIPT_DIR, '.imessage-state.json');
 
-// Real customer/vendor handles — incoming messages from these are ignored so
-// testing doesn't hijack real conversations. E.164 phone numbers or email.
-const KNOWN_NUMBERS = [
-	'+13106990643', // Jose / property manager
-	'+13102663152', // Jose (other number)
-];
-const knownSet = new Set(KNOWN_NUMBERS.map(normalizeHandle));
+function log(msg) {
+	console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
+}
 
 // ── Env ────────────────────────────────────────────────────────────────────────
 
@@ -71,10 +38,13 @@ async function loadDotEnv(p) {
 			if (i <= 0) continue;
 			const k = t.slice(0, i).trim();
 			let v = t.slice(i + 1).trim();
-			if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+			if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
+				v = v.slice(1, -1);
 			if (!(k in process.env)) process.env[k] = v;
 		}
-	} catch { /* optional */ }
+	} catch {
+		/* optional */
+	}
 }
 
 await loadDotEnv(path.join(SCRIPT_DIR, '..', '.env'));
@@ -85,503 +55,130 @@ if (!process.env.OPENAI_API_KEY) {
 	process.exit(1);
 }
 
-// ── Workspace routing ──────────────────────────────────────────────────────────
+// ── iMessage helper supervision ──────────────────────────────────────────────
+// Messages.app (with the injected dylib) is the agent's only mouth — it sends,
+// marks read, and shows typing. When it's gone the agent is silently mute, so a
+// stray ⌘-Q on the host takes the whole product down. These helpers launch it
+// and keep it up.
+
+// Keep Messages.app up. The discriminator that makes this loop-proof is the
+// *process*, not the socket: we relaunch only when no Messages process is
+// running. A socket drop while Messages is still alive is a transient flap (the
+// dylib re-handshakes during boot) and we ignore it — otherwise every flap would
+// trigger a relaunch, run-messages.sh would pkill the healthy instance, and that
+// kill would generate the next flap: an infinite spawn loop.
 //
-// chatGuidIndex maps mapped chat guids (TEST_CHAT_GUID, JOSE_CHAT_GUID) to
-// { workspace_id, label, pm_handles }. Built once after env load. Any incoming
-// chat.db row whose chat_guid is in this index is treated as a work-orders
-// groupchat message (not demo), and we only store messages from pm_handles.
-let chatGuidIndex = new Map();
-let groupchatGuids = [];
+// run-messages.sh pkills every Messages instance, then `exec`s into one fresh
+// instance with the dylib injected. Combined with launching only when none is
+// running, that guarantees exactly one instance — no duplicates fighting over
+// the socket.
+//
+// Set HELPER_WATCHDOG_DISABLED=1 to opt out (e.g. a dev worktree that must not
+// fight prod over the singleton Messages.app).
+const HELPER_WATCHDOG_MS = Number(process.env.HELPER_WATCHDOG_MS ?? 4000);
+// Never relaunch more than once per this window — a hard floor against any
+// tight loop, even if Messages crashes on boot.
+const RELAUNCH_MIN_INTERVAL_MS = Number(process.env.RELAUNCH_MIN_INTERVAL_MS ?? 5000);
 
-// ── State ──────────────────────────────────────────────────────────────────────
+let booting = false; // launched but not yet confirmed connected
+let lastLaunchAt = 0;
 
-const state = { lastSeenRowId: 0, processed: {} };
-
-async function loadState() {
-	try {
-		const raw = await fs.readFile(STATE_PATH, 'utf8');
-		const parsed = JSON.parse(raw);
-		state.lastSeenRowId = Number(parsed.lastSeenRowId ?? 0);
-		state.processed = parsed.processed ?? {};
-	} catch {
-		state.lastSeenRowId = fetchLatestRowId();
-		state.processed = {};
-		await saveState();
-	}
-}
-
-async function saveState() {
-	const entries = Object.entries(state.processed).sort((a, b) => b[1] - a[1]);
-	state.processed = Object.fromEntries(entries.slice(0, 2000));
-	await fs.writeFile(STATE_PATH, JSON.stringify(state, null, 2), 'utf8');
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function log(msg) {
-	console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
-}
-
-function shortHandle(h) {
-	if (!h) return h;
-	if (h.includes('@')) return h; // emails: leave intact, letters and all
-	return h.replace(/^\+1/, '').replace(/[^\d@.]/g, '') || h;
-}
-
-function normalizeHandle(raw) {
-	if (!raw) return '';
-	const value = String(raw).trim();
-	if (!value) return '';
-	if (value.includes('@')) return value.toLowerCase();
-	const digitsOnly = value.replace(/[^\d+]/g, '');
-	if (digitsOnly.startsWith('+')) return `+${digitsOnly.slice(1).replace(/\D/g, '')}`;
-	const digits = digitsOnly.replace(/\D/g, '');
-	if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
-	if (digits.length === 10) return `+1${digits}`;
-	if (digits.length > 0) return `+${digits}`;
-	return value.toLowerCase();
-}
-
-// ── chat.db ────────────────────────────────────────────────────────────────────
-
-let db = null;
-
-function getDb() {
-	if (!db) db = new Database(CHAT_DB_PATH, { readonly: true, fileMustExist: true });
-	return db;
-}
-
-// macOS Ventura+ stores message text in attributedBody (NSAttributedString
-// streamtyped binary). Scan for the longest printable UTF-8 run between the
-// "NSString" class marker and the next attribute-class marker. Kept in sync
-// with agent/scripts/backfill-from-chat.mjs.
-function extractText(row) {
-	if (row.text) return row.text;
-	const blob = row.attributedBody;
-	if (!blob || !Buffer.isBuffer(blob)) return null;
-
-	const stringMarker = Buffer.from('NSString');
-	const stringIdx = blob.indexOf(stringMarker);
-	if (stringIdx < 0) return null;
-
-	const endMarkers = ['NSDictionary', 'NSNumber', 'NSValue', '__kIM', '_kIM'];
-	let endIdx = blob.length;
-	for (const m of endMarkers) {
-		const idx = blob.indexOf(Buffer.from(m), stringIdx + stringMarker.length);
-		if (idx >= 0 && idx < endIdx) endIdx = idx;
-	}
-
-	let bestStart = -1;
-	let bestLen = 0;
-	let curStart = -1;
-	let curLen = 0;
-	for (let i = stringIdx + stringMarker.length; i < endIdx; i++) {
-		const b = blob[i];
-		const isPrintable =
-			b === 0x09 || b === 0x0a || b === 0x0d || (b >= 0x20 && b <= 0x7e) || b >= 0x80;
-		if (isPrintable) {
-			if (curStart === -1) curStart = i;
-			curLen++;
-			if (curLen > bestLen) {
-				bestLen = curLen;
-				bestStart = curStart;
-			}
-		} else {
-			curStart = -1;
-			curLen = 0;
-		}
-	}
-
-	if (bestLen < 2) return null;
-	let text = blob.slice(bestStart, bestStart + bestLen).toString('utf8');
-	// Apple short-string encoding leaks through as "+ [len-byte] [string]" when
-	// the length byte is printable ASCII (lengths 32–126). Detect & strip.
-	if (text.length >= 2 && text.charCodeAt(0) === 0x2b) {
-		const lenByte = text.charCodeAt(1);
-		if (lenByte >= 1 && lenByte <= 127 && lenByte <= text.length - 2) {
-			text = text.slice(2, 2 + lenByte);
-		}
-	}
-	text = text
-		.replace(/^[\x01-\x1f\x7f]+/, '')
-		.replace(/[�\x01-\x1f\x7f]+$/, '')
-		.trim();
-	return text || null;
-}
-
-// 978307200000 = ms since unix epoch for 2001-01-01 UTC. Apple stores
-// message.date as nanoseconds since 2001 on Sierra+. Older schemas used
-// seconds; the magnitude check handles both.
-const APPLE_EPOCH_MS = 978307200000;
-function appleDateToISO(date) {
-	const n = Number(date);
-	if (!Number.isFinite(n) || n <= 0) return null;
-	const ms = n > 1e10 ? APPLE_EPOCH_MS + n / 1e6 : APPLE_EPOCH_MS + n * 1000;
-	return new Date(ms).toISOString();
-}
-
-function fetchLatestRowId() {
-	try {
-		const row = getDb().prepare('SELECT COALESCE(MAX(ROWID),0) AS max_rowid FROM message').get();
-		return Number(row?.max_rowid ?? 0);
-	} catch (err) {
-		log(`db error: ${err.message}`);
-		return 0;
-	}
-}
-
-// SQL accepts two kinds of rows:
-//   1) 1:1 direct messages (style 45, no room_name) — demo path.
-//   2) Any chat whose guid is in `groupchatGuids` — F2 work-orders path.
-// The IN-list is built from the chatGuidIndex so it picks up TEST_CHAT_GUID
-// and JOSE_CHAT_GUID without having to special-case style 43 vs 45.
-function fetchNewMessages(afterRowId, groupchatGuids) {
-	try {
-		const placeholders = groupchatGuids.map(() => '?').join(',');
-		const groupBranch = placeholders ? `OR c.guid IN (${placeholders})` : '';
-		const sql = `
-			SELECT
-			  m.ROWID AS rowid,
-			  m.guid,
-			  m.text,
-			  m.attributedBody,
-			  m.date,
-			  m.is_from_me,
-			  m.service,
-			  COALESCE(m.cache_has_attachments, 0) AS has_attachments,
-			  h.id AS handle,
-			  c.guid AS chat_guid,
-			  c.style AS chat_style,
-			  c.room_name AS room_name
-			FROM message m
-			LEFT JOIN handle h ON h.ROWID = m.handle_id
-			LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
-			LEFT JOIN chat c ON c.ROWID = cmj.chat_id
-			WHERE m.ROWID > ?
-			  AND m.service = 'iMessage'
-			  AND COALESCE(m.cache_has_attachments, 0) = 0
-			  AND (
-			    (c.style = 45 AND c.room_name IS NULL)
-			    ${groupBranch}
-			  )
-			ORDER BY m.ROWID ASC
-			LIMIT 100
-		`;
-		const rows = getDb().prepare(sql).all(Number(afterRowId) || 0, ...groupchatGuids);
-		return rows.map(r => ({ ...r, text: extractText(r) }));
-	} catch (err) {
-		log(`db error: ${err.message}`);
-		return [];
-	}
-}
-
-// ── Helper signals ─────────────────────────────────────────────────────────────
-
-async function markRead(chatGuid) {
-	if (!HELPER_ENABLED) return;
-	const r = await helper.markRead(chatGuid);
-	if (!r.ok) log(`markRead failed: ${r.error}`);
-}
-
-async function setTyping(chatGuid, typing) {
-	if (!HELPER_ENABLED) return;
-	const r = await helper.setTyping(chatGuid, typing);
-	if (!r.ok) log(`setTyping(${typing}) failed: ${r.error}`);
-}
-
-// ── Send ───────────────────────────────────────────────────────────────────────
-
-async function sendPart(chatGuid, _handle, text) {
-	const r = await helper.send(chatGuid, text);
-	if (!r.ok) log(`send failed: ${r.error}`);
-	return r.ok;
-}
-
-// ── Main flow per incoming message ─────────────────────────────────────────────
-
-async function handleIncoming(row) {
-	const handle = normalizeHandle(row.handle);
-	const chatGuid = row.chat_guid || '';
-	const text = String(row.text || '').trim();
-	if (!text) return;
-	if (DEMO_HANDLE && handle !== DEMO_HANDLE) return;
-	if (knownSet.has(handle)) return;
-
-	log(`← ${shortHandle(handle)}: "${text}"`);
-
-	// Fire the read receipt the moment we observe the message — before any
-	// agent work happens. This is independent of whatever skill runs and
-	// whether the orchestrator emits a 'read' event. The user sees "Read"
-	// immediately on every incoming message.
-	await markRead(chatGuid);
-
-	// Dots come on ONLY immediately before a real message ships — never on
-	// the orchestrator's `typing` event itself. The orchestrator emits a
-	// typing event at the start of every iteration including the final
-	// no-op one (where the model returns no more tool calls), so reacting to
-	// that event causes a ghost flash. Tying dots to actual messages mirrors
-	// how real iMessage typing indicators behave: you don't see "..." while
-	// the other person is just thinking, you see them when they're actively
-	// composing the next bubble.
-	const onEvent = async (ev) => {
-		if (ev.type === 'read') {
-			await markRead(chatGuid);
-		} else if (ev.type === 'typing') {
-			// Intentional no-op. See above.
-		} else if (ev.type === 'message') {
-			await setTyping(chatGuid, true);
-			await sleep(typingDwellMs(ev.content));
-			await setTyping(chatGuid, false);
-			const ok = await sendPart(chatGuid, handle, ev.content);
-			if (ok) log(`→ ${shortHandle(handle)}: "${ev.content}"`);
-		} else if (ev.type === 'tool_call') {
-			const args = JSON.stringify(ev.args ?? {});
-			log(`  · ${ev.name}(${args.length > 80 ? args.slice(0, 77) + '...' : args})`);
-		}
-	};
-
-	// react closure for the orchestrator's react_to_message tool. Bound to this
-	// specific incoming message — the LLM doesn't need to know GUIDs.
-	const react = async (reactionType) => {
-		if (!HELPER_ENABLED) return { ok: false, error: 'helper disabled' };
-		const r = await helper.react(chatGuid, row.guid, reactionType, text);
-		if (!r.ok) log(`react(${reactionType}) failed: ${r.error}`);
-		else log(`  · react ${reactionType} -> "${text.slice(0, 40)}${text.length > 40 ? '…' : ''}"`);
-		return r;
-	};
-
-	try {
-		await runTurn(demoSkill, {
-			handle,
-			text,
-			chatGuid,
-			onEvent,
-			react,
-			sendMode: 'live',
-			// Demo path is unknown 1:1 handles only. knownSet filtered above
-			// rejects PM numbers before we get here. Belt-and-suspenders flag
-			// for the send_text safety guard.
-			isPmHandle: false
+// Is a Messages.app process alive right now? (pgrep -x matches the exact name.)
+function messagesRunning() {
+	return new Promise((resolve) => {
+		execFile('pgrep', ['-x', 'Messages'], (err, stdout) => {
+			resolve(!err && stdout.trim().length > 0);
 		});
-	} catch (err) {
-		log(`turn error: ${err.message}`);
-	} finally {
-		// Defensive: kill dots in case anything left them on (e.g., we threw
-		// during the dwell sleep before the typing-off call).
-		await setTyping(chatGuid, false);
-	}
-}
-
-// ── Groupchat (work-orders) message capture ────────────────────────────────────
-//
-// For F2 step 1 we just append PM-handle messages to chat-log.json. The
-// correlator (later step) reads from this log + sent-log to figure out which
-// open issue a PM reply is about. Tenant/owner replies in the same chat are
-// silently dropped — pm_handles is the gate.
-async function handleGroupchatMessage(row, ws) {
-	const handle = normalizeHandle(row.handle);
-	const chatGuid = row.chat_guid;
-	const text = String(row.text || '').trim();
-	if (!text) return;
-
-	// Step 1: append the raw inbound to chat-log (permanent record). The
-	// agent_action field will be patched after the chat skill runs.
-	await appendChatMessage({
-		message_guid: row.guid,
-		chat_guid: chatGuid,
-		workspace_id: ws.workspace_id,
-		workspace_label: ws.label,
-		handle,
-		text,
-		is_from_me: false,
-		db_date: Number(row.date) || null
-	});
-	const preview = text.length > 80 ? `${text.slice(0, 80)}…` : text;
-	log(`◉ ${ws.label} ← ${shortHandle(handle)}: "${preview}"`);
-
-	// Step 2: fire read receipt immediately — same as the demo path.
-	await markRead(chatGuid);
-
-	// Step 3: run the chat skill. acknowledge emits live to the groupchat;
-	// draft_tenant / draft_vendor write to drafts.json for human review.
-	const onEvent = async (ev) => {
-		if (ev.type === 'read') {
-			await markRead(chatGuid);
-		} else if (ev.type === 'message') {
-			await setTyping(chatGuid, true);
-			await sleep(typingDwellMs(ev.content));
-			await setTyping(chatGuid, false);
-			const ok = await sendPart(chatGuid, handle, ev.content);
-			if (ok) log(`→ ${ws.label}: "${ev.content}"`);
-		} else if (ev.type === 'tool_call') {
-			const args = JSON.stringify(ev.args ?? {});
-			log(`  · ${ev.name}(${args.length > 80 ? args.slice(0, 77) + '...' : args})`);
-		}
-	};
-
-	const ctx = {
-		handle,
-		text,
-		chat_guid: chatGuid,
-		workspace_id: ws.workspace_id,
-		workspace_label: ws.label,
-		onEvent,
-		sendMode: 'live', // for acknowledge — the only live-send tool in this skill
-		// Groupchat with a PM is NOT a 1:1 with a PM. The send_text safety
-		// guard (refuse live + isPmHandle) is about preventing direct DMs;
-		// the chat skill doesn't expose send_text anyway.
-		isPmHandle: false
-	};
-
-	let result;
-	let runError = null;
-	try {
-		result = await runTurn(chatSkill, ctx);
-	} catch (err) {
-		runError = err;
-		log(`chat skill error: ${err.message}`);
-	} finally {
-		await setTyping(chatGuid, false);
-	}
-
-	const draftIds = ctx.draftIds ?? [];
-	const draftsCreated = draftIds.length;
-	const action = runError
-		? 'failure'
-		: result?.failure
-			? 'failure'
-			: draftsCreated > 0
-				? 'drafted'
-				: 'no_match';
-
-	await updateChatMessage(row.guid, {
-		agent_action: action,
-		agent_runs_at: new Date().toISOString(),
-		agent_drafts_count: draftsCreated,
-		agent_draft_ids: draftIds,
-		agent_error: runError?.message ?? result?.failure?.error ?? null
-	});
-	log(
-		`◉ ${ws.label} agent: ${action}${draftsCreated ? ` (${draftsCreated} drafts)` : ''}`
-	);
-}
-
-// ── Poll loop ──────────────────────────────────────────────────────────────────
-
-let polling = false;
-const inflight = new Map(); // handle/chat_guid -> Promise; serializes turns
-
-// Sessionizer ingest queue: per-chat Promise chain so boundary calls land in
-// chronological order without blocking the poll loop. Only the prod groupchat
-// is sessionized today — see shouldSessionize().
-const sessionizerInflight = new Map();
-
-function shouldSessionize(ws) {
-	return ws?.label === 'prod';
-}
-
-function queueSessionize(workItem, ws) {
-	if (!shouldSessionize(ws)) return;
-	const key = workItem.chat_guid;
-	const prev = sessionizerInflight.get(key) ?? Promise.resolve();
-	const next = prev
-		.then(() => sessionizer.ingestMessage(workItem))
-		.catch((err) => log(`sessionizer error: ${err.message}`));
-	sessionizerInflight.set(key, next);
-	next.finally(() => {
-		if (sessionizerInflight.get(key) === next) sessionizerInflight.delete(key);
 	});
 }
 
-async function pollOnce() {
-	const rows = fetchNewMessages(state.lastSeenRowId, groupchatGuids);
-	if (!rows.length) return;
+function launchMessages(reason) {
+	if (booting) return; // a launch is already coming up
+	if (Date.now() - lastLaunchAt < RELAUNCH_MIN_INTERVAL_MS) return; // throttle
+	booting = true;
+	lastLaunchAt = Date.now();
+	if (reason) log(`${reason} — launching Messages.app with dylib injected`);
+	const script = path.join(SCRIPT_DIR, 'imessage', 'run-messages.sh');
+	const proc = spawn(script, [], { stdio: 'ignore' });
+	proc.on('error', (err) => log(`Messages.app spawn error: ${err.message}`));
+	proc.on('exit', (code, sig) => {
+		// If the launcher exited and the dylib never dialed in, the boot failed —
+		// clear the flag so the watchdog retries (throttled). If it connected,
+		// onConnect already cleared `booting`.
+		if (!helper.isConnected()) booting = false;
+		if (code && code !== 0) log(`Messages.app exited (code=${code}, sig=${sig})`);
+	});
+}
 
-	for (const row of rows) {
-		state.lastSeenRowId = Math.max(state.lastSeenRowId, Number(row.rowid) || 0);
-		if (state.processed[row.guid]) continue;
-		state.processed[row.guid] = Date.now();
-
-		const handle = normalizeHandle(row.handle);
-		const chatGuid = row.chat_guid || '';
-		const ws = chatGuidIndex.get(chatGuid);
-		const isFromMe = Number(row.is_from_me) === 1;
-
-		// Sessionize first — runs in a per-chat queue, doesn't block the rest of
-		// the loop. Captures BOTH directions and all senders in scope (not just
-		// PM handles) so the persisted transcript matches chat.db faithfully.
-		if (ws && shouldSessionize(ws)) {
-			const text = String(row.text || '').trim();
-			const ts = appleDateToISO(row.date);
-			if (text && ts) {
-				queueSessionize(
-					{
-						workspace_id: ws.workspace_id,
-						chat_guid: chatGuid,
-						handle,
-						is_from_me: isFromMe,
-						body: text,
-						ts,
-						source_rowid: Number(row.rowid),
-						source_guid: row.guid,
-						issue_id: null
-					},
-					ws
-				);
-			}
-		}
-
-		// Outgoing messages stop here — they were sent by us, no skill to run.
-		if (isFromMe) continue;
-
-		if (ws) {
-			// Mapped groupchat. Only store messages from the PM; ignore tenant/
-			// owner replies for now (correlator design only triggers on PM).
-			if (!ws.pm_handles.has(handle)) continue;
-			const key = chatGuid;
-			const prev = inflight.get(key) ?? Promise.resolve();
-			const next = prev
-				.then(() => handleGroupchatMessage(row, ws))
-				.catch((err) => log(`groupchat handle error: ${err.message}`));
-			inflight.set(key, next);
-			next.finally(() => { if (inflight.get(key) === next) inflight.delete(key); });
-			continue;
-		}
-
-		// Groupchat we don't recognize — drop. (Demo path is 1:1 only.)
-		if (row.room_name) continue;
-		// Demo path. Real customer/vendor numbers (knownSet) are dropped so
-		// testing doesn't hijack real conversations.
-		if (knownSet.has(handle)) continue;
-
-		const prev = inflight.get(handle) ?? Promise.resolve();
-		const next = prev.then(() => handleIncoming(row)).catch((err) => log(`handle error: ${err.message}`));
-		inflight.set(handle, next);
-		next.finally(() => { if (inflight.get(handle) === next) inflight.delete(handle); });
+function startHelperWatchdog() {
+	if (process.env.HELPER_WATCHDOG_DISABLED === '1') {
+		log('helper watchdog disabled (HELPER_WATCHDOG_DISABLED=1)');
+		return;
 	}
-
-	await saveState();
+	// A real connect means the boot finished: clear `booting` so the next quit
+	// can relaunch.
+	helper.onConnect(() => {
+		booting = false;
+	});
+	// Fast path: the moment the socket drops, reopen — but ONLY if Messages is
+	// actually gone (a real ⌘-Q / crash). A flap while the process lives is
+	// transient; ignoring it is what stops the spawn loop.
+	helper.onDisconnect(async () => {
+		if (await messagesRunning()) return;
+		launchMessages('Messages.app quit');
+	});
+	// Backstop poll. Handles the no-event cases and a wedged dylib (process up
+	// but never connects). We require the helper to be down across two polls
+	// before replacing a running-but-silent instance, to ride out boot flaps.
+	let downPolls = 0;
+	const timer = setInterval(async () => {
+		if (booting || helper.isConnected()) {
+			downPolls = 0;
+			return;
+		}
+		if (!(await messagesRunning())) {
+			downPolls = 0;
+			launchMessages('Messages.app not running');
+			return;
+		}
+		if (++downPolls >= 2) {
+			downPolls = 0;
+			launchMessages('helper unresponsive — replacing instance');
+		}
+	}, HELPER_WATCHDOG_MS);
+	timer.unref?.();
+	return { stop: () => clearInterval(timer) };
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 async function main() {
-	// Build the work-orders chat-guid index from env (set above by loadDotEnv).
-	// Used by the poll loop to route mapped groupchat rows to chat-log capture
-	// instead of the demo subagent.
-	chatGuidIndex = buildChatGuidIndex();
-	groupchatGuids = [...chatGuidIndex.keys()];
+	// Build the chat-guid index from env. Used by chat-poller to route mapped
+	// groupchat rows to chat-log + incoming_user_message event (vs. 1:1 incoming_anon_message).
+	const chatGuidIndex = buildChatGuidIndex();
 	for (const [guid, w] of chatGuidIndex.entries()) {
 		log(`listening on ${w.label}: ${guid} (pm: ${[...w.pm_handles].join(', ') || '(none)'})`);
 	}
 
-	await loadState();
-
 	if (HELPER_ENABLED) {
-		// Wait briefly for the helper to dial in (Messages.app may have just launched).
-		for (let i = 0; i < 12 && !helper.isConnected(); i++) {
-			await new Promise(r => setTimeout(r, 250));
+		// Register the watchdog FIRST so its onConnect hook is listening before we
+		// launch — otherwise the boot-time connect wouldn't clear `booting` and the
+		// first ⌘-Q would be swallowed. It keeps Messages.app alive for the life of
+		// the process: if the operator ⌘-Q's it (or it crashes), the helper socket
+		// drops and the watchdog relaunches it until it dials back in.
+		startHelperWatchdog();
+
+		// Launch Messages.app with the helper dylib injected so it dials back
+		// into our IPC listener. Skip if the dylib is already connected — e.g.
+		// you ran run-messages.sh by hand in another terminal.
+		if (!helper.isConnected()) {
+			launchMessages('boot');
+		}
+
+		// Wait up to ~10s for the helper to dial in. Messages.app needs to
+		// quit + relaunch when run-messages.sh fires, which takes a moment.
+		for (let i = 0; i < 40 && !helper.isConnected(); i++) {
+			await new Promise((r) => setTimeout(r, 250));
 		}
 		const ping = await helper.ping();
 		if (ping.ok) log(`helper online (Messages.app pid=${ping.pid})`);
@@ -589,45 +186,166 @@ async function main() {
 	} else {
 		log('helper disabled via HELPER_DISABLED=1');
 	}
-	if (DEMO_HANDLE) log(`scoped to DEMO_HANDLE=${DEMO_HANDLE}`);
+
+	// One send path, shared by the UI Send button and the scheduled auto-fire
+	// loop below. Both route through the same dylib call so logs match.
+	const sendIMessage = async ({ chatGuid, body }) => {
+		// Dev/worktree test hook: when the real helper isn't reachable (e.g. another
+		// instance holds the helper port), FAKE_SEND=1 records the send as a success
+		// without touching Messages.app. Never set in prod.
+		if (process.env.FAKE_SEND === '1') {
+			log(`[FAKE_SEND] ${chatGuid}: "${body.slice(0, 60)}${body.length > 60 ? '…' : ''}"`);
+			return { ok: true, guid: 'fake_' + Date.now().toString(36) };
+		}
+		if (!HELPER_ENABLED) {
+			return { ok: false, error: 'helper disabled (HELPER_DISABLED=1)' };
+		}
+		if (!chatGuid) {
+			return { ok: false, error: 'draft has no chat guid' };
+		}
+		const r = await helper.send(chatGuid, body);
+		if (!r.ok) {
+			log(`work-order send failed: ${r.error}`);
+			return { ok: false, error: r.error };
+		}
+		log(`work-order sent to ${chatGuid}: "${body.slice(0, 60)}${body.length > 60 ? '…' : ''}"`);
+		return { ok: true, guid: r.guid ?? null };
+	};
 
 	// Drafts UI. Send button calls the dylib via helper.send.
 	await startUi({
 		port: Number(process.env.WORK_ORDERS_PORT ?? 7878),
 		log,
-		sendIMessage: async ({ chatGuid, body }) => {
-			if (!HELPER_ENABLED) {
-				return { ok: false, error: 'helper disabled (HELPER_DISABLED=1)' };
-			}
-			if (!chatGuid) {
-				return { ok: false, error: 'draft has no chat guid' };
-			}
-			const r = await helper.send(chatGuid, body);
-			if (!r.ok) {
-				log(`work-order send failed: ${r.error}`);
-				return { ok: false, error: r.error };
-			}
-			log(`work-order sent to ${chatGuid}: "${body.slice(0, 60)}${body.length > 60 ? '…' : ''}"`);
-			return { ok: true, guid: r.guid ?? null };
-		}
+		sendIMessage
 	});
 
-	// F1: poll issues_v2 for new work orders and create groupchat drafts.
+	// chat-poller: chat.db → incoming_user_message (mapped groupchats) or incoming_anon_message (1:1).
+	await startChatPoller({ helper, chatGuidIndex, log });
+
+	// issue-poller: issues_v2 → new_issue events → drafts.
 	await startIssuePoller();
 
-	log(`agent server started (poll=${POLL_INTERVAL_MS}ms, lastRow=${state.lastSeenRowId})`);
+	// scheduled sender: fires "Send later" drafts when their hold elapses.
+	startScheduledSender({ sendIMessage });
 
-	setInterval(async () => {
-		if (polling) return;
-		polling = true;
+	// appfolio runner: Playwright service the drafts UI streams from on :9773.
+	startAppfolioRunner();
+
+	log('agent server started');
+}
+
+// Auto-fire loop for scheduled ("Send later") drafts. Every tick it sweeps the
+// drafts file for any that the human approved (approved_at set) whose hold has
+// elapsed (hold_until <= now) and dispatches them through the same path as the
+// UI Send button. Because drafts are durable JSON, a draft approved overnight
+// fires after a restart too — the sweep just catches it once it's overdue.
+//
+// Invariant: this only ever fires drafts with approved_at set. Approval always
+// precedes a send; nothing leaves un-tapped.
+const SCHEDULED_POLL_MS = Number(process.env.SCHEDULED_POLL_MS ?? 30000);
+
+function startScheduledSender({ sendIMessage }) {
+	let running = false;
+	const timer = setInterval(async () => {
+		if (running) return;
+		running = true;
 		try {
-			await pollOnce();
+			const now = Date.now();
+			const drafts = await db.loadDrafts();
+			const due = drafts.filter(
+				(d) => d.approved_at && d.hold_until && new Date(d.hold_until).getTime() <= now
+			);
+			for (const draft of due) {
+				const raw = draft.messages ?? (draft.body ? [{ body: draft.body }] : []);
+				const finals = raw.map((m) => ({ body: String(m?.body ?? '').trim() }));
+				const originals = (draft.original_messages ?? finals).map((m) => ({
+					body: String(m?.body ?? '').trim()
+				}));
+				const result = await dispatchDraft({
+					draft,
+					finals,
+					originals,
+					edited: false,
+					action: 'send',
+					forcedSend: false,
+					sendIMessage,
+					log
+				});
+				if (result.ok) {
+					log(`scheduled send fired: draft=${draft.id} issue=${draft.issue_id} parts=${result.count}`);
+				} else {
+					log(`scheduled send failed: draft=${draft.id} ${result.error}`);
+				}
+			}
 		} catch (err) {
-			log(`poll error: ${err.message}`);
+			log(`scheduled sender error: ${err.message}`);
 		} finally {
-			polling = false;
+			running = false;
 		}
-	}, POLL_INTERVAL_MS);
+	}, SCHEDULED_POLL_MS);
+	return { stop: () => clearInterval(timer) };
+}
+
+// AppFolio step runner. A Playwright-backed HTTP service (appfolio/runner.mjs)
+// that drives AppFolio and streams the browser to the drafts UI's "Send via
+// AppFolio" panel on 127.0.0.1:9773. It launches a browser on boot and has its
+// own top-level await, so we run it as an isolated CHILD PROCESS rather than
+// importing it — that keeps a missing Playwright/Chromium (or a crashed browser)
+// from blocking startup or taking down the agent. Set APPFOLIO_RUNNER_DISABLED=1
+// to skip it (e.g. a host without Playwright installed).
+const APPFOLIO_RUNNER_ENABLED = process.env.APPFOLIO_RUNNER_DISABLED !== '1';
+const APPFOLIO_RUNNER_MAX_RESTARTS = 3;
+
+function startAppfolioRunner() {
+	if (!APPFOLIO_RUNNER_ENABLED) {
+		log('appfolio runner disabled (APPFOLIO_RUNNER_DISABLED=1)');
+		return;
+	}
+	const script = path.join(SCRIPT_DIR, 'appfolio', 'runner.mjs');
+	let child = null;
+	let restarts = 0;
+
+	const spawnOne = () => {
+		// env: process.env so the child inherits the dotenv we loaded (Supabase creds
+		// for srn lookup) + APPFOLIO_HEADED. Same process group → Ctrl-C hits both.
+		child = spawn(process.execPath, [script], { cwd: SCRIPT_DIR, env: process.env });
+		const pipe = (stream) => {
+			stream.setEncoding('utf8');
+			stream.on('data', (chunk) => {
+				for (const line of chunk.split('\n')) if (line.trim()) log(`[appfolio] ${line.trim()}`);
+			});
+		};
+		pipe(child.stdout);
+		pipe(child.stderr);
+		child.on('error', (err) => log(`appfolio runner spawn error: ${err.message}`));
+		child.on('exit', (code, signal) => {
+			if (signal) return; // killed on shutdown — don't restart
+			log(`appfolio runner exited (code=${code})`);
+			if (code !== 0 && restarts < APPFOLIO_RUNNER_MAX_RESTARTS) {
+				restarts++;
+				log(`restarting appfolio runner (${restarts}/${APPFOLIO_RUNNER_MAX_RESTARTS})…`);
+				setTimeout(spawnOne, 2000);
+			} else if (code !== 0) {
+				log(
+					'appfolio runner keeps failing — likely Playwright is not installed in this checkout ' +
+						'(cd agent && npm i, then npx playwright install chromium) or appfolio/.state.json is missing. ' +
+						'Set APPFOLIO_RUNNER_DISABLED=1 to silence.'
+				);
+			}
+		});
+	};
+
+	spawnOne();
+	const kill = () => {
+		try {
+			child?.kill();
+		} catch {
+			/* already gone */
+		}
+	};
+	process.on('exit', kill);
+	process.on('SIGINT', () => { kill(); process.exit(0); });
+	process.on('SIGTERM', () => { kill(); process.exit(0); });
 }
 
 main().catch((err) => {

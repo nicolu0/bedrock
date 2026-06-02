@@ -5,17 +5,12 @@
 	import { fade, scale } from 'svelte/transition';
 	import { clearSessionCaches } from '$lib/stores/clearSessionCaches';
 
-	export let data;
-
 	$: workspaceSlug = $page.params.workspace;
 	$: basePath = workspaceSlug ? `/${workspaceSlug}` : '';
-	$: userRole = data?.role;
-	const allItems = [
+	const items = [
 		{ id: 'integrations', label: 'Integrations', href: 'integrations' },
-		{ id: 'coordinator', label: 'Coordinator iMessage', href: 'coordinator', requireRole: 'bedrock' },
 		{ id: 'members', label: 'Members', href: 'members' }
 	];
-	$: items = allItems.filter((item) => !item.requireRole || userRole === item.requireRole);
 
 	$: activeHref =
 		items.find((item) => $page.url.pathname === `${basePath}/settings/${item.href}`)?.href ?? null;

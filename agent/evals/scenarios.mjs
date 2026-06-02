@@ -4,7 +4,7 @@
 //
 // Scenario shape: { name, skill, setup?, ctx, expected }
 //
-//   skill    — 'demo' | 'f1' | 'chat'. Determines which skill the runner loads.
+//   skill    — 'demo' | 'process_wo' | 'chat'. Determines which skill the runner loads.
 //   setup    — optional pre-populated state for this scenario:
 //                sent_log:   rows pre-written to sent-log.json
 //                chat_log:   rows pre-written to chat-log.json
@@ -35,11 +35,13 @@ const NOW_ISO = () => new Date().toISOString();
 const MINUTES_AGO = (m) => new Date(Date.now() - m * 60 * 1000).toISOString();
 
 // Mock issue rows used across multiple chat scenarios.
+// Post-units-table-normalization: unit.name is the canonical short address
+// the agent uses VERBATIM for line 1. No more "Unit X at Property" construction.
 const ISSUE_FAUCET = {
 	id: 'iss-faucet-001',
 	workspace_id: TEST_WS,
 	property: { name: 'Hub Champaign' },
-	unit: { name: '701' },
+	unit: { name: 'Unit 701 Hub Champaign' },
 	tenant: { name: 'Anna' },
 	vendor: { name: 'Mario' },
 	name: 'kitchen faucet leaking',
@@ -50,17 +52,71 @@ const ISSUE_AC = {
 	id: 'iss-ac-002',
 	workspace_id: TEST_WS,
 	property: { name: 'Hub Champaign' },
-	unit: { name: '701' },
+	unit: { name: 'Unit 701 Hub Champaign' },
 	tenant: { name: 'Anna' },
 	vendor: { name: 'California Heat Air Conditioning' },
 	name: 'AC not blowing cold',
 	description: 'tenant says the AC will not cool the unit'
 };
 
+// ── Incident fixtures (2026-05-30 "Yes, please → clarify" bug) ───────────────
+// Four work orders the agent texted Jose about. dryer+light+fridge were sent
+// days earlier and Jose ALREADY answered each (self-handled / triage); laundry
+// was the lone fresh send he replied "Yes, please" to. Base status is
+// 'awaiting_pm' (open) so they appear as candidates; sim2 overrides the
+// answered three to resolved states via the supabase mock.
+const ISSUE_DRYER = {
+	id: 'iss-dryer-026',
+	workspace_id: TEST_WS,
+	property: { name: '1447 Harvard St' },
+	unit: { name: 'Unit 1 1447 Harvard St' },
+	tenant: { name: 'Marisol' },
+	vendor: { name: 'Cross Appliance' },
+	name: 'dryer with a burning smell',
+	description: 'tenant reports the dryer smells like it is burning',
+	status: 'awaiting_pm'
+};
+const ISSUE_LIGHT = {
+	id: 'iss-light-026',
+	workspace_id: TEST_WS,
+	property: { name: '1829 11th St' },
+	unit: { name: 'Unit 2 1829 11th St' },
+	tenant: { name: 'Priya' },
+	vendor: { name: 'Abraham' },
+	name: 'bathroom light fixture that needs replacement',
+	description: 'the bathroom light fixture needs replacement',
+	status: 'awaiting_pm'
+};
+const ISSUE_FRIDGE = {
+	id: 'iss-fridge-026',
+	workspace_id: TEST_WS,
+	property: { name: '205 Horizon Ave' },
+	unit: { name: 'Unit 3 205 Horizon Ave' },
+	tenant: { name: 'Sam' },
+	vendor: { name: 'Cross Appliance' },
+	name: 'broken refrigerator drawer',
+	description: 'the refrigerator drawer is broken',
+	status: 'awaiting_pm'
+};
+const ISSUE_LAUNDRY = {
+	id: 'iss-laundry-030',
+	workspace_id: TEST_WS,
+	property: { name: '824 11th St' },
+	unit: { name: 'Unit 4 824 11th St' },
+	tenant: { name: 'Lena' },
+	vendor: { name: 'Cross Appliance' },
+	name: 'laundry machine that is not draining',
+	description: 'the laundry machine is not draining',
+	status: 'awaiting_pm'
+};
+
 // Helper: build a sent-log bundle for the test chat referring to one issue.
+// Line 1 = unit.name verbatim (canonical address from the normalized units table).
 function sentBundle(issue, { ago_min = 5 } = {}) {
 	const sent_at = MINUTES_AGO(ago_min);
 	const bundle_id = `drf_${issue.id.replace(/[^a-z0-9]/g, '').slice(0, 16)}`;
+	const body =
+		`${issue.unit.name}\n` + `Has a ${issue.name}.\n\n` + `Should I send ${issue.vendor.name}?`;
 	return [
 		{
 			sent_at,
@@ -72,131 +128,118 @@ function sentBundle(issue, { ago_min = 5 } = {}) {
 			workspace_id: TEST_WS,
 			workspace_label: 'test',
 			chat_guid: TEST_CHAT,
-			body: `Unit ${issue.unit.name} at ${issue.property.name} has a ${issue.name}.`
-		},
-		{
-			sent_at,
-			message_guid: `msg-${issue.id}-2`,
-			bundle_id,
-			part_index: 1,
-			issue_id: issue.id,
-			channel: 'groupchat',
-			workspace_id: TEST_WS,
-			workspace_label: 'test',
-			chat_guid: TEST_CHAT,
-			body: `Should we send ${issue.vendor.name}?`
+			body
 		}
 	];
 }
 
 export const scenarios = [
-	// ─── F1 (5) ────────────────────────────────────────────────────────────
+	// ─── process_wo (read_memory → update_issue → send_text) ────────────────
+	// The poller enriches the issue before runTurn, so the agent receives a
+	// populated issue (property/unit/title) and never calls an enrich tool.
+	// Scenario fixtures are already enriched to match.
 
 	{
-		name: 'f1: standard issue with vendor → 2 messages',
-		skill: 'f1',
+		name: 'process_wo: standard issue with vendor candidate → one multi-line draft',
+		skill: 'process_wo',
 		ctx: {
 			issue: ISSUE_FAUCET,
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test',
 			chat_guid: TEST_CHAT
 		},
 		expected: {
-			tool_calls: ['send_text', 'send_text'],
-			drafts_count: 2,
-			drafts_include: ['Unit 701', 'Hub Champaign', 'Mario']
+			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
+			drafts_count: 1,
+			drafts_include: ['Unit 701', 'Hub Champaign', 'Mario', 'Should I send']
 		}
 	},
 
 	{
-		name: 'f1: no recommended vendor → 1 message only',
-		skill: 'f1',
+		name: 'process_wo: no candidate vendor → read_memory + 1 draft, no vendor question',
+		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, vendor: null, name: 'wifi down' },
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test'
 		},
 		expected: {
-			tool_calls_set: ['send_text'],
+			tool_calls_set_includes: ['read_memory', 'send_text'],
+			tool_calls_excludes: ['update_issue'],
 			drafts_count: 1,
 			drafts_include: ['Unit 701', 'Hub Champaign'],
+			drafts_excludes: ['Should I send', 'URGENT'],
 			judge: {
 				target: 'drafts',
 				criteria:
-					'The single draft must reference Unit 701, Hub Champaign, and the wifi issue in one short, natural English sentence. It must NOT use a colon, em dash, or semicolon. It must NOT be a headline-style fragment like "Unit 701 at Hub Champaign: wifi down." It must NOT contain the ungrammatical phrase "has wifi down". Acceptable phrasings: "Unit 701 at Hub Champaign has no wifi.", "Unit 701 at Hub Champaign\'s wifi is down.", "The wifi at Unit 701, Hub Champaign is down.", or any other natural full-prose rewording.'
+					'The draft is a short two-line bubble about Unit 701 / Hub Champaign and a wifi issue. The second sentence must read as natural English (full prose, not a headline fragment, no colons/em dashes/semicolons, no ungrammatical "has wifi down"). Acceptable second-sentence phrasings: "Has no wifi.", "The wifi is down.", "Wifi is out.", or any other natural rewording.'
 			}
 		}
 	},
 
 	{
-		name: 'f1: urgent issue prepends URGENT',
-		skill: 'f1',
-		ctx: {
-			issue: { ...ISSUE_FAUCET, urgent: true, name: 'gas leak' },
-			sendMode: 'draft',
-			workspace_label: 'test'
-		},
-		expected: {
-			drafts_count: 2,
-			drafts_include: ['URGENT', 'gas leak', 'Mario']
-		}
-	},
-
-	{
-		name: 'f1: missing unit → drops "Unit X at" prefix',
-		skill: 'f1',
+		name: 'process_wo: missing unit → location line is just the property',
+		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, unit: null, name: 'roof leak in lobby' },
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test'
 		},
 		expected: {
-			drafts_count: 2,
-			// First message should NOT start with "Unit"
-			judge: {
-				target: 'drafts',
-				criteria:
-					'The first draft message should reference "Hub Champaign" and the issue, but must NOT start with "Unit". The phrasing should be like "Hub Champaign has a roof leak..." or similar. The second message must be exactly: "Should we send Mario?"'
-			}
+			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
+			drafts_count: 1,
+			drafts_include: ['Hub Champaign', '\n\nShould I send Mario?'],
+			drafts_excludes: ['Unit ', 'URGENT']
 		}
 	},
 
 	{
-		name: 'f1: awkward "has X" title → natural grammar',
-		skill: 'f1',
+		name: 'process_wo: awkward "has X" title → natural grammar on line 2',
+		skill: 'process_wo',
 		ctx: {
 			issue: { ...ISSUE_FAUCET, name: 'dryer not working' },
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test'
 		},
 		expected: {
-			drafts_count: 2,
+			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
+			drafts_count: 1,
+			drafts_include: ['Unit 701', 'Hub Champaign', '\n\nShould I send Mario?'],
+			drafts_excludes: ['has dryer not working', 'URGENT'],
 			judge: {
 				target: 'drafts',
 				criteria:
-					'The first draft must reference Unit 701, Hub Champaign, and the dryer issue in one short, natural English sentence. It must NOT contain "has dryer not working". It must NOT use a colon, em dash, or semicolon, and must NOT be a headline-style fragment like "Unit 701 at Hub Champaign: dryer not working." Acceptable phrasings: "Unit 701 at Hub Champaign has a broken dryer.", "Unit 701 at Hub Champaign\'s dryer isn\'t working.", "The dryer at Unit 701, Hub Champaign isn\'t working.", or any other natural full-prose rewording. The second draft must be exactly: "Should we send Mario?"'
+					'The sentence describing the dryer issue reads as natural English — must NOT use a colon/em dash/semicolon, must NOT be a headline fragment. Acceptable phrasings: "Has a broken dryer.", "The dryer isn\'t working.", "Dryer is out.", or similar.'
 			}
 		}
 	},
 
 	{
-		name: 'f1: long description gets compact summary',
-		skill: 'f1',
+		name: 'process_wo: long description gets compact line 2',
+		skill: 'process_wo',
 		ctx: {
 			issue: {
 				...ISSUE_FAUCET,
 				description:
 					'tenant reports that the kitchen faucet has been leaking for several days, water has been pooling under the sink and damaging the cabinet floor, the leak appears to come from the base of the faucet and is worse when hot water is used, they have placed towels but they need replacing constantly'
 			},
+			workspace_id: TEST_WS,
 			sendMode: 'draft',
 			workspace_label: 'test'
 		},
 		expected: {
-			drafts_count: 2,
+			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
+			drafts_count: 1,
+			drafts_include: ['Unit 701', 'Hub Champaign', '\n\nShould I send Mario?', 'faucet'],
+			drafts_excludes: ['URGENT', 'towels', 'cabinet', 'several days'],
 			judge: {
 				target: 'drafts',
 				criteria:
-					'The first draft must mention the kitchen faucet leak at Unit 701 / Hub Champaign and stay under about 25 words total. It is OK if the summary is two short sentences or has a newline — but it must not be a multi-paragraph dump of all the details. The second draft must be exactly: "Should we send Mario?"'
+					'The issue is summarized in ONE short sentence (under ~20 words) — NOT a multi-paragraph dump. Mentioning "faucet" is enough; "kitchen faucet" is also fine but not required.'
 			}
 		}
 	},
@@ -204,7 +247,7 @@ export const scenarios = [
 	// ─── Chat (8) ──────────────────────────────────────────────────────────
 
 	{
-		name: 'chat: clear "yes" with one candidate → ack + tenant + vendor drafts',
+		name: 'chat: clear "yes" with one candidate → ack + tenant + vendor drafts + observation',
 		skill: 'chat',
 		setup: {
 			sent_log: sentBundle(ISSUE_FAUCET),
@@ -216,34 +259,74 @@ export const scenarios = [
 			text: 'yes'
 		},
 		expected: {
-			tool_calls_set: ['acknowledge', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 2,
+			// Confirmation now also logs an observation of the dispatch decision.
+			// Everything drafts (ack included), so nothing hits the outbox.
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
 			drafts_include: ['Anna', 'Mario', 'kitchen faucet leaking'],
-			outbox_count: 1
-		}
-	},
-
-	{
-		name: 'chat: "yes" with two open candidates → no_match (ambiguous)',
-		skill: 'chat',
-		setup: {
-			sent_log: [
-				...sentBundle(ISSUE_FAUCET, { ago_min: 30 }),
-				...sentBundle(ISSUE_AC, { ago_min: 5 })
-			],
-			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET, [ISSUE_AC.id]: ISSUE_AC }
-		},
-		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
-		expected: {
-			no_tools: true,
-			drafts_count: 0,
 			outbox_count: 0
 		}
 	},
 
 	{
-		name: 'chat: vendor redirect ("no send Luigi") → no dispatch, record observation',
+		// Two work orders genuinely open at once (neither answered yet) + a bare
+		// "yes" that names neither → the agent can't be certain which one, so it
+		// asks ONE clarifying question. This is the SMART ask, not the dumb one:
+		// the dumb case is a lone open WO (which dispatches without asking). In
+		// practice status-closure keeps the open set to one; this fires only when
+		// two are genuinely pending together. The agent reliably clarifies here
+		// rather than gamble on recency — the safe call under full automation.
+		name: 'chat: two genuinely-open WOs + bare "yes" → one clarifying question',
+		skill: 'chat',
+		setup: {
+			sent_log: [
+				...sentBundle(ISSUE_FAUCET, { ago_min: 20 }),
+				...sentBundle(ISSUE_AC, { ago_min: 6 })
+			],
+			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET, [ISSUE_AC.id]: ISSUE_AC }
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
+		expected: {
+			tool_calls_set_includes: ['send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			drafts_count: 1,
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A single clarifying question that does NOT dispatch — asking which of the two work orders the PM meant. Naming them by issue (faucet/AC) or by vendor (Mario / California Heat) is equally fine; the only requirement is that it asks rather than picks one.'
+			}
+		}
+	},
+
+	{
+		// Name beats recency: the AC is the most recent, but the PM names the
+		// faucet → dispatch the faucet (Mario), not the AC.
+		name: 'chat: names the older WO ("go ahead with the faucet") → dispatch that one, not the recent',
+		skill: 'chat',
+		setup: {
+			sent_log: [
+				...sentBundle(ISSUE_FAUCET, { ago_min: 35 }),
+				...sentBundle(ISSUE_AC, { ago_min: 4 })
+			],
+			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET, [ISSUE_AC.id]: ISSUE_AC }
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'go ahead with the faucet' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'update_issue'],
+			drafts_count: 3,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			drafts_include: ['Mario'],
+			drafts_excludes: ['California Heat', 'which one']
+		}
+	},
+
+	{
+		// PM redirects to a different vendor than we suggested. Agent should
+		// dispatch using the named vendor (passing vendor_name to the drafters)
+		// AND record write_memory so the belief-former can learn from the swap.
+		name: 'chat: vendor swap ("no send Luigi instead") → drafts with Luigi + write_memory',
 		skill: 'chat',
 		setup: {
 			sent_log: sentBundle(ISSUE_FAUCET),
@@ -251,13 +334,65 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'no send Luigi instead' },
 		expected: {
-			// New: vendor redirects warrant an observation (the redirect is a
-			// learnable signal). read_memory is optional — model may consult before
-			// deciding. No dispatch tools fire — v1 doesn't handle swaps.
-			tool_calls_set_includes: ['add_observation'],
-			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 0,
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			// Everything drafts now (ack+question included), so nothing is live.
+			drafts_count: 3,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			drafts_include: ['Anna', 'Luigi', 'kitchen faucet leaking'],
 			outbox_count: 0
+		}
+	},
+
+	{
+		// Bare "send X" with no "instead" cue. This is the shape that broke
+		// in production on 2026-05-24 ("Send yonic") — the agent didn't
+		// recognize it as a swap and drafted with the original vendor.
+		name: 'chat: bare vendor swap ("send Yonic") → drafts with Yonic, not Mario',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_FAUCET),
+			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET }
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'send Yonic' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			// Everything drafts now (ack+question included), so nothing is live.
+			drafts_count: 3,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			drafts_include: ['Anna', 'Yonic', 'kitchen faucet leaking'],
+			outbox_count: 0
+		}
+	},
+
+	{
+		// Follow-up answer: the conversation history shows we asked WHY the PM
+		// swapped to Luigi; their reply gives the reason. Capture it with
+		// write_memory and nothing else — dispatch already happened on the
+		// override turn, so no ack and no drafts. Recognition comes from history
+		// (injected via ctx.history in eval mode by buildSessionHistory).
+		name: "chat: follow-up answer (\"he's cheaper\") → write_memory only, no dispatch",
+		skill: 'chat',
+		setup: { sent_log: [], supabase: {} },
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: "he's cheaper for drain jobs",
+			history: [
+				{ role: 'user', content: 'no send Luigi instead' },
+				{ role: 'assistant', content: 'On it, sending Luigi. Any reason you prefer him over Yonic?' }
+			]
+		},
+		expected: {
+			// Dispatch already happened on the override turn (no re-dispatch). Record
+			// the reason AND give a brief natural ack of the answer (option-2 reply).
+			tool_calls_set_includes: ['write_memory', 'send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief reply that takes in the reason the PM gave. Both a plain "makes sense, thanks" and a restatement like "got it, Luigi for drains then" are fine. It must only NOT re-dispatch a vendor/tenant and NOT ask a clarifying question.'
+			}
 		}
 	},
 
@@ -273,7 +408,18 @@ export const scenarios = [
 			workspace_label: 'test',
 			text: 'what is the lockbox code for hub champaign?'
 		},
-		expected: { no_tools: true, drafts_count: 0, outbox_count: 0 }
+		// It's a direct question, so answer it (option-2). read_memory may fire and
+		// finds nothing; the reply says it's not on file. No dispatch, no invented code.
+		expected: {
+			tool_calls_set_includes: ['send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'The reply must NOT provide, invent, or guess a specific code. Acceptable: it says it does not have the code on file, and/or asks the PM where to find it or to provide it. A vague "let me check / I will look into it" promise (it has no way to look it up) is NOT acceptable. It must not dispatch a vendor or tenant.'
+			}
+		}
 	},
 
 	{
@@ -281,7 +427,17 @@ export const scenarios = [
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'ok' },
-		expected: { no_tools: true, drafts_count: 0, outbox_count: 0 }
+		// A bare "ok" out of nowhere is the genuinely-ambiguous edge: a brief reply
+		// ("all good?") is fine, and so is staying quiet. Hard line: no dispatch.
+		expected: {
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'Acceptable: either no message at all (empty), OR one brief natural reply such as acknowledging or asking what they are referring to. It must NOT be a "which work order did you mean?" clarifying question, since none are open.'
+			}
+		}
 	},
 
 	{
@@ -293,8 +449,9 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yep send Mario' },
 		expected: {
-			tool_calls_set: ['acknowledge', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 2,
+			// Confirming our suggested vendor still logs the dispatch decision.
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
 		}
 	},
@@ -304,7 +461,18 @@ export const scenarios = [
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes go ahead' },
-		expected: { no_tools: true, drafts_count: 0 }
+		// The case Andrew cares about: an affirmative that maps to nothing. Don't
+		// ghost: reply and surface the gap. No dispatch.
+		expected: {
+			tool_calls_set_includes: ['send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'The reply acknowledges the PM and surfaces that nothing is currently pending (e.g. asks what they are referring to). It must NOT dispatch any vendor or tenant and must NOT invent a work order.'
+			}
+		}
 	},
 
 	{
@@ -326,10 +494,17 @@ export const scenarios = [
 			workspace_label: 'test',
 			text: "Assigned plumbing to guox and I'll talk to them about the filter tomorrow"
 		},
+		// Option-2: acknowledge the PM's own update with a brief reply (may also close
+		// the faucet WO via update_issue). 2026-05-18 guard still holds: outbox empty,
+		// and the reply must NOT be the robotic "No action taken."
 		expected: {
-			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 0,
-			outbox_count: 0
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief, natural acknowledgment that the PM is handling it themselves (e.g. "got it, thanks"). It must NOT be "No action taken." or similar robotic text, must NOT dispatch a vendor/tenant, and must NOT claim the agent is taking the action.'
+			}
 		}
 	},
 
@@ -349,19 +524,143 @@ export const scenarios = [
 					workspace_id: 'other-ws',
 					workspace_label: 'prod',
 					chat_guid: 'iMessage;+;800f91610cea448fb5085603ab3ea973',
-					body: 'Unit 1 at 829 Ocean Park has a leak. Should we send Yonic?'
+					body: 'Unit 1 at 829 Ocean Park\nHas a leak.\n\nShould I send Yonic?'
 				}
 			],
 			supabase: {}
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
-		expected: { no_tools: true, drafts_count: 0 }
+		// Isolation test: the only send is in a DIFFERENT (prod) chat, so this chat has
+		// nothing pending. Reply must surface that and must NOT touch the prod WO.
+		expected: {
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'Treats this chat as having nothing pending: the reply asks what the PM is referring to or surfaces that nothing is open. It must NOT dispatch or reference the prod work order (829 Ocean Park / Yonic), which belongs to a different chat.'
+			}
+		}
+	},
+
+	// ─── Chat wo_status: lifecycle closure + the 2026-05-30 clarify bug ─────
+	// Sim 1 — each kind of PM reply must advance the addressed WO's status via
+	// update_issue. Sim 2 — once the answered WOs are resolved, a lone fresh
+	// "Yes, please" dispatches instead of asking a clarifying question.
+
+	{
+		// Sim 1a — self-handle. Jose answered the dryer+light days ago with "I
+		// already took care of those". Both are listed candidates; the reply must
+		// close them (pm_handling), NOT dispatch and NOT clarify.
+		name: 'chat wo_status: "I already took care of those" → update_issue pm_handling, no dispatch',
+		skill: 'chat',
+		setup: {
+			sent_log: [
+				...sentBundle(ISSUE_DRYER, { ago_min: 90 }),
+				...sentBundle(ISSUE_LIGHT, { ago_min: 88 })
+			],
+			supabase: { [ISSUE_DRYER.id]: ISSUE_DRYER, [ISSUE_LIGHT.id]: ISSUE_LIGHT }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: 'I already took care of those work orders'
+		},
+		expected: {
+			tool_args: { update_issue: { status: 'pm_handling' } },
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief, natural acknowledgment that the PM handled the work orders themselves (e.g. "great, thanks"). It must NOT claim the agent is dispatching or taking the action. (Whether the WOs were closed via update_issue is asserted separately.)'
+			}
+		}
+	},
+
+	{
+		// Sim 1b — triage. Jose redirects the fridge WO to gathering tenant info
+		// rather than dispatching. Status must move to triaging.
+		name: 'chat wo_status: "have the tenant send a photo first" → update_issue triaging',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_FRIDGE, { ago_min: 45 }),
+			supabase: { [ISSUE_FRIDGE.id]: ISSUE_FRIDGE }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: 'Have the resident send a photo of the drawer and the model number of the fridge first'
+		},
+		expected: {
+			tool_args: { update_issue: { status: 'triaging' } },
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'Moves the WO to triaging AND replies with a brief, natural acknowledgment that it will gather the info first (e.g. "will do, getting a photo"). It must NOT dispatch a vendor yet.'
+			}
+		}
+	},
+
+	{
+		// Sim 1c — dispatch. Lone open WO, clean approval. Dispatch AND advance
+		// status to dispatched so it leaves the candidate list.
+		name: 'chat wo_status: lone "Yes, please" → dispatch + update_issue dispatched',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_LAUNDRY, { ago_min: 20 }),
+			supabase: { [ISSUE_LAUNDRY.id]: ISSUE_LAUNDRY }
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'Yes, please' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'update_issue'],
+			tool_args: { update_issue: { status: 'dispatched' } },
+			drafts_count: 3,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
+		}
+	},
+
+	{
+		// Sim 2 — the incident replay. All four WOs are in the sent-log, but the
+		// three Jose already answered are resolved in issues_v2 (pm_handling /
+		// triaging). recentSentForChat filters them out, leaving laundry as the
+		// ONLY open candidate — so "Yes, please" dispatches it instead of asking
+		// "which one?". This is the exact bug from 2026-05-30.
+		name: 'chat wo_status: resolved WOs excluded → lone "Yes, please" dispatches, not clarifies',
+		skill: 'chat',
+		setup: {
+			sent_log: [
+				...sentBundle(ISSUE_DRYER, { ago_min: 6000 }),
+				...sentBundle(ISSUE_LIGHT, { ago_min: 6000 }),
+				...sentBundle(ISSUE_FRIDGE, { ago_min: 5800 }),
+				...sentBundle(ISSUE_LAUNDRY, { ago_min: 30 })
+			],
+			supabase: {
+				[ISSUE_DRYER.id]: { ...ISSUE_DRYER, status: 'pm_handling' },
+				[ISSUE_LIGHT.id]: { ...ISSUE_LIGHT, status: 'pm_handling' },
+				[ISSUE_FRIDGE.id]: { ...ISSUE_FRIDGE, status: 'triaging' },
+				[ISSUE_LAUNDRY.id]: { ...ISSUE_LAUNDRY, status: 'awaiting_pm' }
+			}
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'Yes, please' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
+			drafts_count: 3,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			judge: {
+				target: 'drafts',
+				criteria:
+					'An ack confirming dispatch of the laundry machine work order (e.g. "got it" / "on it") plus tenant and vendor dispatch drafts. It must NOT be a clarifying question asking which work order the PM meant.'
+			}
+		}
 	},
 
 	// ─── Chat: learning behavior (new tools) ───────────────────────────────
 
 	{
-		name: 'chat: stated preference ("always use Yonic for plumbing") → add_observation, no dispatch',
+		name: 'chat: stated preference ("always use Yonic for plumbing") → write_memory, no dispatch',
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: {
@@ -370,15 +669,20 @@ export const scenarios = [
 			text: 'btw always use Yonic for plumbing at the Hub Champaign building'
 		},
 		expected: {
-			tool_calls_set_includes: ['add_observation'],
-			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 0,
-			outbox_count: 0
+			// Record the preference AND give a brief ack (option-2). No dispatch.
+			tool_calls_set_includes: ['write_memory', 'send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief, natural acknowledgment that the preference is noted (e.g. "noted" / "got it, will use Yonic for plumbing there"). It must NOT dispatch a vendor or tenant.'
+			}
 		}
 	},
 
 	{
-		name: 'chat: per-property quirk (elevator vendor) → add_observation, no dispatch',
+		name: 'chat: per-property quirk (elevator vendor) → write_memory, no dispatch',
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: {
@@ -387,10 +691,15 @@ export const scenarios = [
 			text: 'fyi the elevator vendor for 1234 Main St is Acme Elevators, they have a contract'
 		},
 		expected: {
-			tool_calls_set_includes: ['add_observation'],
-			tool_calls_excludes: ['acknowledge', 'draft_tenant', 'draft_vendor'],
-			drafts_count: 0,
-			outbox_count: 0
+			// Record the per-property quirk AND give a brief ack (option-2). No dispatch.
+			tool_calls_set_includes: ['write_memory', 'send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief, natural acknowledgment that the elevator-vendor note for 1234 Main St is recorded (e.g. "good to know, noted"). It must NOT dispatch a vendor or tenant.'
+			}
 		}
 	},
 
@@ -410,8 +719,8 @@ export const scenarios = [
 			text: 'yes go ahead. and just so you know we always use Yonic for plumbing here.'
 		},
 		expected: {
-			tool_calls_set_includes: ['acknowledge', 'draft_tenant', 'draft_vendor', 'add_observation'],
-			drafts_count: 2,
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
 		}
 	},
@@ -451,7 +760,7 @@ export const scenarios = [
 		},
 		ctx: { handle: '+19000000002', text: 'yes', sendMode: 'live' },
 		expected: {
-			tool_calls_set: ['set_demo_stage', 'send_text'],
+			tool_calls_set: ['write_profile', 'send_text'],
 			judge: {
 				target: 'outbox',
 				criteria:
@@ -481,7 +790,7 @@ export const scenarios = [
 		},
 		ctx: { handle: '+19000000003', text: 'we manage mariposa apartments', sendMode: 'live' },
 		expected: {
-			tool_calls_set: ['update_profile', 'send_text'],
+			tool_calls_set: ['write_profile', 'send_text'],
 			judge: {
 				target: 'outbox',
 				criteria:
@@ -509,7 +818,7 @@ export const scenarios = [
 		},
 		ctx: { handle: '+19000000004', text: 'mario', sendMode: 'live' },
 		expected: {
-			tool_calls_set: ['update_profile', 'set_demo_stage', 'send_text'],
+			tool_calls_set: ['write_profile', 'write_profile', 'send_text'],
 			judge: {
 				target: 'outbox',
 				criteria:
@@ -549,7 +858,7 @@ export const scenarios = [
 		},
 		ctx: { handle: '+19000000005', text: 'yes', sendMode: 'live' },
 		expected: {
-			tool_calls_set: ['send_text', 'set_demo_stage'],
+			tool_calls_set: ['send_text', 'write_profile'],
 			outbox_includes: ["that's how we'll usually handle work orders", 'any questions'],
 			judge: {
 				target: 'outbox',
@@ -602,7 +911,7 @@ export const scenarios = [
 	},
 
 	{
-		name: 'chat: stated preference recorded as observation (no read_memory needed)',
+		name: 'chat: stated preference recorded as memory write (no read_memory needed)',
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: {
@@ -612,10 +921,15 @@ export const scenarios = [
 			text: 'always use Yonic for plumbing at Hub Champaign'
 		},
 		expected: {
-			tool_calls_set_includes: ['add_observation'],
-			tool_calls_excludes: ['recall_beliefs', 'recall_observations'],
-			drafts_count: 0,
-			outbox_count: 0
+			// Record the preference AND give a brief ack (option-2). No recall, no dispatch.
+			tool_calls_set_includes: ['write_memory', 'send_text'],
+			tool_calls_excludes: ['recall_beliefs', 'recall_observations', 'draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief, natural acknowledgment that the preference is noted. It must NOT dispatch a vendor or tenant.'
+			}
 		}
 	},
 

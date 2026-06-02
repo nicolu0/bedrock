@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Status
 
 - **`agent/` is the active product.** This is where new work happens.
+- **Active branch is `agentv1`, not `main`.** All work happens on `agentv1`; `main` is stale. Branch feature worktrees off `agentv1` and don't open PRs against `main`.
 - **`src/` and `supabase/` are the legacy webapp — frozen.** Don't edit without discussing first. Reading is fine; debugging is fine.
 - **Two customers, two PMSes already.** Vanessa (paying, Appfolio — day-to-day user is her PM Jose, not Vanessa) and Steve (free trial, Propertyware). Design the agent's PMS access as a pluggable surface. The "user" the agent talks to is the PM doing the work, not necessarily the buyer who signed.
 
@@ -33,31 +34,35 @@ node agent/evals/run.mjs         # run the eval suite (see "Eval discipline" bel
 
 No unit-test runner. Formatting: tabs, single quotes, no trailing commas, printWidth 100 (see `.prettierrc`).
 
-## Eval discipline (REQUIRED)
+## Eval discipline (on-demand — Claude does NOT auto-run)
 
-The agent has an eval harness at `agent/evals/`. **Before shipping any change that touches a skill prompt, a tool description, a tool's `run` function, or the orchestrator loop, run the suite and confirm no regressions.**
+The agent has an eval harness at `agent/evals/`. **Claude must not run the eval suite on its own.** Evals cost real OpenAI money — the orchestrator runs on full `gpt-5.4-2026-03-05` (only the judge is mini), so a full run is ~27 gpt-5.4 turns, realistically ~$0.15–0.40. Running on every edit is what burns the budget.
+
+Policy:
+
+- **The user triggers evals, not Claude.** When the user says "run the evals" / "run the chat evals" / "run the full suite," run them. Otherwise don't.
+- **After a behavior-changing edit** (skill prompt wording, a tool's `run` logic, a tool description, orchestrator control flow), Claude *suggests* a run and names the cheapest scope that covers it — e.g. "Touched the chat skill; want me to run `--filter chat` (~6 scenarios)?" — then waits.
+- **Skip the suggestion entirely for behavior-neutral edits**: comments, logging, typos, pure renames, formatting. These can't change model output, so there's nothing to catch.
+- **Prefer the narrowest scope.** Scenarios are name-prefixed by domain (`process_wo:`, `chat:`, `demo:`), so `--filter chat` runs just that slice. Reserve the full suite for a final pre-commit/PR gate — and only when the user asks for it.
 
 ```
-node agent/evals/run.mjs              # full suite, ~35s, ~$0.05
-node agent/evals/run.mjs --filter f1  # one skill (filter by name substring)
-node agent/evals/run.mjs --verbose    # print tool-call args on failure
+node agent/evals/run.mjs --filter chat   # one domain (~6 scenarios) — default scope
+node agent/evals/run.mjs                 # full suite (~27 scenarios) — final gate only
+node agent/evals/run.mjs --verbose       # print tool-call args on failure
+node agent/evals/run.mjs --bail          # stop at first failure
 ```
 
-Pattern when adding a feature:
+Pattern when adding a feature (run only when the user asks):
 
-1. **Add a scenario first** in `agent/evals/scenarios.mjs` that captures the new behavior you want. Run the suite — your new scenario should FAIL because the agent doesn't do it yet.
+1. **Add a scenario first** in `agent/evals/scenarios.mjs` capturing the new behavior. Filtered run — it should FAIL.
 2. **Build the feature** (new tool, new skill, prompt edit, etc.).
-3. **Re-run the suite.** Your new scenario should now PASS. None of the others should regress.
+3. **Re-run the filtered scope.** New scenario PASSes. Run the full suite once before commit to confirm nothing else regressed.
 
-Pattern when fixing a bug:
+Pattern when fixing a bug: add a failing regression scenario, fix, re-run the filtered scope (full suite before commit).
 
-1. **Add a regression scenario** that reproduces the bug. It should FAIL.
-2. **Fix the bug.**
-3. **Re-run.** All scenarios pass.
+Why the safety net still matters when you do run: models drift on prompt-adherence between runs, and a "small" prompt tweak can silently break a *different* scenario — which a filtered run won't catch. That's why the full suite is the pre-commit gate, even though day-to-day iteration stays filtered.
 
-Why this matters: without evals we're tuning blind. Mini models drift on prompt-adherence between runs; a "small" prompt tweak can silently break a different scenario. The suite is the safety net. Skipping it on a prompt change is the bug.
-
-Judge model: `gpt-5.4-mini-2026-03-17`. Suite cost is negligible.
+Judge model: `gpt-5.4-mini-2026-03-17`. Orchestrator: `gpt-5.4-2026-03-05` (overridable via `WORK_ORDERS_MODEL` / `CHAT_MODEL` / `OPENAI_MODEL`).
 
 ## Agent architecture (`agent/`)
 

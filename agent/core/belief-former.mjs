@@ -102,7 +102,7 @@ async function consolidate(workspace_id, observation_id) {
 // the legacy jsonb shape. Returns entity rows with a `_weight` field carrying
 // the chosen/rejected role.
 async function resolveObservationEntities(workspace_id, obs) {
-	const { supabaseEnv } = await import('../supabase.mjs');
+	const { supabaseEnv } = await import('./supabase.mjs');
 	const { url, key } = supabaseEnv();
 	const params = new URLSearchParams({
 		select: 'weight,entity:entities(id,kind,name,ref_id)',
@@ -166,7 +166,7 @@ async function collectCandidates({ workspace_id, observation, observationEntitie
 }
 
 async function fetchBeliefEntities(belief_id) {
-	const { supabaseEnv } = await import('../supabase.mjs');
+	const { supabaseEnv } = await import('./supabase.mjs');
 	const { url, key } = supabaseEnv();
 	const params = new URLSearchParams({
 		select: 'entity:entities(id,kind,name)',
@@ -561,7 +561,7 @@ function clamp01(x) {
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 async function fetchObservation(id) {
-	const { supabaseEnv } = await import('../supabase.mjs');
+	const { supabaseEnv } = await import('./supabase.mjs');
 	const { url, key } = supabaseEnv();
 	const params = new URLSearchParams({
 		select: 'id,workspace_id,title,summary,raw_text,entities,salience,tags,source_message_id',

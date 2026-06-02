@@ -1,0 +1,971 @@
+// Drafts UI http server. One module, started from agent/server.mjs.
+//
+// Routes:
+//   GET  /                        -> page.html
+//   GET  /api/drafts              -> array of pending drafts (bundles)
+//   POST /api/drafts/:id/send     -> send each message in order via dylib, log, remove draft
+//   POST /api/drafts/:id/copy     -> log response (copy), remove draft
+//   POST /api/drafts/:id/dismiss  -> log response (dismiss), remove draft
+//   POST /api/drafts/:id/schedule -> toggle "Send later" (approved_at) on a held draft
+//   GET  /kpi                     -> rolled-up KPI numbers from the logs
+//
+// Each draft is a bundle: { id, messages: [{ body }, ...], ... }. Send replays
+// the bundle in order, calling the injected sendIMessage callback per message
+// with a small gap so they arrive as distinct iMessage bubbles.
+
+import http from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { patchIssue } from '../core/supabase.mjs';
+
+import * as db from '../state/helpers.mjs';
+import { WORKSPACES, normalizeHandle } from '../core/workspaces.mjs';
+import { deleteIssuesByWorkspace, supabaseEnv } from '../core/supabase.mjs';
+import * as memory from '../core/memory.mjs';
+import { getDb as getChatDb, extractText, appleDateToISO } from '../triggers/chat-poller.mjs';
+
+// Cofounder phone numbers that act as the agent post-pivot. The chat_messages
+// table stores is_from_me as the raw chat.db value (true only for messages
+// sent from this Mac mini). For UI rendering and downstream LLM prompts we
+// want "agent" to include the cofounders' personas too — this helper does
+// that overlay using WORKSPACES.agent_handles. The DB row is unchanged.
+function isAgentHandleForWorkspace(workspace_id, handle) {
+	if (!handle) return false;
+	return (WORKSPACES[workspace_id]?.agent_handles ?? []).includes(handle);
+}
+
+// ── chat_sessions / chat_messages REST helpers (read-only) ────────────────
+
+async function listChatSessions(workspace_id) {
+	const { url, key } = supabaseEnv();
+	// Nested select via PostgREST: sessions with their chat_messages embedded.
+	// Saves the N+1 per-session-transcript round trip the UI used to do.
+	const params = new URLSearchParams({
+		select:
+			'id,chat_guid,started_at,ended_at,message_count,participants,issue_ids,entities,tags,summary,observations_extracted_at,messages:chat_messages(id,workspace_id,ts,is_from_me,handle,body,issue_id,source_rowid)',
+		workspace_id: `eq.${workspace_id}`,
+		order: 'started_at.desc',
+		'messages.order': 'ts.asc'
+	});
+	const res = await fetch(`${url}/rest/v1/chat_sessions?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listChatSessions: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	// Resolve display identity per message so the UI doesn't need workspace
+	// config: is_agent (raw is_from_me OR a configured agent_handle) and a
+	// human sender label (agent / the PM's label / else the raw handle).
+	const w = WORKSPACES[workspace_id];
+	const pmLabel = w?.pm_label ?? 'jose';
+	const pmSet = new Set((w?.pm_handles ?? []).map(normalizeHandle));
+	return rows.map((s) => ({
+		...s,
+		messages: (s.messages ?? []).map((m) => {
+			const is_agent = m.is_from_me || isAgentHandleForWorkspace(m.workspace_id, m.handle);
+			const nh = normalizeHandle(m.handle);
+			const sender = is_agent ? 'agent' : nh && pmSet.has(nh) ? pmLabel : m.handle || 'unknown';
+			return { ...m, is_agent, sender };
+		})
+	}));
+}
+
+// ── entities REST helpers (read-only) ─────────────────────────────────────
+
+async function listEntitiesForWorkspace(workspace_id) {
+	const { url, key } = supabaseEnv();
+	// Pull entities with their belief and observation reference counts in one
+	// PostgREST query via embedded count selectors.
+	const params = new URLSearchParams({
+		select:
+			'id,kind,name,ref_table,ref_id,metadata,created_at,updated_at,belief_count:belief_entities(count),observation_count:observation_entities(count)',
+		workspace_id: `eq.${workspace_id}`,
+		order: 'kind.asc,name.asc'
+	});
+	const res = await fetch(`${url}/rest/v1/entities?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listEntitiesForWorkspace: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	// PostgREST returns counts as [{ count: N }] — flatten.
+	return rows.map((r) => ({
+		...r,
+		belief_count: Array.isArray(r.belief_count) ? r.belief_count[0]?.count ?? 0 : 0,
+		observation_count: Array.isArray(r.observation_count) ? r.observation_count[0]?.count ?? 0 : 0
+	}));
+}
+
+async function listBeliefEntityEdges(workspace_id) {
+	const { url, key } = supabaseEnv();
+	// Scope edges to this workspace by joining through beliefs.
+	const params = new URLSearchParams({
+		select: 'belief_id,entity_id,belief:beliefs!inner(workspace_id)',
+		'belief.workspace_id': `eq.${workspace_id}`
+	});
+	const res = await fetch(`${url}/rest/v1/belief_entities?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listBeliefEntityEdges: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	return rows.map((r) => ({ belief_id: r.belief_id, entity_id: r.entity_id }));
+}
+
+async function listObservationEntityEdges(workspace_id) {
+	const { url, key } = supabaseEnv();
+	// Scope edges via the observation's workspace_id.
+	const params = new URLSearchParams({
+		select: 'observation_id,entity_id,weight,observation:observations!inner(workspace_id)',
+		'observation.workspace_id': `eq.${workspace_id}`
+	});
+	const res = await fetch(`${url}/rest/v1/observation_entities?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listObservationEntityEdges: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	return rows.map((r) => ({
+		observation_id: r.observation_id,
+		entity_id: r.entity_id,
+		weight: r.weight ?? 1.0
+	}));
+}
+
+// Property↔owner structural edges. Derived from the legacy `owner_properties`
+// join table by mapping legacy property/owner row IDs to their entity rows
+// (via entity.ref_id). Returned as [{ property_entity_id, owner_entity_id }].
+async function listStructuralEdges(workspace_id) {
+	const { url, key } = supabaseEnv();
+	const eRes = await fetch(
+		`${url}/rest/v1/entities?select=id,kind,ref_id&workspace_id=eq.${workspace_id}&kind=in.(property,owner)&ref_id=not.is.null`,
+		{ headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' } }
+	);
+	if (!eRes.ok) throw new Error(`listStructuralEdges(entities): ${eRes.status} ${await eRes.text()}`);
+	const entities = await eRes.json();
+	const propByRef = new Map();
+	const ownerByRef = new Map();
+	for (const e of entities) {
+		if (e.kind === 'property') propByRef.set(e.ref_id, e.id);
+		else if (e.kind === 'owner') ownerByRef.set(e.ref_id, e.id);
+	}
+
+	const opRes = await fetch(
+		`${url}/rest/v1/owner_properties?select=property_id,owner_id&workspace_id=eq.${workspace_id}`,
+		{ headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' } }
+	);
+	if (!opRes.ok) throw new Error(`listStructuralEdges(owner_properties): ${opRes.status} ${await opRes.text()}`);
+	const ops = await opRes.json();
+
+	const edges = [];
+	for (const op of ops) {
+		const pId = propByRef.get(op.property_id);
+		const oId = ownerByRef.get(op.owner_id);
+		if (pId && oId) edges.push({ property_entity_id: pId, owner_entity_id: oId });
+	}
+	return edges;
+}
+
+async function listBeliefsForEntity(entity_id) {
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select:
+			'belief:beliefs(id,claim,scope,confidence,explicitness,created_by,created_at,updated_at,tags)',
+		entity_id: `eq.${entity_id}`
+	});
+	const res = await fetch(`${url}/rest/v1/belief_entities?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listBeliefsForEntity: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	return rows.map((r) => r.belief).filter(Boolean);
+}
+
+async function deleteChatSession(session_id) {
+	const { url, key } = supabaseEnv();
+	const h = { apikey: key, Authorization: `Bearer ${key}` };
+	// Drop messages first. chat_messages.session_id is ON DELETE SET NULL, so
+	// not strictly required for FK, but we want a full purge — orphaned rows
+	// would never be re-sessionized (UNIQUE constraint blocks re-insert) and
+	// would just take up space.
+	const mres = await fetch(
+		`${url}/rest/v1/chat_messages?session_id=eq.${session_id}`,
+		{ method: 'DELETE', headers: h }
+	);
+	if (!mres.ok) throw new Error(`deleteChatSession(messages): ${mres.status} ${await mres.text()}`);
+	const sres = await fetch(`${url}/rest/v1/chat_sessions?id=eq.${session_id}`, {
+		method: 'DELETE',
+		headers: h
+	});
+	if (!sres.ok) throw new Error(`deleteChatSession(session): ${sres.status} ${await sres.text()}`);
+}
+
+async function listChatMessagesForSession(session_id) {
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'id,workspace_id,ts,is_from_me,handle,body,issue_id,source_rowid',
+		session_id: `eq.${session_id}`,
+		order: 'ts.asc'
+	});
+	const res = await fetch(`${url}/rest/v1/chat_messages?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok)
+		throw new Error(`listChatMessagesForSession: ${res.status} ${await res.text()}`);
+	const rows = await res.json();
+	// Overlay: is_agent is the effective sender role (raw is_from_me OR a
+	// configured agent_handle). UI uses this for me/them bubble alignment.
+	return rows.map((m) => ({
+		...m,
+		is_agent: m.is_from_me || isAgentHandleForWorkspace(m.workspace_id, m.handle)
+	}));
+}
+
+// All work orders for a workspace, newest first. issues_v2 has no status
+// column — the route derives status from the local draft/response logs.
+async function listIssuesForWorkspace(workspace_id) {
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select:
+			'id,workspace_id,created_at,appfolio_srn,name,description,urgent,property_id,unit_id,tenant_id,vendor_id',
+		workspace_id: `eq.${workspace_id}`,
+		order: 'created_at.desc'
+	});
+	const res = await fetch(`${url}/rest/v1/issues_v2?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`listIssuesForWorkspace: ${res.status} ${await res.text()}`);
+	return res.json();
+}
+
+// Map chat.db ROWID -> session_id for a workspace, so the live thread (which
+// is read straight from chat.db) can render real sessionizer boundaries. Only
+// rows the sessionizer has ingested AND assigned to a session appear here.
+async function sessionIdByRowid(workspace_id) {
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'source_rowid,session_id',
+		workspace_id: `eq.${workspace_id}`,
+		session_id: 'not.is.null',
+		source_rowid: 'not.is.null'
+	});
+	const res = await fetch(`${url}/rest/v1/chat_messages?${params}`, {
+		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`sessionIdByRowid: ${res.status} ${await res.text()}`);
+	const map = {};
+	for (const r of await res.json()) if (r.source_rowid != null) map[r.source_rowid] = r.session_id;
+	return map;
+}
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PAGE_PATH = path.join(__dirname, 'page.html');
+const STATE_DIR = process.env.BEDROCK_STATE_DIR || path.join(__dirname, '..', 'state');
+const TURNS_LOG_PATH = path.join(STATE_DIR, 'turns.jsonl');
+
+const SEND_GAP_MS = 700; // delay between consecutive bubbles in a bundle
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function diffText(a, b) {
+	if (a === b) return null;
+	return `--- original\n${a}\n--- final\n${b}`;
+}
+
+async function readBody(req) {
+	const chunks = [];
+	for await (const chunk of req) chunks.push(chunk);
+	if (!chunks.length) return {};
+	try {
+		return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+	} catch {
+		return {};
+	}
+}
+
+function json(res, status, value) {
+	const body = JSON.stringify(value);
+	res.writeHead(status, {
+		'content-type': 'application/json',
+		'content-length': Buffer.byteLength(body)
+	});
+	res.end(body);
+}
+
+function text(res, status, value) {
+	res.writeHead(status, { 'content-type': 'text/plain' });
+	res.end(value);
+}
+
+// Map ?workspace=prod|test (or a raw workspace_id) to a workspace uuid via
+// WORKSPACES. Memory endpoints reject 'all' — the graph is workspace-scoped
+// by design.
+function resolveWorkspaceId(value) {
+	if (!value || value === 'all') return null;
+	// If it already looks like a uuid, accept it.
+	if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+		return value;
+	}
+	for (const [id, w] of Object.entries(WORKSPACES)) {
+		if (w.label === value) return id;
+	}
+	return null;
+}
+
+function normalizeMessages(input, fallback) {
+	if (Array.isArray(input)) return input.map((m) => ({ body: String(m?.body ?? '').trim() }));
+	if (Array.isArray(fallback)) return fallback.map((m) => ({ body: String(m?.body ?? '').trim() }));
+	return [];
+}
+
+// Shared terminal action for a draft: optionally send the bundle, write the
+// response-log row, drop the draft. The UI send/copy/dismiss route and the
+// server's scheduled auto-fire loop both go through here so the sent-log /
+// response-log / correlation stay byte-identical between a hand-tap and an
+// auto-fire. `finals`/`originals` are pre-normalized [{ body }]; `forcedSend`
+// flags a send that overrode an active hold (human clicked Send now).
+export async function dispatchDraft({
+	draft,
+	finals,
+	originals,
+	edited = false,
+	action,
+	forcedSend = false,
+	// `external` send: the message already went out out-of-band (the AppFolio
+	// runner clicked Send/Save in the AppFolio UI via Playwright). Log it as a
+	// real send for KPIs/history, but skip the dylib + sent-log — there's no
+	// iMessage to fire and AppFolio texts never land in chat.db.
+	external = false,
+	sendIMessage,
+	log = () => {}
+}) {
+	if (action === 'send' && !external) {
+		if (!finals.length) return { ok: false, error: 'no messages to send' };
+		if (!sendIMessage) return { ok: false, error: 'sendIMessage not configured' };
+		const sentEntries = [];
+		for (let i = 0; i < finals.length; i++) {
+			const body = finals[i].body;
+			if (!body) continue;
+			const result = await sendIMessage({ chatGuid: draft.to, body, draft });
+			if (!result?.ok) {
+				// Persist what made it out before surfacing the error. The draft is
+				// left in place so the failure is visible and retryable.
+				for (const e of sentEntries) await db.appendSent(e);
+				return {
+					ok: false,
+					error: `send failed at message ${i + 1}: ${result?.error ?? 'unknown'}`,
+					sent: sentEntries.length
+				};
+			}
+			sentEntries.push({
+				message_guid: result.guid ?? null,
+				bundle_id: draft.id,
+				part_index: i,
+				issue_id: draft.issue_id,
+				channel: draft.channel,
+				workspace_id: draft.workspace_id ?? null,
+				workspace_label: draft.workspace_label ?? null,
+				chat_guid: draft.channel === 'groupchat' ? draft.to ?? null : null,
+				body
+			});
+			if (i < finals.length - 1) await sleep(SEND_GAP_MS);
+		}
+		for (const e of sentEntries) await db.appendSent(e);
+	}
+
+	await db.appendResponse({
+		draft_id: draft.id,
+		issue_id: draft.issue_id,
+		channel: draft.channel,
+		trigger: draft.trigger,
+		workspace_id: draft.workspace_id ?? null,
+		workspace_label: draft.workspace_label ?? null,
+		to: draft.to ?? null,
+		to_participants: draft.to_participants ?? [],
+		action,
+		messages_original: originals.map((m) => m.body),
+		messages_final: finals.map((m) => m.body),
+		edited,
+		diffs: finals.map((m, i) => diffText(originals[i]?.body ?? '', m.body)),
+		forced_send: forcedSend
+	});
+
+	// When the work-order summary actually goes out to the PM, the WO moves from
+	// 'new' to 'awaiting_pm' — it's now an open candidate the PM's reply could be
+	// approving. The send is the surface event, not draft creation (drafts sit at
+	// 'new' until sent). Only the new_issue summary; dispatch follow-ups
+	// (tenant/vendor) and clarifying questions don't change the WO's status here.
+	// Best-effort: a status-write failure must not fail an already-sent message.
+	if (action === 'send' && draft.trigger === 'new_issue' && draft.issue_id) {
+		try {
+			await patchIssue(draft.issue_id, {
+				status: 'awaiting_pm',
+				status_updated_at: new Date().toISOString()
+			});
+		} catch (err) {
+			log(`awaiting_pm status write failed for issue=${draft.issue_id}: ${err.message}`);
+		}
+	}
+
+	await db.removeDraft(draft.id);
+	return { ok: true, count: finals.length };
+}
+
+export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, log = console.log } = {}) {
+	// Verify the page file exists at boot but read it on every request so edits
+	// to page.html show up on browser refresh without a server restart.
+	await fs.access(PAGE_PATH);
+
+	const server = http.createServer(async (req, res) => {
+		const url = new URL(req.url, `http://${req.headers.host}`);
+		const { pathname } = url;
+
+		try {
+			if (req.method === 'GET' && pathname === '/') {
+				const pageHtml = await fs.readFile(PAGE_PATH, 'utf8');
+				res.writeHead(200, {
+					'content-type': 'text/html; charset=utf-8',
+					'cache-control': 'no-store'
+				});
+				res.end(pageHtml);
+				return;
+			}
+
+			if (req.method === 'GET' && pathname === '/api/drafts') {
+				const drafts = await db.loadDrafts();
+				// One-time backfill: older drafts created before original_messages
+				// existed get it set from their current body, so future edits show
+				// up as edits (against the backfilled baseline, which is the best
+				// approximation we have for what the agent originally produced).
+				for (const d of drafts) {
+					if (Array.isArray(d.messages) && !Array.isArray(d.original_messages)) {
+						await db.updateDraft(d.id, {
+							original_messages: d.messages.map((m) => ({ body: m.body }))
+						});
+						d.original_messages = d.messages.map((m) => ({ body: m.body }));
+					}
+				}
+				return json(res, 200, drafts);
+			}
+
+			const updateMatch = pathname.match(/^\/api\/drafts\/([^/]+)$/);
+			if ((req.method === 'PATCH' || req.method === 'PUT') && updateMatch) {
+				const [, id] = updateMatch;
+				const payload = await readBody(req);
+				if (!Array.isArray(payload.messages)) {
+					return text(res, 400, 'messages array required');
+				}
+				const messages = normalizeMessages(payload.messages);
+				const updated = await db.updateDraft(id, { messages });
+				if (!updated) return text(res, 404, 'draft not found');
+				return json(res, 200, { ok: true });
+			}
+
+			// Toggle the "Send later" schedule on a held draft. Setting approved_at
+			// queues it — the auto-fire loop sends it at hold_until. Clicking again
+			// clears it (back to "Send at <time>"). The loop only ever fires drafts
+			// with approved_at set, so approval always precedes any send.
+			const scheduleMatch = pathname.match(/^\/api\/drafts\/([^/]+)\/schedule$/);
+			if (req.method === 'POST' && scheduleMatch) {
+				const [, id] = scheduleMatch;
+				const drafts = await db.loadDrafts();
+				const draft = drafts.find((d) => d.id === id);
+				if (!draft) return text(res, 404, 'draft not found');
+				const approved_at = draft.approved_at ? null : new Date().toISOString();
+				await db.updateDraft(id, { approved_at });
+				return json(res, 200, { ok: true, approved_at });
+			}
+
+			const historyPatchMatch = pathname.match(/^\/api\/history\/([^/]+)$/);
+			if (req.method === 'PATCH' && historyPatchMatch) {
+				const [, draftId] = historyPatchMatch;
+				const payload = await readBody(req);
+				if (typeof payload.notes !== 'string' && payload.notes !== null) {
+					return text(res, 400, 'notes (string or null) required');
+				}
+				const updated = await db.updateResponse(draftId, {
+					notes: payload.notes ?? '',
+					notes_updated_at: new Date().toISOString()
+				});
+				if (!updated) return text(res, 404, 'response not found');
+				return json(res, 200, { ok: true });
+			}
+
+			// ── Memory graph endpoints ───────────────────────────────────────
+			// All workspace-scoped. ?workspace=prod|test resolves via WORKSPACES.
+
+			if (req.method === 'GET' && pathname === '/api/memory/graph') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const [
+					observations,
+					beliefs,
+					edges,
+					entities,
+					entity_edges,
+					structural_edges,
+					observation_entity_edges
+				] = await Promise.all([
+					memory.listObservations(workspace_id, { limit: 500 }),
+					memory.listBeliefs(workspace_id, { limit: 500 }),
+					memory.listEdges(workspace_id),
+					listEntitiesForWorkspace(workspace_id),
+					listBeliefEntityEdges(workspace_id),
+					listStructuralEdges(workspace_id),
+					listObservationEntityEdges(workspace_id)
+				]);
+				return json(res, 200, {
+					observations,
+					beliefs,
+					edges,
+					entities,
+					entity_edges,
+					structural_edges,
+					observation_entity_edges
+				});
+			}
+
+			if (req.method === 'GET' && pathname === '/api/memory/search') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const q = (url.searchParams.get('q') ?? '').trim();
+				if (!q) return json(res, 200, { observations: [], beliefs: [] });
+				const [obsAll, beliefsAll] = await Promise.all([
+					memory.listObservations(workspace_id, { limit: 500 }),
+					memory.listBeliefs(workspace_id, { limit: 500 })
+				]);
+				const needle = q.toLowerCase();
+				const matchesObs = (o) =>
+					(o.summary ?? '').toLowerCase().includes(needle) ||
+					(o.raw_text ?? '').toLowerCase().includes(needle) ||
+					(o.tags ?? []).some((t) => t.toLowerCase().includes(needle));
+				const matchesBel = (b) =>
+					(b.claim ?? '').toLowerCase().includes(needle) ||
+					JSON.stringify(b.scope ?? {}).toLowerCase().includes(needle) ||
+					(b.tags ?? []).some((t) => t.toLowerCase().includes(needle));
+				return json(res, 200, {
+					observations: obsAll.filter(matchesObs).map((o) => o.id),
+					beliefs: beliefsAll.filter(matchesBel).map((b) => b.id)
+				});
+			}
+
+			if (req.method === 'POST' && pathname === '/api/memory/beliefs') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const payload = await readBody(req);
+				if (!payload.claim) return text(res, 400, 'claim required');
+				try {
+					const belief = await memory.createBelief(workspace_id, {
+						claim: payload.claim,
+						scope: payload.scope ?? {},
+						confidence: typeof payload.confidence === 'number' ? payload.confidence : 0.85,
+						explicitness: payload.explicitness ?? 'stated',
+						created_by: 'user',
+						tags: payload.tags ?? []
+					});
+					return json(res, 200, belief);
+				} catch (err) {
+					return text(res, 500, err.message);
+				}
+			}
+
+			const beliefPatchMatch = pathname.match(/^\/api\/memory\/beliefs\/([^/]+)$/);
+			if (req.method === 'PATCH' && beliefPatchMatch) {
+				const [, id] = beliefPatchMatch;
+				const payload = await readBody(req);
+				try {
+					const belief = await memory.updateBelief(id, payload);
+					return json(res, 200, belief);
+				} catch (err) {
+					return text(res, 500, err.message);
+				}
+			}
+
+			if (req.method === 'DELETE' && beliefPatchMatch) {
+				const [, id] = beliefPatchMatch;
+				try {
+					await memory.deleteBelief(id);
+					return json(res, 200, { ok: true });
+				} catch (err) {
+					return text(res, 500, err.message);
+				}
+			}
+
+			// ── Chat sessions endpoints ──────────────────────────────────────
+			// Read-only views over chat_sessions + chat_messages. The Sessions
+			// tab uses these to render the persisted iMessage transcript broken
+			// into conversational sessions.
+
+			if (req.method === 'GET' && pathname === '/api/sessions') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const sessions = await listChatSessions(workspace_id);
+				return json(res, 200, sessions);
+			}
+
+			const sessionMsgsMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
+			if (req.method === 'GET' && sessionMsgsMatch) {
+				const [, session_id] = sessionMsgsMatch;
+				const messages = await listChatMessagesForSession(session_id);
+				return json(res, 200, messages);
+			}
+
+			const sessionItemMatch = pathname.match(/^\/api\/sessions\/([^/]+)$/);
+			if (req.method === 'DELETE' && sessionItemMatch) {
+				const [, session_id] = sessionItemMatch;
+				await deleteChatSession(session_id);
+				return json(res, 200, { ok: true });
+			}
+
+			// ── Entities endpoints ───────────────────────────────────────────
+
+			if (req.method === 'GET' && pathname === '/api/entities') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const rows = await listEntitiesForWorkspace(workspace_id);
+				return json(res, 200, rows);
+			}
+
+			const entityBeliefsMatch = pathname.match(/^\/api\/entities\/([^/]+)\/beliefs$/);
+			if (req.method === 'GET' && entityBeliefsMatch) {
+				const [, entity_id] = entityBeliefsMatch;
+				const beliefs = await listBeliefsForEntity(entity_id);
+				return json(res, 200, beliefs);
+			}
+
+			if (req.method === 'POST' && pathname === '/api/clear-test') {
+				const testEntry = Object.entries(WORKSPACES).find(([, w]) => w.label === 'test');
+				if (!testEntry) return text(res, 500, 'no test workspace configured');
+				const [test_ws_id] = testEntry;
+				const local = await db.clearWorkspaceLocalState('test');
+				const supa = await deleteIssuesByWorkspace(test_ws_id);
+				log(`cleared test workspace: ${JSON.stringify({ local, supa })}`);
+				return json(res, 200, { ok: true, local, supabase: supa });
+			}
+
+			if (req.method === 'GET' && pathname === '/api/chat-log') {
+				const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit')) || 100));
+				const ws = url.searchParams.get('workspace'); // optional filter
+				const all = await db.loadChatMessages();
+				let items = all;
+				if (ws) items = items.filter((m) => m.workspace_label === ws);
+				items = items.slice(-limit).reverse();
+				return json(res, 200, items);
+			}
+
+			// Orchestrator turn log. One JSONL row per runTurn (see
+			// core/orchestrator.mjs appendTurnLog). Read the whole file, slice
+			// last-N, newest-first. Rows predating the identity enrichment lack
+			// workspace_label and so are dropped by the ?workspace filter.
+			if (req.method === 'GET' && pathname === '/api/turns') {
+				const limit = Math.max(1, Math.min(1000, Number(url.searchParams.get('limit')) || 200));
+				const ws = url.searchParams.get('workspace'); // optional filter
+				const raw = await fs.readFile(TURNS_LOG_PATH, 'utf8').catch(() => '');
+				let items = raw
+					.split('\n')
+					.filter(Boolean)
+					.map((line) => {
+						try {
+							return JSON.parse(line);
+						} catch {
+							return null;
+						}
+					})
+					.filter(Boolean);
+				if (ws) items = items.filter((t) => t.workspace_label === ws);
+				items = items.slice(-limit).reverse();
+
+				// Fold in the human outcome (the old History column). A turn's draft
+				// is reviewed later; the response-log row carries the disposition
+				// (send/copy/dismiss), edits/diffs, and notes. Join on issue_id —
+				// the only id both sides share (turns don't carry draft_id). Use the
+				// latest matching response so a re-drafted issue shows its newest
+				// action. pm_reply turns have no issue_id and so stay outcome-less.
+				const responses = await db.loadResponses();
+				const byIssue = new Map();
+				for (const r of responses) {
+					if (!r.issue_id) continue;
+					const prev = byIssue.get(r.issue_id);
+					if (!prev || new Date(r.timestamp) >= new Date(prev.timestamp)) byIssue.set(r.issue_id, r);
+				}
+				items = items.map((t) => {
+					if (!t.issue_id) return t;
+					const r = byIssue.get(t.issue_id);
+					if (!r) return t;
+					return {
+						...t,
+						outcome: {
+							action: r.action,
+							edited: !!r.edited,
+							forced_send: !!r.forced_send,
+							draft_id: r.draft_id ?? null,
+							timestamp: r.timestamp,
+							messages_original: r.messages_original ?? [],
+							messages_final: r.messages_final ?? [],
+							notes: r.notes ?? ''
+						}
+					};
+				});
+				return json(res, 200, items);
+			}
+
+			if (req.method === 'GET' && pathname === '/api/issues') {
+				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
+				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				const [issues, drafts, responses] = await Promise.all([
+					listIssuesForWorkspace(workspace_id),
+					db.loadDrafts(),
+					db.loadResponses()
+				]);
+				// issues_v2 has no status column. Derive a lifecycle status from the
+				// local logs: latest response action wins (sent/copied/dismissed);
+				// else a pending draft means 'drafted'; else 'new'.
+				const respByIssue = new Map();
+				for (const r of responses) {
+					if (!r.issue_id) continue;
+					const prev = respByIssue.get(r.issue_id);
+					if (!prev || new Date(r.timestamp) >= new Date(prev.timestamp))
+						respByIssue.set(r.issue_id, r);
+				}
+				const drafted = new Set(drafts.map((d) => d.issue_id).filter(Boolean));
+				const items = issues.map((i) => {
+					let status = 'new';
+					const r = respByIssue.get(i.id);
+					if (r)
+						status =
+							r.action === 'send'
+								? 'sent'
+								: r.action === 'copy'
+									? 'copied'
+									: r.action === 'dismiss'
+										? 'dismissed'
+										: r.action;
+					else if (drafted.has(i.id)) status = 'drafted';
+					return { ...i, status };
+				});
+				return json(res, 200, items);
+			}
+
+			if (req.method === 'GET' && pathname === '/api/chat-thread') {
+				const wsLabel = url.searchParams.get('workspace') ?? 'prod';
+				const limit = Math.max(1, Math.min(2000, Number(url.searchParams.get('limit')) || 500));
+				const entry = Object.entries(WORKSPACES).find(([, w]) => w.label === wsLabel);
+				if (!entry) return json(res, 200, { messages: [], pm_handles: [], agent_handles: [], pm_label: 'jose' });
+				const [, w] = entry;
+				const chat_guid = process.env[w.chatEnv];
+				const pm_label = w.pm_label ?? 'jose';
+				if (!chat_guid) return json(res, 200, { messages: [], pm_handles: [], agent_handles: [], pm_label });
+				const pmSet = new Set((w.pm_handles ?? []).map(normalizeHandle));
+				const agentSet = new Set((w.agent_handles ?? []).map(normalizeHandle));
+				// Overlay "edited before send" onto outbound messages so the thread
+				// shows at a glance which sends diverged from the agent's draft. The
+				// send path's message_guid is unreliable (often null), so we match on
+				// the exact sent body, scoped to this workspace to avoid collisions.
+				const editedBodies = new Set();
+				try {
+					for (const r of await db.loadResponses()) {
+						if (r.action !== 'send' || !r.edited) continue;
+						if ((r.workspace_label ?? null) !== wsLabel) continue;
+						const orig = r.messages_original ?? [];
+						const fin = r.messages_final ?? [];
+						for (let i = 0; i < fin.length; i++) {
+							if ((orig[i] ?? '') !== (fin[i] ?? '')) {
+								const body = (fin[i] ?? '').trim();
+								if (body) editedBodies.add(body);
+							}
+						}
+					}
+				} catch {
+					// Best-effort overlay — a read failure must not blank the thread.
+				}
+				// Best-effort session_id overlay (chat.db ROWID -> session_id). A
+				// Supabase hiccup must not blank the thread, so default to empty.
+				const workspace_id = resolveWorkspaceId(wsLabel);
+				let sessionMap = {};
+				try {
+					if (workspace_id) sessionMap = await sessionIdByRowid(workspace_id);
+				} catch {
+					sessionMap = {};
+				}
+				try {
+					const rows = getChatDb()
+						.prepare(
+							`SELECT m.ROWID AS rowid, m.guid, m.text, m.attributedBody, m.date, m.is_from_me,
+							        h.id AS handle
+							 FROM message m
+							 LEFT JOIN handle h ON h.ROWID = m.handle_id
+							 LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+							 LEFT JOIN chat c ON c.ROWID = cmj.chat_id
+							 WHERE c.guid = ?
+							   AND m.service = 'iMessage'
+							   AND COALESCE(m.cache_has_attachments, 0) = 0
+							 ORDER BY m.date DESC
+							 LIMIT ?`
+						)
+						.all(chat_guid, limit);
+					const messages = rows
+						.map((r) => {
+							const text = extractText(r);
+							if (!text) return null;
+							const handle = normalizeHandle(r.handle);
+							const isFromMe = Number(r.is_from_me) === 1;
+							// is_from_me always wins. In 1:1 (style=45) chats chat.db
+							// stores the OTHER party's handle on outbound rows, which
+							// previously made my own messages match pmSet and land
+							// on the left.
+							const isPm = !isFromMe && !!handle && pmSet.has(handle);
+							const side = isPm ? 'left' : 'right';
+							return {
+								guid: r.guid,
+								ts: appleDateToISO(r.date),
+								handle: handle || null,
+								is_from_me: isFromMe,
+								text,
+								side,
+								edited: side === 'right' && editedBodies.has(text.trim()),
+								session_id: sessionMap[r.rowid] ?? null
+							};
+						})
+						.filter(Boolean)
+						.reverse();
+					return json(res, 200, {
+						messages,
+						pm_handles: [...pmSet],
+						agent_handles: [...agentSet],
+						pm_label
+					});
+				} catch (err) {
+					return json(res, 500, { error: err.message });
+				}
+			}
+
+			if (req.method === 'GET' && pathname === '/api/history') {
+				const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit')) || 100));
+				const [responses, sent] = await Promise.all([db.loadResponses(), db.loadSent()]);
+				const sentByBundle = new Map();
+				for (const s of sent) {
+					if (!s.bundle_id) continue;
+					const arr = sentByBundle.get(s.bundle_id) ?? [];
+					arr.push(s);
+					sentByBundle.set(s.bundle_id, arr);
+				}
+				const items = responses
+					.slice(-limit)
+					.reverse()
+					.map((r) => ({ ...r, sent_messages: sentByBundle.get(r.draft_id) ?? [] }));
+				return json(res, 200, items);
+			}
+
+			if (req.method === 'GET' && pathname === '/kpi') {
+				const [allSent, allResponses] = await Promise.all([db.loadSent(), db.loadResponses()]);
+				// KPIs are prod-only. Test traffic is dev/QA noise and would
+				// inflate or skew the real send-without-edit numbers.
+				const sent = allSent.filter((r) => r.workspace_label === 'prod');
+				const responses = allResponses.filter((r) => r.workspace_label === 'prod');
+				const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
+				const recent = responses.filter((r) => new Date(r.timestamp).getTime() >= since);
+				const sends = recent.filter((r) => r.action === 'send');
+				const cleanSends = sends.filter((r) => !r.edited);
+				const byChannel = {};
+				for (const r of recent) {
+					const c = (byChannel[r.channel] ??= { send: 0, copy: 0, dismiss: 0, edited: 0 });
+					c[r.action] = (c[r.action] ?? 0) + 1;
+					if (r.edited) c.edited++;
+				}
+				return json(res, 200, {
+					window_days: 30,
+					scope: 'prod',
+					sent_total: sent.length,
+					responses_total: responses.length,
+					recent_responses: recent.length,
+					send_without_edit_rate: sends.length ? cleanSends.length / sends.length : null,
+					by_channel: byChannel
+				});
+			}
+
+			// The AppFolio step runner finished a flow with a LIVE Send/Save. The
+			// message already went out via the AppFolio UI, so resolve the draft as
+			// a (external) send: log + remove, no dylib.
+			const afDoneMatch = pathname.match(/^\/api\/drafts\/([^/]+)\/appfolio-done$/);
+			if (req.method === 'POST' && afDoneMatch) {
+				const [, id] = afDoneMatch;
+				const payload = await readBody(req);
+				const drafts = await db.loadDrafts();
+				const draft = drafts.find((d) => d.id === id);
+				if (!draft) return text(res, 404, 'draft not found');
+
+				const draftMessages = draft.messages ?? (draft.body ? [{ body: draft.body }] : []);
+				const draftOriginals = draft.original_messages ?? draftMessages;
+				const finals = normalizeMessages(payload.messages, draftMessages);
+				const originals = normalizeMessages(draftOriginals, draftMessages);
+				while (originals.length < finals.length) originals.push({ body: '' });
+				while (finals.length < originals.length) finals.push({ body: '' });
+				const anyEdited = finals.some((m, i) => m.body !== originals[i].body);
+
+				const result = await dispatchDraft({
+					draft,
+					finals,
+					originals,
+					edited: anyEdited,
+					action: 'send',
+					external: true,
+					sendIMessage,
+					log
+				});
+				if (!result.ok) return text(res, 500, result.error);
+				return json(res, 200, { ok: true });
+			}
+
+			const actionMatch = pathname.match(/^\/api\/drafts\/([^/]+)\/(send|copy|dismiss)$/);
+			if (req.method === 'POST' && actionMatch) {
+				const [, id, action] = actionMatch;
+				const payload = await readBody(req);
+
+				const drafts = await db.loadDrafts();
+				const draft = drafts.find((d) => d.id === id);
+				if (!draft) return text(res, 404, 'draft not found');
+
+				const draftMessages = draft.messages ?? (draft.body ? [{ body: draft.body }] : []);
+				const draftOriginals = draft.original_messages ?? draftMessages;
+				const finals = normalizeMessages(payload.messages, draftMessages);
+				const originals = normalizeMessages(draftOriginals, draftMessages);
+				// Pad to the same length so we can index pairwise.
+				while (originals.length < finals.length) originals.push({ body: '' });
+				while (finals.length < originals.length) finals.push({ body: '' });
+
+				const editedFlags = finals.map((m, i) => m.body !== originals[i].body);
+				const anyEdited = editedFlags.some(Boolean);
+
+				const result = await dispatchDraft({
+					draft,
+					finals,
+					originals,
+					edited: anyEdited,
+					action,
+					// Send while a hold is active = the human clicked "Send now" to
+					// override the schedule.
+					forcedSend: action === 'send' && !!draft.hold_until,
+					sendIMessage,
+					log
+				});
+				if (!result.ok) {
+					return text(res, result.error === 'no messages to send' ? 400 : 500, result.error);
+				}
+				return json(res, 200, { ok: true, count: result.count });
+			}
+
+			text(res, 404, 'not found');
+		} catch (err) {
+			log(`ui error: ${err.stack ?? err.message}`);
+			text(res, 500, err.message);
+		}
+	});
+
+	await new Promise((resolve, reject) => {
+		server.once('error', reject);
+		server.listen(port, host, () => {
+			server.off('error', reject);
+			resolve();
+		});
+	});
+
+	log(`drafts UI listening on http://${host}:${port}`);
+	return { server, close: () => new Promise((r) => server.close(r)) };
+}

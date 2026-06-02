@@ -16,9 +16,16 @@ if [[ ! -f "$DYLIB" ]]; then
 	exit 1
 fi
 
-# Quit existing Messages (without injection it's useless to us anyway).
-osascript -e 'quit app "Messages"' 2>/dev/null || true
-sleep 1
+# Enforce a single Messages instance. `osascript quit` only catches one
+# AppleScript-registered instance and can't kill a DYLD-injected zombie, so two
+# instances could survive and fight over the helper socket (connect storm).
+# pkill -x matches every process named exactly "Messages"; wait until they're
+# all gone before launching so we never start alongside a survivor.
+pkill -x Messages 2>/dev/null || true
+for _ in $(seq 1 50); do
+	pgrep -x Messages >/dev/null 2>&1 || break
+	sleep 0.1
+done
 
 # Foreground launch with our dylib injected. Messages.app spams stdout/stderr
 # with internal debug strings ("uh oh.", SwiftUI font warnings, etc.) that have
