@@ -34,47 +34,54 @@
 			}
 			header .sub { color: #a8a29e; font-size: 12px; }
 			header .status { margin-left: 16px; font-size: 12px; color: #a8a29e; }
-			.ws-toggle {
-				margin-left: auto;
-				display: flex;
-				gap: 2px;
-				background: #1c1917;
+			/* Workspace tabs in the bottom bar. Data-driven from core/workspaces.mjs. */
+			.ws-tabs {
+				display: inline-flex;
+				align-items: center;
+				gap: 4px;
+			}
+			.ws-tab {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				height: 30px;
+				background: transparent;
 				border: 1px solid #292524;
-				border-radius: 6px;
-				padding: 2px;
-			}
-			.ws-toggle button {
-				background: transparent;
-				border: none;
 				color: #a8a29e;
-				padding: 4px 12px;
-				font-size: 11.5px;
-				letter-spacing: 0.04em;
+				border-radius: 7px;
+				padding: 0 8px 0 10px;
+				font: inherit;
+				font-size: 12px;
+				cursor: pointer;
+			}
+			.ws-tab:hover { background: #1c1917; color: #fafaf9; }
+			.ws-tab.active { background: #292524; color: #fafaf9; }
+			.ws-tab.active.prod { border-color: rgba(240,128,137,.42); }
+			.ws-tab.active.greenoak { border-color: rgba(108,193,138,.42); }
+			.ws-tab.active.test { border-color: rgba(168,164,216,.42); }
+			.ws-tab .ws-dot {
+				width: 8px; height: 8px; border-radius: 50%;
+				background: #a8a29e; flex: none;
+			}
+			.ws-tab .ws-name { line-height: 1; letter-spacing: 0.02em; white-space: nowrap; }
+			.ws-tab .ws-key,
+			.mem-btn .ws-key,
+			.rtab .ws-key {
+				min-width: 16px;
+				height: 16px;
+				display: inline-grid;
+				place-items: center;
 				border-radius: 4px;
-				cursor: pointer;
-				text-transform: uppercase;
-				font-weight: 500;
+				background: #44403c;
+				color: #d6d3d1;
+				font-family: ui-monospace, Menlo, monospace;
+				font-size: 10px;
+				line-height: 1;
 			}
-			.ws-toggle button:hover { color: #d6d3d1; }
-			.ws-toggle button.active { background: #44403c; color: #fafaf9; }
-			.ws-toggle button.active.prod { background: #3a1a1f; color: #f08089; }
-			.ws-toggle button.active.test { background: #2a2538; color: #a8a4d8; }
-
-			.clear-test-btn {
-				margin-left: 10px;
-				background: transparent;
-				border: 1px solid #3a2025;
-				color: #c48088;
-				padding: 6px 12px;
-				font-size: 11.5px;
-				letter-spacing: 0.04em;
-				text-transform: uppercase;
-				border-radius: 6px;
-				font-weight: 500;
-				cursor: pointer;
-			}
-			.clear-test-btn:hover { background: #2a1518; color: #f08089; border-color: #5a2a30; }
-			.clear-test-btn:disabled { opacity: 0.5; cursor: wait; }
+			/* per-workspace accent dot (keyed on the internal label) */
+			.ws-dot.prod { background: #f08089; }
+			.ws-dot.test { background: #a8a4d8; }
+			.ws-dot.greenoak { background: #6cc18a; }
 			main {
 				padding: 24px;
 				max-width: 1480px;
@@ -135,6 +142,7 @@
 			}
 			.meta .tag.workspace { background: #2a2538; color: #a8a4d8; }
 			.meta .tag.workspace.prod { background: #3a1a1f; color: #f08089; }
+			.meta .tag.workspace.greenoak { background: #14301f; color: #6cc18a; }
 			.meta .tag.urgent { background: #3a1a1f; color: #f08089; }
 			.meta .tag.hold { background: #2a221a; color: #d9a366; }
 			.meta .tag.issue-link { cursor: pointer; }
@@ -463,9 +471,30 @@
 				transition: opacity 0.15s, transform 0.15s;
 				pointer-events: none;
 				max-width: 360px;
+				display: flex;
+				align-items: center;
+				gap: 16px;
 			}
 			.toast.show { opacity: 1; transform: translateY(0); }
 			.toast.error { border-color: #5a2a30; color: #f08089; }
+			/* Toasts with an action button must be clickable; plain ones stay
+			   click-through so they never block the UI underneath. */
+			.toast.has-action { pointer-events: auto; }
+			.toast-action {
+				background: none;
+				border: none;
+				padding: 0;
+				margin: 0;
+				font: inherit;
+				font-weight: 600;
+				font-size: 12px;
+				letter-spacing: 0.04em;
+				text-transform: uppercase;
+				color: #5a9ff5;
+				cursor: pointer;
+				flex: none;
+			}
+			.toast-action:hover { color: #8fbcff; text-decoration: underline; }
 
 			/* ── Tab nav + view switching ───────────────────────────────── */
 			.tab-nav { display: flex; gap: 4px; margin-left: 8px; }
@@ -742,8 +771,6 @@
 				margin-top: 8px;
 			}
 
-			/* Memory tab hides the Clear Test button — it's a Work Orders action */
-			body.memory-mode #clear-test-btn { display: none; }
 			body.memory-mode .memory-search { display: inline-block; }
 
 			/* ── Memory tab: list-view pane ─────────────────────────────── */
@@ -1570,6 +1597,7 @@
 			}
 			.draft-window .dw-top .pill.prod { background: #3a1a1f; color: #f08089; }
 			.draft-window .dw-top .pill.test { background: #2a2538; color: #a8a4d8; }
+			.draft-window .dw-top .pill.greenoak { background: #14301f; color: #6cc18a; }
 			.draft-window .dw-top .age { margin-left: auto; color: #78716c; font-size: 10px; }
 			.draft-window .dw-recip {
 				font-size: 11px;
@@ -1834,7 +1862,7 @@
 
 			.rtabs { display: flex; gap: 3px; }
 			.rtabs[hidden], .rcrumb[hidden] { display: none; }
-			.rtab { background: transparent; border: 0; color: #a8a29e; padding: 5px 11px; border-radius: 6px; font: inherit; font-size: 12.5px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+			.rtab { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 0; color: #a8a29e; padding: 5px 11px; border-radius: 6px; font: inherit; font-size: 12.5px; cursor: pointer; text-transform: none; letter-spacing: 0; }
 			.rtab:hover { background: #1c1917; color: #fafaf9; }
 			.rtab.on { background: #292524; color: #fafaf9; }
 			.rcrumb { display: flex; align-items: center; gap: 8px; }
@@ -1856,10 +1884,9 @@
 			/* AppFolio runner takes over the center pane — let runner-mode win over the thread overrides */
 			.ide-chat .chat-thread.runner-mode { max-width: none; margin: 0; padding: 0; overflow: hidden; }
 			.chat-bottom { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-top: 1px solid #292524; }
-			.chat-bottom .ws-toggle { margin-left: 0; }
-			.chat-bottom .mem-btn { display: flex; align-items: center; gap: 7px; background: #1c1917; border: 1px solid #292524; color: #a8a29e; border-radius: 7px; padding: 5px 11px; font: inherit; font-size: 12px; cursor: pointer; }
+			.chat-bottom .ws-tabs { margin-left: 0; }
+			.chat-bottom .mem-btn { margin-left: auto; display: flex; align-items: center; gap: 7px; background: #1c1917; border: 1px solid #292524; color: #a8a29e; border-radius: 7px; padding: 5px 11px; font: inherit; font-size: 12px; cursor: pointer; }
 			.chat-bottom .mem-btn:hover { background: #292524; color: #fafaf9; }
-			.chat-bottom .clear-test-btn { margin-left: auto; }
 
 			/* right drawer: drafts / turns / session swap */
 			.right-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -1970,20 +1997,16 @@
 						<section id="view-chat" class="chat-view ide-chat"><div id="chat-thread" class="chat-thread"></div></section>
 					</div>
 					<div class="chat-bottom">
-						<div class="ws-toggle" id="ws-toggle">
-							<button data-ws="prod">Prod</button>
-							<button data-ws="test">Test</button>
-						</div>
-						<button class="mem-btn" id="open-memory">⟜ Memory graph</button>
-						<button class="clear-test-btn" id="clear-test-btn" title="Wipe test workspace drafts, logs, and Supabase issues">Clear Test</button>
+						<div class="ws-tabs" id="ws-tabs" role="tablist" aria-label="Workspace"></div>
+						<button class="mem-btn" id="open-memory">⟜ Memory graph<span class="ws-key">m</span></button>
 					</div>
 				</div>
 				<!-- RIGHT: drawer (drafts / turns / session) -->
 				<div class="pane-right">
 					<div class="pane-head" id="right-head">
 						<div class="rtabs" id="right-tabs">
-							<button class="rtab on" data-drawer="drafts">Drafts</button>
-							<button class="rtab" data-drawer="turns">Turns</button>
+							<button class="rtab on" data-drawer="drafts">Drafts<span class="ws-key">[</span></button>
+							<button class="rtab" data-drawer="turns">Turns<span class="ws-key">]</span></button>
 						</div>
 						<div class="rcrumb" id="right-crumb" hidden><button class="back" id="right-back">‹ back</button><span class="ttl" id="right-title">Session</span></div>
 					</div>
@@ -2069,30 +2092,56 @@
 
 		<script>
 			// Workspace filter — global, persists across reloads. Filters drafts,
-			// history, and chat by workspace_label client-side.
+			// history, and chat by workspace_label client-side. The list is
+			// injected server-side from core/workspaces.mjs (LAPM · Green Oak · Test).
+			let WORKSPACES_LIST = "__WORKSPACES_LIST__";
+			// Fallback if served by a server build that doesn't inject the list
+			// (e.g. the old process before a restart) — keeps the panel working.
+			// LAPM's internal label is still 'prod'; only the display name is 'LAPM'.
+			if (!Array.isArray(WORKSPACES_LIST)) {
+				WORKSPACES_LIST = [
+					{ id: '', label: 'prod', display: 'LAPM' },
+					{ id: '', label: 'greenoak', display: 'Green Oak' },
+					{ id: '', label: 'test', display: 'Test' }
+				];
+			}
 			const WS_KEY = 'bedrock.workspaceFilter';
-			// Two modes only: prod | test. Coerce a legacy stored 'all' to prod.
-			let workspaceFilter = localStorage.getItem(WS_KEY) || 'prod';
-			if (workspaceFilter === 'all') workspaceFilter = 'prod';
-			const wsToggle = document.getElementById('ws-toggle');
-			function applyWsToggleStyle() {
-				for (const btn of wsToggle.querySelectorAll('button')) {
-					const ws = btn.dataset.ws;
-					btn.classList.toggle('active', ws === workspaceFilter);
-					btn.classList.toggle('prod', ws === 'prod' && ws === workspaceFilter);
-					btn.classList.toggle('test', ws === 'test' && ws === workspaceFilter);
+			const WS_LABELS = WORKSPACES_LIST.map((w) => w.label);
+			const DEFAULT_WS = WS_LABELS.includes('prod') ? 'prod' : WS_LABELS[0] || 'prod';
+			let workspaceFilter = localStorage.getItem(WS_KEY) || DEFAULT_WS;
+			// Coerce the legacy 'all' value and any label that's no longer a known
+			// workspace back to the default.
+			if (workspaceFilter === 'all') workspaceFilter = DEFAULT_WS;
+			if (!WS_LABELS.includes(workspaceFilter)) workspaceFilter = DEFAULT_WS;
+
+			const wsTabs = document.getElementById('ws-tabs');
+
+			// Build the workspace tabs from the injected workspace list.
+			wsTabs.innerHTML = WORKSPACES_LIST.map(
+				(w, i) =>
+					`<button type="button" role="tab" class="ws-tab ${w.label}" data-ws="${w.label}" aria-selected="false">` +
+					`<span class="ws-dot ${w.label}"></span>` +
+					`<span class="ws-name">${escapeHtml(w.display)}</span>` +
+					`<span class="ws-key">${i + 1}</span>` +
+					`</button>`
+			).join('');
+
+			function renderWsTabs() {
+				for (const btn of wsTabs.querySelectorAll('button[data-ws]')) {
+					btn.classList.toggle('active', btn.dataset.ws === workspaceFilter);
+					btn.setAttribute('aria-selected', btn.dataset.ws === workspaceFilter ? 'true' : 'false');
 				}
 			}
-			wsToggle.addEventListener('click', (e) => {
-				const btn = e.target.closest('button[data-ws]');
-				if (!btn) return;
-				workspaceFilter = btn.dataset.ws;
+
+			function selectWorkspace(label) {
+				if (!label || label === workspaceFilter) return;
+				workspaceFilter = label;
 				localStorage.setItem(WS_KEY, workspaceFilter);
-				applyWsToggleStyle();
+				renderWsTabs();
 				// Bust the id-set guards so render actually rebuilds.
 				renderedDraftIds = '';
 				renderedChatIds = '';
-				renderedIssuesKey = '';
+				renderedIssuesKey = null;
 				refresh();
 				if (drawer === 'sessions') loadSessions();
 				turnsSig = null;
@@ -2101,37 +2150,68 @@
 				// refresh(); bust the render guard and reload now so the switch
 				// is instant instead of waiting on the next poll tick.
 				renderedChatThreadKey = '';
+				renderedChatDraftIds = '';
+				chatThreadCache = null;
+				renderAppfolioRunnerForWorkspace();
 				loadChatThread();
 				loadKpi();
 				if (memOpen) loadMemoryGraph();
+			}
+
+			wsTabs.addEventListener('click', (e) => {
+				const btn = e.target.closest('button[data-ws]');
+				if (!btn) return;
+				selectWorkspace(btn.dataset.ws);
 			});
-			applyWsToggleStyle();
+
+			function workspaceShortcutIndex(e) {
+				if (e.type === 'beforeinput') {
+					if (e.inputType === 'insertText' && /^[1-9]$/.test(e.data || '')) {
+						return Number(e.data) - 1;
+					}
+					return -1;
+				}
+				if (e.ctrlKey || e.altKey || e.shiftKey) return -1;
+				if (/^[1-9]$/.test(e.key)) return Number(e.key) - 1;
+				if (/^Digit[1-9]$/.test(e.code)) return Number(e.code.slice(5)) - 1;
+				if (/^Numpad[1-9]$/.test(e.code)) return Number(e.code.slice(6)) - 1;
+				return -1;
+			}
+
+			let lastWorkspaceShortcut = '';
+			let lastWorkspaceShortcutAt = 0;
+			function handleWorkspaceShortcut(e) {
+				const idx = workspaceShortcutIndex(e);
+				if (idx < 0) return;
+				const keyId = `${idx}:${e.metaKey ? 'm' : ''}`;
+				const now = Date.now();
+				if (keyId === lastWorkspaceShortcut && now - lastWorkspaceShortcutAt < 120) return;
+				lastWorkspaceShortcut = keyId;
+				lastWorkspaceShortcutAt = now;
+				const ws = WORKSPACES_LIST[idx];
+				if (!ws) return;
+				e.preventDefault();
+				e.stopPropagation();
+				window.__bedrockLastWorkspaceShortcut = {
+					type: e.type,
+					key: e.key,
+					code: e.code,
+					data: e.data,
+					workspace: ws.label,
+					at: new Date().toISOString()
+				};
+				selectWorkspace(ws.label);
+			}
+
+			window.addEventListener('keydown', handleWorkspaceShortcut, true);
+			window.addEventListener('keypress', handleWorkspaceShortcut, true);
+			window.addEventListener('keyup', handleWorkspaceShortcut, true);
+			window.addEventListener('beforeinput', handleWorkspaceShortcut, true);
+			renderWsTabs();
 
 			function passesFilter(label) {
 				return label === workspaceFilter;
 			}
-
-			// "Clear Test" button: wipes test-workspace drafts/logs/Supabase rows.
-			document.getElementById('clear-test-btn').addEventListener('click', async (e) => {
-				if (!confirm('Wipe all test-workspace data?\n\n• Drops test drafts, sent-log, response-log, chat-log entries\n• Resets the issues cursor\n• Deletes test issues + agent_runs from Supabase\n\nProd data is untouched.')) return;
-				const btn = e.currentTarget;
-				btn.disabled = true;
-				btn.textContent = 'Clearing…';
-				try {
-					const res = await fetch('/api/clear-test', { method: 'POST' });
-					if (!res.ok) throw new Error(await res.text());
-					const data = await res.json();
-					toast(`cleared (Supabase: ${data.supabase?.issues_deleted ?? 0} issues)`);
-					renderedDraftIds = '';
-					renderedChatIds = '';
-					await refresh();
-				} catch (err) {
-					toast(`clear failed: ${err.message}`, 'error');
-				} finally {
-					btn.disabled = false;
-					btn.textContent = 'Clear Test';
-				}
-			});
 
 			const draftsList = document.getElementById('drafts-list');
 			const chatList = document.getElementById('chat-list');
@@ -2151,13 +2231,47 @@
 			const SAVE_DEBOUNCE_MS = 500;
 
 			let toastTimer = null;
-			function toast(msg, kind = 'info') {
-				toastEl.textContent = msg;
+			function hideToast() {
+				clearTimeout(toastTimer);
+				toastEl.classList.remove('show');
+			}
+			// toast(msg) — plain. toast(msg, kind) — info|error styling.
+			// toast(msg, kind, { label, onClick, duration }) — adds a trailing
+			// action button (e.g. "Undo"); the toast then stays for `duration`ms
+			// and is clickable. Clicking the action hides the toast first.
+			function toast(msg, kind = 'info', action = null) {
 				toastEl.classList.toggle('error', kind === 'error');
+				toastEl.classList.toggle('has-action', !!action);
+				toastEl.textContent = '';
+				const label = document.createElement('span');
+				label.textContent = msg;
+				toastEl.appendChild(label);
+				if (action) {
+					const btn = document.createElement('button');
+					btn.type = 'button';
+					btn.className = 'toast-action';
+					btn.textContent = action.label;
+					btn.addEventListener('click', () => {
+						hideToast();
+						action.onClick && action.onClick();
+					});
+					toastEl.appendChild(btn);
+				}
 				toastEl.classList.add('show');
 				clearTimeout(toastTimer);
-				toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+				toastTimer = setTimeout(
+					() => toastEl.classList.remove('show'),
+					action && action.duration ? action.duration : 2400
+				);
 			}
+
+			// Optimistic-dismiss bookkeeping (Gmail-style undo). A dismissed draft
+			// is hidden from the rail immediately and the server call is DEFERRED
+			// for UNDO_WINDOW_MS; "Undo" just cancels the pending commit, so we
+			// never have to resurrect a server-deleted draft.
+			const UNDO_WINDOW_MS = 5000;
+			const pendingDismiss = new Map(); // id -> { messages, timer }
+			let lastAllDrafts = []; // last /api/drafts payload, for instant re-render
 
 			function escapeHtml(s) {
 				return String(s).replace(/[&<>"']/g, (c) => ({
@@ -2196,7 +2310,7 @@
 				card.dataset.id = d.id;
 
 				const wsLabel = d.workspace_label ?? 'unknown';
-				const wsClass = wsLabel === 'prod' ? 'workspace prod' : 'workspace';
+				const wsClass = 'workspace' + (wsLabel ? ' ' + wsLabel : '');
 
 				const meta = document.createElement('div');
 				meta.className = 'meta';
@@ -2308,7 +2422,7 @@
 				const dismissBtn = document.createElement('button');
 				dismissBtn.className = 'danger';
 				dismissBtn.textContent = 'Dismiss';
-				dismissBtn.onclick = () => act(d.id, 'dismiss', tas, origs, dismissBtn);
+				dismissBtn.onclick = () => dismissWithUndo(d.id, tas);
 				actions.appendChild(dismissBtn);
 				card.appendChild(actions);
 
@@ -2326,6 +2440,7 @@
 			}
 
 			function render(drafts) {
+				drafts = drafts.filter((d) => !pendingDismiss.has(d.id));
 				const idsKey = drafts.map((d) => d.id).join('|');
 				if (idsKey === renderedDraftIds && drafts.length > 0) {
 					for (const d of drafts) {
@@ -2405,6 +2520,61 @@
 				}
 			}
 
+			// Re-render the drafts rail from the last fetched payload without
+			// waiting for the 4s poll — used to make an optimistic dismiss/undo
+			// show up instantly. pendingDismiss ids are filtered out downstream.
+			function rerenderDraftsNow() {
+				renderChatDrafts(lastAllDrafts);
+			}
+
+			// Dismiss optimistically: hide the card now, show an "Undo" toast, and
+			// only POST the dismiss once the undo window lapses.
+			function dismissWithUndo(id, tas) {
+				// Flush any pending edits so the dismiss logs the final body and an
+				// undo restores the latest text on the next poll.
+				flushSave(id, tas);
+				const messages = tas.map((t) => ({ body: t.value }));
+				const prev = pendingDismiss.get(id);
+				if (prev) clearTimeout(prev.timer);
+				const timer = setTimeout(() => commitDismiss(id), UNDO_WINDOW_MS);
+				pendingDismiss.set(id, { messages, timer });
+				rerenderDraftsNow();
+				toast('Draft dismissed', 'info', {
+					label: 'Undo',
+					duration: UNDO_WINDOW_MS,
+					onClick: () => undoDismiss(id)
+				});
+			}
+
+			function undoDismiss(id) {
+				const p = pendingDismiss.get(id);
+				if (!p) return;
+				clearTimeout(p.timer);
+				pendingDismiss.delete(id);
+				rerenderDraftsNow();
+			}
+
+			async function commitDismiss(id) {
+				const p = pendingDismiss.get(id);
+				if (!p) return; // undone before the window closed
+				try {
+					const res = await fetch(`/api/drafts/${id}/dismiss`, {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ messages: p.messages })
+					});
+					if (!res.ok) throw new Error(await res.text());
+					// Server dropped it; next poll won't return it. Clear the local
+					// guard so the Map doesn't grow unbounded.
+					pendingDismiss.delete(id);
+				} catch (err) {
+					// Restore the card on failure so the dismiss isn't silently lost.
+					pendingDismiss.delete(id);
+					rerenderDraftsNow();
+					toast(`dismiss failed: ${err.message}`, 'error');
+				}
+			}
+
 			// Format a hold_until ISO into a short "7 AM tomorrow" / "7 AM Monday"
 			// label for the Send-later button.
 			function holdLabel(iso) {
@@ -2462,45 +2632,106 @@
 			// runner.mjs on :9773) through its JSON endpoints (CORS is open). The
 			// runner resolves the WO from the draft's issue_id and pauses for
 			// approval at each step; the final Send/Save is gated and never fires.
-			const APPFOLIO_RUNNER = 'http://127.0.0.1:9773';
-			let afRunnerActive = false;
-			let afRunnerPoller = null;
-			// The draft this run came from + the body that was actually sent, so we
-			// can resolve the draft once the runner reaches its LIVE Send (status
-			// 'done'). afRunnerResolved guards against firing the resolve twice.
-			let afRunnerDraft = null;
-			let afRunnerResolved = false;
+			// Each AppFolio workspace has its OWN runner process on its own port
+			// (injected from core/workspaces.mjs). "Send via AppFolio" routes to the
+			// port for that draft's workspace, so a send can never hit another
+			// account's runner. The panel state is also keyed per workspace, so
+			// switching workspaces never leaves another account's runner visible.
+			let RUNNER_PORTS = "__RUNNER_PORTS__";
+			if (typeof RUNNER_PORTS !== 'object' || RUNNER_PORTS === null) RUNNER_PORTS = {};
+			function runnerBaseFor(workspace_id) {
+				const port = RUNNER_PORTS[workspace_id] || 9773;
+				return 'http://127.0.0.1:' + port;
+			}
+			const afRunnerStates = new Map();
+
+			function afWorkspaceLabel(d) {
+				return d.workspace_label ?? WORKSPACES_LIST.find((w) => w.id === d.workspace_id)?.label ?? workspaceFilter;
+			}
+
+			function currentAfRunnerState() {
+				const state = afRunnerStates.get(workspaceFilter);
+				return state?.active ? state : null;
+			}
+
+			function stopAfRunnerState(state, { reject = true } = {}) {
+				if (!state) return;
+				state.active = false;
+				state.draft = null;
+				if (state.poller) {
+					clearInterval(state.poller);
+					state.poller = null;
+				}
+				if (reject) fetch(`${state.base}/reject`, { method: 'POST' }).catch(() => {});
+			}
 
 			function openAppfolioRunner(d, body) {
-				afRunnerDraft = { id: d.id, messages: [{ body }] };
 				const to = d.channel === 'vendor_appfolio' ? 'Vendor' : 'Tenant';
 				const params = { flow: 'text', to, message: body };
+				// Pin the account so the runner uses the right AppFolio login/session.
+				if (d.workspace_id) params.workspace = d.workspace_id;
 				// A draft may pin the AppFolio SRN directly (test WOs whose issue row
 				// has no appfolio_srn); otherwise the runner resolves it from issue_id.
 				if (d.appfolio_srn) params.srn = String(d.appfolio_srn);
 				else params.issue_id = d.issue_id ?? '';
+				const workspaceLabel = afWorkspaceLabel(d);
+				const base = runnerBaseFor(d.workspace_id);
 				const qs = new URLSearchParams(params);
-				startAppfolioRunner(`${APPFOLIO_RUNNER}/?${qs}`);
+				startAppfolioRunner(workspaceLabel, {
+					base,
+					workspace_id: d.workspace_id ?? null,
+					draft: { id: d.id, messages: [{ body }] },
+					startUrl: `${base}/?${qs}`
+				});
 				// If launched from the Work Orders pane, jump to Chat so the right
 				// pane (where the runner now lives) is on screen.
 				// chat thread is always visible in the IDE layout — no tab switch needed
 			}
 
 			function openAppfolioVendorRunner(d, body) {
-				afRunnerDraft = { id: d.id, messages: [{ body: body ?? '' }] };
 				// Vendor drafts carry the vendor name in `to`/`to_participants`, not a
 				// `vendor` field — read those (legacy `d.vendor` first, just in case).
 				const vendor = d.vendor ?? d.to ?? (d.to_participants && d.to_participants[0]) ?? '';
 				const params = { flow: 'vendor', vendor, message: body ?? '' };
+				if (d.workspace_id) params.workspace = d.workspace_id;
 				if (d.appfolio_srn) params.srn = String(d.appfolio_srn);
 				else params.issue_id = d.issue_id ?? '';
-				startAppfolioRunner(`${APPFOLIO_RUNNER}/?${new URLSearchParams(params)}`);
+				const workspaceLabel = afWorkspaceLabel(d);
+				const base = runnerBaseFor(d.workspace_id);
+				startAppfolioRunner(workspaceLabel, {
+					base,
+					workspace_id: d.workspace_id ?? null,
+					draft: { id: d.id, messages: [{ body: body ?? '' }] },
+					startUrl: `${base}/?${new URLSearchParams(params)}`
+				});
 				// chat thread is always visible in the IDE layout — no tab switch needed
 			}
 
-			async function startAppfolioRunner(startUrl) {
-				afRunnerActive = true;
-				afRunnerResolved = false;
+			async function startAppfolioRunner(workspaceLabel, opts) {
+				stopAfRunnerState(afRunnerStates.get(workspaceLabel), { reject: false });
+				const state = {
+					workspaceLabel,
+					workspace_id: opts.workspace_id,
+					base: opts.base,
+					draft: opts.draft,
+					resolved: false,
+					active: true,
+					poller: null
+				};
+				afRunnerStates.set(workspaceLabel, state);
+				renderAppfolioRunnerForWorkspace();
+				// GET with the run params triggers startRun server-side.
+				try { await fetch(opts.startUrl); } catch {}
+				afTick(state);
+				if (!state.poller) state.poller = setInterval(() => afTick(state), 1000);
+			}
+
+			function renderAppfolioRunnerForWorkspace() {
+				const state = currentAfRunnerState();
+				if (!state) {
+					chatThreadEl.classList.remove('runner-mode');
+					return false;
+				}
 				chatThreadEl.classList.add('runner-mode');
 				chatThreadEl.innerHTML =
 					'<div class="af-runner">' +
@@ -2515,35 +2746,49 @@
 					'      <ol class="af-steps" id="af-steps"></ol>' +
 					'      <div class="af-bar">' +
 					'        <button class="primary" id="af-approve">Approve next step</button>' +
+					'        <button class="primary" id="af-login" style="display:none">Log in to AppFolio</button>' +
 					'        <button class="danger" id="af-reject">Reject / stop</button>' +
 					'      </div>' +
 					'      <div class="af-status" id="af-status"></div>' +
 					'    </div>' +
 					'    <div class="af-shotwrap"><img class="af-shot" id="af-shot" src="' +
-					APPFOLIO_RUNNER + '/stream" alt=""></div>' +
+					state.base + '/stream" alt=""></div>' +
 					'  </div>' +
 					'</div>';
 				document.getElementById('af-close').onclick = closeAppfolioRunner;
 				document.getElementById('af-approve').onclick = async () => {
-					await fetch(`${APPFOLIO_RUNNER}/approve`, { method: 'POST' }).catch(() => {});
-					afTick();
+					await fetch(`${state.base}/approve`, { method: 'POST' }).catch(() => {});
+					afTick(state);
 				};
 				document.getElementById('af-reject').onclick = async () => {
-					await fetch(`${APPFOLIO_RUNNER}/reject`, { method: 'POST' }).catch(() => {});
-					afTick();
+					await fetch(`${state.base}/reject`, { method: 'POST' }).catch(() => {});
+					afTick(state);
 				};
-				// GET with the run params triggers startRun server-side.
-				try { await fetch(startUrl); } catch {}
-				afTick();
-				if (!afRunnerPoller) afRunnerPoller = setInterval(afTick, 1000);
+				document.getElementById('af-login').onclick = async () => {
+					await fetch(`${state.base}/login`, { method: 'POST' }).catch(() => {});
+					afTick(state);
+				};
+				return true;
 			}
 
-			async function afTick() {
-				if (!afRunnerActive) return;
+			async function afTick(state) {
+				if (!state?.active) return;
 				let s;
-				try { s = await (await fetch(`${APPFOLIO_RUNNER}/state`)).json(); } catch { return; }
+				try { s = await (await fetch(`${state.base}/state`)).json(); } catch { return; }
+				const visible = state === currentAfRunnerState();
 				const flowEl = document.getElementById('af-flow');
-				if (!flowEl) return; // panel closed mid-flight
+				// The flow finished a LIVE Send/Save — resolve the originating draft
+				// (log it as a send + drop it). The send already happened in AppFolio,
+				// so this never re-sends; the server's appfolio-done route skips the dylib.
+				if (s.status === 'done' && state.draft && !state.resolved) {
+					state.resolved = true;
+					fetch('/api/drafts/' + state.draft.id + '/appfolio-done', {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ messages: state.draft.messages })
+					}).then(() => loadChatThread()).catch(() => {});
+				}
+				if (!visible || !flowEl) return; // another workspace owns the visible pane
 				flowEl.textContent = (s.flowName || '') + ' flow';
 				document.getElementById('af-steps').innerHTML = (s.steps || [])
 					.map((st, i) => {
@@ -2558,20 +2803,12 @@
 						);
 					})
 					.join('');
-				// The flow finished a LIVE Send/Save — resolve the originating draft
-				// (log it as a send + drop it). The send already happened in AppFolio,
-				// so this never re-sends; the server's appfolio-done route skips the dylib.
-				if (s.status === 'done' && afRunnerDraft && !afRunnerResolved) {
-					afRunnerResolved = true;
-					fetch('/api/drafts/' + afRunnerDraft.id + '/appfolio-done', {
-						method: 'POST',
-						headers: { 'content-type': 'application/json' },
-						body: JSON.stringify({ messages: afRunnerDraft.messages })
-					}).then(() => loadChatThread()).catch(() => {});
-				}
 				const ap = document.getElementById('af-approve');
-				ap.disabled = ['idle', 'gated', 'done', 'error', 'running'].includes(s.status);
+				ap.disabled = ['idle', 'gated', 'done', 'error', 'running', 'needs_login', 'logging_in', 'verifying_2fa', 'awaiting_2fa'].includes(s.status);
 				ap.textContent = s.status === 'running' ? 'running…' : 'Approve next step';
+				// Offer auto-login when the session has expired (or a login attempt errored).
+				const loginBtn = document.getElementById('af-login');
+				if (loginBtn) loginBtn.style.display = (s.status === 'needs_login' || s.status === 'error') ? 'inline-block' : 'none';
 				const msg =
 					{
 						idle: 'No active run.',
@@ -2581,6 +2818,10 @@
 						running: 'Running…',
 						gated: 'Reached the gated final step. Nothing sent/saved.',
 						done: 'Done — sent/saved via AppFolio.',
+						needs_login: (s.error || 'Logged out') + ' — click “Log in to AppFolio”.',
+						logging_in: 'Signing in to AppFolio…',
+						verifying_2fa: 'Reading the texted 2FA code and signing in automatically…',
+						awaiting_2fa: 'A login window opened — the texted code should auto-fill; otherwise type it there.',
 						error: 'Error: ' + s.error
 					}[s.status] || s.status;
 				const stEl = document.getElementById('af-status');
@@ -2591,14 +2832,12 @@
 			}
 
 			function closeAppfolioRunner() {
-				afRunnerActive = false;
-				afRunnerDraft = null;
-				if (afRunnerPoller) { clearInterval(afRunnerPoller); afRunnerPoller = null; }
-				fetch(`${APPFOLIO_RUNNER}/reject`, { method: 'POST' }).catch(() => {});
+				stopAfRunnerState(currentAfRunnerState());
 				chatThreadEl.classList.remove('runner-mode');
 				renderedChatThreadKey = ''; // force a fresh thread paint
+				chatThreadCache = null;
 				chatThreadEl.innerHTML = '<div class="empty">Loading conversation…</div>';
-				renderChatThread();
+				loadChatThread();
 			}
 
 			function renderNotes(wrap, r) {
@@ -2704,7 +2943,7 @@
 					card.className = 'chat-item';
 
 					const wsLabel = m.workspace_label ?? 'unknown';
-					const wsClass = wsLabel === 'prod' ? 'tag workspace prod' : 'tag workspace';
+					const wsClass = 'tag workspace' + (wsLabel ? ' ' + wsLabel : '');
 
 					const label = agentActionLabel(m);
 					// When agent_action is missing (pre-F2 row or agent never ran),
@@ -2743,7 +2982,7 @@
 			// (a send flips an issue drafted→sent) so the list stays current.
 			const issuesList = document.getElementById('issues-list');
 			let issuesLoading = false;
-			let renderedIssuesKey = '';
+			let renderedIssuesKey = null;
 			// Set when a draft's issue chip is clicked; applied after the next
 			// issues render to scroll the row into view and flash it.
 			let pendingFocusIssueId = null;
@@ -2775,10 +3014,10 @@
 				if (wsLabel && wsLabel !== 'unknown' && wsLabel !== workspaceFilter) {
 					workspaceFilter = wsLabel;
 					localStorage.setItem(WS_KEY, workspaceFilter);
-					applyWsToggleStyle();
+					renderWsTabs();
 					renderedDraftIds = '';
 					renderedChatIds = '';
-					renderedIssuesKey = '';
+					renderedIssuesKey = null;
 					renderedChatThreadKey = '';
 				}
 				pendingFocusIssueId = issueId;
@@ -2926,18 +3165,44 @@
 			document.getElementById('memclose').addEventListener('click', closeMemory);
 			document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && memOpen) closeMemory(); });
 
+			// Single-key shortcuts: "m" toggles the memory graph for the current
+			// workspace, "[" opens the Drafts drawer, "]" opens Turns. All skipped
+			// while typing in a field (so they never eat a literal keystroke in a
+			// draft/search box) or with a modifier held.
+			document.addEventListener('keydown', (e) => {
+				if (e.metaKey || e.ctrlKey || e.altKey) return;
+				const el = document.activeElement;
+				if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+				if (e.key === 'm' || e.key === 'M') {
+					e.preventDefault();
+					memOpen ? closeMemory() : openMemory();
+				} else if (e.key === '[') {
+					e.preventDefault();
+					setDrawer('drafts');
+				} else if (e.key === ']') {
+					e.preventDefault();
+					setDrawer('turns');
+				}
+			});
+
 			// KPI strip (center top) — from /kpi (prod-scoped).
 			async function loadKpi() {
+				// KPIs are per-workspace and always shown: zeros for a workspace with
+				// no activity yet (e.g. Green Oak), real numbers as it accrues.
 				try {
-					const res = await fetch('/kpi');
+					const res = await fetch('/kpi?workspace=' + encodeURIComponent(workspaceFilter));
 					if (!res.ok) return;
 					const k = await res.json();
-					const pct = k.send_without_edit_rate == null ? '—' : Math.round(k.send_without_edit_rate * 100) + '%';
+					const matched = k.scope === workspaceFilter;
+					const days = k.window_days ?? 30;
+					const pct = matched && k.send_without_edit_rate != null ? Math.round(k.send_without_edit_rate * 100) + '%' : '0%';
+					const sent = matched ? k.sent_total : 0;
+					const actions = matched ? k.recent_responses : 0;
 					document.getElementById('kpi-strip').innerHTML =
 						'<div class="turns-kpi">' +
-						'<div class="stat"><span class="v">' + pct + '</span><span class="l">send-without-edit · ' + k.window_days + 'd</span></div>' +
-						'<div class="stat"><span class="v">' + k.sent_total + '</span><span class="l">messages sent</span></div>' +
-						'<div class="stat"><span class="v">' + k.recent_responses + '</span><span class="l">actions · ' + k.window_days + 'd</span></div>' +
+						'<div class="stat"><span class="v">' + pct + '</span><span class="l">send-without-edit · ' + days + 'd</span></div>' +
+						'<div class="stat"><span class="v">' + sent + '</span><span class="l">messages sent</span></div>' +
+						'<div class="stat"><span class="v">' + actions + '</span><span class="l">actions · ' + days + 'd</span></div>' +
 						'</div>';
 				} catch {}
 			}
@@ -3340,9 +3605,12 @@
 					turnsList.innerHTML = '<div class="turns-empty">Loading turns…</div>';
 				}
 				try {
-					// KPI strip is prod-only (the /kpi endpoint scopes to prod traffic).
-					const reqs = [fetch('/api/turns?workspace=' + workspaceFilter + '&limit=300')];
-					if (workspaceFilter === 'prod') reqs.push(fetch('/kpi'));
+					// Per-workspace KPI feeds the change-signature; the strip itself is
+					// rendered by loadKpi (center top).
+					const reqs = [
+						fetch('/api/turns?workspace=' + workspaceFilter + '&limit=300'),
+						fetch('/kpi?workspace=' + encodeURIComponent(workspaceFilter))
+					];
 					const resps = await Promise.all(reqs);
 					if (!resps[0].ok) throw new Error(await resps[0].text());
 					const turns = await resps[0].json();
@@ -3691,7 +3959,7 @@
 				const vendor = (t.tool_calls || []).some((c) => c.name === 'draft_vendor');
 				if (ev === 'new_issue') {
 					if (sent) return 'New work order → drafted & sent';
-					if (drafted) return 'New work order → drafted ' + (vendor ? 'vendor dispatch' : 'tenant text');
+					if (drafted) return 'New work order → drafted ' + (vendor ? 'vendor dispatch' : 'PM text');
 					if (t.kind === 'precheck_short_circuit') return 'New work order → skipped (precheck)';
 					return 'New work order → triaged, no message';
 				}
@@ -3770,7 +4038,7 @@
 			async function loadChatThread() {
 				if (chatThreadLoading) return;
 				chatThreadLoading = true;
-				if (!chatThreadCache && !afRunnerActive) {
+				if (!chatThreadCache && !currentAfRunnerState()) {
 					chatThreadEl.innerHTML = '<div class="empty">Loading conversation…</div>';
 				}
 				try {
@@ -3784,6 +4052,7 @@
 					// rail, whose data comes from the separate /api/drafts endpoint.
 					if (dRes.ok) {
 						const allDrafts = await dRes.json();
+						lastAllDrafts = allDrafts;
 						renderChatDrafts(allDrafts);
 					}
 					if (!tRes.ok) throw new Error(await tRes.text());
@@ -3813,7 +4082,9 @@
 				// Mirror the Work Orders pane: same passesFilter() against the
 				// active workspace toggle (prod | test), so anything visible in
 				// Work Orders is also listed in the chat rail.
-				const drafts = (allDrafts ?? []).filter((d) => passesFilter(d.workspace_label));
+				const drafts = (allDrafts ?? [])
+					.filter((d) => passesFilter(d.workspace_label))
+					.filter((d) => !pendingDismiss.has(d.id));
 				const idsKey = drafts.map((d) => d.id).join('|');
 				if (idsKey === renderedChatDraftIds && drafts.length > 0) {
 					for (const d of drafts) {
@@ -3929,7 +4200,7 @@
 			});
 
 			function renderChatThread() {
-				if (afRunnerActive) return; // runner owns the right pane
+				if (currentAfRunnerState()) return; // this workspace's runner owns the center pane
 				if (!chatThreadCache) return;
 				const msgs = chatThreadCache.messages ?? [];
 				// session_id in the key so boundaries repaint when the sessionizer
@@ -5047,11 +5318,6 @@
 					toast(`search failed: ${err.message}`, 'error');
 				}
 			}
-
-			// Reload graph when workspace toggle changes (memory view only).
-			wsToggle.addEventListener('click', () => {
-				if (memOpen) loadMemoryGraph();
-			});
 
 			// Initial loads now that every loader + module state is initialized.
 			// Issues (left) and Chat (center) are always on; the drawer defaults to

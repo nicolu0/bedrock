@@ -1,1 +1,4 @@
 .claude/artifacts/
+appfolio/.state*.json
+appfolio/crawl/
+appfolio/.login.lock

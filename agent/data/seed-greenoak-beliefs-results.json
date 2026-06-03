@@ -1,0 +1,1654 @@
+[
+  {
+    "obs": "4bec0b9f-cc6f-40eb-9c24-981d37faaba7",
+    "summary": "Jimmy’s Pool Service handled monthly pool cleaning at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Jimmy’s Pool Service handles pool cleaning at 742 N Cherokee.",
+        "belief_id": "c85b5f32-0983-4d2e-84ba-723ca2a1e0ee",
+        "weight": null,
+        "extra_edges": 0
+      },
+      {
+        "action": "create",
+        "claim": "Jimmy’s Pool Service is the go-to pool service vendor at 742 N Cherokee.",
+        "belief_id": "f986442e-0826-4fcb-82ec-52f90e27200f",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "972284bf-02af-440e-9203-a7fe4a7678a7",
+    "summary": "Jose Rivera Landscaping handled monthly gardening at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Jose Rivera Landscaping is the go-to landscaping vendor at 742 N Cherokee.",
+        "belief_id": "4aca3d24-b55a-495f-b430-401d9b744938",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "0160837a-7444-4b34-a072-7bdcb7f27f9e",
+    "summary": "Garcia’s Handyman repaired dishwasher soap dispenser, assessed leaks at 8921 Wonderland Park Ave.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Garcia's Handyman and Cleaning Services LLC. handles general handyman repairs, minor plumbing leaks, and dishwasher issues.",
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": null,
+        "extra_edges": 0
+      },
+      {
+        "action": "noop",
+        "claim": null,
+        "belief_id": null,
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "40ce6a51-7126-4a3d-bcf6-3153c6200541",
+    "summary": "George HVAC handled AC foul-odor issue at 9th St Bungalow Home unit 5.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "George HVAC handles HVAC issues.",
+        "belief_id": "073f16b1-9541-4c61-a6d8-16b67993dfd2",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "0e83cc1c-9293-4c10-b184-b72542eba3e8",
+    "summary": "Garcia’s Handyman replaced missing bulbs, swapped bedroom lock for door knob at 9206 S Hoover St.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "06920eb5-9f54-4324-abd1-d9bdbcb4547a",
+    "summary": "Garcia’s Handyman installed new AC at 1820 S Barrington unit 104.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "2e528cb2-5b7e-486c-8e34-b71e2273b659",
+    "summary": "Garcia’s Handyman gave fence bid for owner submission at 505 N Belmont Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "6abc1449-a7c3-44be-b25c-17c4bb5611d0",
+    "summary": "Garcia’s Handyman replaced hardwired smoke detectors at 115 Ocean Front Walk, tall ceilings.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "57830be1-f94c-4c45-ae18-4999f3f975f2",
+    "summary": "Garcia’s Handyman resealed bathroom at 1820 S Barrington unit 104.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": 0.55,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "765f1538-5ea2-4ec7-a769-949e318eea2d",
+    "summary": "Rightway Apartment Service handled weak fridge door seal at 1827 S Barrington Ave #107.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Rightway Apartment Service handles general handyman repairs and minor leaks.",
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": null,
+        "extra_edges": 0
+      },
+      {
+        "action": "create",
+        "claim": "Rightway Apartment Service is the go-to handyman vendor at 1827 S Barrington Ave #107.",
+        "belief_id": "5f62a323-ff44-4bae-9c01-01c6d17d2b9a",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "67ee6f3e-8ea5-4c71-bce9-712886db2981",
+    "summary": "Garcia’s Handyman fixed shower door seal at 9th St Bungalow Home unit 13.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": 0.58,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "dd8a9b8b-1fe7-44ce-9d16-96ea7ea9605d",
+    "summary": "Garcia’s Handyman replaced leaking kitchen sink disposal at 2135 Ivar Ave unit 1.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "ca012ea0-f251-4e31-99dc-c13291da68c9",
+    "summary": "Twin Home Experts handled rat infestation in walls and attic at 4239 Lindblade.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Twin Home Experts Consulting LLC handles rodent and pest infestations.",
+        "belief_id": "c9882fdc-4444-49b0-9b96-c49d07a9112e",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "1c380822-0faa-414d-b8c8-a41f9411d042",
+    "summary": "A1 Service Appliances handled washer/dryer with no cold water at 9033 Dicks St.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "A1 Service Appliances, Inc. handles appliance repairs and HVAC issues.",
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "4a1ad76d-e222-4023-9cad-e762ff2f2623",
+    "summary": "Reckon & Reckon Plumbing cleared slow-draining shower drain at 4418 Vantage Ave unit 1.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Reckon & Reckon Plumbing Inc. handles drain clogs and drain backups.",
+        "belief_id": "fd9874e2-0745-4019-b9e6-bdd89ab9520e",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "e1226ae0-1fba-46b5-b260-6dc467cdff80",
+    "summary": "Garcia’s Handyman checked bathroom faucet that would not shut off at 8921 Wonderland Park Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": 0.72,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "f9ed6f0a-6ffa-4969-8b3e-9bbba52df4e5",
+    "summary": "Zakhar Plumbing replaced water heater at 1820 S Barrington unit 201.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Zakhar Plumbing handles plumbing repairs and water heaters.",
+        "belief_id": "1ee57a65-f982-480d-a152-94d90a8e2da3",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "2f1a89da-2755-4275-acb6-f88d3e628e57",
+    "summary": "Raptor Appliance Repair handled laundry washer not draining at 4418 Vantage Ave unit 1.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Raptor Appliance Repair handles appliance repairs, especially washers and dishwashers.",
+        "belief_id": "c640c418-6ecf-45a6-a60b-0ea197b911bb",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "841465dc-ec98-4e8f-b9f8-b940d6bb2b52",
+    "summary": "Rightway Apartment Service handled out ceiling and stairway lights at 2135 Ivar Ave unit 5.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 2
+      },
+      {
+        "action": "create",
+        "claim": "Rightway Apartment Service is the go-to handyman vendor at 2135 Ivar Ave.",
+        "belief_id": "6a207b78-4079-4145-9f81-6d6588674816",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "32a2a734-55aa-492d-9fd3-42e41ef1a8d1",
+    "summary": "Reckon & Reckon Plumbing cleared kitchen sink not draining at 829 Bunker Hill unit 11.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "fd9874e2-0745-4019-b9e6-bdd89ab9520e",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "efd4c26c-5082-46ac-a503-bd24217c3d39",
+    "summary": "Yesika Duarte handled monthly cleaning at 829 Bunker Hill.",
+    "ops": [
+      {
+        "action": "noop",
+        "claim": null,
+        "belief_id": null,
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "db02fdc1-44ca-45e2-ad46-60bbd72dcd42",
+    "summary": "Jimmy’s Pool Service handled monthly pool cleaning at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "c85b5f32-0983-4d2e-84ba-723ca2a1e0ee",
+        "weight": 0.72,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "f986442e-0826-4fcb-82ec-52f90e27200f",
+        "weight": 0.62,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "ca48bb26-b345-4f1c-bbc6-d77b406c679b",
+    "summary": "Zakhar Plumbing handled leaking shower faucet at 8342 Kirkwood.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "1ee57a65-f982-480d-a152-94d90a8e2da3",
+        "weight": 0.55,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "96f6f338-80d3-4a97-a6b8-e776935b4c49",
+    "summary": "Mike Green Fire Protection installed compliance fire extinguisher at 4418 Vantage Ave.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Mike Green Fire Protection handles fire extinguisher compliance work.",
+        "belief_id": "54ed9a31-e0fd-4fb8-8fa3-2d0c4e306455",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "4640d008-7c31-4598-b2f9-7ef4aaa32636",
+    "summary": "Rightway Apartment Service handled bright back-entrance flood light needing sensor at 9th St Bungalow unit 6.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "84a33729-1b28-42fa-9d6a-b81d14aa3d6f",
+    "summary": "First Aid Appliance & HVAC Pro handled non-working air conditioner at 829 Bunker Hill unit 6.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "FIRST AID APPLIANCE & HVAC PRO handles HVAC issues.",
+        "belief_id": "4b3783fb-e8ca-423f-bbb4-32bf6a9d8932",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "b63d0fab-c3b2-487d-82ec-85a5ab2e7c56",
+    "summary": "Zakhar Plumbing handled leaking shower faucet at 8342 Kirkwood.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "1ee57a65-f982-480d-a152-94d90a8e2da3",
+        "weight": 0.72,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "0175dcf0-6926-40b0-8ca3-15adf98cdcbc",
+    "summary": "Rightway Apartment Service handled blinds, grout, outlet covers and door punch list at 1616 Ashland Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "1e497f6d-fcf4-4d52-ac05-cadbc3777e5e",
+    "summary": "Rightway Apartment Service adjusted alley gate door not twisting or self-closing at 9th St Bungalow.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 0
+      },
+      {
+        "action": "create",
+        "claim": "Rightway Apartment Service is the go-to handyman vendor at 9th St Bungalow Home LLC.",
+        "belief_id": "4db7273c-128d-4081-bcd0-505d3609b91c",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "b9452e7f-a21b-4081-a918-70c0d06d2607",
+    "summary": "Rightway Apartment Service fixed leaking bathroom sink at 1827 S Barrington Ave #107.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.56,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "5f62a323-ff44-4bae-9c01-01c6d17d2b9a",
+        "weight": 0.52,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "64b1debb-cda8-41df-b169-4537ce5d0b07",
+    "summary": "Rightway Apartment Service handled eroded shower grout leaking + mildew at 33 Sea Colony Dr.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "d4d3912c-0248-4f17-bda6-9bd7278cb1bb",
+    "summary": "Rightway Apartment Service handled glass atrium leak at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 0
+      },
+      {
+        "action": "create",
+        "claim": "Rightway Apartment Service is the go-to handyman vendor at 742 N Cherokee.",
+        "belief_id": "d09c61b3-38d2-4be5-9a40-7dbdcada84b7",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "ee81f3b4-44b1-4e3b-83e5-6812783a8edc",
+    "summary": "Rightway Apartment Service handled roof leak on deck at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "d09c61b3-38d2-4be5-9a40-7dbdcada84b7",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "5db50810-e2da-40f6-9d96-708bcb2852e6",
+    "summary": "Rightway Apartment Service handled ceiling leak from balcony above at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "d09c61b3-38d2-4be5-9a40-7dbdcada84b7",
+        "weight": 0.6,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "fe5bdd18-3acf-4fe1-811b-c0bd52cc5335",
+    "summary": "Rightway Apartment Service handled door leak at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.56,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "d09c61b3-38d2-4be5-9a40-7dbdcada84b7",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "e8465821-1262-40a8-b2c1-91724845ea9d",
+    "summary": "Rightway Apartment Service fixed non-working roof-deck water heater at 2419 S Cochran Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "0a39251a-618d-46de-abbc-af14b6206e4f",
+    "summary": "Rightway Apartment Service handled bedroom window mesh repair + out main-bedroom light at 4219 Abner St.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "79ded47a-4726-4f97-884f-ba0c3f7776aa",
+    "summary": "Rightway Apartment Service handled leak from ceiling at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "d09c61b3-38d2-4be5-9a40-7dbdcada84b7",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "8c4bfd3f-f777-4606-b7c3-1ee22feffbd9",
+    "summary": "A1 Service Appliances serviced recurring non-working ice maker at 4239 Lindblade; known model issue.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "2fb4ee8d-8a95-4408-8d1e-ac98183a9a50",
+    "summary": "Rightway Apartment Service made + distributed left-gate key copies to odd units at 9th St Bungalow Home LLC.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.56,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "4db7273c-128d-4081-bcd0-505d3609b91c",
+        "weight": 0.52,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "5054325f-49d7-4174-b528-01291f33427c",
+    "summary": "Get Pro Locksmith fixed sticky back-gate alley lock mechanism at 9th St Bungalow Home LLC.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Get Pro Locksmith handles locksmith and lock issues.",
+        "belief_id": "42535692-72eb-4b64-87c8-aebd9406061e",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "798f9542-4cd0-4a80-a51d-fd3180c91e96",
+    "summary": "Get Pro Locksmith replaced front + back door locks keyed alike at 4219 Abner St.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "42535692-72eb-4b64-87c8-aebd9406061e",
+        "weight": 0.72,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "1f7b6d1d-8340-48a9-8343-5dcae69c3b19",
+    "summary": "Roberto Carvalho fixed leak in/near window at 9th St Bungalow Home LLC unit 1.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Roberto Carvalho handles general handyman repairs at 9th St Bungalow Home LLC.",
+        "belief_id": "8b254d95-cb49-4e35-bbba-fa3ec7ddf859",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "c44f2cb8-dc3e-4e64-b078-02d300aa6450",
+    "summary": "Raptor Appliance Repair handled still-malfunctioning dishwasher at 8921 Wonderland Park Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "c640c418-6ecf-45a6-a60b-0ea197b911bb",
+        "weight": 0.72,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "049a3364-d566-4169-956f-627be1346136",
+    "summary": "Jimmy’s Pool Service handled monthly pool cleaning at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "c85b5f32-0983-4d2e-84ba-723ca2a1e0ee",
+        "weight": 0.72,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "f986442e-0826-4fcb-82ec-52f90e27200f",
+        "weight": 0.62,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "ea7802b6-616f-4ad2-a769-e188a87d7b84",
+    "summary": "Jose Rivera Landscaping handled monthly gardening at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "4aca3d24-b55a-495f-b430-401d9b744938",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "e368640a-1662-4afe-90ba-ab2dbed0b46b",
+    "summary": "Primate Pest Elimination handled overdue secondary bug-control request at 2419 S Cochran Ave.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Primate Pest Elimination handles pest-control issues at 2419 S Cochran Ave.",
+        "belief_id": "31e73cb3-1129-4d71-8e9c-8d1f079483e1",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "a6292058-34e9-4e94-a3fa-fba6a5f451f5",
+    "summary": "Garcia’s Handyman remediated mold in/on HVAC vents at 2123 Linnington.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "b002fbff-6ce1-441d-adb0-f90ea2377089",
+    "summary": "A1 Service Appliances checked under-drying dryer + non-dispensing dishwasher at 8921 Wonderland Park Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.62,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "cb55c7bf-b550-4d06-8dd2-da021455feee",
+    "summary": "Kaesler Plumbing handled garbage disposal check at 8921 Wonderland Park Ave.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Kaesler Plumbing, Inc. handles plumbing issues.",
+        "belief_id": "d47efb11-616f-4324-ad11-71ab0d2e21c4",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "6aa18052-4570-4279-bb7e-9a0f185b195b",
+    "summary": "José Gonzalez checked under-kitchen-sink mildew + potential water leaks at 4219 Abner St.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "José Gonzalez handles general handyman repairs and minor plumbing/leak issues.",
+        "belief_id": "497dcfa2-849b-4c2b-bc01-009e5d23e976",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "c1670ccf-9363-44c7-bfba-42cd9cdab87d",
+    "summary": "Enterprise Plumbing handled gas-company red-tagged water heater, no hot water, at 9206 S Hoover St.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Enterprise Plumbing handles plumbing issues and water heaters.",
+        "belief_id": "37bdca33-95f9-498a-a4e5-5db6dacb3e08",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "a184c58f-cda2-4f78-a1db-6d8736a9bd32",
+    "summary": "All City Plumbing fixed toilet with poor flush + continuously running water at 4219 Abner St.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "All City Plumbing Inc handles plumbing issues.",
+        "belief_id": "b387fe84-5cc2-4eb9-a014-f78a4f1d2768",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "bb84a736-b6ed-4c7e-9652-7ca89a3de2f9",
+    "summary": "First Aid Appliance & HVAC Pro fixed AC that would not power on at 9th St Bungalow Home LLC unit 9.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "4b3783fb-e8ca-423f-bbb4-32bf6a9d8932",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "be062dba-73a1-410b-b4e3-c90bfdc01534",
+    "summary": "Roberto Carvalho fixed kitchen lighting + patched bathroom holes at 9th St Bungalow Home LLC unit 11.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "8b254d95-cb49-4e35-bbba-fa3ec7ddf859",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "d32753aa-72c4-4e7c-8c55-aba022af7aa4",
+    "summary": "José Gonzalez handled multi-item punch list: sink leaks, gate lock, range hood, frame mold, toilet at 3473 Sabina St.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "497dcfa2-849b-4c2b-bc01-009e5d23e976",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "124498c9-6113-4637-ad97-a6f8139872c2",
+    "summary": "Reckon & Reckon Plumbing handled backed-up sink + dishwasher check at 8921 Wonderland Park Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "fd9874e2-0745-4019-b9e6-bdd89ab9520e",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "82cfb52d-1ba2-4d57-ad73-4774826fcab8",
+    "summary": "Reckon & Reckon Plumbing handled sewage smell in entry at 9033 Dicks St.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "fd9874e2-0745-4019-b9e6-bdd89ab9520e",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "f317296d-56c8-4a36-b72e-93d997805528",
+    "summary": "Reckon & Reckon Plumbing cleared bathtub backing up from drain + non-working toilet at 829 Bunker Hill unit 5.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "fd9874e2-0745-4019-b9e6-bdd89ab9520e",
+        "weight": 0.72,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "8cd5a0da-f758-4ba5-9195-67ef04ae4af9",
+    "summary": "José Gonzalez handled move-in issues: no hot water, dead disposals, stove gas, weak AC, dryer at 1616 Ashland Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "497dcfa2-849b-4c2b-bc01-009e5d23e976",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "a4e411ca-2a7c-46d4-a0e8-497c2790b0f2",
+    "summary": "Reckon & Reckon Plumbing cleared kitchen sink backing up when sinks run at 2135 Ivar Ave unit 1.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "fd9874e2-0745-4019-b9e6-bdd89ab9520e",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "ecc9dcdf-3075-462a-9af6-e25cf72b1840",
+    "summary": "George HVAC handled weak-airflow AC cycling on/off + two dead kitchen disposals at 1616 Ashland Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "073f16b1-9541-4c61-a6d8-16b67993dfd2",
+        "weight": 0.72,
+        "extra_edges": 0
+      },
+      {
+        "action": "noop",
+        "claim": null,
+        "belief_id": null,
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "c09d3f16-8ed2-4652-9c3c-5b402504363f",
+    "summary": "A1 Service Appliances handled AC not cooling at 829 Bunker Hill unit 6.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.58,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "9c5fc740-db14-4cc2-ba25-ea40f5b66982",
+    "summary": "Garcia’s Handyman checked smoke detector at 2312 West Blvd.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "cec20ee7-0d15-4a40-8d8d-246b9fc5d2ee",
+        "weight": 0.58,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "5da6370a-2b71-4708-9c26-31fc125f95ef",
+    "summary": "Rightway Apartment Service checked garbage disposal at 8921 Wonderland Park Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.45,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "907de00c-7a69-4a78-a724-2c70ba44f03c",
+    "summary": "Rightway Apartment Service handled washer flooding onto floor at 9th St Bungalow Home LLC unit 12.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.56,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "4db7273c-128d-4081-bcd0-505d3609b91c",
+        "weight": 0.47,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "e1253f95-8cab-4a81-be3e-12a64b0abe99",
+    "summary": "A1 Service Appliances handled AC not cooling at 829 Bunker Hill unit 5.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "96287cda-6ee7-468b-bc8e-83d1fac3c6de",
+    "summary": "Reckon & Reckon Plumbing snaked plumbing line at 9th St Bungalow Home LLC unit 12.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "fd9874e2-0745-4019-b9e6-bdd89ab9520e",
+        "weight": 0.63,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "92221f9e-e2eb-435c-bda8-5fe88d0c846b",
+    "summary": "Make It Work AC Service handled AC not cooling at 829 Bunker Hill unit 6.",
+    "ops": [
+      {
+        "action": "noop",
+        "claim": null,
+        "belief_id": null,
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "29e77c26-af43-4015-8200-e8f5a2d93e02",
+    "summary": "A1 Service Appliances handled weak-airflow AC cycling on/off at 1616 Ashland Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.62,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "79c343eb-d8b9-40d6-bd20-540c8adf039f",
+    "summary": "A1 Service Appliances handled fridge/freezer not cooling after defrost at 9th St Bungalow Home LLC unit 12.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "ba388a19-9248-4ffd-8615-411a13bf3faa",
+    "summary": "A1 Service Appliances serviced rooftop AC not blowing cold after filter change at 5178 Almont St.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.58,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "9593d568-705e-485a-bd4d-7e1348644a35",
+    "summary": "All City Plumbing investigated recurring sewer smell in entryway at 9033 Dicks St.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "b387fe84-5cc2-4eb9-a014-f78a4f1d2768",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "f03f2b3b-4cfa-413c-a3e0-c3e92a78f395",
+    "summary": "A1 Service Appliances handled AC making loud fan noise + not turning off at 9th St Bungalow Home LLC unit 1.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "bfd22b22-a603-4d7d-bcbe-65a143360f25",
+    "summary": "A1 Service Appliances fixed AC that would not power on at 9th St Bungalow Home LLC unit 9.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "88538a9f-cf68-49c1-9537-5c5be599e546",
+    "summary": "Jose Rivera Landscaping handled monthly gardening at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "4aca3d24-b55a-495f-b430-401d9b744938",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "c51936b8-2d36-44cc-bd64-d11adcfa9c43",
+    "summary": "United Glass & Windows repaired broken window at 4418 Vantage Ave unit 1.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "United Glass & Windows handles window and glass repairs.",
+        "belief_id": "81c88f57-2e06-406b-96e8-d994c945042e",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "7b514c8b-06d4-4cb5-8ad0-a92cf9753747",
+    "summary": "A1 Service Appliances handled leaking bedroom AC causing moisture in vacant unit at 4418 Vantage Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "20e41710-6784-48a5-ba30-a8a36a6dabb5",
+    "summary": "A1 Service Appliances handled non-working heater + replacement-system estimate at 829 Bunker Hill unit 5.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.72,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "7d8cf66d-5374-4989-b0fe-59e94af0f6a1",
+    "summary": "Rightway Apartment Service assessed pipe leak on building side by unit 5 at 4418 Vantage Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.56,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "abd4f5df-dd3d-40d1-827b-3c2cd0233398",
+    "summary": "Primate Pest Elimination handled secondary bug spraying follow-up at 2419 S Cochran Ave.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "31e73cb3-1129-4d71-8e9c-8d1f079483e1",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "f4a07b73-9271-44a4-b7ca-9dfaccd0d56a",
+    "summary": "Raptor Appliance Repair handled freezer leaking into fridge, clogged defrost drain, at 9th St Bungalow Home LLC unit 13.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "c640c418-6ecf-45a6-a60b-0ea197b911bb",
+        "weight": 0.58,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "77c2e480-b948-4043-92a5-9a724f45655d",
+    "summary": "Tony Germann handled intermittently-working heater needing service + estimate at 2419 S Cochran Ave unit 2419.",
+    "ops": [
+      {
+        "action": "noop",
+        "claim": null,
+        "belief_id": null,
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "0d887d95-3cc5-49e4-8bd8-9692d939f725",
+    "summary": "Raptor Appliance Repair fixed washer leaking through door at 5179 Huntington Dr.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "c640c418-6ecf-45a6-a60b-0ea197b911bb",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "071c393c-d5a6-4d2b-8c9f-90c484ec9485",
+    "summary": "ASAP Locksmith rekeyed front + back door knobs at 9th St Bungalow Home LLC unit 8.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "ASAP Locksmith handles locksmith and lock issues.",
+        "belief_id": "78715c48-d678-4efc-8f8a-b0b958bd4b32",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "5b503663-a599-43c1-88db-5d890972a42f",
+    "summary": "All City Plumbing handled no hot water at 829 Bunker Hill unit 6.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "b387fe84-5cc2-4eb9-a014-f78a4f1d2768",
+        "weight": 0.58,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "8155a5f3-33e7-4498-bc57-47e1a1d26948",
+    "summary": "King Neptune Pools handled out pool light at 8921 Wonderland Park Ave.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "King Neptune Pools Inc. handles pool maintenance and pool equipment issues.",
+        "belief_id": "9ef2f1cb-cfed-4af4-9104-9db554c855cb",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "d0435afa-75e1-4e5b-b8ec-a7a1ad44644b",
+    "summary": "All City Plumbing investigated bathroom ceiling bubbling under upstairs bathroom at 3473 Sabina St.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "b387fe84-5cc2-4eb9-a014-f78a4f1d2768",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "79a549ae-b6fa-4dac-a807-f41ef4b20626",
+    "summary": "South County Exterminators handled flying carpenter ant infestation in back bedroom at 4219 Abner St.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "South County Exterminators handles pest-control issues.",
+        "belief_id": "8a4db512-f156-4cae-b455-ac4354c16775",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "295133c5-b463-4118-b940-0c013f41f02a",
+    "summary": "Jimmy’s Pool Service handled monthly pool cleaning at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "c85b5f32-0983-4d2e-84ba-723ca2a1e0ee",
+        "weight": 0.58,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "f986442e-0826-4fcb-82ec-52f90e27200f",
+        "weight": 0.54,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "17a89772-7978-4741-9efb-1211d3b07a12",
+    "summary": "Jose Rivera Landscaping handled monthly gardening at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "4aca3d24-b55a-495f-b430-401d9b744938",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "809cdf91-6059-4028-ad9a-dee370454d73",
+    "summary": "All City Plumbing handled shower water not getting hot at 4418 Vantage Ave unit 3.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "b387fe84-5cc2-4eb9-a014-f78a4f1d2768",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "e4bf42f0-012c-447a-a9c0-81341ff7b77a",
+    "summary": "Bresnahan Rain Gutter Cleaning estimated reseating gutter fallen into balcony at 829 Bunker Hill unit 9.",
+    "ops": [
+      {
+        "action": "noop",
+        "claim": null,
+        "belief_id": null,
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "eb3db6d7-8103-404f-ac10-37ed58b4ad57",
+    "summary": "Bondy Service handled communal washer/dryer not powering on, app error, at 9th St Bungalow Home LLC unit 9.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Bondy Service Inc handles laundry appliance repairs, including communal washers and dryers.",
+        "belief_id": "c2784d19-f8c3-461d-9082-83238f5448de",
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "c42d147e-9980-42c0-abf5-233a1f5ec6bb",
+    "summary": "All City Plumbing handled leak in wall behind upstairs shower dripping to floor below at 2123 Linnington.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "b387fe84-5cc2-4eb9-a014-f78a4f1d2768",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "3bdb29a9-4b68-425b-b7f2-bed450a28d6f",
+    "summary": "Rightway Apartment Service handled leak from garage water pipe/sprinkler at 2135 Ivar Ave unit 7.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "6a207b78-4079-4145-9f81-6d6588674816",
+        "weight": 0.52,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "02ccf3a2-5ec8-43ee-a72d-5d483d9e9a4e",
+    "summary": "Rightway Apartment Service handled stuck dryer door + washer not completing cycles at Horizon Ave Duplex unit 218.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.52,
+        "extra_edges": 1
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "87e16113-dece-4fce-8711-c72e57775b79",
+    "summary": "Rightway Apartment Service handled parking-garage leak dripping on car + pooling ceiling at 2135 Ivar Ave unit 2.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.58,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "6a207b78-4079-4145-9f81-6d6588674816",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "6d4d3537-0451-4d1c-b7e4-f57349f91a43",
+    "summary": "A1 Service Appliances handled recurring AC issue with flashing thermostat at 5178 Almont St.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "3cbcd3c8-aa36-4476-b796-9b0992963ca4",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "71c93846-7f9c-452b-a828-1b9de952b304",
+    "summary": "Rightway Apartment Service handled recurring broken latch on front glass hallway door at 2135 Ivar Ave unit 1.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "721b39a0-9658-4c67-b83f-1df03a89ed7f",
+        "weight": 0.56,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "6a207b78-4079-4145-9f81-6d6588674816",
+        "weight": 0.52,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "c5a8b591-2c1a-4318-8e3d-47e5eb678d51",
+    "summary": "Raptor Appliance Repair handled non-working washing machine at 8342 Kirkwood.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "c640c418-6ecf-45a6-a60b-0ea197b911bb",
+        "weight": 0.72,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "0cd5a79c-9cb0-41db-a927-90e96c1dc7f8",
+    "summary": "All City Plumbing cleared slow-draining bathroom sink at 1827 S Barrington Ave #107.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "b387fe84-5cc2-4eb9-a014-f78a4f1d2768",
+        "weight": 0.56,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "1fe53b81-833b-4d0f-a00f-d8a205f8ae1d",
+    "summary": "Raptor Appliance Repair handled non-working garbage disposal at 8342 Kirkwood.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "c640c418-6ecf-45a6-a60b-0ea197b911bb",
+        "weight": 0.55,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "a15b4a5d-71ba-4c88-a617-09a5f9749760",
+    "summary": "Raptor Appliance Repair handled garbage disposal not activating from light switch at 9th St Bungalow Home LLC unit 12.",
+    "ops": [
+      {
+        "action": "create",
+        "claim": "Raptor Appliance Repair handles appliance repairs.",
+        "belief_id": "9b811033-e4f2-4c43-8556-fd21c475771d",
+        "weight": null,
+        "extra_edges": 0
+      },
+      {
+        "action": "noop",
+        "claim": null,
+        "belief_id": null,
+        "weight": null,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "82d2d822-d2e6-43c6-95be-aa19964f81f3",
+    "summary": "George HVAC serviced + cleaned dehumidifier at Horizon Ave Duplex.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "073f16b1-9541-4c61-a6d8-16b67993dfd2",
+        "weight": 0.58,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "05b8c724-a37e-4509-987a-efd10ef39385",
+    "summary": "Jimmy’s Pool Service handled monthly pool cleaning at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "c85b5f32-0983-4d2e-84ba-723ca2a1e0ee",
+        "weight": 0.56,
+        "extra_edges": 0
+      },
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "f986442e-0826-4fcb-82ec-52f90e27200f",
+        "weight": 0.52,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  },
+  {
+    "obs": "9927b323-6baa-40c3-83bc-f3b67835f4cc",
+    "summary": "Jose Rivera Landscaping handled monthly gardening at 742 N Cherokee.",
+    "ops": [
+      {
+        "action": "attach",
+        "claim": null,
+        "belief_id": "4aca3d24-b55a-495f-b430-401d9b744938",
+        "weight": 0.6,
+        "extra_edges": 0
+      }
+    ],
+    "error": null
+  }
+]

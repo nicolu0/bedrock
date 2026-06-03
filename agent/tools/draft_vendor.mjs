@@ -4,11 +4,12 @@
 // fills template, writes draft row with channel='vendor_appfolio'. Human
 // reviews + copies into AppFolio.
 
-import { fetchIssueById } from '../core/supabase.mjs';
+import { fetchIssueById, fetchUnitTenantPhone, formatPhone } from '../core/supabase.mjs';
 import * as db from '../state/helpers.mjs';
 
-function renderVendorBody({ issue_summary }) {
-	return `Please schedule with the tenant for ${issue_summary}. Their phone number is [phone].`;
+function renderVendorBody({ issue_summary, tenant_phone }) {
+	const phone = tenant_phone ? ` Their phone number is ${tenant_phone}.` : '';
+	return `Please schedule with the tenant for ${issue_summary}.${phone}`;
 }
 
 export const draftVendor = {
@@ -44,7 +45,19 @@ export const draftVendor = {
 		// issue.name is the work-order title (e.g. "kitchen faucet leaking"),
 		// which reads naturally in the template's "for <issue>" slot.
 		const summary = issue.name || issue.description || 'this work order';
-		const body = renderVendorBody({ issue_summary: summary });
+
+		// The vendor needs a number to call. Prefer the issue's tenant; if that
+		// tenant has no phone (common for co-tenants), fall back to any unit-mate
+		// with one so the draft still carries a reachable number.
+		let tenantPhone = issue.tenant?.phone ?? null;
+		if (!tenantPhone && issue.unit_id) {
+			tenantPhone = await fetchUnitTenantPhone(issue.unit_id, { excludeName: issue.tenant?.name });
+		}
+
+		const body = renderVendorBody({
+			issue_summary: summary,
+			tenant_phone: formatPhone(tenantPhone)
+		});
 
 		const draft = await db.createDraft({
 			trigger: 'groupchat_reply',

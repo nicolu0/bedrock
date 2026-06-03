@@ -1,0 +1,398 @@
+{
+  "processed": 30,
+  "written": 30,
+  "results": [
+    {
+      "wo": "1234-1",
+      "title": "Pool service at 742 N Cherokee → Jimmy’s Pool Service",
+      "summary": "Jimmy’s Pool Service handled monthly pool cleaning at 742 N Cherokee.",
+      "vendor": "Jimmy’s Pool Service",
+      "property": "742 N Cherokee",
+      "tags": [
+        "pool",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1235-1",
+      "title": "Landscaping at 742 N Cherokee → Jose Rivera Landscaping",
+      "summary": "Jose Rivera Landscaping handled monthly gardening at 742 N Cherokee.",
+      "vendor": "Jose Rivera Landscaping",
+      "property": "742 N Cherokee",
+      "tags": [
+        "landscaping",
+        "gardening",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1236-1",
+      "title": "Dishwasher + leak check at 8921 Wonderland → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman repaired dishwasher soap dispenser, assessed leaks at 8921 Wonderland Park Ave.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "8921 Wonderland Park Ave Los Angeles, CA 90046",
+      "tags": [
+        "handyperson",
+        "dishwasher",
+        "leak",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1238-1",
+      "title": "AC odor at 9th St Bungalow → George HVAC",
+      "summary": "George HVAC handled AC foul-odor issue at 9th St Bungalow Home unit 5.",
+      "vendor": "George HVAC",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "hvac",
+        "ac",
+        "odor",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1239-1",
+      "title": "Light bulbs + lock at 9206 S Hoover → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman replaced missing bulbs, swapped bedroom lock for door knob at 9206 S Hoover St.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "9206 S Hoover St",
+      "tags": [
+        "handyperson",
+        "lighting",
+        "lock",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1240-1",
+      "title": "AC install at 1820 S Barrington → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman installed new AC at 1820 S Barrington unit 104.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "1820 S Barrington",
+      "tags": [
+        "handyperson",
+        "ac",
+        "install",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1242-1",
+      "title": "Fence bid at 505 N Belmont → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman gave fence bid for owner submission at 505 N Belmont Ave.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "505  N Belmont Ave",
+      "tags": [
+        "handyperson",
+        "fence",
+        "bid",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1246-1",
+      "title": "Smoke detectors at 115 Ocean Front Walk → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman replaced hardwired smoke detectors at 115 Ocean Front Walk, tall ceilings.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "115 Ocean Front Walk",
+      "tags": [
+        "handyperson",
+        "smoke-detector",
+        "fire-safety",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1247-1",
+      "title": "Bathroom reseal at 1820 S Barrington → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman resealed bathroom at 1820 S Barrington unit 104.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "1820 S Barrington",
+      "tags": [
+        "handyperson",
+        "bathroom",
+        "caulking",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1250-1",
+      "title": "Fridge seal at 1827 S Barrington → Rightway",
+      "summary": "Rightway Apartment Service handled weak fridge door seal at 1827 S Barrington Ave #107.",
+      "vendor": "Rightway Apartment Service",
+      "property": "1827 S Barrington Ave #107",
+      "tags": [
+        "handyperson",
+        "fridge",
+        "appliance",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1251-1",
+      "title": "Shower door seal at 9th St Bungalow → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman fixed shower door seal at 9th St Bungalow Home unit 13.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "handyperson",
+        "shower",
+        "seal",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1253-1",
+      "title": "Disposal leak at 2135 Ivar Ave → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman replaced leaking kitchen sink disposal at 2135 Ivar Ave unit 1.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "2135 Ivar Ave",
+      "tags": [
+        "handyperson",
+        "disposal",
+        "leak",
+        "plumbing",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1256-1",
+      "title": "Rats at 4239 Lindblade → Twin Home Experts",
+      "summary": "Twin Home Experts handled rat infestation in walls and attic at 4239 Lindblade.",
+      "vendor": "Twin Home Experts Consulting LLC",
+      "property": "4239 Lindblade",
+      "tags": [
+        "pest-control",
+        "rats",
+        "rodent",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1261-1",
+      "title": "Washer no cold water at 9033 Dicks St → A1 Service Appliances",
+      "summary": "A1 Service Appliances handled washer/dryer with no cold water at 9033 Dicks St.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "9033 Dicks St",
+      "tags": [
+        "appliance",
+        "washer",
+        "laundry",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1263-1",
+      "title": "Slow shower drain at 4418 Vantage Ave → Reckon & Reckon Plumbing",
+      "summary": "Reckon & Reckon Plumbing cleared slow-draining shower drain at 4418 Vantage Ave unit 1.",
+      "vendor": "Reckon & Reckon Plumbing Inc.",
+      "property": "4418 Vantage Ave",
+      "tags": [
+        "plumbing",
+        "drain",
+        "clog",
+        "shower",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1265-1",
+      "title": "Bathroom faucet at 8921 Wonderland → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman checked bathroom faucet that would not shut off at 8921 Wonderland Park Ave.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "8921 Wonderland Park Ave Los Angeles, CA 90046",
+      "tags": [
+        "handyperson",
+        "faucet",
+        "plumbing",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1269-1",
+      "title": "Water heater at 1820 S Barrington → Zakhar Plumbing",
+      "summary": "Zakhar Plumbing replaced water heater at 1820 S Barrington unit 201.",
+      "vendor": "Zakhar Plumbing",
+      "property": "1820 S Barrington",
+      "tags": [
+        "plumbing",
+        "water-heater",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1273-1",
+      "title": "Washer not draining at 4418 Vantage Ave → Raptor Appliance Repair",
+      "summary": "Raptor Appliance Repair handled laundry washer not draining at 4418 Vantage Ave unit 1.",
+      "vendor": "Raptor Appliance Repair",
+      "property": "4418 Vantage Ave",
+      "tags": [
+        "appliance",
+        "washer",
+        "laundry",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1274-1",
+      "title": "Ceiling lights out at 2135 Ivar Ave → Rightway",
+      "summary": "Rightway Apartment Service handled out ceiling and stairway lights at 2135 Ivar Ave unit 5.",
+      "vendor": "Rightway Apartment Service",
+      "property": "2135 Ivar Ave",
+      "tags": [
+        "handyperson",
+        "lighting",
+        "electrical",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1276-1",
+      "title": "Kitchen sink drain at 829 Bunker Hill → Reckon & Reckon Plumbing",
+      "summary": "Reckon & Reckon Plumbing cleared kitchen sink not draining at 829 Bunker Hill unit 11.",
+      "vendor": "Reckon & Reckon Plumbing Inc.",
+      "property": "829 Bunker Hill",
+      "tags": [
+        "plumbing",
+        "drain",
+        "sink",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1278-1",
+      "title": "Monthly cleaning at 829 Bunker Hill → Yesika Duarte",
+      "summary": "Yesika Duarte handled monthly cleaning at 829 Bunker Hill.",
+      "vendor": "Yesika Duarte",
+      "property": "829 Bunker Hill",
+      "tags": [
+        "cleaning",
+        "recurring-treatment",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1279-1",
+      "title": "Pool service at 742 N Cherokee → Jimmy’s Pool Service",
+      "summary": "Jimmy’s Pool Service handled monthly pool cleaning at 742 N Cherokee.",
+      "vendor": "Jimmy’s Pool Service",
+      "property": "742 N Cherokee",
+      "tags": [
+        "pool",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1281-1",
+      "title": "Leaking shower faucet at 8342 Kirkwood → Zakhar Plumbing",
+      "summary": "Zakhar Plumbing handled leaking shower faucet at 8342 Kirkwood.",
+      "vendor": "Zakhar Plumbing",
+      "property": "8342 Kirkwood",
+      "tags": [
+        "plumbing",
+        "faucet",
+        "leak",
+        "shower",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1283-1",
+      "title": "Fire extinguisher at 4418 Vantage Ave → Mike Green Fire Protection",
+      "summary": "Mike Green Fire Protection installed compliance fire extinguisher at 4418 Vantage Ave.",
+      "vendor": "Mike Green Fire Protection",
+      "property": "4418 Vantage Ave",
+      "tags": [
+        "fire-safety",
+        "fire-extinguisher",
+        "compliance",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1284-1",
+      "title": "Flood light sensor at 9th St Bungalow → Rightway",
+      "summary": "Rightway Apartment Service handled bright back-entrance flood light needing sensor at 9th St Bungalow unit 6.",
+      "vendor": "Rightway Apartment Service",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "handyperson",
+        "lighting",
+        "electrical",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1290-1",
+      "title": "AC not working at 829 Bunker Hill → First Aid Appliance & HVAC",
+      "summary": "First Aid Appliance & HVAC Pro handled non-working air conditioner at 829 Bunker Hill unit 6.",
+      "vendor": "FIRST AID APPLIANCE & HVAC PRO",
+      "property": "829 Bunker Hill",
+      "tags": [
+        "hvac",
+        "ac",
+        "appliance",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1291-1",
+      "title": "Leaking shower faucet at 8342 Kirkwood → Zakhar Plumbing",
+      "summary": "Zakhar Plumbing handled leaking shower faucet at 8342 Kirkwood.",
+      "vendor": "Zakhar Plumbing",
+      "property": "8342 Kirkwood",
+      "tags": [
+        "plumbing",
+        "faucet",
+        "leak",
+        "shower",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1285-3",
+      "title": "Make-ready punch list at 1616 Ashland Ave → Rightway",
+      "summary": "Rightway Apartment Service handled blinds, grout, outlet covers and door punch list at 1616 Ashland Ave.",
+      "vendor": "Rightway Apartment Service",
+      "property": "1616 Ashland Ave",
+      "tags": [
+        "handyperson",
+        "make-ready",
+        "punch-list",
+        "multi-issue-single-vendor",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1297-1",
+      "title": "Alley gate at 9th St Bungalow → Rightway",
+      "summary": "Rightway Apartment Service adjusted alley gate door not twisting or self-closing at 9th St Bungalow.",
+      "vendor": "Rightway Apartment Service",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "handyperson",
+        "gate",
+        "security",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1298-1",
+      "title": "Bathroom sink leak at 1827 S Barrington → Rightway",
+      "summary": "Rightway Apartment Service fixed leaking bathroom sink at 1827 S Barrington Ave #107.",
+      "vendor": "Rightway Apartment Service",
+      "property": "1827 S Barrington Ave #107",
+      "tags": [
+        "handyperson",
+        "sink",
+        "leak",
+        "plumbing",
+        "status-resolved"
+      ]
+    }
+  ]
+}

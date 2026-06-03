@@ -1,0 +1,14 @@
+-- Step 1 of dropping tenants.user_id (multi-tenant cleanup).
+-- user_id is vestigial: RLS on tenants now keys on unit_id joins ("Team members ...")
+-- and rows are scoped by workspace via units, not by a per-user FK.
+--
+-- Dropping NOT NULL first is the safe rollout order:
+--   1. (this migration) make user_id nullable — old appfolio-sync code still writes a
+--      value, so nothing breaks; new code (and the Green Oak crawler) can now insert
+--      tenants with a null user_id.
+--   2. redeploy appfolio-sync with the user_id write stripped.
+--   3. drop the column (20260601121000_tenants_drop_user_id.sql).
+--
+-- Drop-NOT-NULL-first avoids the insert-failure window that "stop writing then drop"
+-- would open, and unblocks the crawler's tenant load immediately.
+alter table public.tenants alter column user_id drop not null;

@@ -20,8 +20,13 @@ import { fileURLToPath } from 'node:url';
 import { patchIssue } from '../core/supabase.mjs';
 
 import * as db from '../state/helpers.mjs';
-import { WORKSPACES, normalizeHandle } from '../core/workspaces.mjs';
-import { deleteIssuesByWorkspace, supabaseEnv } from '../core/supabase.mjs';
+import {
+	WORKSPACES,
+	normalizeHandle,
+	listWorkspacesForUi,
+	appfolioRunnerPorts
+} from '../core/workspaces.mjs';
+import { supabaseEnv } from '../core/supabase.mjs';
 import * as memory from '../core/memory.mjs';
 import { getDb as getChatDb, extractText, appleDateToISO } from '../triggers/chat-poller.mjs';
 
@@ -294,7 +299,7 @@ function text(res, status, value) {
 	res.end(value);
 }
 
-// Map ?workspace=prod|test (or a raw workspace_id) to a workspace uuid via
+// Map ?workspace=<label> (or a raw workspace_id) to a workspace uuid via
 // WORKSPACES. Memory endpoints reject 'all' — the graph is workspace-scoped
 // by design.
 function resolveWorkspaceId(value) {
@@ -420,11 +425,18 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 		try {
 			if (req.method === 'GET' && pathname === '/') {
 				const pageHtml = await fs.readFile(PAGE_PATH, 'utf8');
+				// Inject the workspace list so the selector is data-driven off
+				// core/workspaces.mjs (no hardcoded prod/test buttons in the page),
+				// plus the per-workspace AppFolio runner ports so "Send via AppFolio"
+				// hits the dedicated runner process for that draft's account.
+				const injected = pageHtml
+					.replace('"__WORKSPACES_LIST__"', JSON.stringify(listWorkspacesForUi()))
+					.replace('"__RUNNER_PORTS__"', JSON.stringify(appfolioRunnerPorts()));
 				res.writeHead(200, {
 					'content-type': 'text/html; charset=utf-8',
 					'cache-control': 'no-store'
 				});
-				res.end(pageHtml);
+				res.end(injected);
 				return;
 			}
 
@@ -489,11 +501,11 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 			}
 
 			// ── Memory graph endpoints ───────────────────────────────────────
-			// All workspace-scoped. ?workspace=prod|test resolves via WORKSPACES.
+			// All workspace-scoped. ?workspace=<label> resolves via WORKSPACES.
 
 			if (req.method === 'GET' && pathname === '/api/memory/graph') {
 				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
-				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				if (!workspace_id) return text(res, 400, 'workspace param required');
 				const [
 					observations,
 					beliefs,
@@ -524,7 +536,7 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 
 			if (req.method === 'GET' && pathname === '/api/memory/search') {
 				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
-				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				if (!workspace_id) return text(res, 400, 'workspace param required');
 				const q = (url.searchParams.get('q') ?? '').trim();
 				if (!q) return json(res, 200, { observations: [], beliefs: [] });
 				const [obsAll, beliefsAll] = await Promise.all([
@@ -548,7 +560,7 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 
 			if (req.method === 'POST' && pathname === '/api/memory/beliefs') {
 				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
-				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				if (!workspace_id) return text(res, 400, 'workspace param required');
 				const payload = await readBody(req);
 				if (!payload.claim) return text(res, 400, 'claim required');
 				try {
@@ -595,7 +607,7 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 
 			if (req.method === 'GET' && pathname === '/api/sessions') {
 				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
-				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				if (!workspace_id) return text(res, 400, 'workspace param required');
 				const sessions = await listChatSessions(workspace_id);
 				return json(res, 200, sessions);
 			}
@@ -618,7 +630,7 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 
 			if (req.method === 'GET' && pathname === '/api/entities') {
 				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
-				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				if (!workspace_id) return text(res, 400, 'workspace param required');
 				const rows = await listEntitiesForWorkspace(workspace_id);
 				return json(res, 200, rows);
 			}
@@ -628,16 +640,6 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				const [, entity_id] = entityBeliefsMatch;
 				const beliefs = await listBeliefsForEntity(entity_id);
 				return json(res, 200, beliefs);
-			}
-
-			if (req.method === 'POST' && pathname === '/api/clear-test') {
-				const testEntry = Object.entries(WORKSPACES).find(([, w]) => w.label === 'test');
-				if (!testEntry) return text(res, 500, 'no test workspace configured');
-				const [test_ws_id] = testEntry;
-				const local = await db.clearWorkspaceLocalState('test');
-				const supa = await deleteIssuesByWorkspace(test_ws_id);
-				log(`cleared test workspace: ${JSON.stringify({ local, supa })}`);
-				return json(res, 200, { ok: true, local, supabase: supa });
 			}
 
 			if (req.method === 'GET' && pathname === '/api/chat-log') {
@@ -708,7 +710,7 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 
 			if (req.method === 'GET' && pathname === '/api/issues') {
 				const workspace_id = resolveWorkspaceId(url.searchParams.get('workspace'));
-				if (!workspace_id) return text(res, 400, 'workspace=prod|test required');
+				if (!workspace_id) return text(res, 400, 'workspace param required');
 				const [issues, drafts, responses] = await Promise.all([
 					listIssuesForWorkspace(workspace_id),
 					db.loadDrafts(),
@@ -855,10 +857,12 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 
 			if (req.method === 'GET' && pathname === '/kpi') {
 				const [allSent, allResponses] = await Promise.all([db.loadSent(), db.loadResponses()]);
-				// KPIs are prod-only. Test traffic is dev/QA noise and would
-				// inflate or skew the real send-without-edit numbers.
-				const sent = allSent.filter((r) => r.workspace_label === 'prod');
-				const responses = allResponses.filter((r) => r.workspace_label === 'prod');
+				// KPIs are per-workspace: scope to the requested workspace_label so
+				// each customer shows its own numbers (zeros until it has activity).
+				// Defaults to LAPM ('prod') for back-compat.
+				const wsLabel = url.searchParams.get('workspace') ?? 'prod';
+				const sent = allSent.filter((r) => r.workspace_label === wsLabel);
+				const responses = allResponses.filter((r) => r.workspace_label === wsLabel);
 				const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
 				const recent = responses.filter((r) => new Date(r.timestamp).getTime() >= since);
 				const sends = recent.filter((r) => r.action === 'send');
@@ -871,7 +875,7 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				}
 				return json(res, 200, {
 					window_days: 30,
-					scope: 'prod',
+					scope: wsLabel,
 					sent_total: sent.length,
 					responses_total: responses.length,
 					recent_responses: recent.length,

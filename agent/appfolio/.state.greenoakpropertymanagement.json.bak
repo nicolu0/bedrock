@@ -1,0 +1,315 @@
+{
+  "cookies": [
+    {
+      "name": "AUTH_SESSION_ID",
+      "value": "Nmh0LWUtV2VUUW1qelpwSUUtbExIYUVFLlFJMHVyYUhfY1oyck5LWDZZRW42R3VwWldDM2tlRy11UW5MVVFnWERLbldLLUlpV0cyVTBiTzJmYmV3bVhGaWRZcGNCQnJ1R0lkYzB0blJmcjVadE9R.ip-10-0-13-87-4440",
+      "domain": "account.appfolio.com",
+      "path": "/realms/property/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "KEYCLOAK_REMEMBER_MY_DEVICE",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIyM2U0NTdlNi1kYTFjLTRlYjMtYjI5Zi0xODQ1NTI5ZjBhZjcifQ.eyJleHBpcmF0aW9uIjoxNzgyOTUyNjIzMTkwLCJ1c2VybmFtZSI6ImdyZWVub2FrcHJvcGVydHltYW5hZ2VtZW50QHVzZWJlZHJvY2suY28ifQ.RH2X7LLG6-gpbLad74GS9WmtFOv-VHEKS-NN9wlAXBI",
+      "domain": "account.appfolio.com",
+      "path": "/realms/property/",
+      "expires": 1782952623.332795,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "KEYCLOAK_IDENTITY",
+      "value": "eyJhbGciOiJIUzUxMiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJmOWY1NzdkZS05NThmLTQ2NjUtYjNkZi1mMTg3YjIzNTYxNTkifQ.eyJleHAiOjE3ODAzOTY2MjMsImlhdCI6MTc4MDM2MDYyMywianRpIjoiMDg5YWI3NDAtYjVhNS0wMTYyLTNhOGMtZWEyN2ViZWMyYTU1IiwiaXNzIjoiaHR0cHM6Ly9hY2NvdW50LmFwcGZvbGlvLmNvbS9yZWFsbXMvcHJvcGVydHkiLCJzdWIiOiI5YTM5NGYyYS1iZmZkLTRjMDgtYjFlNy03YjI3OGI2ZThmODIiLCJ0eXAiOiJTZXJpYWxpemVkLUlEIiwic2lkIjoiNmh0LWUtV2VUUW1qelpwSUUtbExIYUVFIiwic3RhdGVfY2hlY2tlciI6ImhRTm55cEhMVEQ4Tm5OZUl6dGVuQU00VTZwTlZadkRGT0xqWFlMaVBsV1UifQ.3gxSULgl92U6mktQ5LkheCw4Lym_6jCne7fAhc5bHUfiv7OsMnd53sdDYlTm9o9rc9udxWeDJQX5tNfKdljbyg",
+      "domain": "account.appfolio.com",
+      "path": "/realms/property/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "KEYCLOAK_SESSION",
+      "value": "S5yGoAA6R_5mxe8Dz5x46RTNX65Ln78oyXzlPdBIW1Y",
+      "domain": "account.appfolio.com",
+      "path": "/realms/property/",
+      "expires": 1780396623.332866,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "af_fingerprint",
+      "value": "28ebe2c6c3929304a9b0bd1cbea96e2819bd62a9",
+      "domain": ".appfolio.com",
+      "path": "/",
+      "expires": 1814920576.220955,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_sp_ses.3403",
+      "value": "*",
+      "domain": ".appfolio.com",
+      "path": "/",
+      "expires": 1780362428,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "intercom-id-u3fkdwwh",
+      "value": "fb8ad44f-1913-44f2-a2c7-bd42177759ba",
+      "domain": ".appfolio.com",
+      "path": "/",
+      "expires": 1780361515,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "intercom-device-id-u3fkdwwh",
+      "value": "0950c3b1-fda0-41c1-a9fc-99f623eba453",
+      "domain": ".appfolio.com",
+      "path": "/",
+      "expires": 1803690628,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_dd_s",
+      "value": "aid=10534f77-7f99-4567-a812-4eac5ba66fc5&logs=1&id=0045e7b0-45b5-4e45-82f4-5abf52a60a4c&created=1780360576537&expire=1780361523173",
+      "domain": "account.appfolio.com",
+      "path": "/",
+      "expires": 1811896623,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Strict"
+    },
+    {
+      "name": "af_database",
+      "value": "greenoakpropertymanagement",
+      "domain": ".appfolio.com",
+      "path": "/",
+      "expires": 1814920624.073006,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "outdatedbrowser",
+      "value": "pause",
+      "domain": "greenoakpropertymanagement.appfolio.com",
+      "path": "/",
+      "expires": 1781570225.079671,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "current_screen_size",
+      "value": "extra-large",
+      "domain": "greenoakpropertymanagement.appfolio.com",
+      "path": "/",
+      "expires": 1780447028.241609,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "active_end_sidebar_tab",
+      "value": "tasks-sidebar",
+      "domain": "greenoakpropertymanagement.appfolio.com",
+      "path": "/",
+      "expires": 1780447025.58751,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__ssid",
+      "value": "9ebe0b47bb82ae31a97628c98e7b9ee",
+      "domain": ".appfolio.com",
+      "path": "/",
+      "expires": 1814920625.818952,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_sp_id.3403",
+      "value": "f65dacd0-a7d8-43c5-9f97-ad50257808b3.1780360577.1.1780360628..71f93c42-be27-4348-8c99-61ddf324df94..f99e4ea8-1185-4a8c-b2a1-83abfec2654f.1780360576637.10",
+      "domain": ".appfolio.com",
+      "path": "/",
+      "expires": 1814920628.112694,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "https://greenoakpropertymanagement.appfolio.com_ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$session_state",
+      "value": "{\"lastSessionTimestamp\":1780360628057,\"sessionId\":\"157288ca-0df5-4e91-9b66-d1e6a590a619\"}",
+      "domain": "a20035616984.cdn.optimizely.com",
+      "path": "/",
+      "expires": 1795912628.217995,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "intercom-session-u3fkdwwh",
+      "value": "OGJOU2szZ2FPdHlVSm5LWkZIRmVJSlFDb0hpRDhwbmpaZGVJdFZUZjEreEJZdFk4aWpwV2I3MnI2VmhnUWp6V3hnYmt5R3FiZHdqc0JWeGZJZGUraHYveXBEUFNaR290RnZPYXN3NEhkWlBMQnYyTkpNbzhLcDFsekFac0ozWDArWmFqanFZVkJGODljMWVwMXdnN1hnS2pKWE04MVBvQUpaMlB3ZnRxUEdOa2c2RkJQQ1lVajZpQ1RaYkhZbHRNMmNuM2RxTGdac0xJcGVjWE1pRXBBQkRHVnZBdDVKams2b0VMcEs4VkZwQVZpYTkrTXZtVjN6MTBYL0g0TzFIdzVqUWplV0JwZTdpaDRIRThnTUhnYnc9PS0tYytiZE9jRVBpUGF1dzZMZ3grTFd2Zz09--2af4d8f0bd7f2d19c23a940a1c7db5da536894c6",
+      "domain": ".appfolio.com",
+      "path": "/",
+      "expires": 1780361528,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_dd_s",
+      "value": "aid=dff2ac4b-8fea-4117-8aa4-0bbb27961414&rum=0&expire=1780361529077",
+      "domain": "greenoakpropertymanagement.appfolio.com",
+      "path": "/",
+      "expires": 1811896629,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Strict"
+    },
+    {
+      "name": "_property_session",
+      "value": "I7cv84qf3sJ55jnHn8VmpUia3FdhQqxqozmEaqfGfbIrs75QZUuJK%2BWQ2PNBeSuvV0jDmGglkmLYhcS9KvbpqFrYuAPGL8WkB6rRQ2ENjyhaEz0l59bAcJcdwFBKei807nyvNRW%2FoIE64K6lKRE2DWnDLTpXPAxISKA04IktZKG5arOfWtNoqZW5nujYU0XwXGoWs0qgT1QaS0HmiygZM1evGTTs5wqJo03n7IhLV621vX81r4xSozgbgeY2RUaZVMvvUHSY0aNBEmyBmGIGM6KE%2F7YBq%2FHLxpF1tbVhFZiTqc6vIOSVGPgU0OK1M6Dqqa2YRAhGjKayBWkyxV%2Fd60SuuOh%2FyExydtbrIVkpHrSWA0Du%2BSUYZ%2FcHR89TwPbCZjXhDxo0pGzZELPjA0294HoLdPntR9q9%2FW4wpzK15Cb7kqZuS%2B5YJMcSnevGcHr9ZRIqV7jD0gOhXPJ4%2FoP8Uy5pJXCpG81NZC3WXVZ3iQ1XJzwm3waOmPIsSdaCK%2BV8LwJ3DQr8m6fl%2BbHeg4%2Bq2oN%2FrF1k%2B%2B4lPotmgKdX7prXNk77I0TiKcc77VrzbDZeWIlVIZoGKVTtx6Noi%2BGYouoLRI%2FLieEhCjZxHiXdXVx4%2Ff0ngGY7j7yZVJsRkkTiQvlR9Oknwc4SJsB7fu53%2FwBv1sZsS1Nmx%2BpuRZFZbFjL%2B%2FE13cGH5KNkj0kSM%2B8uCdAe8hlz3pQa--e27JpiM5d4DNp5Tu--BSNQh9GNUe9ELnoAyv5xeQ%3D%3D",
+      "domain": "greenoakpropertymanagement.appfolio.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://greenoakpropertymanagement.appfolio.com",
+      "localStorage": [
+        {
+          "name": "_pendo_meta.1ff2f78f-0cd7-4525-5631-4d97fad3daab",
+          "value": "{\"ttl\":1789000625742,\"value\":1645774952}"
+        },
+        {
+          "name": "optimizely_data$$ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$session_state",
+          "value": "{\"lastSessionTimestamp\":1780360628057,\"sessionId\":\"157288ca-0df5-4e91-9b66-d1e6a590a619\"}"
+        },
+        {
+          "name": "_pendo_visitorId.1ff2f78f-0cd7-4525-5631-4d97fad3daab",
+          "value": "{\"ttl\":1789000628260,\"value\":\"ddbd5c91-5bae-11f1-a851-0a10eb9173f5\"}"
+        },
+        {
+          "name": "snowplowOutQueue_snowplow_sp1",
+          "value": "[]"
+        },
+        {
+          "name": "intercom.intercom-state-u3fkdwwh",
+          "value": "{\"app\":{\"openConfig\":{\"unifiedStyling\":true,\"openTo\":\"home\",\"spaces\":[{\"type\":\"home\",\"label\":\"Home\",\"navigationLabel\":\"Home\",\"badge\":null},{\"type\":\"messages\",\"label\":\"Messages\",\"navigationLabel\":\"Messages\",\"badge\":null},{\"type\":\"help\",\"label\":\"Help\",\"navigationLabel\":\"Help\",\"badge\":null},{\"type\":\"tasks\",\"label\":\"Tasks\",\"navigationLabel\":\"Tasks\",\"badge\":null},{\"type\":\"news\",\"label\":\"News\",\"navigationLabel\":\"News\",\"badge\":null}],\"userHasReceivedChecklists\":false,\"userHasLiveNewsfeed\":false,\"userHasTickets\":false},\"selfServeSuggestionsMatch\":false,\"name\":\"AppFolio\",\"features\":{\"anonymousInboundMessages\":true,\"googleAnalytics\":true,\"hubspotInstalled\":false,\"inboundMessages\":true,\"marketoEnrichmentInstalled\":false,\"googleAnalytics4Integration\":true,\"improveOpenBehavior\":false},\"helpCenterSiteUrl\":\"https://knowledge.appfolio.com\",\"inboundConversationsDisabled\":false,\"isDeveloperWorkspace\":false,\"customGoogleAnalyticsTrackerId\":\"G-F73LVDXC71\"},\"launcher\":{\"isLauncherEnabled\":true},\"launcherDiscoveryMode\":{\"hasDiscoveredLauncher\":true},\"launcherSettings\":{\"alignment\":\"right\",\"color\":\"#006EB7\",\"colorDark\":\"#34a2eb\",\"hasRequiredFeatures\":true,\"horizontalPadding\":20,\"instantBootEnabled\":false,\"launcherLogoUrl\":\"https://downloads.intercomcdn.com/i/o/u3fkdwwh/594316/3ca13eddb05d09673ab28c9e9349/5d73ede4689a6d589e63cc43c16f9e88.png\",\"launcherLogoDarkUrl\":null,\"messengerLayout\":\"widget\",\"messengerModeSwitcherEnabled\":false,\"secondaryColor\":\"#006EB7\",\"secondaryColorDark\":\"#006eb7\",\"showLauncher\":true,\"themeMode\":\"light\",\"updatedAt\":1780276345,\"verticalPadding\":20,\"isLoading\":false},\"user\":{\"id\":\"6a1a15708cabd52aa733bb8e\",\"role\":\"user\",\"locale\":\"en\",\"hasConversations\":true},\"message\":{},\"conversations\":{\"byId\":{}},\"openOnBoot\":{\"type\":null,\"metadata\":{},\"lastOpenAtTimestamp\":1780360634691},\"operator\":{\"lastComposerEvent\":0},\"router\":{\"isInitialized\":false,\"navigationQueue\":[]}}"
+        },
+        {
+          "name": "optimizely_data$$ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$tracker_optimizely",
+          "value": "{}"
+        },
+        {
+          "name": "_pendo_accountId.1ff2f78f-0cd7-4525-5631-4d97fad3daab",
+          "value": "{\"ttl\":1789000628261,\"value\":\"ff638028-3743-4ddf-a662-06b494bf7c8c\"}"
+        },
+        {
+          "name": "_pendo_sessionId.1ff2f78f-0cd7-4525-5631-4d97fad3daab",
+          "value": "{\"sessionId\":\"RqOlJ8ib9d6DhcFP\",\"timestamp\":1780360628261}"
+        },
+        {
+          "name": "optimizely_data$$ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$contextual_mab",
+          "value": "{}"
+        },
+        {
+          "name": "optimizely_data$$ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$visitor_profile",
+          "value": "{\"profile\":{\"custom\":{\"bill_pay_enabled\":{\"value\":true},\"e_check_enabled\":{\"value\":true},\"uuid\":{\"value\":\"ddbd5c91-5bae-11f1-a851-0a10eb9173f5\"},\"20207410147\":{\"id\":\"20207410147\",\"value\":\"greenoakpropertymanagement\",\"name\":\"vhost\"}},\"visitorId\":\"ddbd5c91-5bae-11f1-a851-0a10eb9173f5\"},\"metadata\":{\"custom\":{\"bill_pay_enabled\":{\"lastModified\":1780360628056},\"e_check_enabled\":{\"lastModified\":1780360628056},\"uuid\":{\"lastModified\":1780360628056},\"20207410147\":{\"lastModified\":1780360628056}},\"visitorId\":{}}}"
+        },
+        {
+          "name": "_pendo_guides_blocked.1ff2f78f-0cd7-4525-5631-4d97fad3daab",
+          "value": "{\"ttl\":1780375025907,\"value\":\"0\"}"
+        },
+        {
+          "name": "optimizely_data$$ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$layer_states",
+          "value": "[]"
+        },
+        {
+          "name": "optimizely_data$$ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$layer_map",
+          "value": "{}"
+        },
+        {
+          "name": "optimizely_data$$pending_events",
+          "value": "{}"
+        },
+        {
+          "name": "optimizely_data$$ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$variation_map",
+          "value": "{}"
+        },
+        {
+          "name": "_pendo_utm.1ff2f78f-0cd7-4525-5631-4d97fad3daab",
+          "value": "{\"channel\":\"Direct\"}"
+        }
+      ]
+    },
+    {
+      "origin": "https://account.appfolio.com",
+      "localStorage": [
+        {
+          "name": "snowplowOutQueue_snowplow_sp1",
+          "value": "[]"
+        },
+        {
+          "name": "intercom.intercom-state-u3fkdwwh",
+          "value": "{\"app\":{\"openConfig\":{\"unifiedStyling\":true,\"openTo\":\"home\",\"spaces\":[{\"type\":\"home\",\"label\":\"Home\",\"navigationLabel\":\"Home\",\"badge\":null},{\"type\":\"messages\",\"label\":\"Messages\",\"navigationLabel\":\"Messages\",\"badge\":null},{\"type\":\"tickets\",\"label\":\"Tickets\",\"navigationLabel\":\"Tickets\",\"badge\":null},{\"type\":\"tasks\",\"label\":\"Tasks\",\"navigationLabel\":\"Tasks\",\"badge\":null}],\"userHasReceivedChecklists\":false,\"userHasLiveNewsfeed\":false,\"userHasTickets\":false},\"selfServeSuggestionsMatch\":false,\"name\":\"AppFolio\",\"features\":{\"anonymousInboundMessages\":true,\"googleAnalytics\":true,\"hubspotInstalled\":false,\"inboundMessages\":true,\"marketoEnrichmentInstalled\":false,\"googleAnalytics4Integration\":true,\"improveOpenBehavior\":false},\"helpCenterSiteUrl\":\"https://knowledge.appfolio.com\",\"inboundConversationsDisabled\":false,\"isDeveloperWorkspace\":false,\"customGoogleAnalyticsTrackerId\":\"G-F73LVDXC71\"},\"launcher\":{\"isLauncherEnabled\":true},\"launcherDiscoveryMode\":{\"hasDiscoveredLauncher\":true},\"launcherSettings\":{\"alignment\":\"right\",\"color\":\"#006EB7\",\"colorDark\":\"#34a2eb\",\"hasRequiredFeatures\":true,\"horizontalPadding\":20,\"instantBootEnabled\":false,\"launcherLogoUrl\":\"https://downloads.intercomcdn.com/i/o/u3fkdwwh/594316/3ca13eddb05d09673ab28c9e9349/5d73ede4689a6d589e63cc43c16f9e88.png\",\"launcherLogoDarkUrl\":null,\"messengerLayout\":\"widget\",\"messengerModeSwitcherEnabled\":false,\"secondaryColor\":\"#006EB7\",\"secondaryColorDark\":\"#006eb7\",\"showLauncher\":true,\"themeMode\":\"light\",\"updatedAt\":1780276345,\"verticalPadding\":20,\"isLoading\":false},\"user\":{\"id\":\"6a1e25818c7718b2ef76756a\",\"role\":\"visitor\",\"locale\":\"en\",\"hasConversations\":true},\"message\":{},\"conversations\":{\"byId\":{}},\"openOnBoot\":{\"type\":null,\"metadata\":{},\"lastOpenAtTimestamp\":1780360622565},\"operator\":{\"lastComposerEvent\":0},\"router\":{\"isInitialized\":false,\"navigationQueue\":[]}}"
+        }
+      ]
+    },
+    {
+      "origin": "https://a20035616984.cdn.optimizely.com",
+      "localStorage": [
+        {
+          "name": "https://greenoakpropertymanagement.appfolio.com_ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$layer_states",
+          "value": "[]"
+        },
+        {
+          "name": "https://greenoakpropertymanagement.appfolio.com_pending_events",
+          "value": "{}"
+        },
+        {
+          "name": "https://greenoakpropertymanagement.appfolio.com_ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$visitor_profile",
+          "value": "{\"profile\":{\"custom\":{\"bill_pay_enabled\":{\"value\":true},\"e_check_enabled\":{\"value\":true},\"uuid\":{\"value\":\"ddbd5c91-5bae-11f1-a851-0a10eb9173f5\"},\"20207410147\":{\"id\":\"20207410147\",\"value\":\"greenoakpropertymanagement\",\"name\":\"vhost\"}},\"visitorId\":\"ddbd5c91-5bae-11f1-a851-0a10eb9173f5\"},\"metadata\":{\"custom\":{\"bill_pay_enabled\":{\"lastModified\":1780360628056},\"e_check_enabled\":{\"lastModified\":1780360628056},\"uuid\":{\"lastModified\":1780360628056},\"20207410147\":{\"lastModified\":1780360628056}},\"visitorId\":{}}}"
+        },
+        {
+          "name": "https://greenoakpropertymanagement.appfolio.com_ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$session_state",
+          "value": "{\"lastSessionTimestamp\":1780360628057,\"sessionId\":\"157288ca-0df5-4e91-9b66-d1e6a590a619\"}"
+        },
+        {
+          "name": "https://greenoakpropertymanagement.appfolio.com_ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$contextual_mab",
+          "value": "{}"
+        },
+        {
+          "name": "https://greenoakpropertymanagement.appfolio.com_ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$layer_map",
+          "value": "{}"
+        },
+        {
+          "name": "https://greenoakpropertymanagement.appfolio.com_ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$tracker_optimizely",
+          "value": "{}"
+        },
+        {
+          "name": "https://greenoakpropertymanagement.appfolio.com_ddbd5c91-5bae-11f1-a851-0a10eb9173f5$$20120098439$$variation_map",
+          "value": "{}"
+        }
+      ]
+    }
+  ]
+}

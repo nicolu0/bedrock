@@ -65,7 +65,7 @@ function resolveParticipants(chatGuid) {
 }
 
 function log(msg, extra) {
-	const ts = new Date().toISOString().slice(11, 19);
+	const ts = new Date().toTimeString().slice(0, 8); // local HH:MM:SS (matches the Mac mini's wall clock)
 	if (extra) console.log(`[${ts}] [poller] ${msg}`, extra);
 	else console.log(`[${ts}] [poller] ${msg}`);
 }

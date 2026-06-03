@@ -16,14 +16,14 @@ import { helper } from './imessage/helper.mjs';
 import { startUi, dispatchDraft } from './ui/index.mjs';
 import { startChatPoller } from './triggers/chat-poller.mjs';
 import { startIssuePoller } from './triggers/issue-poller.mjs';
-import { buildChatGuidIndex } from './core/workspaces.mjs';
+import { buildChatGuidIndex, appfolioRunnerTargets } from './core/workspaces.mjs';
 import * as db from './state/helpers.mjs';
 
 const HELPER_ENABLED = process.env.HELPER_DISABLED !== '1';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 function log(msg) {
-	console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
+	console.log(`[${new Date().toTimeString().slice(0, 8)}] ${msg}`); // local HH:MM:SS (matches the Mac mini's wall clock)
 }
 
 // ── Env ────────────────────────────────────────────────────────────────────────
@@ -228,8 +228,9 @@ async function main() {
 	// scheduled sender: fires "Send later" drafts when their hold elapses.
 	startScheduledSender({ sendIMessage });
 
-	// appfolio runner: Playwright service the drafts UI streams from on :9773.
-	startAppfolioRunner();
+	// appfolio runners: one Playwright service PER workspace, each on its own port
+	// (own browser + login held in isolation). The drafts UI routes per workspace.
+	startAppfolioRunners();
 
 	log('agent server started');
 }
@@ -286,66 +287,77 @@ function startScheduledSender({ sendIMessage }) {
 	return { stop: () => clearInterval(timer) };
 }
 
-// AppFolio step runner. A Playwright-backed HTTP service (appfolio/runner.mjs)
-// that drives AppFolio and streams the browser to the drafts UI's "Send via
-// AppFolio" panel on 127.0.0.1:9773. It launches a browser on boot and has its
-// own top-level await, so we run it as an isolated CHILD PROCESS rather than
-// importing it — that keeps a missing Playwright/Chromium (or a crashed browser)
-// from blocking startup or taking down the agent. Set APPFOLIO_RUNNER_DISABLED=1
-// to skip it (e.g. a host without Playwright installed).
+// AppFolio step runners. A Playwright-backed HTTP service (appfolio/runner.mjs)
+// drives AppFolio and streams the browser to the drafts UI's "Send via AppFolio"
+// panel. We run ONE runner process PER AppFolio workspace, each pinned (via
+// RUNNER_WORKSPACE_ID + RUNNER_PORT) to a single account with its own browser +
+// login. That process boundary is the cross-account safety guarantee: a runner
+// physically cannot act in another workspace's AppFolio. Each runs as an
+// isolated CHILD PROCESS (own top-level await + browser) so a missing
+// Playwright/Chromium or a crashed browser can't take down the agent. Set
+// APPFOLIO_RUNNER_DISABLED=1 to skip them all.
 const APPFOLIO_RUNNER_ENABLED = process.env.APPFOLIO_RUNNER_DISABLED !== '1';
 const APPFOLIO_RUNNER_MAX_RESTARTS = 3;
 
-function startAppfolioRunner() {
+function startAppfolioRunners() {
 	if (!APPFOLIO_RUNNER_ENABLED) {
-		log('appfolio runner disabled (APPFOLIO_RUNNER_DISABLED=1)');
+		log('appfolio runners disabled (APPFOLIO_RUNNER_DISABLED=1)');
 		return;
 	}
 	const script = path.join(SCRIPT_DIR, 'appfolio', 'runner.mjs');
-	let child = null;
-	let restarts = 0;
+	const targets = appfolioRunnerTargets();
+	if (!targets.length) {
+		log('no AppFolio workspaces configured — no runners spawned');
+		return;
+	}
+	const kills = [];
 
-	const spawnOne = () => {
-		// env: process.env so the child inherits the dotenv we loaded (Supabase creds
-		// for srn lookup) + APPFOLIO_HEADED. Same process group → Ctrl-C hits both.
-		child = spawn(process.execPath, [script], { cwd: SCRIPT_DIR, env: process.env });
-		const pipe = (stream) => {
-			stream.setEncoding('utf8');
-			stream.on('data', (chunk) => {
-				for (const line of chunk.split('\n')) if (line.trim()) log(`[appfolio] ${line.trim()}`);
+	for (const t of targets) {
+		let child = null;
+		let restarts = 0;
+
+		const spawnOne = () => {
+			// Inherit our dotenv (Supabase creds + APPFOLIO_PW_*), pinning this child
+			// to one workspace + port. Same process group → Ctrl-C hits every runner.
+			child = spawn(process.execPath, [script], {
+				cwd: SCRIPT_DIR,
+				env: { ...process.env, RUNNER_WORKSPACE_ID: t.workspace_id, RUNNER_PORT: String(t.port) }
+			});
+			const pipe = (stream) => {
+				stream.setEncoding('utf8');
+				stream.on('data', (chunk) => {
+					for (const line of chunk.split('\n')) if (line.trim()) log(`[appfolio:${t.label}] ${line.trim()}`);
+				});
+			};
+			pipe(child.stdout);
+			pipe(child.stderr);
+			child.on('error', (err) => log(`appfolio runner(${t.label}) spawn error: ${err.message}`));
+			child.on('exit', (code, signal) => {
+				if (signal) return; // killed on shutdown — don't restart
+				log(`appfolio runner(${t.label}) exited (code=${code})`);
+				if (code !== 0 && restarts < APPFOLIO_RUNNER_MAX_RESTARTS) {
+					restarts++;
+					log(`restarting appfolio runner(${t.label}) (${restarts}/${APPFOLIO_RUNNER_MAX_RESTARTS})…`);
+					setTimeout(spawnOne, 2000);
+				} else if (code !== 0) {
+					log(
+						`appfolio runner(${t.label}) keeps failing — likely Playwright is not installed ` +
+							'(cd agent && npm i, then npx playwright install chromium). ' +
+							'Set APPFOLIO_RUNNER_DISABLED=1 to silence.'
+					);
+				}
 			});
 		};
-		pipe(child.stdout);
-		pipe(child.stderr);
-		child.on('error', (err) => log(`appfolio runner spawn error: ${err.message}`));
-		child.on('exit', (code, signal) => {
-			if (signal) return; // killed on shutdown — don't restart
-			log(`appfolio runner exited (code=${code})`);
-			if (code !== 0 && restarts < APPFOLIO_RUNNER_MAX_RESTARTS) {
-				restarts++;
-				log(`restarting appfolio runner (${restarts}/${APPFOLIO_RUNNER_MAX_RESTARTS})…`);
-				setTimeout(spawnOne, 2000);
-			} else if (code !== 0) {
-				log(
-					'appfolio runner keeps failing — likely Playwright is not installed in this checkout ' +
-						'(cd agent && npm i, then npx playwright install chromium) or appfolio/.state.json is missing. ' +
-						'Set APPFOLIO_RUNNER_DISABLED=1 to silence.'
-				);
-			}
-		});
-	};
 
-	spawnOne();
-	const kill = () => {
-		try {
-			child?.kill();
-		} catch {
-			/* already gone */
-		}
-	};
-	process.on('exit', kill);
-	process.on('SIGINT', () => { kill(); process.exit(0); });
-	process.on('SIGTERM', () => { kill(); process.exit(0); });
+		spawnOne();
+		log(`appfolio runner(${t.label}) → :${t.port} (${t.vhost})`);
+		kills.push(() => { try { child?.kill(); } catch { /* already gone */ } });
+	}
+
+	const killAll = () => kills.forEach((k) => k());
+	process.on('exit', killAll);
+	process.on('SIGINT', () => { killAll(); process.exit(0); });
+	process.on('SIGTERM', () => { killAll(); process.exit(0); });
 }
 
 main().catch((err) => {

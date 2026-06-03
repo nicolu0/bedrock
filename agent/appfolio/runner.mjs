@@ -1,12 +1,22 @@
 // Step-gated AppFolio runner — SERVICE mode. Holds one logged-in Chromium and a
 // local panel (http://localhost:9773). A run executes ONE step per approval and
-// pauses between; the final Send/Save step is GATED — it never fires (yet).
+// pauses between; the final Send/Save step is LIVE (authorized) and genuinely
+// commits — but only after an explicit approval.
 //
 // A run is started either from the CLI (back-compat) or by loading the panel URL
 // with query params (how agent/ui embeds it via an <iframe>):
 //   http://localhost:9773/?flow=text&issue_id=<uuid>&to=Tenant&message=<text>
 //   http://localhost:9773/?flow=vendor&srn=7665&vendor=JL%20Unlimited%20Services
-// The runner resolves issue_id -> appfolio_srn itself, so the UI stays dumb.
+// An optional &workspace=<uuid> pins the account; otherwise the runner resolves
+// it from issue_id (issues_v2.workspace_id), defaulting to LAPM.
+//
+// MULTI-ACCOUNT + AUTO-LOGIN: each workspace is a separate AppFolio tenant on
+// its own subdomain. The runner picks the vhost / session-state / login creds
+// for the run's workspace (session.mjs keys state per vhost) so it can never act
+// in the wrong account. If the saved session has expired, the "Open" step
+// reports `needs_login` instead of dying; the panel's "Log in to AppFolio"
+// button auto-fills email (workspace alias) + password (APPFOLIO_PW_<SLUG> from
+// .env) in a HEADED window, the human types the 2FA code, and the run resumes.
 //
 // CLI (same as before):
 //   node agent/appfolio/runner.mjs --flow vendor --srn 7665 --vendor "JL Unlimited Services"
@@ -14,13 +24,51 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { BASE_URL, HERE, launch, looksLoggedOut, findConversationsSelect } from './session.mjs';
+import {
+	HERE,
+	launchFor,
+	looksLoggedOut,
+	looksLoggedIn,
+	autoLogin,
+	findSendCodeButton,
+	chooseSmsDelivery,
+	find2faInput,
+	fill2faCode,
+	submit2faPage,
+	tickRememberDevice,
+	stateFileFor,
+	slugFromVhost,
+	findConversationsSelect
+} from './session.mjs';
+import { readLatestAppfolioCode } from './twofa.mjs';
+import { acquireLoginLock, releaseLoginLock, clearOwnStaleLock } from './login-lock.mjs';
 import { supabaseEnv } from '../core/supabase.mjs';
+import { appfolioVhostFor } from '../core/workspaces.mjs';
 
-const PORT = 9773;
-// Headless by default: the panel's live screencast is the view, so no Chromium
-// window pops over your screen. Set APPFOLIO_HEADED=1 to launch a real window.
-const HEADLESS = !process.env.APPFOLIO_HEADED;
+// Fallback account when no workspace is pinned (legacy single-runner default).
+const LAPM_ID = '2e4373a0-40b8-42c2-a873-b08c99dbf76a';
+// This process serves EXACTLY ONE workspace. server.mjs spawns one runner per
+// AppFolio workspace, pinning its id + port via env. The runner refuses any
+// request for a different workspace — process isolation is the cross-account
+// safety boundary (one process only ever holds one account's login).
+const RUNNER_WS_ID = process.env.RUNNER_WORKSPACE_ID || LAPM_ID;
+const PORT = Number(process.env.RUNNER_PORT) || 9773;
+// Everything runs HEADLESS — runs and login both. The panel's live screencast is
+// the view, so no Chromium window pops over your screen. Login fills email+pw and
+// reads the texted 2FA code from chat.db, completing invisibly. Set
+// APPFOLIO_HEADED=1 to launch a real window for debugging.
+const HEADED = !!process.env.APPFOLIO_HEADED;
+// Background keepalive: touch an authenticated page on this cadence so AppFolio's
+// idle timeout never fires → the session stays warm → we rarely re-login (and
+// rarely 2FA). Under any plausible AppFolio idle window. APPFOLIO_KEEPALIVE_MS=0
+// disables it.
+const KEEPALIVE_MS =
+	process.env.APPFOLIO_KEEPALIVE_MS === '0'
+		? 0
+		: Number(process.env.APPFOLIO_KEEPALIVE_MS) || 10 * 60 * 1000;
+// Drop a leftover login lock from this port's previous (killed) incarnation so a
+// restart mid-login doesn't block the next login until the lock ages out.
+clearOwnStaleLock(PORT);
 
 function parseFlags(argv) {
 	const f = {};
@@ -34,24 +82,79 @@ function parseFlags(argv) {
 	return f;
 }
 
+// ---- Supabase lookups ----------------------------------------------------
+
+function sbHeaders() {
+	const { key } = supabaseEnv();
+	return { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' };
+}
+
 async function resolveSrn(issue_id) {
-	const { url, key } = supabaseEnv();
+	const { url } = supabaseEnv();
 	const res = await fetch(`${url}/rest/v1/issues_v2?id=eq.${issue_id}&select=appfolio_srn`, {
-		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
+		headers: sbHeaders()
 	});
 	if (!res.ok) throw new Error(`resolveSrn: ${res.status} ${await res.text()}`);
 	const rows = await res.json();
 	return rows?.[0]?.appfolio_srn;
 }
 
+async function workspaceIdFromIssue(issue_id) {
+	const { url } = supabaseEnv();
+	const res = await fetch(`${url}/rest/v1/issues_v2?id=eq.${issue_id}&select=workspace_id`, {
+		headers: sbHeaders()
+	});
+	if (!res.ok) return null;
+	const rows = await res.json();
+	return rows?.[0]?.workspace_id ?? null;
+}
+
+async function fetchWorkspaceRow(id) {
+	const { url } = supabaseEnv();
+	const res = await fetch(`${url}/rest/v1/workspaces?id=eq.${id}&select=slug,alias`, {
+		headers: sbHeaders()
+	});
+	if (!res.ok) return null;
+	const rows = await res.json();
+	return rows?.[0] ?? null;
+}
+
+// Resolve the full AppFolio identity for THIS runner's pinned workspace: which
+// account (vhost), where its session lives (stateFile), and how to log in
+// (email = workspace alias, password = APPFOLIO_PW_<SLUG> in .env). Resolved once
+// and cached — this process never serves any other account.
+let wsCache = null;
+async function getWorkspace() {
+	if (wsCache) return wsCache;
+	const id = RUNNER_WS_ID;
+	const vhost = appfolioVhostFor(id) || process.env.APPFOLIO_VHOST || 'lapm.appfolio.com';
+	const row = (await fetchWorkspaceRow(id).catch(() => null)) || {};
+	const slug = row.slug || slugFromVhost(vhost);
+	const ENV = slug.toUpperCase().replace(/[^A-Z0-9]/g, '');
+	const email = process.env[`APPFOLIO_EMAIL_${ENV}`] || row.alias || '';
+	const password = process.env[`APPFOLIO_PW_${ENV}`] || '';
+	wsCache = {
+		id,
+		slug,
+		vhost,
+		baseUrl: `https://${vhost}`,
+		stateFile: stateFileFor(vhost),
+		email,
+		password
+	};
+	return wsCache;
+}
+
 // ---- flows: each step { name, gate?, run(page) } -------------------------
 
-function openStep(srn) {
+function openStep(srn, baseUrl) {
 	return {
 		name: `Open work order #${srn}`,
 		run: async (p) => {
-			await p.goto(`${BASE_URL}/maintenance/service_requests/${srn}`, { waitUntil: 'domcontentloaded' });
-			if (await looksLoggedOut(p)) throw new Error('not logged in — run `worker.mjs login` first');
+			await p.goto(`${baseUrl}/maintenance/service_requests/${srn}`, { waitUntil: 'domcontentloaded' });
+			// Sentinel: runNext maps NEEDS_LOGIN to the recoverable `needs_login`
+			// state (offer auto-login) rather than a dead error.
+			if (await looksLoggedOut(p)) throw new Error('NEEDS_LOGIN');
 		}
 	};
 }
@@ -98,9 +201,9 @@ const sendStep = () => ({
 // Standalone messaging: open → expand Texts → pick the conversation → fill →
 // SEND (LIVE). Like the vendor flow, the final Send genuinely texts the
 // recipient; every step still needs an explicit approval before it runs.
-function textFlow({ srn, to, message }) {
+function textFlow({ srn, to, message, baseUrl }) {
 	return [
-		openStep(srn),
+		openStep(srn, baseUrl),
 		expandTextsStep(),
 		selectConversationStep(to),
 		fillMessageStep(message),
@@ -113,9 +216,9 @@ function textFlow({ srn, to, message }) {
 // the vendor and fires the secure link) → expand Texts → pick the Vendor
 // conversation → fill the free-text message → SEND. Each step still needs an
 // explicit approval; Save and Send genuinely commit.
-function vendorFlow({ srn, vendor, message }) {
+function vendorFlow({ srn, vendor, message, baseUrl }) {
 	return [
-		openStep(srn),
+		openStep(srn, baseUrl),
 		{
 			name: 'Click Edit',
 			run: async (p) => {
@@ -182,34 +285,43 @@ let cdp = null;
 let lastFrame = null;
 const streamClients = new Set();
 
-// Browser session. Relaunchable: if the headed window gets closed, the next run
-// (clicking "Send via AppFolio") reopens it via ensurePage().
+// Browser session for this runner's ONE account. Relaunchable: ensurePage tears
+// it down and relaunches only when the headed/headless mode changes (login goes
+// headed for 2FA), restoring this account's saved session state. The vhost never
+// changes — this process is pinned to a single workspace.
 let browser, context, page;
+let curHeaded = null;
+let curWs = null; // resolved workspace (vhost/creds/stateFile) — always RUNNER_WS_ID
+let loginPoll = null;
 
-async function ensurePage() {
-	if (page && !page.isClosed() && browser?.isConnected?.()) return false;
+async function ensurePage(headed) {
+	const ws = await getWorkspace();
+	const alive = page && !page.isClosed() && browser?.isConnected?.();
+	if (alive && curHeaded === headed) return false;
 	if (browser?.isConnected?.()) await browser.close().catch(() => {});
-	const fresh = await launch(HEADLESS);
+	const fresh = await launchFor(ws.vhost, !headed); // launchFor takes headless; headed = !headless
 	browser = fresh.browser;
 	context = fresh.context;
 	page = fresh.page;
+	curHeaded = headed;
 	cdp = null; // any prior screencast died with the old page
 	if (streamClients.size) await ensureScreencast().catch(() => {});
 	return true;
 }
-await ensurePage();
 
 let flow = [];
 let steps = []; // {name, gate} for the panel
 let flowName = 'text';
 let idx = 0;
-let status = 'idle'; // idle | ready | running | paused | gated | error | done
+let status = 'idle'; // idle | starting | ready | running | paused | gated | needs_login | logging_in | verifying_2fa | error | done
 let error = null;
 let shotTs = 0;
 let busy = false;
 let sig = null;
+let keepAliveBusy = false; // true while a keepalive ping holds the page
 
 async function snapshot() {
+	if (!page || page.isClosed()) return;
 	await page.screenshot({ path: path.join(HERE, 'run-current.png') }).catch(() => {});
 	shotTs = Date.now();
 }
@@ -219,8 +331,6 @@ async function snapshot() {
 // shows a live view instead of per-step stills. Started lazily on the first
 // /stream client; frames broadcast to every open <img> connection. No deps,
 // no WebSocket — a plain <img src="/stream"> renders multipart/x-mixed-replace.
-// (State — cdp / lastFrame / streamClients — is declared up top so ensurePage
-// can re-attach the stream after a relaunch.)
 
 function writeFrame(res, buf) {
 	res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${buf.length}\r\n\r\n`);
@@ -229,7 +339,7 @@ function writeFrame(res, buf) {
 }
 
 async function ensureScreencast() {
-	if (cdp) return;
+	if (cdp || !page) return;
 	cdp = await page.context().newCDPSession(page);
 	await cdp.send('Page.startScreencast', {
 		format: 'jpeg',
@@ -252,19 +362,36 @@ async function ensureScreencast() {
 }
 
 async function startRun(params) {
-	await ensurePage(); // reopen the browser if its window was closed
+	// Let an in-flight keepalive ping finish so we don't navigate the page out from
+	// under it (keepalive yields the page back within a couple seconds).
+	for (let i = 0; i < 50 && keepAliveBusy; i++) await new Promise((r) => setTimeout(r, 100));
+	// SAFETY: this runner serves exactly one account. Refuse a misrouted request
+	// — both an explicit foreign workspace and an issue that belongs elsewhere.
+	if (params.workspace && params.workspace !== RUNNER_WS_ID) {
+		throw new Error(`workspace ${params.workspace} not served by this runner (${RUNNER_WS_ID})`);
+	}
+	if (params.issue_id) {
+		const wid = await workspaceIdFromIssue(params.issue_id).catch(() => null);
+		if (wid && wid !== RUNNER_WS_ID) {
+			throw new Error(`issue belongs to ${wid}, not this runner's workspace (${RUNNER_WS_ID})`);
+		}
+	}
 	flowName = params.flow === 'vendor' ? 'vendor' : 'text';
 	steps = []; // clear any prior run so a failed start shows a clean error
 	idx = 0;
 	status = 'starting';
 	error = null;
+	const ws = await getWorkspace();
+	curWs = ws;
+	loginAttempts = 0; // fresh run → allow auto-login again
 	let srn = params.srn;
 	if (!srn && params.issue_id) srn = await resolveSrn(params.issue_id);
 	if (!srn) throw new Error('no srn (and issue_id did not resolve to appfolio_srn)');
+	await ensurePage(HEADED); // headless by default
 	flow =
 		flowName === 'vendor'
-			? vendorFlow({ srn, vendor: params.vendor, message: params.message || '' })
-			: textFlow({ srn, to: params.to || 'Tenant', message: params.message || '' });
+			? vendorFlow({ srn, vendor: params.vendor, message: params.message || '', baseUrl: ws.baseUrl })
+			: textFlow({ srn, to: params.to || 'Tenant', message: params.message || '', baseUrl: ws.baseUrl });
 	steps = flow.map((s) => ({ name: s.name, gate: !!s.gate }));
 	idx = 0;
 	status = 'ready';
@@ -277,6 +404,9 @@ async function startRun(params) {
 
 async function runNext() {
 	if (busy || status === 'idle') return;
+	// Don't advance mid-login — running a step would navigate away from the login
+	// page while we're filling email/password or the texted 2FA code.
+	if (status === 'logging_in' || status === 'verifying_2fa') return;
 	if (idx >= flow.length || flow[idx].gate) { status = 'gated'; return; }
 	busy = true;
 	status = 'running';
@@ -286,15 +416,148 @@ async function runNext() {
 		idx++;
 		status = idx >= flow.length ? 'done' : flow[idx].gate ? 'gated' : 'paused';
 	} catch (e) {
-		error = e.message;
-		status = 'error';
+		if (e.message === 'NEEDS_LOGIN') {
+			// Recoverable: leave idx on the open step so it re-runs after login.
+			status = 'needs_login';
+			error = curWs ? `Logged out of ${curWs.slug} — signing in…` : 'Logged out of AppFolio';
+		} else {
+			error = e.message;
+			status = 'error';
+		}
 		await snapshot();
 	} finally {
 		busy = false;
 	}
+	// Auto-login the moment we detect a logged-out session — no button click. The
+	// attempt cap stops an infinite loop if login keeps not "taking".
+	if (status === 'needs_login' && loginAttempts < 2) {
+		loginAttempts++;
+		startLogin().catch((err) => { error = err.message; status = 'error'; });
+	}
 }
 
-await snapshot();
+// ---- auto-login (fully headless; 2FA code read from chat.db) -----------------
+
+let submitTimeMs = 0;
+let loginAttempts = 0;
+
+function stopLoginPoll() {
+	if (loginPoll) { clearInterval(loginPoll); loginPoll = null; }
+}
+
+async function failLogin(msg, st = 'error') {
+	stopLoginPoll();
+	releaseLoginLock();
+	error = msg;
+	status = st;
+	await snapshot();
+}
+
+// Headless auto-login. Fires automatically when a run finds the session logged
+// out (and re-runnable via the panel button). Fills email+password, then reads
+// the texted 2FA code from chat.db and submits it — no window, no human, no
+// click. Set APPFOLIO_HEADED=1 to watch it in a real window for debugging.
+async function startLogin() {
+	if (!curWs) return failLogin('no active run to log in for');
+	if (!curWs.email) return failLogin(`no login email for ${curWs.slug} (workspace alias missing)`);
+	if (!curWs.password) {
+		return failLogin(`no password — set APPFOLIO_PW_${curWs.slug.toUpperCase().replace(/[^A-Z0-9]/g, '')} in .env`);
+	}
+	status = 'logging_in';
+	await snapshot();
+	// Serialize logins across all workspace runners: only one account may have a
+	// login (and thus an inbound 2FA SMS) in flight at a time, so the texted code
+	// we read can only be ours. Rare event, ~30s, so the wait costs nothing.
+	const got = await acquireLoginLock({ workspace: curWs.slug, port: PORT });
+	if (!got) return failLogin('another AppFolio login is in progress — retry shortly', 'needs_login');
+	try {
+		await ensurePage(HEADED); // headless by default — invisible end to end
+		submitTimeMs = Date.now();
+		await autoLogin(page, curWs);
+	} catch (e) {
+		return failLogin(`auto-login failed: ${e.message}`, 'needs_login');
+	}
+	status = 'verifying_2fa';
+	error = null;
+	await snapshot();
+	startLoginPoll();
+}
+
+// Poll until logged in: read the texted code from chat.db, fill it, submit, tick
+// remember-device. Re-attempts every ~12s in case the first SMS lagged. On
+// success: assert the right account, persist the session, resume the run. Caps
+// at ~150s → needs_login (the panel button retries; APPFOLIO_HEADED=1 to debug).
+function startLoginPoll() {
+	stopLoginPoll();
+	const started = Date.now();
+	let lastFillAt = 0;
+	let codeRequested = false;
+	loginPoll = setInterval(async () => {
+		if (status !== 'verifying_2fa') return stopLoginPoll();
+		let inNow = false;
+		try { inNow = await looksLoggedIn(page); } catch { /* mid-navigation */ }
+		if (inNow) { stopLoginPoll(); return finishLogin(); }
+		try {
+			// Step A: the "2-Step Verification" chooser — pick SMS and click "Send
+			// Verification Code" ONCE to trigger the text (the code-entry field only
+			// appears after this). Reset the freshness gate to this moment.
+			if (!codeRequested) {
+				const sendBtn = await findSendCodeButton(page);
+				if (sendBtn) {
+					await chooseSmsDelivery(page).catch(() => {});
+					await sendBtn.click().catch(() => {});
+					codeRequested = true;
+					submitTimeMs = Date.now(); // the SMS is sent now
+					await snapshot();
+					return;
+				}
+			}
+			// Step B: code-entry page — read the texted code, fill it, submit.
+			if (await find2faInput(page)) {
+				const hit = readLatestAppfolioCode(submitTimeMs);
+				if (hit && Date.now() - lastFillAt > 12000) {
+					lastFillAt = Date.now();
+					await tickRememberDevice(page).catch(() => {});
+					await fill2faCode(page, hit.code);
+					await submit2faPage(page);
+					await snapshot();
+				}
+			}
+		} catch { /* keep polling */ }
+		if (Date.now() - started > 150000) {
+			return failLogin('auto-login timed out (no 2FA code seen?) — retry via the button', 'needs_login');
+		}
+	}, 2000);
+}
+
+async function finishLogin() {
+	releaseLoginLock(); // logged in → the SMS-triggering window is over, free the slot
+	try {
+		// Right-account guard: a successful login MUST land on this workspace's own
+		// subdomain. Combined with per-vhost state files, this makes acting in the
+		// wrong account impossible.
+		const host = new URL(page.url()).host;
+		if (host !== curWs.vhost && !host.endsWith(`.${curWs.vhost}`)) {
+			error = `logged in on ${host}, expected ${curWs.vhost} — aborting (wrong account)`;
+			status = 'error';
+			await snapshot();
+			return;
+		}
+		await context.storageState({ path: curWs.stateFile });
+	} catch (e) {
+		error = `saving session failed: ${e.message}`;
+		status = 'error';
+		await snapshot();
+		return;
+	}
+	// Logged in (headed). Re-run from the open step and continue the run normally;
+	// every commit step still gates on its own approval.
+	idx = 0;
+	status = 'ready';
+	error = null;
+	await snapshot();
+	await runNext();
+}
 
 // CLI back-compat: --flow on the command line starts a run at boot.
 const cli = parseFlags(process.argv.slice(2));
@@ -317,33 +580,36 @@ const SHELL = `<!doctype html><meta charset=utf-8><title>AppFolio step runner</t
  .bar{display:flex;gap:8px;margin:12px 0}
  button{font:600 13px system-ui;padding:9px 16px;border-radius:8px;border:0;cursor:pointer}
  .ap{background:#7a5cff;color:#fff}.ap:disabled{opacity:.4;cursor:not-allowed}
- .rj{background:#2c2c32;color:#f85149} .st{font-size:12px;color:#9a9a96}.err{color:#f85149}
+ .lg{background:#1f883d;color:#fff} .rj{background:#2c2c32;color:#f85149} .st{font-size:12px;color:#9a9a96}.err{color:#f85149}
 </style>
 <div class=wrap>
  <h1 id=title>AppFolio step runner</h1>
  <p class=sub>Approve each step. The final Send/Save is LIVE and will fire.</p>
  <img id=shot src="/shot?t=0">
  <ol id=steps></ol>
- <div class=bar><button class=ap id=ap>Approve next step</button><button class=rj id=rj>Reject / stop</button></div>
+ <div class=bar><button class=ap id=ap>Approve next step</button><button class=lg id=lg style="display:none">Log in to AppFolio</button><button class=rj id=rj>Reject / stop</button></div>
  <div class=st id=st></div>
 </div>
 <script>
 async function tick(){
  let s; try{ s=await (await fetch('/state')).json(); }catch{ return; }
- document.getElementById('title').textContent='AppFolio step runner — '+s.flowName+' flow';
+ document.getElementById('title').textContent='AppFolio step runner — '+s.flowName+' flow'+(s.workspace?' · '+s.workspace:'');
  document.getElementById('steps').innerHTML=(s.steps||[]).map((st,i)=>{
   let cls='pend',d=i+1;
   if(i<s.idx){cls='done';d='✓';}else if(st.gate){cls='gate';d='!';}else if(i===s.idx){cls='cur';}
   return '<li class='+cls+'><span class=dot>'+d+'</span><span class=nm>'+st.name+'</span></li>';
  }).join('');
- const stop=['idle','gated','done','error','running'].includes(s.status);
+ const stop=['idle','gated','done','error','running','needs_login','logging_in','verifying_2fa','awaiting_2fa'].includes(s.status);
  const ap=document.getElementById('ap');
  ap.disabled=stop; ap.textContent=s.status==='running'?'running…':'Approve next step';
- const msg={idle:'No active run.',ready:'Ready — click Approve to run step 1.',paused:'Step done — approve the next.',running:'Running…',gated:'Reached the gated final step. Nothing sent/saved.',done:'Done — sent/saved via AppFolio.',error:'Error: '+s.error}[s.status]||s.status;
+ const lg=document.getElementById('lg');
+ lg.style.display=(s.status==='needs_login'||s.status==='error')?'inline-block':'none';
+ const msg={idle:'No active run.',starting:'Starting…',ready:'Ready — click Approve to run step 1.',paused:'Step done — approve the next.',running:'Running…',gated:'Reached the gated final step. Nothing sent/saved.',done:'Done — sent/saved via AppFolio.',needs_login:'Logged out — click "Log in to AppFolio".',logging_in:'Signing in…',verifying_2fa:'Reading the texted 2FA code and signing in…',awaiting_2fa:'A window opened — the code should auto-fill, else type it there.',error:'Error: '+s.error}[s.status]||s.status;
  document.getElementById('st').innerHTML='<span class="'+(s.status==='error'?'err':'')+'">'+msg+'</span>';
  document.getElementById('shot').src='/shot?t='+s.shotTs;
 }
 document.getElementById('ap').onclick=async()=>{await fetch('/approve',{method:'POST'});};
+document.getElementById('lg').onclick=async()=>{await fetch('/login',{method:'POST'});};
 document.getElementById('rj').onclick=async()=>{await fetch('/reject',{method:'POST'});};
 setInterval(tick,1000);tick();
 </script>`;
@@ -358,7 +624,11 @@ http
 			if (u.searchParams.get('flow')) {
 				const params = Object.fromEntries(u.searchParams.entries());
 				const nextSig = JSON.stringify(params);
-				if (nextSig !== sig && !busy) {
+				// Don't clobber a run that's still in flight (a second request for the
+				// same workspace waits its turn). Cross-workspace never reaches here —
+				// each workspace has its own runner process/port.
+				const active = !['idle', 'done', 'error'].includes(status);
+				if (nextSig !== sig && !busy && !active) {
 					sig = nextSig;
 					try { await startRun(params); } catch (e) { error = e.message; status = 'error'; }
 				}
@@ -368,7 +638,9 @@ http
 		}
 		if (u.pathname === '/state') {
 			res.writeHead(200, { 'content-type': 'application/json' });
-			return res.end(JSON.stringify({ flowName, steps, idx, status, error, shotTs }));
+			return res.end(
+				JSON.stringify({ flowName, steps, idx, status, error, shotTs, workspace: curWs?.slug ?? null })
+			);
 		}
 		if (u.pathname === '/stream') {
 			res.writeHead(200, {
@@ -389,13 +661,48 @@ http
 			return res.end(fs.readFileSync(file));
 		}
 		if (u.pathname === '/approve' && req.method === 'POST') { await runNext(); res.writeHead(200); return res.end('ok'); }
+		if (u.pathname === '/login' && req.method === 'POST') {
+			// Manual retry — fire-and-forget; the panel polls /state for progress.
+			loginAttempts = 0;
+			startLogin().catch((e) => { error = e.message; status = 'error'; });
+			res.writeHead(200); return res.end('ok');
+		}
 		if (u.pathname === '/reject' && req.method === 'POST') {
+			if (loginPoll) { clearInterval(loginPoll); loginPoll = null; }
+			releaseLoginLock(); // abort during login → free the slot for the other workspace
 			status = 'idle'; sig = null;
 			res.writeHead(200); return res.end('ok');
 		}
 		res.writeHead(404); res.end();
 	})
 	.listen(PORT, '127.0.0.1', () => {
-		console.log(`\nStep runner service ready: http://localhost:${PORT}`);
-		console.log('Idle until a run is requested (CLI --flow or a panel URL with ?flow=…). Final Send/Save is GATED.\n');
+		console.log(`\nStep runner ready: http://localhost:${PORT} — workspace ${RUNNER_WS_ID}`);
+		console.log('Pinned to one account. Idle until a run is requested. Logged-out → auto-login.\n');
 	});
+
+// ── Session keepalive ───────────────────────────────────────────────────────
+// Every KEEPALIVE_MS, touch an authenticated page so AppFolio's idle timeout
+// never fires. Keeping the session warm is what lets us skip 2FA most of the
+// time — we only re-login when the session truly dies (e.g. an absolute lifetime
+// cap), which is rare. Runs only when idle; yields the page to any real run.
+async function keepAliveTick() {
+	if (keepAliveBusy || busy || status !== 'idle') return;
+	keepAliveBusy = true;
+	try {
+		const ws = await getWorkspace();
+		await ensurePage(HEADED);
+		if (busy || status !== 'idle') return; // a run slipped in while launching
+		await page.goto(`${ws.baseUrl}/dashboard`, { waitUntil: 'domcontentloaded' }).catch(() => {});
+		if (await looksLoggedOut(page)) {
+			console.log(`[keepalive] ${ws.slug}: logged out — will auto-login on next send`);
+		} else {
+			await context.storageState({ path: ws.stateFile }).catch(() => {}); // persist refreshed cookies
+			console.log(`[keepalive] ${ws.slug}: session warm`);
+		}
+	} catch (e) {
+		console.error('keepalive:', e.message);
+	} finally {
+		keepAliveBusy = false;
+	}
+}
+if (KEEPALIVE_MS) setInterval(() => { keepAliveTick(); }, KEEPALIVE_MS);

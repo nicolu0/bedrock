@@ -260,7 +260,7 @@ Your job NOW: given ONE new observation and a list of candidate beliefs, decide 
 Beliefs are the PRIMARY retrieval surface for future decisions. Observations are the FALLBACK — they exist only to support beliefs that don't yet stand on their own. Your goal is to make every belief AS GENERAL AS POSSIBLE while still being plausibly correct.
 
 Generalization order (broadest → narrowest):
-  1. Vendor-wide: "X handles Y issues" (no property/owner scope)
+  1. Vendor-wide: "X handles Y issues" (the CLAIM carries no property/owner scope — but you MUST still link the properties the vendor has worked at as entity edges; the footprint matters for dispatch)
   2. Owner-scoped: "X handles Y at Owner properties"
   3. Property-scoped: "X handles Y at specific property"
   4. Issue-specific or one-off: usually NOT a belief at all — leave as obs evidence
@@ -293,9 +293,10 @@ Bad examples:
 
 2. **CLAIM = RULE-LIKE STATEMENT.** Belief claims read like memos or standards — "X handles Y", "X requires Y before Z", "For Y, use X". Never "X has quirk Y" or "X did Y once".
 
-3. **MULTIPLE BELIEFS PER VENDOR ARE FINE.** Don't merge a vendor's capabilities into one giant claim. Better as separate retrievable beliefs:
+3. **MULTIPLE BELIEFS PER VENDOR ARE FINE — BUT NEVER TWO FOR THE SAME VENDOR+TRADE.** Separate beliefs for DIFFERENT trades or directions are good:
    - "Cross Appliance handles appliances" (one belief)
    - "Cross Appliance was rejected by Grauzinis owner for oven repair" (separate belief if it matters)
+   But if a candidate belief already covers this vendor + this trade, you MUST **attach** to it (refine its claim wording in place if needed) — NEVER create a second, near-duplicate capability belief for the same vendor+trade. Two beliefs that differ only in phrasing ("handles appliances" vs "appliance repairs") is the exact failure to avoid.
 
 4. **DOMAIN ASSIGNMENT:**
    - Garbage disposals = PLUMBING (not appliance). Route to Yonic/Abraham, not Cross.
@@ -310,7 +311,16 @@ Bad examples:
    - It's a vendor exclusion ("don't use Darwin").
    - It's an owner approval policy ("Grauzinis requires approval").
    - Property-specific ownership exception ("we don't own the laundry machines at Westmoreland").
-   Otherwise: NOOP (just store the obs as evidence — no belief).
+   Otherwise, if the similar past observations show NO repeated pattern either (see 6b): NOOP.
+
+6b. **BEHAVIORAL GENERALIZATION FROM REPEATED PATTERN — the main path for work-order data.** The "similar past observations" block is EVIDENCE, not mere context. When the new observation TOGETHER WITH the similar past observations shows the SAME vendor doing the same or related work across multiple instances (≥2 distinct jobs — repeatedly at one property or spread across several), CREATE a generalized **inferred** belief, following the GENERALIZATION MANDATE:
+   - Work spans multiple properties → vendor-wide: "Rightway Apartment Service is a general handyman/repair vendor (latches, lights, leaks, windows, dryers)."
+   - Work clusters at one owner/property → owner- or property-scoped.
+   Use explicitness=inferred, weight 0.4–0.6. Silent work-order history IS a rule — do NOT noop a clear repeated vendor pattern just because nobody spoke it aloud. (Still never mint a belief whose subject is one single past event; generalize about the shared vendor/entity.)
+
+   **ALWAYS LINK PROPERTIES (entities array) — the vendor's footprint is load-bearing for dispatch.** A vendor-wide belief's CLAIM stays general, but the entities you emit MUST include every property the vendor has worked at (from the new observation AND the similar past observations). On every attach to a vendor belief, add that observation's property to the belief's entities if it isn't linked yet — this accumulates the vendor's property footprint so the agent can later answer "which vendors have serviced property X." Do NOT drop the property just because the claim generalized upward.
+
+   Do NOT mint frequency-based "X is the go-to TRADE at PROPERTY" beliefs yourself — counting jobs per property is handled by a separate DETERMINISTIC pass that can't miscount. Your scoped beliefs come only from genuine SPECIALIZATION, not job tallies: create an owner-scoped belief when a vendor clearly works across ONE owner's properties (per the mandate), or a property-scoped belief only when a vendor is genuinely tied to one property (a contract, the vendor ONLY ever serves that property, or the PM said so) — never merely because it has a few jobs there.
 
 7. **JOSE = JL.** Don't write "Jose self-handled X via JL" — Jose IS JL. Just "Jose self-handled X" or "JL handled X". Don't append "at properties he manages directly" — he's PM for ALL properties.
 
@@ -325,7 +335,7 @@ Bad examples:
 1. If candidate belief's entity-set OVERLAPS with this observation AND has a similar claim direction → ATTACH. Don't duplicate.
 2. STRONGLY prefer attach. Reinforcing a belief is better than creating a near-duplicate.
 3. Create only when claim is genuinely new (different entity-set OR different rule direction).
-4. NOOP when: status confirmations, vendor lifecycle admin, weak single-obs without stated rule, or just routine evidence for an existing belief.
+4. NOOP when: status confirmations, vendor lifecycle admin, or a weak single-obs with NO stated rule AND no repeated pattern in the similar observations. If a repeated vendor pattern IS visible (rule 6b), CREATE instead of noop.
 5. Emit AT MOST 2 ops per observation. Secondary claims wait for their own observations.
 
 # WEIGHT & EXPLICITNESS
@@ -439,7 +449,7 @@ function formatPrompt({
 
 	return `${obsBlock}
 
-# similar past observations (context only — do not create beliefs about them)
+# similar past observations (EVIDENCE of behavioral patterns — use them to GENERALIZE per rule 6b; just don't mint a belief whose subject is one single past event)
 ${obsContext}
 
 # candidate beliefs (the only ids you may use for action=attach)
@@ -467,8 +477,18 @@ async function applyOp({
 		if (!belief) throw new Error(`attach op references unknown belief_id ${op.belief_id}`);
 
 		await memory.attachEvidence(belief.id, observation.id, op.weight);
-		const nextConf = applyConfidenceDelta(belief.confidence, op.weight, observation.salience);
-		await memory.updateBelief(belief.id, { confidence: nextConf });
+		// Pinned beliefs: a hard-coded escape hatch from the confidence dynamics.
+		// We still record the evidence row (keeps the footprint + audit trail), but
+		// the confidence is frozen — no decay, no penalty from off-target negatives.
+		// Used to nail down a known-correct routing rule that the live dynamics keep
+		// eroding (e.g. an over-broad belief collecting contradictions from
+		// legitimate per-subtype specialization). Interim guard until the
+		// observation/belief model is reworked.
+		const pinned = Array.isArray(belief.tags) && belief.tags.includes('pinned');
+		const nextConf = pinned
+			? belief.confidence
+			: applyConfidenceDelta(belief.confidence, op.weight, observation.salience);
+		if (!pinned) await memory.updateBelief(belief.id, { confidence: nextConf });
 
 		// Optionally enrich the belief with any new entities the LLM emitted.
 		let extraEdges = 0;

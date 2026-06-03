@@ -4,16 +4,19 @@
 // fills a hardcoded template, and writes a draft row directly to drafts.json
 // with channel='tenant_appfolio'. The human reviews + copies into AppFolio.
 //
-// Phone numbers are not in the schema yet — template uses a [phone] placeholder
-// the human fills in before sending.
+// The tenant message tells the tenant who to expect a call from — so it carries
+// the VENDOR's phone. We read it from the issue's vendor join, or (when the PM
+// names an override vendor) look that vendor up by name. If no number is on
+// file the phone clause is dropped rather than leaking a placeholder.
 
-import { fetchIssueById } from '../core/supabase.mjs';
+import { fetchIssueById, fetchVendorByName, formatPhone } from '../core/supabase.mjs';
 import * as db from '../state/helpers.mjs';
 
-function renderTenantBody({ tenant_name, vendor_name }) {
+function renderTenantBody({ tenant_name, vendor_name, vendor_phone }) {
+	const at = vendor_phone ? ` at ${vendor_phone}` : '';
 	return `Hi ${tenant_name},
 
-I sent this to ${vendor_name}. Please expect a call from [phone]. They will schedule with you.
+I sent this to ${vendor_name}. Please expect a call from them${at}. They will schedule with you.
 
 Best,
 Jose`;
@@ -43,16 +46,31 @@ export const draftTenant = {
 		if (!issue) return { ok: false, error: `issue not found: ${issue_id}` };
 		if (!issue.tenant?.name) return { ok: false, error: `issue ${issue_id} has no tenant on file` };
 
-		const vendorName = (vendor_name ?? '').trim() || issue.vendor?.name;
+		const override = (vendor_name ?? '').trim();
+		const vendorName = override || issue.vendor?.name;
 		if (!vendorName)
 			return {
 				ok: false,
 				error: `issue ${issue_id} has no vendor (none on file, none passed via vendor_name)`
 			};
 
+		// Resolve the vendor's phone. No override (or override names the same
+		// vendor that's on the issue) → use the joined row. A genuine override →
+		// look that vendor up by name so we don't quote the wrong number.
+		let vendorPhone = null;
+		const sameAsIssue =
+			issue.vendor?.name && override.toLowerCase() === issue.vendor.name.toLowerCase();
+		if (!override || sameAsIssue) {
+			vendorPhone = issue.vendor?.phone ?? null;
+		} else {
+			const match = await fetchVendorByName(issue.workspace_id, override);
+			vendorPhone = match?.phone ?? null;
+		}
+
 		const body = renderTenantBody({
 			tenant_name: issue.tenant.name,
-			vendor_name: vendorName
+			vendor_name: vendorName,
+			vendor_phone: formatPhone(vendorPhone)
 		});
 
 		const draft = await db.createDraft({

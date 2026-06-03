@@ -480,10 +480,12 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 	const sessionizerInflight = new Map();
 
 	function shouldSessionize(ws) {
-		// History now feeds every incoming_user_message turn (buildSessionHistory
-		// reads the open session), so any workspace we converse in needs a session
-		// — not just prod. Test included so follow-up recognition works there too.
-		return ws?.label === 'prod' || ws?.label === 'test';
+		// History feeds every incoming_user_message turn (buildSessionHistory reads
+		// the open session), so every workspace we converse in gets a session.
+		// Label-independent on purpose: no per-workspace gate to drift on a rename
+		// or to forget when a new customer is added. The poller only calls this for
+		// chats whose GUID is configured, so unset workspaces never fire.
+		return Boolean(ws);
 	}
 
 	function queueSessionize(workItem, ws) {

@@ -18,8 +18,27 @@
 // edge surface.
 
 import { supabaseEnv } from '../core/supabase.mjs';
+import { WORKSPACES } from '../core/workspaces.mjs';
 
 const APPFOLIO_MODEL = process.env.ENRICH_MODEL || 'gpt-5.4-mini-2026-03-17';
+
+// Derive a clean job description from the raw AppFolio WO email, for workspaces
+// without Reports API access (e.g. Green Oak) where the API's cleaner
+// description isn't reachable. The notification email has a stable shape:
+//   Job Description\n\n<text>\n\nIssue Descriptor:\n<descriptor>\n\nIssue Details…
+// Falls back to null if neither section is present (caller keeps raw text).
+function parseAppfolioEmailBody(body) {
+	if (!body) return null;
+	const text = String(body).replace(/\r/g, '');
+	const jobMatch = text.match(/Job Description\s*\n+([\s\S]*?)\n+\s*Issue Descriptor:/i);
+	const descMatch = text.match(
+		/Issue Descriptor:\s*\n+([\s\S]*?)\n+\s*(?:Issue Details|Permission to Enter:|Resident Name:)/i
+	);
+	const job = jobMatch?.[1]?.replace(/\s+/g, ' ').trim() || null;
+	const descriptor = descMatch?.[1]?.replace(/\s+/g, ' ').trim() || null;
+	if (job && descriptor) return `${descriptor} — ${job}`;
+	return job || descriptor || null;
+}
 
 // Best-effort: AppFolio and the LLM are each wrapped so a failure degrades the
 // field rather than aborting. A missing row returns { ok: false } and the
@@ -30,11 +49,14 @@ export async function enrichIssue(issue_id) {
 	if (!row) return { ok: false, error: `enrich_issue: issue ${issue_id} not found` };
 	const property = row.property_id ? await fetchProperty(row.property_id) : null;
 
-	// 2. AppFolio reports API → unit + cleaner desc. Failure here is
+	// 2. AppFolio reports API → unit + cleaner desc. Only for workspaces with
+	//    Reports API access — others (Green Oak) would hit the wrong vhost with
+	//    the global creds and could splice another tenant's WO. Failure here is
 	//    non-fatal; row keeps its email-derived description.
+	const hasApi = WORKSPACES[row.workspace_id]?.appfolioApi === true;
 	let unitId = row.unit_id ?? null;
 	let cleanDescription = null;
-	if (property?.appfolio_property_id && row.appfolio_srn) {
+	if (hasApi && property?.appfolio_property_id && row.appfolio_srn) {
 		try {
 			const wo = await fetchAppfolioWorkOrder({
 				appfolio_property_id: property.appfolio_property_id,
@@ -54,6 +76,11 @@ export async function enrichIssue(issue_id) {
 			console.error(`enrich_issue: AppFolio fetch failed for ${issue_id}: ${err.message}`);
 		}
 	}
+
+	// No API description (no API access, or the fetch came back empty) → parse a
+	// clean job description out of the raw WO email text. Replaces the noisy
+	// full-email blob with "Descriptor — Job description".
+	if (!cleanDescription) cleanDescription = parseAppfolioEmailBody(row.description);
 
 	// 3. LLM: one-shot triage of the cleanest description we have — a short
 	//    title plus the urgency call (urgent + a one-line reason). The PMS

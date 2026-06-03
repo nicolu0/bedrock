@@ -47,6 +47,65 @@ function parseAppfolioBody(body: string) {
 	return { residentName: m?.[1]?.trim() ?? null };
 }
 
+// AppFolio identifies a property by a NUMBER on accounts that use property
+// numbers (LAPM), but by its ADDRESS/display-name on accounts that don't
+// (Green Oak — every appfolio_property_number is null). Both arrive in the
+// email: subject `WO #n - {category} - {property} - {unit}` and a body
+// `Address: {property}, {street}, {city, st zip}, {unit}` line. When the
+// number lookup misses we fall back to matching that property string against
+// properties.name (normalized exact, then substring) — mirrors the Node
+// agent's entities.mjs resolver, validated against all 1,273 Green Oak WOs.
+
+const STREET_SUFFIX: Record<string, string> = {
+	street: 'st', avenue: 'ave', av: 'ave', boulevard: 'blvd', drive: 'dr',
+	road: 'rd', place: 'pl', lane: 'ln', court: 'ct', terrace: 'ter'
+};
+function normAddr(s: string | null | undefined): string {
+	return String(s ?? '')
+		.toLowerCase()
+		.replace(/[#.,]/g, ' ')
+		.replace(/\b(street|avenue|av|boulevard|drive|road|place|lane|court|terrace)\b/g, (m) => STREET_SUFFIX[m])
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+// Candidate property strings, most-reliable first: the subject's property
+// segment, then the first two comma-fields of the body `Address:` line.
+function propertyCandidates(subject: string, body: string): string[] {
+	const out: string[] = [];
+	const seg = String(subject ?? '').split(' - ')[2]?.trim();
+	if (seg) out.push(seg);
+	const m = String(body ?? '').match(/Address:\s*([\s\S]*?)\s*View this work order/i);
+	if (m) {
+		const fields = m[1].replace(/\s+/g, ' ').trim().split(',').map((s) => s.trim()).filter(Boolean);
+		if (fields[0]) out.push(fields[0]);
+		if (fields[1]) out.push(fields[1]);
+	}
+	return out;
+}
+
+async function resolvePropertyByAddress(workspaceId: string, candidates: string[]) {
+	const targets = candidates.map(normAddr).filter(Boolean);
+	if (!targets.length) return null;
+	const { data: rows } = await supabase
+		.from('properties')
+		.select('id,name')
+		.eq('workspace_id', workspaceId)
+		.limit(500);
+	if (!rows?.length) return null;
+	const normed = rows.map((r: any) => ({ r, n: normAddr(r.name) })).filter((x: any) => x.n);
+	// exact normalized match, then substring containment either direction
+	for (const t of targets) {
+		const hit = normed.find((x: any) => x.n === t);
+		if (hit) return hit.r;
+	}
+	for (const t of targets) {
+		const hit = normed.find((x: any) => x.n.includes(t) || t.includes(x.n));
+		if (hit) return hit.r;
+	}
+	return null;
+}
+
 // ── Main Handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -56,12 +115,14 @@ serve(async (req) => {
 	if (!workspaceId || !gmailMessageId) {
 		return Response.json({ ok: false, error: 'Missing required fields' }, { status: 400 });
 	}
-	if (!isTest && (!payload.serviceRequestNumber || !payload.appfolioPropertyId)) {
+	// No-number AppFolio accounts (Green Oak) carry no appfolioPropertyId — the
+	// property is resolved by address below, so only the WO number is required.
+	if (!isTest && !payload.serviceRequestNumber) {
 		return Response.json({ ok: false, error: 'Missing AppFolio fields' }, { status: 400 });
 	}
 
 	console.log(
-		`intake-shim: ${isTest ? 'TEST' : `WO #${payload.serviceRequestNumber} property=${payload.appfolioPropertyId}`} msg=${gmailMessageId}`
+		`intake-shim: ${isTest ? 'TEST' : `WO #${payload.serviceRequestNumber} property=${payload.appfolioPropertyId ?? '(by-address)'}`} msg=${gmailMessageId}`
 	);
 
 	// Resolve everything we can from email + DB before the insert.
@@ -81,15 +142,29 @@ serve(async (req) => {
 
 		// Property lookup. The agent's enrich_issue tool needs property_id to
 		// find appfolio_property_id on the properties table for the reports API.
-		const { data: property } = await supabase
-			.from('properties')
-			.select('id')
-			.eq('workspace_id', workspaceId)
-			.eq('appfolio_property_number', propNumber)
-			.maybeSingle();
+		// LAPM-style accounts carry a property NUMBER → exact match. Green Oak
+		// has no numbers → fall back to matching the property's address/name.
+		let property: { id: string } | null = null;
+		if (propNumber) {
+			const { data } = await supabase
+				.from('properties')
+				.select('id')
+				.eq('workspace_id', workspaceId)
+				.eq('appfolio_property_number', propNumber)
+				.maybeSingle();
+			property = data ?? null;
+		}
+		if (!property) {
+			property = await resolvePropertyByAddress(
+				workspaceId,
+				propertyCandidates(subject ?? '', emailBody ?? '')
+			);
+		}
 		propertyDbId = property?.id ?? null;
 		if (!propertyDbId) {
-			console.warn(`intake-shim: no property for number=${propNumber} — inserting without property_id`);
+			console.warn(
+				`intake-shim: no property match (number=${propNumber ?? '—'}) — inserting without property_id`
+			);
 		}
 
 		// Tenant: exact-match on parsed "Resident Name:" scoped to the property's

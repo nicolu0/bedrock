@@ -18,12 +18,72 @@ function authHeaders(key) {
 // The standard select string used everywhere we read an issue with joins.
 // One place to add fields when we need more.
 const ISSUE_SELECT =
-	'id,workspace_id,appfolio_srn,name,description,urgent,created_at,property_id,vendor_id,' +
+	'id,workspace_id,appfolio_srn,name,description,urgent,created_at,property_id,vendor_id,unit_id,' +
 	'status,status_reason,status_updated_at,' +
-	'tenant:tenants!tenant_id(name),' +
+	'tenant:tenants!tenant_id(name,phone),' +
 	'property:properties!property_id(name),' +
 	'unit:units!unit_id(name),' +
-	'vendor:vendors!vendor_id(name)';
+	'vendor:vendors!vendor_id(name,phone)';
+
+// Format a stored phone (digits-only, as crawled) for display in a draft body.
+// All rows are 10-digit US numbers; tolerate a leading country `1` and fall
+// back to the raw digits if the length is unexpected. Returns null for empty.
+export function formatPhone(raw) {
+	if (!raw) return null;
+	const digits = String(raw).replace(/\D/g, '');
+	const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+	if (ten.length !== 10) return digits || null;
+	return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+}
+
+// Look up a single vendor row by name within a workspace. Used by draft_tenant
+// when the PM names an override vendor (one not on the issue row) so we can put
+// THAT vendor's phone in the tenant message. Tries an exact case-insensitive
+// match first, then a substring match (PM types "Luigi" → "Luigi's Plumbing").
+// Returns { id, name, phone } or null.
+export async function fetchVendorByName(workspace_id, name) {
+	if (!workspace_id || !name?.trim()) return null;
+	const { url, key } = supabaseEnv();
+	const esc = (s) => s.replace(/[%,()*]/g, ' ').trim();
+	const clean = esc(name);
+	for (const pattern of [`ilike.${clean}`, `ilike.*${clean}*`]) {
+		const params = new URLSearchParams({
+			select: 'id,name,phone',
+			workspace_id: `eq.${workspace_id}`,
+			name: pattern,
+			limit: '1'
+		});
+		const res = await fetch(`${url}/rest/v1/vendors?${params}`, { headers: authHeaders(key) });
+		if (!res.ok) throw new Error(`fetchVendorByName ${res.status}: ${await res.text()}`);
+		const rows = await res.json();
+		if (rows[0]) return rows[0];
+	}
+	return null;
+}
+
+// Find a reachable phone for a unit when the issue's own tenant has none.
+// Many phoneless tenants are co-tenants (kids/spouse/roommates) on a lease
+// whose primary leaseholder DOES have a number on file — so for a vendor to
+// reach "the unit" we fall back to any unit-mate with a phone. `excludeName`
+// skips the tenant already tried. Returns raw digits, or null.
+export async function fetchUnitTenantPhone(unit_id, { excludeName } = {}) {
+	if (!unit_id) return null;
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'name,phone',
+		unit_id: `eq.${unit_id}`,
+		phone: 'not.is.null',
+		order: 'name.asc'
+	});
+	const res = await fetch(`${url}/rest/v1/tenants?${params}`, { headers: authHeaders(key) });
+	if (!res.ok) throw new Error(`fetchUnitTenantPhone ${res.status}: ${await res.text()}`);
+	const rows = await res.json();
+	const exclude = (excludeName ?? '').trim().toLowerCase();
+	const hit = rows.find(
+		(r) => r.phone && r.phone.trim() && r.name?.trim().toLowerCase() !== exclude
+	);
+	return hit?.phone ?? null;
+}
 
 export async function fetchIssueById(id) {
 	if (!id) throw new Error('fetchIssueById: id required');
@@ -63,44 +123,4 @@ export async function patchIssue(id, patch) {
 	}
 	const rows = await res.json();
 	return rows[0] ?? null;
-}
-
-// Delete all issues in a workspace plus their agent_runs (FK dep). Used by
-// the "Clear test workspace" button — should never be called on prod.
-export async function deleteIssuesByWorkspace(workspace_id) {
-	if (!workspace_id) throw new Error('deleteIssuesByWorkspace: workspace_id required');
-	const { url, key } = supabaseEnv();
-	const headers = authHeaders(key);
-
-	// 1. Fetch the issue ids so we can target agent_runs.
-	const idsRes = await fetch(
-		`${url}/rest/v1/issues_v2?select=id&workspace_id=eq.${workspace_id}`,
-		{ headers }
-	);
-	if (!idsRes.ok) {
-		throw new Error(`fetch issues: ${idsRes.status} ${await idsRes.text()}`);
-	}
-	const rows = await idsRes.json();
-	const ids = rows.map((r) => r.id);
-	if (ids.length === 0) return { issues_deleted: 0, agent_runs_deleted: 0 };
-
-	// 2. Delete agent_runs first (FK).
-	const runsRes = await fetch(
-		`${url}/rest/v1/agent_runs?issue_id=in.(${ids.join(',')})`,
-		{ method: 'DELETE', headers }
-	);
-	if (!runsRes.ok) {
-		throw new Error(`delete agent_runs: ${runsRes.status} ${await runsRes.text()}`);
-	}
-
-	// 3. Delete the issues themselves.
-	const issuesRes = await fetch(
-		`${url}/rest/v1/issues_v2?workspace_id=eq.${workspace_id}`,
-		{ method: 'DELETE', headers }
-	);
-	if (!issuesRes.ok) {
-		throw new Error(`delete issues: ${issuesRes.status} ${await issuesRes.text()}`);
-	}
-
-	return { issues_deleted: ids.length };
 }

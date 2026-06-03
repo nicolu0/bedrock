@@ -1,0 +1,1009 @@
+{
+  "processed": 77,
+  "written": 77,
+  "results": [
+    {
+      "wo": "1299-1",
+      "title": "Shower grout leak at 33 Sea Colony Dr → Rightway",
+      "summary": "Rightway Apartment Service handled eroded shower grout leaking + mildew at 33 Sea Colony Dr.",
+      "vendor": "Rightway Apartment Service",
+      "property": "33 Sea Colony Dr",
+      "tags": [
+        "handyperson",
+        "grout",
+        "leak",
+        "shower",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1300-1",
+      "title": "Atrium leak at 742 N Cherokee → Rightway",
+      "summary": "Rightway Apartment Service handled glass atrium leak at 742 N Cherokee.",
+      "vendor": "Rightway Apartment Service",
+      "property": "742 N Cherokee",
+      "tags": [
+        "handyperson",
+        "leak",
+        "roofing",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1301-1",
+      "title": "Roof deck leak at 742 N Cherokee → Rightway",
+      "summary": "Rightway Apartment Service handled roof leak on deck at 742 N Cherokee.",
+      "vendor": "Rightway Apartment Service",
+      "property": "742 N Cherokee",
+      "tags": [
+        "handyperson",
+        "leak",
+        "roofing",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1302-1",
+      "title": "Ceiling leak at 742 N Cherokee → Rightway",
+      "summary": "Rightway Apartment Service handled ceiling leak from balcony above at 742 N Cherokee.",
+      "vendor": "Rightway Apartment Service",
+      "property": "742 N Cherokee",
+      "tags": [
+        "handyperson",
+        "leak",
+        "ceiling",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1303-1",
+      "title": "Door leak at 742 N Cherokee → Rightway",
+      "summary": "Rightway Apartment Service handled door leak at 742 N Cherokee.",
+      "vendor": "Rightway Apartment Service",
+      "property": "742 N Cherokee",
+      "tags": [
+        "handyperson",
+        "leak",
+        "door",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1304-1",
+      "title": "Roof water heater at 2419 S Cochran → Rightway",
+      "summary": "Rightway Apartment Service fixed non-working roof-deck water heater at 2419 S Cochran Ave.",
+      "vendor": "Rightway Apartment Service",
+      "property": "2419 S Cochran Ave",
+      "tags": [
+        "handyperson",
+        "water-heater",
+        "plumbing",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1305-1",
+      "title": "Window mesh + light at 4219 Abner St → Rightway",
+      "summary": "Rightway Apartment Service handled bedroom window mesh repair + out main-bedroom light at 4219 Abner St.",
+      "vendor": "Rightway Apartment Service",
+      "property": "4219 Abner St",
+      "tags": [
+        "handyperson",
+        "window",
+        "lighting",
+        "multi-issue-single-vendor",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1307-1",
+      "title": "Ceiling leak at 742 N Cherokee → Rightway",
+      "summary": "Rightway Apartment Service handled leak from ceiling at 742 N Cherokee.",
+      "vendor": "Rightway Apartment Service",
+      "property": "742 N Cherokee",
+      "tags": [
+        "handyperson",
+        "leak",
+        "ceiling",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1310-1",
+      "title": "Ice maker at 4239 Lindblade → A1 Service Appliances",
+      "summary": "A1 Service Appliances serviced recurring non-working ice maker at 4239 Lindblade; known model issue.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "4239 Lindblade",
+      "tags": [
+        "appliance",
+        "ice-maker",
+        "fridge",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1311-1",
+      "title": "Gate key copies at 9th St Bungalow → Rightway",
+      "summary": "Rightway Apartment Service made + distributed left-gate key copies to odd units at 9th St Bungalow Home LLC.",
+      "vendor": "Rightway Apartment Service",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "handyperson",
+        "keys",
+        "gate",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1312-1",
+      "title": "Back gate lock at 9th St Bungalow → Get Pro Locksmith",
+      "summary": "Get Pro Locksmith fixed sticky back-gate alley lock mechanism at 9th St Bungalow Home LLC.",
+      "vendor": "Get Pro Locksmith",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "locks",
+        "gate",
+        "lock",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1313-1",
+      "title": "Rekey front + back doors at 4219 Abner St → Get Pro Locksmith",
+      "summary": "Get Pro Locksmith replaced front + back door locks keyed alike at 4219 Abner St.",
+      "vendor": "Get Pro Locksmith",
+      "property": "4219 Abner St",
+      "tags": [
+        "locks",
+        "rekey",
+        "lock",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1314-1",
+      "title": "Window leak at 9th St Bungalow → Roberto Carvalho",
+      "summary": "Roberto Carvalho fixed leak in/near window at 9th St Bungalow Home LLC unit 1.",
+      "vendor": "Roberto Carvalho",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "handyperson",
+        "leak",
+        "window",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1236-2",
+      "title": "Dishwasher again at 8921 Wonderland → Raptor Appliance Repair",
+      "summary": "Raptor Appliance Repair handled still-malfunctioning dishwasher at 8921 Wonderland Park Ave.",
+      "vendor": "Raptor Appliance Repair",
+      "property": "8921 Wonderland Park Ave",
+      "tags": [
+        "appliance",
+        "dishwasher",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1318-1",
+      "title": "Pool service at 742 N Cherokee → Jimmy’s Pool Service",
+      "summary": "Jimmy’s Pool Service handled monthly pool cleaning at 742 N Cherokee.",
+      "vendor": "Jimmy’s Pool Service",
+      "property": "742 N Cherokee",
+      "tags": [
+        "pool",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1319-1",
+      "title": "Landscaping at 742 N Cherokee → Jose Rivera Landscaping",
+      "summary": "Jose Rivera Landscaping handled monthly gardening at 742 N Cherokee.",
+      "vendor": "Jose Rivera Landscaping",
+      "property": "742 N Cherokee",
+      "tags": [
+        "landscaping",
+        "gardening",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1320-1",
+      "title": "Bug control at 2419 S Cochran → Primate Pest Elimination",
+      "summary": "Primate Pest Elimination handled overdue secondary bug-control request at 2419 S Cochran Ave.",
+      "vendor": "Primate Pest Elimination",
+      "property": "2419 S Cochran Ave",
+      "tags": [
+        "pest-control",
+        "bugs",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1323-1",
+      "title": "HVAC vent mold at 2123 Linnington → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman remediated mold in/on HVAC vents at 2123 Linnington.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "2123 Linnington",
+      "tags": [
+        "handyperson",
+        "mold",
+        "hvac",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1325-1",
+      "title": "Dryer + dishwasher at 8921 Wonderland → A1 Service Appliances",
+      "summary": "A1 Service Appliances checked under-drying dryer + non-dispensing dishwasher at 8921 Wonderland Park Ave.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "8921 Wonderland Park Ave",
+      "tags": [
+        "appliance",
+        "dryer",
+        "dishwasher",
+        "multi-issue-single-vendor",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1326-1",
+      "title": "Garbage disposal at 8921 Wonderland → Kaesler Plumbing",
+      "summary": "Kaesler Plumbing handled garbage disposal check at 8921 Wonderland Park Ave.",
+      "vendor": "Kaesler Plumbing, Inc",
+      "property": "8921 Wonderland Park Ave",
+      "tags": [
+        "plumbing",
+        "disposal",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1327-1",
+      "title": "Sink mildew + leak at 4219 Abner St → José Gonzalez",
+      "summary": "José Gonzalez checked under-kitchen-sink mildew + potential water leaks at 4219 Abner St.",
+      "vendor": "José Gonzalez",
+      "property": "4219 Abner St",
+      "tags": [
+        "handyperson",
+        "leak",
+        "mildew",
+        "sink",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1329-1",
+      "title": "Red-tagged water heater at 9206 S Hoover → Enterprise Plumbing",
+      "summary": "Enterprise Plumbing handled gas-company red-tagged water heater, no hot water, at 9206 S Hoover St.",
+      "vendor": "Enterprise Plumbing",
+      "property": "9206 S Hoover St",
+      "tags": [
+        "plumbing",
+        "water-heater",
+        "gas",
+        "urgent",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1334-1",
+      "title": "Toilet water pressure at 4219 Abner St → All City Plumbing",
+      "summary": "All City Plumbing fixed toilet with poor flush + continuously running water at 4219 Abner St.",
+      "vendor": "All City Plumbing Inc",
+      "property": "4219 Abner St",
+      "tags": [
+        "plumbing",
+        "toilet",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1335-1",
+      "title": "AC won’t turn on at 9th St Bungalow → First Aid Appliance & HVAC",
+      "summary": "First Aid Appliance & HVAC Pro fixed AC that would not power on at 9th St Bungalow Home LLC unit 9.",
+      "vendor": "FIRST AID APPLIANCE & HVAC PRO",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "hvac",
+        "ac",
+        "appliance",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1337-1",
+      "title": "Kitchen lighting + holes at 9th St Bungalow → Roberto Carvalho",
+      "summary": "Roberto Carvalho fixed kitchen lighting + patched bathroom holes at 9th St Bungalow Home LLC unit 11.",
+      "vendor": "Roberto Carvalho",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "handyperson",
+        "lighting",
+        "drywall",
+        "multi-issue-single-vendor",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1338-1",
+      "title": "Make-ready punch list at 3473 Sabina St. → José Gonzalez",
+      "summary": "José Gonzalez handled multi-item punch list: sink leaks, gate lock, range hood, frame mold, toilet at 3473 Sabina St.",
+      "vendor": "José Gonzalez",
+      "property": "3473 Sabina St.",
+      "tags": [
+        "handyperson",
+        "punch-list",
+        "leak",
+        "multi-issue-single-vendor",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1340-1",
+      "title": "Backed-up sink at 8921 Wonderland → Reckon & Reckon Plumbing",
+      "summary": "Reckon & Reckon Plumbing handled backed-up sink + dishwasher check at 8921 Wonderland Park Ave.",
+      "vendor": "Reckon & Reckon Plumbing Inc.",
+      "property": "8921 Wonderland Park Ave",
+      "tags": [
+        "plumbing",
+        "drain",
+        "sink",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1341-1",
+      "title": "Sewage smell at 9033 Dicks St → Reckon & Reckon Plumbing",
+      "summary": "Reckon & Reckon Plumbing handled sewage smell in entry at 9033 Dicks St.",
+      "vendor": "Reckon & Reckon Plumbing Inc.",
+      "property": "9033 Dicks St",
+      "tags": [
+        "plumbing",
+        "sewage",
+        "odor",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1345-1",
+      "title": "Backup drain + toilet at 829 Bunker Hill → Reckon & Reckon Plumbing",
+      "summary": "Reckon & Reckon Plumbing cleared bathtub backing up from drain + non-working toilet at 829 Bunker Hill unit 5.",
+      "vendor": "Reckon & Reckon Plumbing Inc.",
+      "property": "829 Bunker Hill",
+      "tags": [
+        "plumbing",
+        "drain",
+        "toilet",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1346-1",
+      "title": "Move-in punch list at 1616 Ashland Ave → José Gonzalez",
+      "summary": "José Gonzalez handled move-in issues: no hot water, dead disposals, stove gas, weak AC, dryer at 1616 Ashland Ave.",
+      "vendor": "José Gonzalez",
+      "property": "1616 Ashland Ave",
+      "tags": [
+        "handyperson",
+        "punch-list",
+        "move-in",
+        "multi-issue-single-vendor",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1347-1",
+      "title": "Kitchen sink backup at 2135 Ivar Ave → Reckon & Reckon Plumbing",
+      "summary": "Reckon & Reckon Plumbing cleared kitchen sink backing up when sinks run at 2135 Ivar Ave unit 1.",
+      "vendor": "Reckon & Reckon Plumbing Inc.",
+      "property": "2135 Ivar Ave",
+      "tags": [
+        "plumbing",
+        "drain",
+        "sink",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1348-1",
+      "title": "AC + disposals at 1616 Ashland Ave → George HVAC",
+      "summary": "George HVAC handled weak-airflow AC cycling on/off + two dead kitchen disposals at 1616 Ashland Ave.",
+      "vendor": "George HVAC",
+      "property": "1616 Ashland Ave",
+      "tags": [
+        "hvac",
+        "ac",
+        "disposal",
+        "multi-issue-single-vendor",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1349-1",
+      "title": "AC not cooling at 829 Bunker Hill → A1 Service Appliances",
+      "summary": "A1 Service Appliances handled AC not cooling at 829 Bunker Hill unit 6.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "829 Bunker Hill",
+      "tags": [
+        "hvac",
+        "ac",
+        "appliance",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1352-1",
+      "title": "Smoke detector at 2312 West Blvd → Garcia’s Handyman",
+      "summary": "Garcia’s Handyman checked smoke detector at 2312 West Blvd.",
+      "vendor": "Garcia's Handyman and Cleaning Services LLC.",
+      "property": "2312 West Blvd",
+      "tags": [
+        "handyperson",
+        "smoke-detector",
+        "fire-safety",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1354-1",
+      "title": "Garbage disposal at 8921 Wonderland → Rightway",
+      "summary": "Rightway Apartment Service checked garbage disposal at 8921 Wonderland Park Ave.",
+      "vendor": "Rightway Apartment Service",
+      "property": "8921 Wonderland Park Ave",
+      "tags": [
+        "handyperson",
+        "disposal",
+        "plumbing",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1355-1",
+      "title": "Washer flooding at 9th St Bungalow → Rightway",
+      "summary": "Rightway Apartment Service handled washer flooding onto floor at 9th St Bungalow Home LLC unit 12.",
+      "vendor": "Rightway Apartment Service",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "handyperson",
+        "washer",
+        "leak",
+        "laundry",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1356-1",
+      "title": "AC not cooling at 829 Bunker Hill → A1 Service Appliances",
+      "summary": "A1 Service Appliances handled AC not cooling at 829 Bunker Hill unit 5.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "829 Bunker Hill",
+      "tags": [
+        "hvac",
+        "ac",
+        "appliance",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1355-2",
+      "title": "Snake plumbing line at 9th St Bungalow → Reckon & Reckon Plumbing",
+      "summary": "Reckon & Reckon Plumbing snaked plumbing line at 9th St Bungalow Home LLC unit 12.",
+      "vendor": "Reckon & Reckon Plumbing Inc.",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "plumbing",
+        "drain",
+        "snake",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1349-2",
+      "title": "AC not cooling at 829 Bunker Hill → Make It Work AC Service",
+      "summary": "Make It Work AC Service handled AC not cooling at 829 Bunker Hill unit 6.",
+      "vendor": "Make It Work AC Service Inc.",
+      "property": "829 Bunker Hill",
+      "tags": [
+        "hvac",
+        "ac",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1348-2",
+      "title": "AC weak airflow at 1616 Ashland Ave → A1 Service Appliances",
+      "summary": "A1 Service Appliances handled weak-airflow AC cycling on/off at 1616 Ashland Ave.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "1616 Ashland Ave",
+      "tags": [
+        "hvac",
+        "ac",
+        "appliance",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1357-2",
+      "title": "Fridge not cooling at 9th St Bungalow → A1 Service Appliances",
+      "summary": "A1 Service Appliances handled fridge/freezer not cooling after defrost at 9th St Bungalow Home LLC unit 12.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "appliance",
+        "fridge",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1360-1",
+      "title": "AC not cooling at 5178 Almont St → A1 Service Appliances",
+      "summary": "A1 Service Appliances serviced rooftop AC not blowing cold after filter change at 5178 Almont St.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "5178 Almont St",
+      "tags": [
+        "hvac",
+        "ac",
+        "appliance",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1341-2",
+      "title": "Sewer smell at 9033 Dicks St → All City Plumbing",
+      "summary": "All City Plumbing investigated recurring sewer smell in entryway at 9033 Dicks St.",
+      "vendor": "All City Plumbing Inc",
+      "property": "9033 Dicks St",
+      "tags": [
+        "plumbing",
+        "sewage",
+        "odor",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1351-2",
+      "title": "Loud AC at 9th St Bungalow → A1 Service Appliances",
+      "summary": "A1 Service Appliances handled AC making loud fan noise + not turning off at 9th St Bungalow Home LLC unit 1.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "hvac",
+        "ac",
+        "appliance",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1335-2",
+      "title": "AC won’t turn on at 9th St Bungalow → A1 Service Appliances",
+      "summary": "A1 Service Appliances fixed AC that would not power on at 9th St Bungalow Home LLC unit 9.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "hvac",
+        "ac",
+        "appliance",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1370-1",
+      "title": "Landscaping at 742 N Cherokee → Jose Rivera Landscaping",
+      "summary": "Jose Rivera Landscaping handled monthly gardening at 742 N Cherokee.",
+      "vendor": "Jose Rivera Landscaping",
+      "property": "742 N Cherokee",
+      "tags": [
+        "landscaping",
+        "gardening",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1359-3",
+      "title": "Broken window at 4418 Vantage Ave → United Glass & Windows",
+      "summary": "United Glass & Windows repaired broken window at 4418 Vantage Ave unit 1.",
+      "vendor": "United Glass & Windows",
+      "property": "4418 Vantage Ave",
+      "tags": [
+        "windows",
+        "glass",
+        "window",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1371-1",
+      "title": "Leaking AC at 4418 Vantage Ave → A1 Service Appliances",
+      "summary": "A1 Service Appliances handled leaking bedroom AC causing moisture in vacant unit at 4418 Vantage Ave.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "4418 Vantage Ave",
+      "tags": [
+        "hvac",
+        "ac",
+        "leak",
+        "appliance",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1224-2",
+      "title": "Heater + replacement estimate at 829 Bunker Hill → A1 Service Appliances",
+      "summary": "A1 Service Appliances handled non-working heater + replacement-system estimate at 829 Bunker Hill unit 5.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "829 Bunker Hill",
+      "tags": [
+        "hvac",
+        "heater",
+        "estimate",
+        "appliance",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1375-1",
+      "title": "Pipe leak at 4418 Vantage Ave → Rightway",
+      "summary": "Rightway Apartment Service assessed pipe leak on building side by unit 5 at 4418 Vantage Ave.",
+      "vendor": "Rightway Apartment Service",
+      "property": "4418 Vantage Ave",
+      "tags": [
+        "handyperson",
+        "leak",
+        "plumbing",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1320-2",
+      "title": "Secondary spraying at 2419 S Cochran → Primate Pest Elimination",
+      "summary": "Primate Pest Elimination handled secondary bug spraying follow-up at 2419 S Cochran Ave.",
+      "vendor": "Primate Pest Elimination",
+      "property": "2419 S Cochran Ave",
+      "tags": [
+        "pest-control",
+        "bugs",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1379-1",
+      "title": "Freezer leak at 9th St Bungalow → Raptor Appliance Repair",
+      "summary": "Raptor Appliance Repair handled freezer leaking into fridge, clogged defrost drain, at 9th St Bungalow Home LLC unit 13.",
+      "vendor": "Raptor Appliance Repair",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "appliance",
+        "fridge",
+        "leak",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1380-2",
+      "title": "Intermittent heater at 2419 S Cochran → Tony Germann",
+      "summary": "Tony Germann handled intermittently-working heater needing service + estimate at 2419 S Cochran Ave unit 2419.",
+      "vendor": "Tony Germann",
+      "property": "2419 S Cochran Ave",
+      "tags": [
+        "hvac",
+        "heater",
+        "estimate",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1383-1",
+      "title": "Washer leaking at 5179 Huntington Dr. → Raptor Appliance Repair",
+      "summary": "Raptor Appliance Repair fixed washer leaking through door at 5179 Huntington Dr.",
+      "vendor": "Raptor Appliance Repair",
+      "property": "5179 Huntington Dr.",
+      "tags": [
+        "appliance",
+        "washer",
+        "leak",
+        "laundry",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1390-1",
+      "title": "Rekey door knobs at 9th St Bungalow → ASAP Locksmith",
+      "summary": "ASAP Locksmith rekeyed front + back door knobs at 9th St Bungalow Home LLC unit 8.",
+      "vendor": "ASAP Locksmith",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "locks",
+        "rekey",
+        "lock",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1394-1",
+      "title": "No hot water at 829 Bunker Hill → All City Plumbing",
+      "summary": "All City Plumbing handled no hot water at 829 Bunker Hill unit 6.",
+      "vendor": "All City Plumbing Inc",
+      "property": "829 Bunker Hill",
+      "tags": [
+        "plumbing",
+        "water-heater",
+        "hot-water",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1397-1",
+      "title": "Pool light out at 8921 Wonderland → King Neptune Pools",
+      "summary": "King Neptune Pools handled out pool light at 8921 Wonderland Park Ave.",
+      "vendor": "King Neptune Pools Inc.",
+      "property": "8921 Wonderland Park Ave",
+      "tags": [
+        "pool",
+        "lighting",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1398-1",
+      "title": "Ceiling bubbling at 3473 Sabina St. → All City Plumbing",
+      "summary": "All City Plumbing investigated bathroom ceiling bubbling under upstairs bathroom at 3473 Sabina St.",
+      "vendor": "All City Plumbing Inc",
+      "property": "3473 Sabina St.",
+      "tags": [
+        "plumbing",
+        "leak",
+        "ceiling",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1404-1",
+      "title": "Carpenter ants at 4219 Abner St → South County Exterminators",
+      "summary": "South County Exterminators handled flying carpenter ant infestation in back bedroom at 4219 Abner St.",
+      "vendor": "South County Exterminators",
+      "property": "4219 Abner St",
+      "tags": [
+        "pest-control",
+        "ants",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1406-1",
+      "title": "Pool service at 742 N Cherokee → Jimmy’s Pool Service",
+      "summary": "Jimmy’s Pool Service handled monthly pool cleaning at 742 N Cherokee.",
+      "vendor": "Jimmy’s Pool Service",
+      "property": "742 N Cherokee",
+      "tags": [
+        "pool",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1407-1",
+      "title": "Landscaping at 742 N Cherokee → Jose Rivera Landscaping",
+      "summary": "Jose Rivera Landscaping handled monthly gardening at 742 N Cherokee.",
+      "vendor": "Jose Rivera Landscaping",
+      "property": "742 N Cherokee",
+      "tags": [
+        "landscaping",
+        "gardening",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1438-1",
+      "title": "No hot shower water at 4418 Vantage Ave → All City Plumbing",
+      "summary": "All City Plumbing handled shower water not getting hot at 4418 Vantage Ave unit 3.",
+      "vendor": "All City Plumbing Inc",
+      "property": "4418 Vantage Ave",
+      "tags": [
+        "plumbing",
+        "hot-water",
+        "shower",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1366-4",
+      "title": "Fallen gutter estimate at 829 Bunker Hill → Bresnahan Rain Gutter",
+      "summary": "Bresnahan Rain Gutter Cleaning estimated reseating gutter fallen into balcony at 829 Bunker Hill unit 9.",
+      "vendor": "Bresnahan Rain Gutter Cleaning",
+      "property": "829 Bunker Hill",
+      "tags": [
+        "roofing",
+        "gutter",
+        "estimate",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1447-1",
+      "title": "Communal laundry down at 9th St Bungalow → Bondy Service",
+      "summary": "Bondy Service handled communal washer/dryer not powering on, app error, at 9th St Bungalow Home LLC unit 9.",
+      "vendor": "Bondy Service Inc",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "laundry",
+        "washer",
+        "dryer",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1459-1",
+      "title": "Shower wall leak at 2123 Linnington → All City Plumbing",
+      "summary": "All City Plumbing handled leak in wall behind upstairs shower dripping to floor below at 2123 Linnington.",
+      "vendor": "All City Plumbing Inc",
+      "property": "2123 Linnington",
+      "tags": [
+        "plumbing",
+        "leak",
+        "shower",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1467-1",
+      "title": "Garage sprinkler leak at 2135 Ivar Ave → Rightway",
+      "summary": "Rightway Apartment Service handled leak from garage water pipe/sprinkler at 2135 Ivar Ave unit 7.",
+      "vendor": "Rightway Apartment Service",
+      "property": "2135 Ivar Ave",
+      "tags": [
+        "handyperson",
+        "leak",
+        "plumbing",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1468-1",
+      "title": "Washer + dryer at Horizon Ave Duplex → Rightway",
+      "summary": "Rightway Apartment Service handled stuck dryer door + washer not completing cycles at Horizon Ave Duplex unit 218.",
+      "vendor": "Rightway Apartment Service",
+      "property": "Horizon Ave Duplex",
+      "tags": [
+        "handyperson",
+        "washer",
+        "dryer",
+        "laundry",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1469-1",
+      "title": "Garage ceiling leak at 2135 Ivar Ave → Rightway",
+      "summary": "Rightway Apartment Service handled parking-garage leak dripping on car + pooling ceiling at 2135 Ivar Ave unit 2.",
+      "vendor": "Rightway Apartment Service",
+      "property": "2135 Ivar Ave",
+      "tags": [
+        "handyperson",
+        "leak",
+        "ceiling",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1360-2",
+      "title": "AC recurring + thermostat at 5178 Almont St → A1 Service Appliances",
+      "summary": "A1 Service Appliances handled recurring AC issue with flashing thermostat at 5178 Almont St.",
+      "vendor": "A1 Service Appliances, Inc.",
+      "property": "5178 Almont St",
+      "tags": [
+        "hvac",
+        "ac",
+        "thermostat",
+        "appliance",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1471-1",
+      "title": "Hallway door latch at 2135 Ivar Ave → Rightway",
+      "summary": "Rightway Apartment Service handled recurring broken latch on front glass hallway door at 2135 Ivar Ave unit 1.",
+      "vendor": "Rightway Apartment Service",
+      "property": "2135 Ivar Ave",
+      "tags": [
+        "handyperson",
+        "door",
+        "latch",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1472-1",
+      "title": "Washer not working at 8342 Kirkwood → Raptor Appliance Repair",
+      "summary": "Raptor Appliance Repair handled non-working washing machine at 8342 Kirkwood.",
+      "vendor": "Raptor Appliance Repair",
+      "property": "8342 Kirkwood",
+      "tags": [
+        "appliance",
+        "washer",
+        "laundry",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1475-1",
+      "title": "Slow bathroom sink at 1827 S Barrington → All City Plumbing",
+      "summary": "All City Plumbing cleared slow-draining bathroom sink at 1827 S Barrington Ave #107.",
+      "vendor": "All City Plumbing Inc",
+      "property": "1827 S Barrington Ave #107",
+      "tags": [
+        "plumbing",
+        "drain",
+        "sink",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1478-1",
+      "title": "Garbage disposal at 8342 Kirkwood → Raptor Appliance Repair",
+      "summary": "Raptor Appliance Repair handled non-working garbage disposal at 8342 Kirkwood.",
+      "vendor": "Raptor Appliance Repair",
+      "property": "8342 Kirkwood",
+      "tags": [
+        "appliance",
+        "disposal",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1481-1",
+      "title": "Disposal switch at 9th St Bungalow → Raptor Appliance Repair",
+      "summary": "Raptor Appliance Repair handled garbage disposal not activating from light switch at 9th St Bungalow Home LLC unit 12.",
+      "vendor": "Raptor Appliance Repair",
+      "property": "9th St Bungalow Home LLC",
+      "tags": [
+        "appliance",
+        "disposal",
+        "electrical",
+        "status-resolved"
+      ]
+    },
+    {
+      "wo": "1485-1",
+      "title": "Dehumidifier service at Horizon Ave Duplex → George HVAC",
+      "summary": "George HVAC serviced + cleaned dehumidifier at Horizon Ave Duplex.",
+      "vendor": "George HVAC",
+      "property": "Horizon Ave Duplex",
+      "tags": [
+        "hvac",
+        "dehumidifier",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1489-1",
+      "title": "Pool service at 742 N Cherokee → Jimmy’s Pool Service",
+      "summary": "Jimmy’s Pool Service handled monthly pool cleaning at 742 N Cherokee.",
+      "vendor": "Jimmy’s Pool Service",
+      "property": "742 N Cherokee",
+      "tags": [
+        "pool",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    },
+    {
+      "wo": "1490-1",
+      "title": "Landscaping at 742 N Cherokee → Jose Rivera Landscaping",
+      "summary": "Jose Rivera Landscaping handled monthly gardening at 742 N Cherokee.",
+      "vendor": "Jose Rivera Landscaping",
+      "property": "742 N Cherokee",
+      "tags": [
+        "landscaping",
+        "gardening",
+        "recurring-treatment",
+        "vendor-dispatch"
+      ]
+    }
+  ]
+}
