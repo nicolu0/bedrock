@@ -177,6 +177,9 @@ async function resetState(scenario) {
 
 const realFetch = global.fetch;
 let supabaseMock = {};
+// Per-scenario vendor roster ({ id, name, phone? }[]) served for /rest/v1/vendors.
+// Set from setup.supabase_vendors; [] for scenarios that don't care.
+let supabaseVendors = [];
 
 global.fetch = async (url, init) => {
 	const urlStr = typeof url === 'string' ? url : (url?.toString?.() ?? '');
@@ -192,6 +195,21 @@ global.fetch = async (url, init) => {
 			});
 		}
 		return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
+	}
+	if (urlStr.includes('/rest/v1/vendors')) {
+		// fetchWorkspaceVendors (workspace_id filter only) → whole roster.
+		// fetchVendorByName (name=ilike.<x>) → roster rows matching that name,
+		// honoring PostgREST's `*` wildcard so substring lookups resolve.
+		const nameM = urlStr.match(/name=ilike\.([^&]+)/);
+		let rows = supabaseVendors;
+		if (nameM) {
+			const needle = decodeURIComponent(nameM[1]).replace(/\*/g, '').toLowerCase();
+			rows = supabaseVendors.filter((v) => v.name?.toLowerCase().includes(needle));
+		}
+		return new Response(JSON.stringify(rows), {
+			status: 200,
+			headers: { 'content-type': 'application/json' }
+		});
 	}
 	return realFetch(url, init);
 };
@@ -386,6 +404,7 @@ for (const scenario of scenarios) {
 	process.stdout.write(`▷ ${scenario.name} `);
 	await resetState(scenario);
 	supabaseMock = scenario.setup?.supabase ?? {};
+	supabaseVendors = scenario.setup?.supabase_vendors ?? [];
 
 	let event;
 	try {

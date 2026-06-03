@@ -110,6 +110,47 @@ const ISSUE_LAUNDRY = {
 	status: 'awaiting_pm'
 };
 
+// ── Voice fixtures (2026-06-02 tone fixes) ───────────────────────────────────
+// Long/legal vendor names + a Title-cased issue, so the draft renderers exercise
+// the deterministic shorteners: suffix strip, first-name-for-individuals (with a
+// workspace collision guard), and lowercasing an interpolated issue phrase.
+const ISSUE_OUTLETS = {
+	id: 'iss-outlets-040',
+	workspace_id: TEST_WS,
+	property: { name: '1829 11th St' },
+	unit: { name: 'Unit 2 1829 11th St' },
+	tenant: { name: 'Cecilia Escobedo' },
+	vendor: { name: 'Osalpa Electric, INC.' },
+	name: 'Dead outlets after spark',
+	description: 'several outlets went dead after a spark'
+};
+const ISSUE_DISPOSAL = {
+	id: 'iss-disposal-041',
+	workspace_id: TEST_WS,
+	property: { name: '205 Horizon Ave' },
+	unit: { name: 'Unit 3 205 Horizon Ave' },
+	tenant: { name: 'Andrea Fesi' },
+	vendor: { name: 'Yonic Herrera' },
+	name: 'garbage disposal not working',
+	description: 'the kitchen garbage disposal is jammed'
+};
+const ISSUE_LEAK_LUIS = {
+	id: 'iss-leak-042',
+	workspace_id: TEST_WS,
+	property: { name: '829 Ocean Park' },
+	unit: { name: 'Unit 1 829 Ocean Park' },
+	tenant: { name: 'Marisol Vega' },
+	vendor: { name: 'Luis Herrera' },
+	name: 'slow bathroom drain',
+	description: 'the bathroom sink drains slowly'
+};
+// Two "Luis ..." in the same workspace — first-name shorthand collides, so both
+// must stay full-named in any draft.
+const VENDORS_TWO_LUIS = [
+	{ id: 'ven-luis-h', name: 'Luis Herrera' },
+	{ id: 'ven-luis-r', name: 'Luis Ramos' }
+];
+
 // Helper: build a sent-log bundle for the test chat referring to one issue.
 // Line 1 = unit.name verbatim (canonical address from the normalized units table).
 function sentBundle(issue, { ago_min = 5 } = {}) {
@@ -370,7 +411,7 @@ export const scenarios = [
 		// write_memory and nothing else — dispatch already happened on the
 		// override turn, so no ack and no drafts. Recognition comes from history
 		// (injected via ctx.history in eval mode by buildSessionHistory).
-		name: "chat: follow-up answer (\"he's cheaper\") → write_memory only, no dispatch",
+		name: 'chat: follow-up answer ("he\'s cheaper") → write_memory only, no dispatch',
 		skill: 'chat',
 		setup: { sent_log: [], supabase: {} },
 		ctx: {
@@ -379,7 +420,10 @@ export const scenarios = [
 			text: "he's cheaper for drain jobs",
 			history: [
 				{ role: 'user', content: 'no send Luigi instead' },
-				{ role: 'assistant', content: 'On it, sending Luigi. Any reason you prefer him over Yonic?' }
+				{
+					role: 'assistant',
+					content: 'On it, sending Luigi. Any reason you prefer him over Yonic?'
+				}
 			]
 		},
 		expected: {
@@ -657,6 +701,69 @@ export const scenarios = [
 		}
 	},
 
+	// ─── Chat: voice — vendor short names + issue casing (2026-06-02) ───────
+	// Deterministic draft-render checks. Assert on exact template substrings (the
+	// trailing "." after the vendor proves the shortening, not the model's ack):
+	//   "to Osalpa Electric."  → legal suffix stripped (not "...Electric, INC.")
+	//   "to Yonic."            → individual collapsed to first name
+	//   "to Luis Herrera."     → first-name collision → full name kept
+
+	{
+		name: 'chat voice: legal name + Title-cased issue → suffix stripped + issue lowercased',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_OUTLETS, { ago_min: 15 }),
+			supabase: { [ISSUE_OUTLETS.id]: ISSUE_OUTLETS },
+			supabase_vendors: [{ id: 'ven-osalpa', name: 'Osalpa Electric, INC.' }]
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			// tenant draft names the suffix-stripped vendor; vendor draft lowercases the issue.
+			drafts_include: ['to Osalpa Electric.', 'for dead outlets after spark'],
+			outbox_count: 0
+		}
+	},
+
+	{
+		name: 'chat voice: individual vendor ("Yonic Herrera") → first name in tenant draft',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_DISPOSAL, { ago_min: 15 }),
+			supabase: { [ISSUE_DISPOSAL.id]: ISSUE_DISPOSAL },
+			supabase_vendors: [
+				{ id: 'ven-yonic', name: 'Yonic Herrera' },
+				{ id: 'ven-cross', name: 'Cross Appliance Inc' }
+			]
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			drafts_include: ['to Yonic.'],
+			outbox_count: 0
+		}
+	},
+
+	{
+		name: 'chat voice: two "Luis" in workspace → collision keeps full name in draft',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_LEAK_LUIS, { ago_min: 15 }),
+			supabase: { [ISSUE_LEAK_LUIS.id]: ISSUE_LEAK_LUIS },
+			supabase_vendors: VENDORS_TWO_LUIS
+		},
+		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			// must NOT collapse to bare "Luis" — the trailing "." after "Herrera" proves it.
+			drafts_include: ['to Luis Herrera.'],
+			outbox_count: 0
+		}
+	},
+
 	// ─── Chat: learning behavior (new tools) ───────────────────────────────
 
 	{
@@ -923,7 +1030,12 @@ export const scenarios = [
 		expected: {
 			// Record the preference AND give a brief ack (option-2). No recall, no dispatch.
 			tool_calls_set_includes: ['write_memory', 'send_text'],
-			tool_calls_excludes: ['recall_beliefs', 'recall_observations', 'draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: [
+				'recall_beliefs',
+				'recall_observations',
+				'draft_tenant',
+				'draft_vendor'
+			],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',

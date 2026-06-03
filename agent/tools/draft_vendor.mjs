@@ -4,12 +4,20 @@
 // fills template, writes draft row with channel='vendor_appfolio'. Human
 // reviews + copies into AppFolio.
 
-import { fetchIssueById, fetchUnitTenantPhone, formatPhone } from '../core/supabase.mjs';
+import {
+	fetchIssueById,
+	fetchUnitTenantPhone,
+	fetchWorkspaceVendors,
+	formatPhone
+} from '../core/supabase.mjs';
+import { shortenVendorName, lowerLead } from '../core/vendor-name.mjs';
 import * as db from '../state/helpers.mjs';
 
 function renderVendorBody({ issue_summary, tenant_phone }) {
 	const phone = tenant_phone ? ` Their phone number is ${tenant_phone}.` : '';
-	return `Please schedule with the tenant for ${issue_summary}.${phone}`;
+	// lowerLead: the title lands mid-sentence ("for dead outlets"), so drop its
+	// leading capital — but leave acronyms ("AC ...") alone.
+	return `Please schedule with the tenant for ${lowerLead(issue_summary)}.${phone}`;
 }
 
 export const draftVendor = {
@@ -35,12 +43,17 @@ export const draftVendor = {
 		const issue = await fetchIssueById(issue_id);
 		if (!issue) return { ok: false, error: `issue not found: ${issue_id}` };
 
-		const vendorName = (vendor_name ?? '').trim() || issue.vendor?.name;
-		if (!vendorName)
+		const rawVendorName = (vendor_name ?? '').trim() || issue.vendor?.name;
+		if (!rawVendorName)
 			return {
 				ok: false,
 				error: `issue ${issue_id} has no vendor (none on file, none passed via vendor_name)`
 			};
+
+		// Address the vendor the way the PM does — first name / short name —
+		// resolving first-name collisions against the workspace roster.
+		const roster = await fetchWorkspaceVendors(issue.workspace_id);
+		const vendorName = shortenVendorName(rawVendorName, roster);
 
 		// issue.name is the work-order title (e.g. "kitchen faucet leaking"),
 		// which reads naturally in the template's "for <issue>" slot.

@@ -9,7 +9,13 @@
 // names an override vendor) look that vendor up by name. If no number is on
 // file the phone clause is dropped rather than leaking a placeholder.
 
-import { fetchIssueById, fetchVendorByName, formatPhone } from '../core/supabase.mjs';
+import {
+	fetchIssueById,
+	fetchVendorByName,
+	fetchWorkspaceVendors,
+	formatPhone
+} from '../core/supabase.mjs';
+import { shortenVendorName } from '../core/vendor-name.mjs';
 import * as db from '../state/helpers.mjs';
 
 function renderTenantBody({ tenant_name, vendor_name, vendor_phone }) {
@@ -67,9 +73,12 @@ export const draftTenant = {
 			vendorPhone = match?.phone ?? null;
 		}
 
+		// Name the vendor the way the PM does in the tenant-facing message. Keep
+		// the raw name above for phone resolution; shorten only for display.
+		const roster = await fetchWorkspaceVendors(issue.workspace_id);
 		const body = renderTenantBody({
 			tenant_name: issue.tenant.name,
-			vendor_name: vendorName,
+			vendor_name: shortenVendorName(vendorName, roster),
 			vendor_phone: formatPhone(vendorPhone)
 		});
 

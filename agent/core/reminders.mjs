@@ -15,6 +15,7 @@
 //   # recalled beliefs       — workspace turns: top beliefs for the relevant entity
 
 import { loadSkill, getMenu } from './skills.mjs';
+import { shortenVendorName } from './vendor-name.mjs';
 import { recentSentForChat } from '../state/helpers.mjs';
 import * as memory from '../memory.mjs';
 import * as sessionizer from './sessionizer.mjs';
@@ -54,8 +55,15 @@ function formatIssueContext(issue, candidate_vendors) {
 			}
 		];
 	}
+	// Show vendors by the short name the PM uses (first name / dropped suffix),
+	// resolving collisions against the full candidate list — this is the name the
+	// model echoes into the WO summary and clarifications. The id keeps tool
+	// routing unambiguous.
 	const candidatesBlock = cands.length
-		? ['Candidate vendors:', ...cands.map((c) => `  - ${c.name} (id: ${c.id})`)].join('\n')
+		? [
+				'Candidate vendors:',
+				...cands.map((c) => `  - ${shortenVendorName(c.name, cands)} (id: ${c.id})`)
+			].join('\n')
 		: 'Candidate vendors: (none provided — rely on read_memory)';
 
 	return `# issue context\n${issueBlock}\n\n${candidatesBlock}`;
@@ -121,8 +129,7 @@ function formatEnvironment(ctx) {
 function formatMenu(menu, loadedNames) {
 	const loaded = new Set(loadedNames);
 	const lines = menu.map(
-		({ name, description }) =>
-			`- ${name} — ${description}${loaded.has(name) ? ' (loaded)' : ''}`
+		({ name, description }) => `- ${name} — ${description}${loaded.has(name) ? ' (loaded)' : ''}`
 	);
 	return [
 		'# available skills',

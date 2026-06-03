@@ -61,6 +61,27 @@ export async function fetchVendorByName(workspace_id, name) {
 	return null;
 }
 
+// Load the workspace's vendor names (id + name only). Used by the draft tools
+// to shorten a vendor to first-name only when that's unambiguous — two "Luis ..."
+// in the same workspace must stay full-named. Returns [] on any error so a draft
+// never fails over a display-name nicety (degrades to "assume unique").
+export async function fetchWorkspaceVendors(workspace_id) {
+	if (!workspace_id) return [];
+	try {
+		const { url, key } = supabaseEnv();
+		const params = new URLSearchParams({
+			select: 'id,name',
+			workspace_id: `eq.${workspace_id}`,
+			order: 'name.asc'
+		});
+		const res = await fetch(`${url}/rest/v1/vendors?${params}`, { headers: authHeaders(key) });
+		if (!res.ok) return [];
+		return await res.json();
+	} catch {
+		return [];
+	}
+}
+
 // Find a reachable phone for a unit when the issue's own tenant has none.
 // Many phoneless tenants are co-tenants (kids/spouse/roommates) on a lease
 // whose primary leaseholder DOES have a number on file — so for a vendor to
