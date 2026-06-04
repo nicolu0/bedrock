@@ -1,7 +1,6 @@
-// Step-gated AppFolio runner — SERVICE mode. Holds one logged-in Chromium and a
-// local panel (http://localhost:9773). A run executes ONE step per approval and
-// pauses between; the final Send/Save step is LIVE (authorized) and genuinely
-// commits — but only after an explicit approval.
+// AppFolio runner — SERVICE mode. Holds one logged-in Chromium and a local panel
+// (http://localhost:9773). The runner owns the whole flow and executes every
+// step internally. The panel is now only a monitor / stop surface.
 //
 // A run is started either from the CLI (back-compat) or by loading the panel URL
 // with query params (how agent/ui embeds it via an <iframe>):
@@ -69,6 +68,10 @@ const KEEPALIVE_MS =
 // Drop a leftover login lock from this port's previous (killed) incarnation so a
 // restart mid-login doesn't block the next login until the lock ages out.
 clearOwnStaleLock(PORT);
+
+function sleep(ms) {
+	return new Promise((r) => setTimeout(r, ms));
+}
 
 function parseFlags(argv) {
 	const f = {};
@@ -293,6 +296,15 @@ let browser, context, page;
 let curHeaded = null;
 let curWs = null; // resolved workspace (vhost/creds/stateFile) — always RUNNER_WS_ID
 let loginPoll = null;
+let curDraftId = null; // draft this run is sending for (send-once guard key)
+
+// Send-once guard (defense in depth behind the UI's server-side claim lock): this
+// process physically clicks Send, so it also remembers which drafts it has already
+// sent LIVE and refuses to send them again. draft_id → ISO time of the completed
+// send. In-memory only — the durable per-draft lock lives in the drafts file; this
+// catches a duplicate within the same runner process (UI bypass, or a ghost send
+// that landed but reported error, then got retried). Unbounded but tiny.
+const sentDrafts = new Map();
 
 async function ensurePage(headed) {
 	const ws = await getWorkspace();
@@ -317,6 +329,8 @@ let status = 'idle'; // idle | starting | ready | running | paused | gated | nee
 let error = null;
 let shotTs = 0;
 let busy = false;
+let autoRun = false;
+let autoBusy = false;
 let sig = null;
 let keepAliveBusy = false; // true while a keepalive ping holds the page
 
@@ -364,7 +378,7 @@ async function ensureScreencast() {
 async function startRun(params) {
 	// Let an in-flight keepalive ping finish so we don't navigate the page out from
 	// under it (keepalive yields the page back within a couple seconds).
-	for (let i = 0; i < 50 && keepAliveBusy; i++) await new Promise((r) => setTimeout(r, 100));
+	for (let i = 0; i < 50 && keepAliveBusy; i++) await sleep(100);
 	// SAFETY: this runner serves exactly one account. Refuse a misrouted request
 	// — both an explicit foreign workspace and an issue that belongs elsewhere.
 	if (params.workspace && params.workspace !== RUNNER_WS_ID) {
@@ -376,7 +390,20 @@ async function startRun(params) {
 			throw new Error(`issue belongs to ${wid}, not this runner's workspace (${RUNNER_WS_ID})`);
 		}
 	}
+	curDraftId = params.draft_id || null;
 	flowName = params.flow === 'vendor' ? 'vendor' : 'text';
+	// Send-once: if this exact draft already completed a LIVE send in this process,
+	// short-circuit to 'done' WITHOUT re-running the flow — no second Send click.
+	// The UI then resolves the draft normally (appfolio-done) and nothing re-sends.
+	if (curDraftId && sentDrafts.has(curDraftId)) {
+		steps = [{ name: 'Already sent — skipped (duplicate)', gate: false }];
+		idx = 1;
+		status = 'done';
+		error = null;
+		await snapshot();
+		return;
+	}
+	autoRun = params.auto !== '0' && params.auto !== 'false';
 	steps = []; // clear any prior run so a failed start shows a clean error
 	idx = 0;
 	status = 'starting';
@@ -398,8 +425,23 @@ async function startRun(params) {
 	error = null;
 	await snapshot();
 	// Auto-run the first step (open the WO) so the browser navigates to the work
-	// order the moment the run starts — it's read-only. The rest still gate.
-	await runNext();
+	// order the moment the run starts. In auto mode, keep going through the full
+	// committed flow; auto mode is now the default.
+	if (autoRun) await runUntilDone();
+	else await runNext();
+}
+
+async function runUntilDone() {
+	if (autoBusy) return;
+	autoBusy = true;
+	try {
+		while (autoRun && (status === 'ready' || status === 'paused')) {
+			await runNext();
+			if (status === 'ready' || status === 'paused') await sleep(250);
+		}
+	} finally {
+		autoBusy = false;
+	}
 }
 
 async function runNext() {
@@ -415,6 +457,9 @@ async function runNext() {
 		await snapshot();
 		idx++;
 		status = idx >= flow.length ? 'done' : flow[idx].gate ? 'gated' : 'paused';
+		// Flow complete = the final LIVE Send/Save just ran. Record this draft so a
+		// retry of the same draft is refused (send-once guard).
+		if (status === 'done' && curDraftId) sentDrafts.set(curDraftId, new Date().toISOString());
 	} catch (e) {
 		if (e.message === 'NEEDS_LOGIN') {
 			// Recoverable: leave idx on the open step so it re-runs after login.
@@ -556,7 +601,8 @@ async function finishLogin() {
 	status = 'ready';
 	error = null;
 	await snapshot();
-	await runNext();
+	if (autoRun) await runUntilDone();
+	else await runNext();
 }
 
 // CLI back-compat: --flow on the command line starts a run at boot.
@@ -565,7 +611,7 @@ if (cli.flow) startRun(cli).catch((e) => { error = e.message; status = 'error'; 
 
 // ---- panel + control endpoints -------------------------------------------
 
-const SHELL = `<!doctype html><meta charset=utf-8><title>AppFolio step runner</title>
+const SHELL = `<!doctype html><meta charset=utf-8><title>AppFolio runner</title>
 <style>
  body{margin:0;background:#16161a;color:#e8e8e6;font:14px/1.5 -apple-system,system-ui,sans-serif}
  .wrap{max-width:560px;margin:0 auto;padding:16px}
@@ -579,36 +625,31 @@ const SHELL = `<!doctype html><meta charset=utf-8><title>AppFolio step runner</t
  img{width:100%;border:1px solid #2c2c32;border-radius:9px;display:block;margin-bottom:10px}
  .bar{display:flex;gap:8px;margin:12px 0}
  button{font:600 13px system-ui;padding:9px 16px;border-radius:8px;border:0;cursor:pointer}
- .ap{background:#7a5cff;color:#fff}.ap:disabled{opacity:.4;cursor:not-allowed}
  .lg{background:#1f883d;color:#fff} .rj{background:#2c2c32;color:#f85149} .st{font-size:12px;color:#9a9a96}.err{color:#f85149}
 </style>
 <div class=wrap>
- <h1 id=title>AppFolio step runner</h1>
- <p class=sub>Approve each step. The final Send/Save is LIVE and will fire.</p>
+ <h1 id=title>AppFolio runner</h1>
+ <p class=sub>Runs each step automatically. The final Send/Save is LIVE.</p>
  <img id=shot src="/shot?t=0">
  <ol id=steps></ol>
- <div class=bar><button class=ap id=ap>Approve next step</button><button class=lg id=lg style="display:none">Log in to AppFolio</button><button class=rj id=rj>Reject / stop</button></div>
+ <div class=bar><button class=lg id=lg style="display:none">Log in to AppFolio</button><button class=rj id=rj>Stop</button></div>
  <div class=st id=st></div>
 </div>
 <script>
 async function tick(){
  let s; try{ s=await (await fetch('/state')).json(); }catch{ return; }
- document.getElementById('title').textContent='AppFolio step runner — '+s.flowName+' flow'+(s.workspace?' · '+s.workspace:'');
+ document.getElementById('title').textContent='AppFolio runner — '+s.flowName+' flow'+(s.workspace?' · '+s.workspace:'');
  document.getElementById('steps').innerHTML=(s.steps||[]).map((st,i)=>{
   let cls='pend',d=i+1;
   if(i<s.idx){cls='done';d='✓';}else if(st.gate){cls='gate';d='!';}else if(i===s.idx){cls='cur';}
   return '<li class='+cls+'><span class=dot>'+d+'</span><span class=nm>'+st.name+'</span></li>';
  }).join('');
- const stop=['idle','gated','done','error','running','needs_login','logging_in','verifying_2fa','awaiting_2fa'].includes(s.status);
- const ap=document.getElementById('ap');
- ap.disabled=stop; ap.textContent=s.status==='running'?'running…':'Approve next step';
  const lg=document.getElementById('lg');
  lg.style.display=(s.status==='needs_login'||s.status==='error')?'inline-block':'none';
- const msg={idle:'No active run.',starting:'Starting…',ready:'Ready — click Approve to run step 1.',paused:'Step done — approve the next.',running:'Running…',gated:'Reached the gated final step. Nothing sent/saved.',done:'Done — sent/saved via AppFolio.',needs_login:'Logged out — click "Log in to AppFolio".',logging_in:'Signing in…',verifying_2fa:'Reading the texted 2FA code and signing in…',awaiting_2fa:'A window opened — the code should auto-fill, else type it there.',error:'Error: '+s.error}[s.status]||s.status;
+ const msg={idle:'No active run.',starting:'Starting…',ready:'Ready.',paused:'Continuing…',running:'Running…',gated:'Stopped before a gated step.',done:'Done — sent/saved via AppFolio.',needs_login:'Logged out — click "Log in to AppFolio".',logging_in:'Signing in…',verifying_2fa:'Reading the texted 2FA code and signing in…',awaiting_2fa:'A window opened — the code should auto-fill, else type it there.',error:'Error: '+s.error}[s.status]||s.status;
  document.getElementById('st').innerHTML='<span class="'+(s.status==='error'?'err':'')+'">'+msg+'</span>';
  document.getElementById('shot').src='/shot?t='+s.shotTs;
 }
-document.getElementById('ap').onclick=async()=>{await fetch('/approve',{method:'POST'});};
 document.getElementById('lg').onclick=async()=>{await fetch('/login',{method:'POST'});};
 document.getElementById('rj').onclick=async()=>{await fetch('/reject',{method:'POST'});};
 setInterval(tick,1000);tick();
@@ -630,7 +671,7 @@ http
 				const active = !['idle', 'done', 'error'].includes(status);
 				if (nextSig !== sig && !busy && !active) {
 					sig = nextSig;
-					try { await startRun(params); } catch (e) { error = e.message; status = 'error'; }
+					startRun(params).catch((e) => { error = e.message; status = 'error'; });
 				}
 			}
 			res.writeHead(200, { 'content-type': 'text/html' });
@@ -660,7 +701,6 @@ http
 			res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
 			return res.end(fs.readFileSync(file));
 		}
-		if (u.pathname === '/approve' && req.method === 'POST') { await runNext(); res.writeHead(200); return res.end('ok'); }
 		if (u.pathname === '/login' && req.method === 'POST') {
 			// Manual retry — fire-and-forget; the panel polls /state for progress.
 			loginAttempts = 0;
@@ -670,7 +710,7 @@ http
 		if (u.pathname === '/reject' && req.method === 'POST') {
 			if (loginPoll) { clearInterval(loginPoll); loginPoll = null; }
 			releaseLoginLock(); // abort during login → free the slot for the other workspace
-			status = 'idle'; sig = null;
+			status = 'idle'; sig = null; autoRun = false;
 			res.writeHead(200); return res.end('ok');
 		}
 		res.writeHead(404); res.end();

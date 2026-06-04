@@ -108,6 +108,41 @@ export async function removeDraft(id) {
 	});
 }
 
+// Atomically claim a draft for a LIVE AppFolio send so it can fire exactly once.
+// The actual send happens in the Playwright runner, which the UI triggers
+// fire-and-forget — so a re-click (or a UI false-negative) could otherwise fire a
+// second real send. The claim is the chokepoint: undefined/'idle' → 'sending'
+// (granted); already 'sending' or 'sent' → refused. A genuine pre-send failure
+// calls releaseDraftSend to reopen it; a completed send removes the draft. Atomic
+// via the drafts file lock, so two racing clicks can't both win.
+export async function claimDraftSend(id) {
+	return withLock(FILES.drafts, async () => {
+		const drafts = await readJson(FILES.drafts, []);
+		const i = drafts.findIndex((d) => d.id === id);
+		if (i === -1) return { ok: false, reason: 'not_found' };
+		const cur = drafts[i].send_state;
+		if (cur === 'sending' || cur === 'sent') return { ok: false, reason: cur, draft: drafts[i] };
+		drafts[i] = { ...drafts[i], send_state: 'sending', send_claimed_at: new Date().toISOString() };
+		await writeJsonAtomic(FILES.drafts, drafts);
+		return { ok: true, draft: drafts[i] };
+	});
+}
+
+// Reopen a claimed draft after a genuine failure so the human can retry. Only
+// touches a draft still in 'sending' — never resurrects one already 'sent' (the
+// text went out) or removed.
+export async function releaseDraftSend(id) {
+	return withLock(FILES.drafts, async () => {
+		const drafts = await readJson(FILES.drafts, []);
+		const i = drafts.findIndex((d) => d.id === id);
+		if (i === -1) return null;
+		if (drafts[i].send_state !== 'sending') return drafts[i];
+		drafts[i] = { ...drafts[i], send_state: 'idle', send_claimed_at: null };
+		await writeJsonAtomic(FILES.drafts, drafts);
+		return drafts[i];
+	});
+}
+
 // ─── append-only logs ──────────────────────────────────────────────────────
 
 export async function appendSent(entry) {
@@ -122,6 +157,26 @@ export async function appendSent(entry) {
 
 export async function loadSent() {
 	return readJson(FILES.sent, []);
+}
+
+// The issue_id we attached to a groupchat send with this exact body, if any.
+// chat.db carries no issue linkage, so when the poller reads our own send back
+// it uses this to stamp issue_id onto the matching outbound chat_messages row —
+// which is what lets a closed session's `issue_ids` (and the live open-session
+// scoping) know which work orders it touched. Matches on chat_guid + body
+// (byte-identical between what we logged and what landed in Messages);
+// most-recent match wins. Returns null for sends that carry no issue_id (acks,
+// clarifying questions) or when nothing matches.
+export async function sentIssueIdForBody({ chat_guid, body } = {}) {
+	if (!chat_guid || !body) return null;
+	const target = String(body).trim();
+	const all = await readJson(FILES.sent, []);
+	for (let i = all.length - 1; i >= 0; i--) {
+		const row = all[i];
+		if (row.channel !== 'groupchat' || row.chat_guid !== chat_guid || !row.issue_id) continue;
+		if (String(row.body ?? '').trim() === target) return row.issue_id;
+	}
+	return null;
 }
 
 export async function appendResponse(entry) {
@@ -265,15 +320,18 @@ async function filterOpenByStatus(bundles) {
 	return checked.filter(Boolean);
 }
 
-// withinMs defaults to 7 days. limit defaults to 5. sessionStartedAt (ISO),
-// when provided, scopes candidates to the live session — only WOs sent at/after
-// the session opened count, so a fresh "yes" can't attach to a stale WO from a
-// prior conversation. Null/absent (eval, no open session) = flat 7-day window.
+// withinMs defaults to 7 days. limit defaults to 5. sessionSendBodies, when
+// provided, scopes candidates to the live session by MEMBERSHIP: a sent summary
+// counts only if its text is among the open session's outbound messages — so a
+// fresh "yes" can't attach to a stale WO from a prior conversation. Matching on
+// text (not the sent-log timestamp vs the session's read-back start) avoids the
+// ~100ms cross-store skew that dropped a session-opening WO from its own
+// session. Null/absent (eval, no open session) = flat 7-day window, no scoping.
 export async function recentSentForChat({
 	chat_guid,
 	withinMs = 7 * 24 * 60 * 60 * 1000,
 	limit = 5,
-	sessionStartedAt = null
+	sessionSendBodies = null
 } = {}) {
 	if (!chat_guid) return [];
 	const [all, drafted] = await Promise.all([
@@ -281,7 +339,6 @@ export async function recentSentForChat({
 		alreadyDraftedFollowupIds()
 	]);
 	const cutoff = Date.now() - withinMs;
-	const sessionCutoff = sessionStartedAt ? new Date(sessionStartedAt).getTime() : null;
 	const matches = all.filter((row) => {
 		if (row.channel !== 'groupchat') return false;
 		if (row.chat_guid !== chat_guid) return false;
@@ -291,7 +348,10 @@ export async function recentSentForChat({
 		if (!row.issue_id) return false;
 		const sentAt = row.sent_at ? new Date(row.sent_at).getTime() : 0;
 		if (sentAt < cutoff) return false;
-		if (sessionCutoff && sentAt < sessionCutoff) return false; // scope to live session
+		// Scope to the live session by MEMBERSHIP, not timestamp: keep a send only
+		// if its text is among the open session's outbound messages. Null (eval / no
+		// open session) = no session scoping, just the flat window above.
+		if (sessionSendBodies && !sessionSendBodies.has(String(row.body ?? '').trim())) return false;
 		return true;
 	});
 	// Bundle by bundle_id (one F1 turn = one bundle = one issue), keep most

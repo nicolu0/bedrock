@@ -130,7 +130,7 @@ async function saveCursor(cursor) {
 	await db.saveCursor('issues', cursor);
 }
 
-async function pollOnce() {
+async function pollOnce({ onDraftCreated } = {}) {
 	const cursor = await db.loadCursor('issues');
 	cursor.processedIds = cursor.processedIds ?? {};
 
@@ -259,13 +259,18 @@ async function pollOnce() {
 				urgent: !!issue.urgent,
 				urgency_reason: issue.urgency_reason ?? null
 			});
+			if (onDraftCreated) {
+				Promise.resolve(onDraftCreated({ draft, issue, workspace: ws })).catch((err) => {
+					log(`draft-created hook failed for ${draft.id}: ${err.message}`);
+				});
+			}
 		} catch (err) {
 			log(`error processing ${issue.id}: ${err.message}`);
 		}
 	}
 }
 
-export async function startIssuePoller() {
+export async function startIssuePoller({ onDraftCreated } = {}) {
 	const cursor = await db.loadCursor('issues');
 	if (!cursor.lastCheckedAt) {
 		cursor.lastCheckedAt = new Date(Date.now() - STARTUP_LOOKBACK_MS).toISOString();
@@ -286,7 +291,7 @@ export async function startIssuePoller() {
 		if (running) return;
 		running = true;
 		try {
-			await pollOnce();
+			await pollOnce({ onDraftCreated });
 		} catch (err) {
 			// Node's `fetch failed` hides the real reason in err.cause. Surface it.
 			const cause = err?.cause

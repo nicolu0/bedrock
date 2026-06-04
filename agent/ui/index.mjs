@@ -262,8 +262,43 @@ async function sessionIdByRowid(workspace_id) {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAGE_PATH = path.join(__dirname, 'page.html');
+const ICON_192_PATH = path.join(__dirname, 'icon-192.png');
+const ICON_512_PATH = path.join(__dirname, 'icon-512.png');
 const STATE_DIR = process.env.BEDROCK_STATE_DIR || path.join(__dirname, '..', 'state');
 const TURNS_LOG_PATH = path.join(STATE_DIR, 'turns.jsonl');
+
+// ── PWA assets ───────────────────────────────────────────────────────────────
+// Serving a manifest + icons + a service worker makes the UI installable as a
+// standalone "Bedrock" app (Chrome → Install): own window/icon, its own Dock +
+// Raycast entry, and native desktop notifications when new drafts land. http on
+// localhost is a secure context, so install / SW / Notifications all work.
+const WEB_MANIFEST = {
+	name: 'Bedrock',
+	short_name: 'Bedrock',
+	start_url: '/',
+	scope: '/',
+	display: 'standalone',
+	background_color: '#0c0a09',
+	theme_color: '#0c0a09',
+	icons: [
+		{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+		{ src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+		{ src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+	]
+};
+
+const SERVICE_WORKER_JS = `// Minimal SW: enables PWA install + focuses the window when a notification is clicked.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', () => {}); // pass-through; a fetch handler aids installability
+self.addEventListener('notificationclick', (e) => {
+	e.notification.close();
+	e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
+		for (const c of cs) { if ('focus' in c) return c.focus(); }
+		if (self.clients.openWindow) return self.clients.openWindow('/');
+	}));
+});
+`;
 
 const SEND_GAP_MS = 700; // delay between consecutive bubbles in a bundle
 
@@ -332,6 +367,7 @@ export async function dispatchDraft({
 	originals,
 	edited = false,
 	action,
+	denialReason = null,
 	forcedSend = false,
 	// `external` send: the message already went out out-of-band (the AppFolio
 	// runner clicked Send/Save in the AppFolio UI via Playwright). Log it as a
@@ -385,6 +421,7 @@ export async function dispatchDraft({
 		to: draft.to ?? null,
 		to_participants: draft.to_participants ?? [],
 		action,
+		denial_reason: action === 'dismiss' ? denialReason : null,
 		messages_original: originals.map((m) => m.body),
 		messages_final: finals.map((m) => m.body),
 		edited,
@@ -437,6 +474,37 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 					'cache-control': 'no-store'
 				});
 				res.end(injected);
+				return;
+			}
+
+			if (req.method === 'GET' && pathname === '/manifest.webmanifest') {
+				res.writeHead(200, {
+					'content-type': 'application/manifest+json; charset=utf-8',
+					'cache-control': 'no-store'
+				});
+				res.end(JSON.stringify(WEB_MANIFEST));
+				return;
+			}
+
+			if (req.method === 'GET' && pathname === '/sw.js') {
+				res.writeHead(200, {
+					'content-type': 'text/javascript; charset=utf-8',
+					'cache-control': 'no-store',
+					'service-worker-allowed': '/'
+				});
+				res.end(SERVICE_WORKER_JS);
+				return;
+			}
+
+			if (req.method === 'GET' && (pathname === '/icon-192.png' || pathname === '/icon-512.png')) {
+				try {
+					const buf = await fs.readFile(pathname === '/icon-192.png' ? ICON_192_PATH : ICON_512_PATH);
+					res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'max-age=86400' });
+					res.end(buf);
+				} catch {
+					res.writeHead(404);
+					res.end('icon not found');
+				}
 				return;
 			}
 
@@ -863,7 +931,10 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				const wsLabel = url.searchParams.get('workspace') ?? 'prod';
 				const sent = allSent.filter((r) => r.workspace_label === wsLabel);
 				const responses = allResponses.filter((r) => r.workspace_label === wsLabel);
-				const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
+				const dayStart = new Date();
+				dayStart.setHours(0, 0, 0, 0);
+				const since = dayStart.getTime();
+				const recentSent = sent.filter((r) => new Date(r.sent_at).getTime() >= since);
 				const recent = responses.filter((r) => new Date(r.timestamp).getTime() >= since);
 				const sends = recent.filter((r) => r.action === 'send');
 				const cleanSends = sends.filter((r) => !r.edited);
@@ -874,14 +945,35 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 					if (r.edited) c.edited++;
 				}
 				return json(res, 200, {
-					window_days: 30,
+					window: 'today',
 					scope: wsLabel,
-					sent_total: sent.length,
+					sent_total: recentSent.length,
 					responses_total: responses.length,
 					recent_responses: recent.length,
 					send_without_edit_rate: sends.length ? cleanSends.length / sends.length : null,
 					by_channel: byChannel
 				});
+			}
+
+			// Claim a draft for a LIVE AppFolio send (send-once guard). The UI must
+			// win this before firing the runner; a refused claim means the draft is
+			// already sending or sent, so we must NOT trigger another real send.
+			const afClaimMatch = pathname.match(/^\/api\/drafts\/([^/]+)\/appfolio-claim$/);
+			if (req.method === 'POST' && afClaimMatch) {
+				const [, id] = afClaimMatch;
+				const claim = await db.claimDraftSend(id);
+				if (claim.reason === 'not_found') return text(res, 404, 'draft not found');
+				if (!claim.ok) return json(res, 409, { ok: false, reason: claim.reason });
+				return json(res, 200, { ok: true });
+			}
+
+			// Reopen a claimed draft after a genuine pre-send failure so it can retry.
+			// No-op on a draft that already sent (and was removed).
+			const afReleaseMatch = pathname.match(/^\/api\/drafts\/([^/]+)\/appfolio-release$/);
+			if (req.method === 'POST' && afReleaseMatch) {
+				const [, id] = afReleaseMatch;
+				await db.releaseDraftSend(id);
+				return json(res, 200, { ok: true });
 			}
 
 			// The AppFolio step runner finished a flow with a LIVE Send/Save. The
@@ -943,6 +1035,7 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 					originals,
 					edited: anyEdited,
 					action,
+					denialReason: payload.denial_reason ?? null,
 					// Send while a hold is active = the human clicked "Send now" to
 					// override the schedule.
 					forcedSend: action === 'send' && !!draft.hold_until,

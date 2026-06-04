@@ -36,7 +36,7 @@ No unit-test runner. Formatting: tabs, single quotes, no trailing commas, printW
 
 ## Eval discipline (on-demand — Claude does NOT auto-run)
 
-The agent has an eval harness at `agent/evals/`. **Claude must not run the eval suite on its own.** Evals cost real OpenAI money — the orchestrator runs on full `gpt-5.4-2026-03-05` (only the judge is mini), so a full run is ~27 gpt-5.4 turns, realistically ~$0.15–0.40. Running on every edit is what burns the budget.
+The agent has an eval harness at `agent/evals/`. **Claude must not run the eval suite on its own.** Evals cost real OpenAI money — the orchestrator runs on full `gpt-5.4-2026-03-05`, so a full run is ~27 gpt-5.4 turns, realistically ~$0.15–0.40. (The judge also runs on full gpt-5.4 now, but its I/O is a one-line verdict, so it barely moves the total — the orchestrator turn dominates.) Running on every edit is what burns the budget.
 
 Policy:
 
@@ -62,7 +62,7 @@ Pattern when fixing a bug: add a failing regression scenario, fix, re-run the fi
 
 Why the safety net still matters when you do run: models drift on prompt-adherence between runs, and a "small" prompt tweak can silently break a *different* scenario — which a filtered run won't catch. That's why the full suite is the pre-commit gate, even though day-to-day iteration stays filtered.
 
-Judge model: `gpt-5.4-mini-2026-03-17`. Orchestrator: `gpt-5.4-2026-03-05` (overridable via `WORK_ORDERS_MODEL` / `CHAT_MODEL` / `OPENAI_MODEL`).
+Judge model: `gpt-5.4-2026-03-05` at `temperature: 0` (overridable via `JUDGE_MODEL`); it grades only the observable output text, never tool outcomes. Orchestrator: `gpt-5.4-2026-03-05` (overridable via `WORK_ORDERS_MODEL` / `CHAT_MODEL` / `OPENAI_MODEL`).
 
 ## Agent architecture (`agent/`)
 

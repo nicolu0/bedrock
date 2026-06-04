@@ -6,13 +6,20 @@
 //   - incoming_anon_message   — message from an unknown 1:1 handle (style 45,
 //                      no room_name, not in knownNumbers)
 //
+// PM groupchat messages are burst-settled: rapid rows within a ~5s quiet
+// window coalesce into ONE incoming_user_message turn (see bufferGroupchatTurn),
+// so the agent acts on a finished thought rather than each chat.db row. Read
+// receipts and the permanent transcript still fire per row.
+//
 // Side-effects per turn:
 //   - Sessionize the message into the memory-graph (prod workspace only).
 //   - Append PM groupchat messages to chat-log via state helpers, then patch
 //     the row with the agent's action after the turn completes.
 //   - Read receipts fire immediately on observation (before any LLM work).
-//   - Typing dots fire ONLY immediately before each outbound message bubble
-//     (NOT on the orchestrator's `typing` event — see comment on onEvent).
+//   - Typing dots (PM groupchat): turn on the instant a PM message lands and stay
+//     on — kept alive on an interval — through the settle window + model call, so
+//     the agent reads as typing/thinking; cleared when the turn ends. The demo 1:1
+//     path is unchanged: dots there fire only right before each outbound bubble.
 //
 // Inputs (from server.mjs):
 //   { helper, chatGuidIndex, log }
@@ -31,12 +38,23 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { runTurn } from '../core/orchestrator.mjs';
-import { appendChatMessage, updateChatMessage, createDraft } from '../state/helpers.mjs';
+import {
+	appendChatMessage,
+	updateChatMessage,
+	createDraft,
+	sentIssueIdForBody
+} from '../state/helpers.mjs';
 import * as sessionizer from '../core/sessionizer.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const POLL_INTERVAL_MS = 1000;
+// Burst-settling quiet window (T1): a mapped chat must go quiet for this long
+// before its buffered messages fire as one settled turn. It's a DEBOUNCE — each
+// new message resets the timer, so the wait is measured from the LAST message,
+// not the first. Override via CHAT_SETTLE_MS for tuning (too short re-introduces
+// partial-thought turns, too long adds visible reply latency).
+const SETTLE_MS = Number(process.env.CHAT_SETTLE_MS) || 5000;
 const HELPER_ENABLED = process.env.HELPER_DISABLED !== '1';
 const CHAT_DB_PATH = path.join(os.homedir(), 'Library', 'Messages', 'chat.db');
 // STATE_PATH is at agent/.imessage-state.json (sibling of triggers/).
@@ -48,6 +66,10 @@ const STATE_PATH = path.join(__dirname, '..', '.imessage-state.json');
 const TYPING_MIN_MS = 300;
 const TYPING_PER_CHAR_MS = 25;
 const TYPING_MAX_MS = 2000;
+// While a PM groupchat is "thinking" (from message-received through the settle
+// window + model call) we re-assert the typing indicator this often so it doesn't
+// auto-expire mid-think. Comfortably under iMessage's indicator timeout.
+const TYPING_REFRESH_MS = 4000;
 
 function typingDwellMs(text) {
 	const n = (text ?? '').length;
@@ -228,7 +250,7 @@ function fetchNewMessages(afterRowId, groupchatGuids, log) {
 
 // ── Module ─────────────────────────────────────────────────────────────────────
 
-export async function startChatPoller({ helper, chatGuidIndex, log }) {
+export async function startChatPoller({ helper, chatGuidIndex, log, onUserMessage }) {
 	const groupchatGuids = [...chatGuidIndex.keys()];
 
 	// ── State ────────────────────────────────────────────────────────────────────
@@ -266,6 +288,32 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 		if (!HELPER_ENABLED) return;
 		const r = await helper.setTyping(chatGuid, typing);
 		if (!r.ok) log(`setTyping(${typing}) failed: ${r.error}`);
+	}
+
+	// Typing keep-alive. A PM groupchat shows "thinking" dots from the moment a
+	// message lands, through the settle window and the model call — far longer than
+	// a typing indicator stays up on its own. So while a chat is thinking we
+	// re-assert the indicator on an interval, and clear it when the turn ends.
+	// startTyping is idempotent (one interval per chat); stopTyping is always
+	// called from runGroupchatTurn's finally, so the dots never hang.
+	const typingKeepAlive = new Map(); // chat_guid -> interval handle
+
+	async function startTyping(chatGuid) {
+		await setTyping(chatGuid, true);
+		if (typingKeepAlive.has(chatGuid)) return;
+		const iv = setInterval(() => {
+			setTyping(chatGuid, true).catch(() => {});
+		}, TYPING_REFRESH_MS);
+		typingKeepAlive.set(chatGuid, iv);
+	}
+
+	async function stopTyping(chatGuid) {
+		const iv = typingKeepAlive.get(chatGuid);
+		if (iv) {
+			clearInterval(iv);
+			typingKeepAlive.delete(chatGuid);
+		}
+		await setTyping(chatGuid, false);
 	}
 
 	async function sendPart(chatGuid, text) {
@@ -318,7 +366,10 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 		};
 
 		try {
-			const event = { type: 'incoming_anon_message', payload: { text, handle, msg_guid: row.guid } };
+			const event = {
+				type: 'incoming_anon_message',
+				payload: { text, handle, msg_guid: row.guid }
+			};
 			await runTurn(event, {
 				handle,
 				text,
@@ -339,10 +390,15 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 		}
 	}
 
-	// Mapped groupchat: append to chat-log (permanent record), fire read
-	// receipt, run the incoming_user_message event, then patch the chat-log row with the
-	// agent's resulting action (drafted/no_match/failure).
-	async function handleGroupchatMessage(row, ws) {
+	// Mapped groupchat — split into two phases so a rapid burst of PM messages
+	// becomes ONE turn (see bufferGroupchatTurn):
+	//   recordGroupchatMessage — runs per chat.db row, immediately: append to the
+	//     permanent chat-log + fire the read receipt + log. Faithful transcript
+	//     and a prompt "Read" never wait on the settle window.
+	//   runGroupchatTurn — once the burst settles, runs ONE incoming_user_message
+	//     turn over the concatenated text, persists drafts, and patches the
+	//     burst's final chat-log row with the agent's resulting action.
+	async function recordGroupchatMessage(row, ws) {
 		const handle = normalizeHandle(row.handle);
 		const chatGuid = row.chat_guid;
 		const text = String(row.text || '').trim();
@@ -362,6 +418,41 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 		log(`◉ ${ws.label} ← ${shortHandle(handle)}: "${preview}"`);
 
 		await markRead(chatGuid);
+		// Show "thinking" dots the instant the PM messages — they ride through the
+		// settle window + model call (kept alive on an interval) so the wait never
+		// reads as dead air. runGroupchatTurn's finally clears them.
+		await startTyping(chatGuid);
+
+		// Surface the desktop reviewer app on any incoming PM message (the page
+		// then follows to this workspace). Fire-and-forget — never block the
+		// transcript/read-receipt on UI focus.
+		try {
+			onUserMessage?.({
+				workspace_id: ws.workspace_id,
+				workspace_label: ws.label,
+				handle,
+				text,
+				message_guid: row.guid
+			});
+		} catch (err) {
+			log(`onUserMessage hook failed: ${err.message}`);
+		}
+	}
+
+	async function runGroupchatTurn(rows, ws) {
+		if (!rows.length) return;
+		const lastRow = rows[rows.length - 1];
+		const chatGuid = lastRow.chat_guid;
+		const handle = normalizeHandle(lastRow.handle);
+		// One settled turn over the whole burst: each row's text, in order, joined
+		// into a single user message. liveBodies rides on ctx so buildSessionHistory
+		// drops every burst line from the prior-turn history (not just one).
+		const liveBodies = rows.map((r) => String(r.text || '').trim()).filter(Boolean);
+		if (!liveBodies.length) {
+			await stopTyping(chatGuid);
+			return;
+		}
+		const text = liveBodies.join('\n');
 
 		const onEvent = async (ev) => {
 			if (ev.type === 'read') {
@@ -378,11 +469,11 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 			}
 		};
 
-		// Pull the live session_id from the sessionizer cache (already populated
-		// by the parallel sessionizer.ingestMessage call for this same row).
-		// session_id rides on ctx so write_memory can stamp it on the observation.
-		// If the sessionizer hasn't run yet for this chat (rare race), session_id
-		// is null and write_memory still functions — the obs just won't be linked.
+		// Pull the live session_id from the sessionizer cache. By the time a burst
+		// settles, the per-chat sessionizer queue has ingested every row, so the
+		// open session is reliably populated — the settle also closes the old
+		// session_id ingest race for free. session_id rides on ctx so write_memory
+		// can stamp it on the observation; null still functions (obs just unlinked).
 		const openSession = await sessionizer.getOpenSession(chatGuid).catch(() => null);
 		const session_id = openSession?.session_id ?? null;
 
@@ -400,22 +491,33 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 			sendMode: 'draft',
 			isPmHandle: false,
 			session_id,
-			source_message_id: row.guid ?? null
+			source_message_id: lastRow.guid ?? null,
+			liveBodies
 		};
 
 		const event = {
 			type: 'incoming_user_message',
-			payload: { text, chat_guid: chatGuid, sender_handle: handle, msg_guid: row.guid ?? null }
+			payload: { text, chat_guid: chatGuid, sender_handle: handle, msg_guid: lastRow.guid ?? null }
 		};
 		let result;
 		let runError = null;
+		// Captured before the turn. The PM ack is emitted FIRST by the model (the
+		// dispatch sequence is send_text → draft_tenant → draft_vendor) but it only
+		// stages into ctx.drafts and is persisted after the turn — whereas
+		// draft_tenant/draft_vendor write their rows mid-turn, so they get an earlier
+		// created_at. The queue (ui) orders by created_at asc, which would float the
+		// AppFolio drafts above the ack. Backdating the ack to turn start restores the
+		// model's order: ack to the PM first, then the AppFolio drafts.
+		const turnStartedAt = new Date().toISOString();
 		try {
 			result = await runTurn(event, ctx);
 		} catch (err) {
 			runError = err;
 			log(`incoming_user_message error: ${err.message}`);
 		} finally {
-			await setTyping(chatGuid, false);
+			// Clears both the keep-alive interval and the indicator itself, whether
+			// the turn sent a live bubble, only drafted, or did nothing.
+			await stopTyping(chatGuid);
 		}
 
 		// Dispatch drafts (tenant/vendor) come back as ctx.draftIds. A clarifying
@@ -436,7 +538,9 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 					to: chatGuid,
 					to_participants: [],
 					messages: staged,
-					hold_until: null
+					hold_until: null,
+					// Sort ahead of this turn's mid-turn dispatch drafts (see above).
+					created_at: turnStartedAt
 				});
 				clarificationId = cdraft.id;
 			} catch (err) {
@@ -459,7 +563,10 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 							? 'learned'
 							: 'no_match';
 
-		await updateChatMessage(row.guid, {
+		// Patch the action onto the burst's final row — the message that closed the
+		// thought and whose guid this turn carried. Earlier burst rows stay plain
+		// inbound records (one turn, one action).
+		await updateChatMessage(lastRow.guid, {
 			agent_action: action,
 			agent_runs_at: new Date().toISOString(),
 			agent_drafts_count: draftsCreated,
@@ -473,6 +580,40 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 
 	let polling = false;
 	const inflight = new Map(); // handle/chat_guid -> Promise; serializes turns
+
+	// Per-chat burst-settling buffer (T1). Rapid-fire PM messages are usually one
+	// thought split across several chat.db rows; a runTurn per row makes the agent
+	// act on a half-read thought. Instead we debounce: each new row for a chat
+	// resets its quiet-window timer, and only after SETTLE_MS of silence do the
+	// buffered rows fire as ONE settled turn. Read receipts + the transcript still
+	// happen per row (recordGroupchatMessage) — only the turn is deferred.
+	const settleBuffers = new Map(); // chat_guid -> { rows, ws, timer }
+
+	function bufferGroupchatTurn(row, ws) {
+		const key = row.chat_guid;
+		let buf = settleBuffers.get(key);
+		if (!buf) {
+			buf = { rows: [], ws, timer: null };
+			settleBuffers.set(key, buf);
+		}
+		buf.ws = ws;
+		buf.rows.push(row);
+		if (buf.timer) clearTimeout(buf.timer);
+		buf.timer = setTimeout(() => {
+			settleBuffers.delete(key);
+			// Serialize on the same per-chat inflight chain the demo path uses, so a
+			// burst that lands while a prior turn is still running queues behind it
+			// instead of interleaving sends into the same chat.
+			const prev = inflight.get(key) ?? Promise.resolve();
+			const next = prev
+				.then(() => runGroupchatTurn(buf.rows, buf.ws))
+				.catch((err) => log(`groupchat handle error: ${err.message}`));
+			inflight.set(key, next);
+			next.finally(() => {
+				if (inflight.get(key) === next) inflight.delete(key);
+			});
+		}, SETTLE_MS);
+	}
 
 	// Sessionizer ingest queue: per-chat Promise chain so boundary calls land in
 	// chronological order without blocking the poll loop. Only the prod
@@ -533,7 +674,13 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 							ts,
 							source_rowid: Number(row.rowid),
 							source_guid: row.guid,
-							issue_id: null
+							// Our own sends carry no issue linkage in chat.db; recover it
+							// from the sent-log (matched by body) so the outbound row records
+							// which WO it was about. PM messages — and misses — stay null,
+							// best-effort exactly as before.
+							issue_id: isFromMe
+								? await sentIssueIdForBody({ chat_guid: chatGuid, body: text })
+								: null
 						},
 						ws
 					);
@@ -548,15 +695,14 @@ export async function startChatPoller({ helper, chatGuidIndex, log }) {
 				// tenant/owner replies for now (correlator design only triggers
 				// on PM).
 				if (!ws.pm_handles.has(handle)) continue;
-				const key = chatGuid;
-				const prev = inflight.get(key) ?? Promise.resolve();
-				const next = prev
-					.then(() => handleGroupchatMessage(row, ws))
-					.catch((err) => log(`groupchat handle error: ${err.message}`));
-				inflight.set(key, next);
-				next.finally(() => {
-					if (inflight.get(key) === next) inflight.delete(key);
-				});
+				// Record + read-receipt immediately (per row), then debounce the
+				// turn: the settle buffer coalesces a rapid burst into one runTurn.
+				try {
+					await recordGroupchatMessage(row, ws);
+				} catch (err) {
+					log(`groupchat record error: ${err.message}`);
+				}
+				bufferGroupchatTurn(row, ws);
 				continue;
 			}
 

@@ -15,7 +15,7 @@
 //   # recalled beliefs       — workspace turns: top beliefs for the relevant entity
 
 import { loadSkill, getMenu } from './skills.mjs';
-import { shortenVendorName } from './vendor-name.mjs';
+import { shortenVendorName } from './names.mjs';
 import { recentSentForChat } from '../state/helpers.mjs';
 import * as memory from '../memory.mjs';
 import * as sessionizer from './sessionizer.mjs';
@@ -175,16 +175,21 @@ export async function buildReminders(event, ctx, skillName) {
 	if (event.type === 'incoming_user_message') {
 		const chat_guid = event.payload?.chat_guid ?? ctx.chat_guid;
 		if (!chat_guid) throw new Error('reminders: incoming_user_message requires payload.chat_guid');
-		// Scope candidates to the live session: a fresh "yes" is about a work order
-		// we raised in THIS conversation, not a stale one from days/sessions ago.
-		// Eval mode (no live sessions) and a missing session fall open to the flat
-		// window, preserving test behavior.
-		let sessionStartedAt = null;
+		// Scope candidates to the live session by MEMBERSHIP: a fresh "yes" is about
+		// a work order we raised in THIS conversation, not a stale one from days /
+		// sessions ago. We match a sent summary to the open session by its text
+		// appearing among the session's outbound chat_messages — NOT by comparing
+		// the sent-log's dispatch time to the session's read-back start. That
+		// cross-store timestamp compare raced: the summary that OPENS a session is
+		// logged ~100ms before the session's recorded start, so it dropped out of
+		// its own session and the PM's reply saw "(none open)". Eval mode (no live
+		// sessions) and a missing session fall open to the flat window.
+		let sessionSendBodies = null;
 		if (process.env.BEDROCK_EVAL_MODE !== '1') {
-			const session = await sessionizer.getOpenSession(chat_guid).catch(() => null);
-			sessionStartedAt = session?.started_at ?? null;
+			const session = await sessionizer.outboundBodiesForOpenSession(chat_guid).catch(() => null);
+			sessionSendBodies = session?.bodies ?? null;
 		}
-		const bundles = await recentSentForChat({ chat_guid, sessionStartedAt });
+		const bundles = await recentSentForChat({ chat_guid, sessionSendBodies });
 		blocks.push(reminder(formatRecentSends(bundles)));
 	}
 

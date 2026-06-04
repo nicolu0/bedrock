@@ -9,8 +9,9 @@
 //   node agent/server.mjs             # in another
 
 import fs from 'node:fs/promises';
+import { readdirSync } from 'node:fs';
 import path from 'node:path';
-import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { helper } from './imessage/helper.mjs';
 import { startUi, dispatchDraft } from './ui/index.mjs';
@@ -24,6 +25,109 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 function log(msg) {
 	console.log(`[${new Date().toTimeString().slice(0, 8)}] ${msg}`); // local HH:MM:SS (matches the Mac mini's wall clock)
+}
+
+function bundleId(appPath) {
+	try {
+		const r = spawnSync(
+			'/usr/libexec/PlistBuddy',
+			['-c', 'Print CFBundleIdentifier', path.join(appPath, 'Contents', 'Info.plist')],
+			{ encoding: 'utf8' }
+		);
+		return (r.stdout || '').trim();
+	} catch {
+		return '';
+	}
+}
+
+// Open the installed "Bedrock" Chrome PWA on boot so desktop notifications start
+// flowing without a manual launch (the notification poller lives in the page, so
+// the window must be running to alert on new work orders). We deliberately prefer
+// a Chrome PWA (Blink → crisp) and SKIP Safari web apps (com.apple.Safari.WebApp,
+// WebKit → fuzzy on this non-Retina display) so a stray "Add to Dock" install is
+// never reopened. `open` is single-instance — a restart just focuses it. Set
+// WORK_ORDERS_DESKTOP=0 to disable.
+function openDesktopApp(port) {
+	if (process.env.WORK_ORDERS_DESKTOP === '0') return;
+	const home = process.env.HOME || '';
+	const dirs = [path.join(home, 'Applications', 'Chrome Apps.localized'), path.join(home, 'Applications')];
+	const candidates = [];
+	for (const dir of dirs) {
+		try {
+			for (const n of readdirSync(dir)) {
+				if (/bedrock/i.test(n) && n.endsWith('.app')) candidates.push(path.join(dir, n));
+			}
+		} catch {}
+	}
+	const appPath =
+		candidates.find((p) => bundleId(p).startsWith('com.google.Chrome.app.')) ||
+		candidates.find((p) => !bundleId(p).startsWith('com.apple.Safari.WebApp.'));
+	if (!appPath) {
+		log(
+			`Bedrock (Chrome) app not installed — open http://127.0.0.1:${port} in Google Chrome → ⋮ → Cast, Save, and Share → Install page as app. (Not Safari's Add to Dock — WebKit renders fuzzy on this display.)`
+		);
+		return;
+	}
+	const child = spawn('open', ['-a', appPath], { stdio: 'ignore', detached: true });
+	child.on('error', (e) => log(`desktop app failed to open: ${e.message}`));
+	child.unref();
+	log(`desktop app opening (${path.basename(appPath)})`);
+}
+
+const DESKTOP_DRAFT_WATCH_MS = Number(process.env.DESKTOP_DRAFT_WATCH_MS ?? 1000);
+const desktopFocusedDraftIds = new Set();
+
+function focusDesktopForDraft(draft, port, reason) {
+	if (!draft?.id || desktopFocusedDraftIds.has(draft.id)) return;
+	desktopFocusedDraftIds.add(draft.id);
+	openDesktopApp(port);
+	log(
+		`desktop app focused for new work order (${reason}): ` +
+			`issue=${draft.issue_id ?? '(none)'} draft=${draft.id} workspace=${draft.workspace_label ?? '(unknown)'}`
+	);
+}
+
+// Bring the desktop app forward whenever a PM texts in a mapped group chat —
+// same intent as a new work order, just driven off the incoming message rather
+// than a draft. The page-side chat-log poller then follows the window to the
+// message's workspace. Throttled so a rapid burst is one front-bring, not N
+// (mirrors how the burst settles into a single turn). `open` is single-instance,
+// so this just focuses the existing window.
+const DESKTOP_MESSAGE_FOCUS_THROTTLE_MS = Number(process.env.DESKTOP_MESSAGE_FOCUS_THROTTLE_MS ?? 1500);
+let lastDesktopMessageFocusAt = 0;
+
+function focusDesktopForMessage(msg, port) {
+	const now = Date.now();
+	if (now - lastDesktopMessageFocusAt < DESKTOP_MESSAGE_FOCUS_THROTTLE_MS) return;
+	lastDesktopMessageFocusAt = now;
+	openDesktopApp(port);
+	log(
+		`desktop app focused for PM message: ` +
+			`workspace=${msg?.workspace_label ?? '(unknown)'} from=${msg?.handle ?? '(unknown)'}`
+	);
+}
+
+function startDesktopDraftWatcher({ port }) {
+	let running = false;
+	let bootstrapped = false;
+	const timer = setInterval(async () => {
+		if (running) return;
+		running = true;
+		try {
+			const drafts = (await db.loadDrafts()).filter((d) => d.trigger === 'new_issue' && d.issue_id);
+			if (!bootstrapped) {
+				for (const d of drafts) desktopFocusedDraftIds.add(d.id);
+				bootstrapped = true;
+				return;
+			}
+			for (const d of drafts) focusDesktopForDraft(d, port, 'draft watcher');
+		} catch (err) {
+			log(`desktop draft watcher failed: ${err.message}`);
+		} finally {
+			running = false;
+		}
+	}, DESKTOP_DRAFT_WATCH_MS);
+	return { stop: () => clearInterval(timer) };
 }
 
 // ── Env ────────────────────────────────────────────────────────────────────────
@@ -213,17 +317,36 @@ async function main() {
 	};
 
 	// Drafts UI. Send button calls the dylib via helper.send.
+	const uiPort = Number(process.env.WORK_ORDERS_PORT ?? 7878);
 	await startUi({
-		port: Number(process.env.WORK_ORDERS_PORT ?? 7878),
+		port: uiPort,
 		log,
 		sendIMessage
 	});
 
+	// Pop the desktop app window now the UI is listening.
+	openDesktopApp(uiPort);
+	startDesktopDraftWatcher({ port: uiPort });
+
 	// chat-poller: chat.db → incoming_user_message (mapped groupchats) or incoming_anon_message (1:1).
-	await startChatPoller({ helper, chatGuidIndex, log });
+	// onUserMessage fires per incoming PM message in a mapped group chat → surface the desktop app.
+	await startChatPoller({
+		helper,
+		chatGuidIndex,
+		log,
+		onUserMessage: (msg) => focusDesktopForMessage(msg, uiPort)
+	});
 
 	// issue-poller: issues_v2 → new_issue events → drafts.
-	await startIssuePoller();
+	await startIssuePoller({
+		onDraftCreated: ({ draft, issue, workspace }) => {
+			focusDesktopForDraft(
+				{ ...draft, issue_id: issue.id, workspace_label: workspace.label },
+				uiPort,
+				'issue poller'
+			);
+		}
+	});
 
 	// scheduled sender: fires "Send later" drafts when their hold elapses.
 	startScheduledSender({ sendIMessage });

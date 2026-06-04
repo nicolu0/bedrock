@@ -129,7 +129,7 @@ const ISSUE_DISPOSAL = {
 	workspace_id: TEST_WS,
 	property: { name: '205 Horizon Ave' },
 	unit: { name: 'Unit 3 205 Horizon Ave' },
-	tenant: { name: 'Andrea Fesi' },
+	tenant: { name: 'Andrea M. Fesi' },
 	vendor: { name: 'Yonic Herrera' },
 	name: 'garbage disposal not working',
 	description: 'the kitchen garbage disposal is jammed'
@@ -406,6 +406,44 @@ export const scenarios = [
 	},
 
 	{
+		// T20 / T1 — burst-settles-to-one-turn. The PM's instruction arrives as a
+		// rapid multi-bubble burst; the chat poller's settle buffer concatenates the
+		// rows (newline-joined) into ONE turn before calling runTurn, so ctx.text
+		// here is exactly what a settled burst looks like. The LAST bubble corrects
+		// the vendor, so reading the whole burst as a unit must land on Luigi — never
+		// dispatch Mario off the first "yes go ahead" bubble. If settling ever
+		// regressed to first-bubble-only, drafts_include 'Luigi' + the dispatch
+		// exclude below would fail. (The debounce TIMING lives in the transport and
+		// isn't exercised by the runTurn harness; this guards the orchestrator-visible
+		// contract: a concatenated burst is one last-bubble-wins instruction.)
+		//
+		// drafts_excludes scans the ack too (a staged send_text draft), and a GOOD
+		// ack asks "why Luigi over Mario?" — so a bare 'Mario' exclude false-fails on
+		// that contrastive mention. Scope to the tenant template's dispatch phrase
+		// ("I sent this to <vendor>") so we only catch Mario actually being DISPATCHED.
+		name: 'chat: settled burst ("yes" / "wait" / "send Luigi not Mario") → one turn, dispatch Luigi',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_FAUCET),
+			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			// Three chat.db rows the poller joined with '\n' into one settled turn.
+			text: 'yes go ahead\nwait\nactually send Luigi instead of Mario'
+		},
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			drafts_count: 3,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			drafts_include: ['Anna', 'Luigi', 'kitchen faucet leaking'],
+			drafts_excludes: ['sent this to Mario'],
+			outbox_count: 0
+		}
+	},
+
+	{
 		// Follow-up answer: the conversation history shows we asked WHY the PM
 		// swapped to Luigi; their reply gives the reason. Capture it with
 		// write_memory and nothing else — dispatch already happened on the
@@ -642,8 +680,12 @@ export const scenarios = [
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
+				// Judge only the ack TEXT — the status move to triaging is asserted
+				// deterministically via tool_args above. The judge's target is 'drafts'
+				// (ack text only; no tool args), so a "moves to triaging" clause here
+				// would ask it to confirm something it can't see → flaky fails.
 				criteria:
-					'Moves the WO to triaging AND replies with a brief, natural acknowledgment that it will gather the info first (e.g. "will do, getting a photo"). It must NOT dispatch a vendor yet.'
+					'A brief, natural acknowledgment that it will gather the requested info first — a photo plus the fridge model number — before doing anything (e.g. "will do, getting a photo"). It must NOT claim a vendor is being dispatched.'
 			}
 		}
 	},
@@ -707,6 +749,8 @@ export const scenarios = [
 	//   "to Osalpa Electric."  → legal suffix stripped (not "...Electric, INC.")
 	//   "to Yonic."            → individual collapsed to first name
 	//   "to Luis Herrera."     → first-name collision → full name kept
+	//   "Hi Cecilia,"          → tenant greeting drops surname
+	//   "Hi Andrea,"           → tenant greeting drops middle initial + surname
 
 	{
 		name: 'chat voice: legal name + Title-cased issue → suffix stripped + issue lowercased',
@@ -720,8 +764,9 @@ export const scenarios = [
 		expected: {
 			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
-			// tenant draft names the suffix-stripped vendor; vendor draft lowercases the issue.
-			drafts_include: ['to Osalpa Electric.', 'for dead outlets after spark'],
+			// tenant draft greets by first name + names the suffix-stripped vendor;
+			// vendor draft lowercases the issue.
+			drafts_include: ['Hi Cecilia,', 'to Osalpa Electric.', 'for dead outlets after spark'],
 			outbox_count: 0
 		}
 	},
@@ -741,7 +786,8 @@ export const scenarios = [
 		expected: {
 			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
-			drafts_include: ['to Yonic.'],
+			// "Andrea M. Fesi" → greeting drops the middle initial + surname.
+			drafts_include: ['Hi Andrea,', 'to Yonic.'],
 			outbox_count: 0
 		}
 	},

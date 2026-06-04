@@ -2,8 +2,15 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<title>Bedrock · Work-order drafts</title>
+		<title>Bedrock · Action queue</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- PWA: installable as a standalone "Bedrock" app with native notifications. -->
+		<link rel="manifest" href="/manifest.webmanifest" />
+		<meta name="theme-color" content="#0c0a09" />
+		<link rel="icon" href="/icon-192.png" />
+		<link rel="apple-touch-icon" href="/icon-192.png" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-title" content="Bedrock" />
 		<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 		<style>
 			* { box-sizing: border-box; }
@@ -13,6 +20,8 @@
 				color: #fafaf9;
 				font: 14px/1.5 -apple-system, ui-sans-serif, system-ui, sans-serif;
 				min-height: 100vh;
+				-webkit-font-smoothing: antialiased;
+				-moz-osx-font-smoothing: grayscale;
 			}
 			html { background-color: #0c0a09; }
 			header {
@@ -117,13 +126,15 @@
 				padding: 60px 0;
 				font-size: 13px;
 			}
-			.draft {
-				background: #1c1917;
-				border: 1px solid #292524;
-				border-radius: 10px;
-				padding: 16px 18px;
-				margin-bottom: 14px;
-			}
+				.draft {
+					background: #1c1917;
+					border: 1px solid #292524;
+					border-radius: 10px;
+					padding: 16px 18px;
+					margin-bottom: 14px;
+					overflow: hidden;
+				}
+				.draft.next-up { padding-bottom: 0; }
 			.meta {
 				display: flex;
 				gap: 8px;
@@ -221,12 +232,64 @@
 				white-space: nowrap;
 			}
 
-			.actions {
-				display: flex;
-				gap: 8px;
-				margin-top: 4px;
-			}
-			button {
+				.actions {
+					display: flex;
+					gap: 8px;
+					margin-top: 4px;
+				}
+				.draft.next-up .actions {
+					display: grid;
+					grid-template-columns: 1fr 1fr;
+					gap: 0;
+					margin: 14px -18px 0;
+					border-top: 1px solid #292524;
+				}
+				.draft.next-up .actions button {
+					border: 0;
+					border-radius: 0;
+					padding: 17px 12px;
+					font-size: 13px;
+					letter-spacing: 0.01em;
+				}
+				.draft.next-up .actions button:first-child { border-bottom-left-radius: 10px; }
+				.draft.next-up .actions button:last-child { border-bottom-right-radius: 10px; }
+				.draft.next-up .actions button.primary {
+					background: #2b7a4b;
+					border-color: transparent;
+					color: #effff4;
+				}
+				.draft.next-up .actions button.primary:hover { background: #329159; }
+				.draft.next-up .actions button.danger {
+					background: #4b2525;
+					color: #ffd5d5;
+				}
+				.draft.next-up .actions button.danger:hover { background: #5c2b2b; }
+				.draft.next-up.deny-open .actions button:first-child,
+				.draft.next-up.deny-open .actions button:last-child { border-radius: 0; }
+				.deny-reasons {
+					display: none;
+					margin: 0 -18px;
+					padding: 10px 12px 12px;
+					background: #15110f;
+					border-top: 1px solid #292524;
+					border-radius: 0 0 10px 10px;
+					grid-template-columns: repeat(2, minmax(0, 1fr));
+					gap: 8px;
+				}
+				.draft.next-up.deny-open .deny-reasons { display: grid; }
+				.deny-reasons button {
+					text-align: left;
+					border-color: #3a3531;
+					background: #211c19;
+					color: #d6d3d1;
+					padding: 8px 10px;
+					font-size: 12px;
+				}
+				.deny-reasons button:hover {
+					background: #2a2420;
+					color: #fafaf9;
+				}
+				button {
 				background: #292524;
 				color: #fafaf9;
 				border: 1px solid #44403c;
@@ -1736,114 +1799,6 @@
 				font-size: 13px;
 			}
 
-			/* AppFolio step runner — takes over the right pane (replaces the
-			   iMessage thread) while a run is active. Palette matches the app:
-			   stone surfaces, #1d6ee2 primary, #f08089 danger. */
-			.chat-thread.runner-mode {
-				max-width: none;
-				margin: 0;
-				padding: 0;
-				overflow: hidden;
-			}
-			.af-runner {
-				display: flex;
-				flex-direction: column;
-				height: 100%;
-				width: 100%;
-				background: #0c0a09;
-			}
-			.af-runner .af-head {
-				display: flex;
-				align-items: center;
-				gap: 10px;
-				padding: 13px 18px;
-				border-bottom: 1px solid #292524;
-				flex: 0 0 auto;
-			}
-			.af-runner .af-head h3 {
-				margin: 0;
-				font-size: 14px;
-				font-weight: 600;
-				color: #fafaf9;
-			}
-			.af-runner .af-head .af-flow {
-				font-size: 11px;
-				color: #a8a29e;
-				text-transform: uppercase;
-				letter-spacing: 0.06em;
-			}
-			.af-runner .af-head .af-close { margin-left: auto; }
-			.af-runner .af-body {
-				flex: 1 1 auto;
-				display: flex;
-				flex-direction: row;
-				gap: 16px;
-				padding: 16px 18px;
-				min-height: 0;
-				overflow: hidden;
-			}
-			.af-runner .af-shotwrap {
-				flex: 1 1 auto;
-				min-width: 0;
-				display: flex;
-				align-items: flex-start;
-				justify-content: center;
-				overflow: auto;
-			}
-			.af-runner .af-side {
-				flex: 0 0 340px;
-				display: flex;
-				flex-direction: column;
-				min-height: 0;
-				overflow-y: auto;
-			}
-			.af-runner .af-sub { color: #a8a29e; font-size: 12px; margin: 0 0 14px; }
-			.af-runner .af-shot {
-				max-width: 100%;
-				max-height: 100%;
-				object-fit: contain;
-				border: 1px solid #292524;
-				border-radius: 9px;
-				display: block;
-				background: #1c1917;
-				min-height: 120px;
-			}
-			.af-runner ol.af-steps { list-style: none; margin: 0 0 14px; padding: 0; }
-			.af-runner ol.af-steps li {
-				display: flex;
-				gap: 10px;
-				align-items: center;
-				padding: 8px 11px;
-				border: 1px solid #292524;
-				border-radius: 8px;
-				margin-bottom: 6px;
-				background: #1c1917;
-				font-size: 13px;
-				color: #d6d3d1;
-			}
-			.af-runner ol.af-steps li .af-dot {
-				width: 19px;
-				height: 19px;
-				border-radius: 50%;
-				display: grid;
-				place-items: center;
-				font-size: 11px;
-				font-weight: 700;
-				flex: 0 0 19px;
-				background: #292524;
-				color: #78716c;
-			}
-			.af-runner ol.af-steps li.done { border-color: rgba(116, 201, 154, 0.3); }
-			.af-runner ol.af-steps li.done .af-dot { background: #1f6f43; color: #fafaf9; }
-			.af-runner ol.af-steps li.cur { border-color: #1d6ee2; }
-			.af-runner ol.af-steps li.cur .af-dot { background: #1d6ee2; color: #fff; }
-			.af-runner ol.af-steps li.gate { border-color: rgba(217, 163, 102, 0.4); }
-			.af-runner ol.af-steps li.gate .af-dot { background: #d9a366; color: #1c1917; }
-			.af-runner ol.af-steps li.gate .af-nm { color: #d9a366; }
-			.af-runner .af-bar { display: flex; gap: 8px; margin-bottom: 12px; }
-			.af-runner .af-status { font-size: 12px; color: #a8a29e; }
-			.af-runner .af-status.err { color: #f08089; }
-
 			/* ============================================================ */
 			/* IDE layout (Issues | Chat | Drawer) — overrides the tab shell */
 			/* ============================================================ */
@@ -1881,8 +1836,6 @@
 			.chat-scroll { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 			.ide-chat { height: auto; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 			.ide-chat .chat-thread { height: auto; flex: 1 1 auto; min-height: 0; overflow-y: auto; max-width: 720px; width: 100%; margin: 0 auto; padding: 18px 18px 24px; }
-			/* AppFolio runner takes over the center pane — let runner-mode win over the thread overrides */
-			.ide-chat .chat-thread.runner-mode { max-width: none; margin: 0; padding: 0; overflow: hidden; }
 			.chat-bottom { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-top: 1px solid #292524; }
 			.chat-bottom .ws-tabs { margin-left: 0; }
 			.chat-bottom .mem-btn { margin-left: auto; display: flex; align-items: center; gap: 7px; background: #1c1917; border: 1px solid #292524; color: #a8a29e; border-radius: 7px; padding: 5px 11px; font: inherit; font-size: 12px; cursor: pointer; }
@@ -2000,12 +1953,12 @@
 						<div class="ws-tabs" id="ws-tabs" role="tablist" aria-label="Workspace"></div>
 						<button class="mem-btn" id="open-memory">⟜ Memory graph<span class="ws-key">m</span></button>
 					</div>
-				</div>
-				<!-- RIGHT: drawer (drafts / turns / session) -->
+					</div>
+					<!-- RIGHT: drawer (queue / turns / session) -->
 				<div class="pane-right">
 					<div class="pane-head" id="right-head">
-						<div class="rtabs" id="right-tabs">
-							<button class="rtab on" data-drawer="drafts">Drafts<span class="ws-key">[</span></button>
+							<div class="rtabs" id="right-tabs">
+								<button class="rtab on" data-drawer="drafts">Queue<span class="ws-key">[</span></button>
 							<button class="rtab" data-drawer="turns">Turns<span class="ws-key">]</span></button>
 						</div>
 						<div class="rcrumb" id="right-crumb" hidden><button class="back" id="right-back">‹ back</button><span class="ttl" id="right-title">Session</span></div>
@@ -2152,7 +2105,6 @@
 				renderedChatThreadKey = '';
 				renderedChatDraftIds = '';
 				chatThreadCache = null;
-				renderAppfolioRunnerForWorkspace();
 				loadChatThread();
 				loadKpi();
 				if (memOpen) loadMemoryGraph();
@@ -2265,13 +2217,13 @@
 				);
 			}
 
-			// Optimistic-dismiss bookkeeping (Gmail-style undo). A dismissed draft
+			// Optimistic-deny bookkeeping (Gmail-style undo). A denied action
 			// is hidden from the rail immediately and the server call is DEFERRED
 			// for UNDO_WINDOW_MS; "Undo" just cancels the pending commit, so we
 			// never have to resurrect a server-deleted draft.
 			const UNDO_WINDOW_MS = 5000;
 			const pendingDismiss = new Map(); // id -> { messages, timer }
-			let lastAllDrafts = []; // last /api/drafts payload, for instant re-render
+			let lastAllDrafts = []; // last /api/drafts payload, for instant queue re-render
 
 			function escapeHtml(s) {
 				return String(s).replace(/[&<>"']/g, (c) => ({
@@ -2291,23 +2243,53 @@
 				return id.length > 12 ? id.slice(0, 8) : id;
 			}
 
+			function queueActionLabel(channel) {
+				if (channel === 'groupchat') return 'chat';
+				if (channel === 'tenant_appfolio') return 'appfolio tenant';
+				if (channel === 'vendor_appfolio') return 'appfolio vendor';
+				return channel ?? 'action';
+			}
+
+			function orderedQueueItems(items) {
+				return [...items].sort((a, b) => {
+					const at = new Date(a.created_at ?? 0).getTime();
+					const bt = new Date(b.created_at ?? 0).getTime();
+					return at - bt;
+				});
+			}
+
+				function isPreviewQueueItem(d) {
+					return !!d.preview_only;
+				}
+
+				const DENY_REASONS = [
+					['wrong_action', 'Wrong action'],
+					['wrong_work_order', 'Wrong work order'],
+					['wrong_vendor', 'Wrong vendor'],
+					['wrong_recipient', 'Wrong recipient'],
+					['missing_context', 'Missing context'],
+					['should_be_silent', 'Should be silent'],
+					['duplicate', 'Duplicate'],
+					['unsafe_or_not_allowed', 'Unsafe / not allowed']
+				];
+
 			function autoSize(ta) {
 				ta.style.height = 'auto';
 				ta.style.height = ta.scrollHeight + 'px';
 			}
 
-			// Builds one full draft card (meta row + recipients + editable
-			// bubbles + Send/Dismiss). Both the Work Orders pane and the
-			// Chat-tab left rail use this so they stay 1:1 in sync.
-			function createDraftCard(d, refsMap) {
+				// Builds one queue card. The rail renders every draft, but only the
+				// next-up action gets Accept/Deny controls.
+				function createDraftCard(d, refsMap, { showActions = true } = {}) {
 				const messages = Array.isArray(d.messages) ? d.messages : [{ body: d.body ?? '' }];
 				const origs = (Array.isArray(d.original_messages) ? d.original_messages : messages).map(
 					(m) => m.body
 				);
 
-				const card = document.createElement('div');
-				card.className = 'draft';
-				card.dataset.id = d.id;
+					const card = document.createElement('div');
+					card.className = 'draft';
+					card.classList.toggle('next-up', showActions);
+					card.dataset.id = d.id;
 
 				const wsLabel = d.workspace_label ?? 'unknown';
 				const wsClass = 'workspace' + (wsLabel ? ' ' + wsLabel : '');
@@ -2316,7 +2298,7 @@
 				meta.className = 'meta';
 				meta.innerHTML =
 					`<span class="tag ${wsClass}">${escapeHtml(wsLabel)}</span>` +
-					`<span class="tag channel ${escapeHtml(d.channel ?? '')}">${escapeHtml(d.channel)}</span>` +
+					`<span class="tag channel ${escapeHtml(d.channel ?? '')}">${escapeHtml(queueActionLabel(d.channel))}</span>` +
 					(d.issue_id
 						? `<span class="tag issue-link" data-issue="${escapeHtml(d.issue_id)}" data-ws="${escapeHtml(wsLabel)}" title="open issue ${escapeHtml(d.issue_id)}">issue ${escapeHtml(shortIssue(d.issue_id))} ↗</span>`
 						: `<span class="tag">issue —</span>`) +
@@ -2366,8 +2348,10 @@
 				});
 				card.appendChild(bubbles);
 
-				const actions = document.createElement('div');
-				actions.className = 'actions';
+					if (!showActions) return card;
+
+					const actions = document.createElement('div');
+					actions.className = 'actions';
 
 				// Only groupchat drafts get a Send button (live dylib send). For
 				// tenant_appfolio / vendor_appfolio drafts there's no automated
@@ -2392,42 +2376,70 @@
 					actions.appendChild(laterBtn);
 				}
 
-				if (canSend) {
-					const sendBtn = document.createElement('button');
-					sendBtn.className = 'primary';
-					sendBtn.textContent = messages.length > 1 ? `Send (${messages.length})` : 'Send';
-					sendBtn.onclick = () => act(d.id, 'send', tas, origs, sendBtn);
-					actions.appendChild(sendBtn);
-				}
+					if (canSend) {
+						const sendBtn = document.createElement('button');
+						sendBtn.className = 'primary';
+						sendBtn.textContent = 'Accept';
+						sendBtn.onclick = isPreviewQueueItem(d)
+							? () => toast('Preview only — not sent')
+							: () => act(d.id, 'send', tas, origs, sendBtn);
+						actions.appendChild(sendBtn);
+					}
 
-				// AppFolio drafts: launch the step-gated runner embedded in the page.
-				// Never auto-sends — you approve each step. Routing is by channel:
-				// every vendor_appfolio draft runs the full vendor-dispatch flow
-				// (Edit → pick vendor → tick secure-link boxes → Save → text → Send);
-				// tenant_appfolio runs the text/message flow.
+				// AppFolio drafts: one click starts the existing runner in the
+				// background and lets the runner execute each step. Routing is by channel:
+				// vendor_appfolio runs the vendor-dispatch flow (assign vendor +
+				// vendor text); tenant_appfolio runs the tenant text flow.
 				if (d.channel === 'vendor_appfolio') {
-					const vbtn = document.createElement('button');
-					vbtn.className = 'primary';
-					vbtn.textContent = 'Assign vendor via AppFolio';
-					vbtn.onclick = () => openAppfolioVendorRunner(d, tas.map((t) => t.value).join('\n'));
-					actions.appendChild(vbtn);
-				} else if ((d.channel ?? '').endsWith('_appfolio')) {
-					const afBtn = document.createElement('button');
-					afBtn.className = 'primary';
-					afBtn.textContent = 'Send via AppFolio';
-					afBtn.onclick = () => openAppfolioRunner(d, tas.map((t) => t.value).join('\n'));
-					actions.appendChild(afBtn);
+						const vbtn = document.createElement('button');
+						vbtn.className = 'primary';
+						vbtn.textContent = 'Accept';
+						if (isPreviewQueueItem(d)) {
+							vbtn.title = 'Preview only: this seeded example will not run AppFolio';
+						} else if (!hasAppfolioRunner(d)) {
+							vbtn.disabled = true;
+							vbtn.title = 'Preview only: this workspace has no AppFolio runner';
+						}
+						vbtn.onclick = isPreviewQueueItem(d)
+							? () => toast('Preview only — AppFolio not run')
+							: () => runAppfolioVendorDraft(d, tas.map((t) => t.value).join('\n'), vbtn);
+						actions.appendChild(vbtn);
+					} else if ((d.channel ?? '').endsWith('_appfolio')) {
+						const afBtn = document.createElement('button');
+						afBtn.className = 'primary';
+						afBtn.textContent = 'Accept';
+						if (isPreviewQueueItem(d)) {
+							afBtn.title = 'Preview only: this seeded example will not run AppFolio';
+						} else if (!hasAppfolioRunner(d)) {
+							afBtn.disabled = true;
+							afBtn.title = 'Preview only: this workspace has no AppFolio runner';
+						}
+						afBtn.onclick = isPreviewQueueItem(d)
+							? () => toast('Preview only — AppFolio not run')
+							: () => runAppfolioTenantDraft(d, tas.map((t) => t.value).join('\n'), afBtn);
+						actions.appendChild(afBtn);
+					}
+
+					const dismissBtn = document.createElement('button');
+					dismissBtn.className = 'danger';
+					dismissBtn.textContent = 'Deny';
+					dismissBtn.onclick = () => card.classList.toggle('deny-open');
+					actions.appendChild(dismissBtn);
+					card.appendChild(actions);
+
+					const reasons = document.createElement('div');
+					reasons.className = 'deny-reasons';
+					for (const [value, label] of DENY_REASONS) {
+						const reasonBtn = document.createElement('button');
+						reasonBtn.type = 'button';
+						reasonBtn.textContent = label;
+						reasonBtn.onclick = () => dismissWithUndo(d.id, tas, value);
+						reasons.appendChild(reasonBtn);
+					}
+					card.appendChild(reasons);
+
+					return card;
 				}
-
-				const dismissBtn = document.createElement('button');
-				dismissBtn.className = 'danger';
-				dismissBtn.textContent = 'Dismiss';
-				dismissBtn.onclick = () => dismissWithUndo(d.id, tas);
-				actions.appendChild(dismissBtn);
-				card.appendChild(actions);
-
-				return card;
-			}
 
 			// Re-run autoSize on every textarea inside both draft panes. Cheap
 			// and idempotent. Called after tab activation so hidden→visible
@@ -2440,7 +2452,7 @@
 			}
 
 			function render(drafts) {
-				drafts = drafts.filter((d) => !pendingDismiss.has(d.id));
+				drafts = orderedQueueItems(drafts.filter((d) => !pendingDismiss.has(d.id)));
 				const idsKey = drafts.map((d) => d.id).join('|');
 				if (idsKey === renderedDraftIds && drafts.length > 0) {
 					for (const d of drafts) {
@@ -2455,12 +2467,12 @@
 				if (!drafts.length) {
 					const e = document.createElement('div');
 					e.className = 'empty';
-					e.textContent = 'no pending drafts';
+					e.textContent = 'no pending actions';
 					draftsList.appendChild(e);
 					return;
 				}
-				for (const d of drafts) {
-					draftsList.appendChild(createDraftCard(d, cardRefs));
+					for (const [i, d] of drafts.entries()) {
+						draftsList.appendChild(createDraftCard(d, cardRefs, { showActions: i === 0 }));
 				}
 			}
 
@@ -2520,16 +2532,16 @@
 				}
 			}
 
-			// Re-render the drafts rail from the last fetched payload without
-			// waiting for the 4s poll — used to make an optimistic dismiss/undo
+			// Re-render the queue rail from the last fetched payload without
+			// waiting for the 4s poll — used to make an optimistic deny/undo
 			// show up instantly. pendingDismiss ids are filtered out downstream.
 			function rerenderDraftsNow() {
 				renderChatDrafts(lastAllDrafts);
 			}
 
-			// Dismiss optimistically: hide the card now, show an "Undo" toast, and
-			// only POST the dismiss once the undo window lapses.
-			function dismissWithUndo(id, tas) {
+			// Deny optimistically: hide the card now, show an "Undo" toast, and
+			// only POST the dismiss endpoint once the undo window lapses.
+				function dismissWithUndo(id, tas, denialReason = null) {
 				// Flush any pending edits so the dismiss logs the final body and an
 				// undo restores the latest text on the next poll.
 				flushSave(id, tas);
@@ -2537,9 +2549,9 @@
 				const prev = pendingDismiss.get(id);
 				if (prev) clearTimeout(prev.timer);
 				const timer = setTimeout(() => commitDismiss(id), UNDO_WINDOW_MS);
-				pendingDismiss.set(id, { messages, timer });
+					pendingDismiss.set(id, { messages, denialReason, timer });
 				rerenderDraftsNow();
-				toast('Draft dismissed', 'info', {
+				toast('Action denied', 'info', {
 					label: 'Undo',
 					duration: UNDO_WINDOW_MS,
 					onClick: () => undoDismiss(id)
@@ -2559,10 +2571,10 @@
 				if (!p) return; // undone before the window closed
 				try {
 					const res = await fetch(`/api/drafts/${id}/dismiss`, {
-						method: 'POST',
-						headers: { 'content-type': 'application/json' },
-						body: JSON.stringify({ messages: p.messages })
-					});
+							method: 'POST',
+							headers: { 'content-type': 'application/json' },
+							body: JSON.stringify({ messages: p.messages, denial_reason: p.denialReason })
+						});
 					if (!res.ok) throw new Error(await res.text());
 					// Server dropped it; next poll won't return it. Clear the local
 					// guard so the Map doesn't grow unbounded.
@@ -2626,218 +2638,139 @@
 				}
 			}
 
-			// ─── AppFolio step runner (embedded in the right pane) ──────────────
-			// "Send via AppFolio" takes over the chat thread's right column with a
-			// native step panel and drives the runner service (agent/appfolio/
-			// runner.mjs on :9773) through its JSON endpoints (CORS is open). The
-			// runner resolves the WO from the draft's issue_id and pauses for
-			// approval at each step; the final Send/Save is gated and never fires.
-			// Each AppFolio workspace has its OWN runner process on its own port
-			// (injected from core/workspaces.mjs). "Send via AppFolio" routes to the
-			// port for that draft's workspace, so a send can never hit another
-			// account's runner. The panel state is also keyed per workspace, so
-			// switching workspaces never leaves another account's runner visible.
+			// ─── AppFolio send (runs the runner service in the background) ──────
+			// Accepting an AppFolio draft drives the runner service (agent/appfolio/
+			// runner.mjs) through its JSON endpoints (CORS is open) — no visible
+			// panel; the runner resolves the WO from the draft's issue_id, auto-runs
+			// the flow, and the final Send/Save is LIVE. Each AppFolio workspace has
+			// its OWN runner process on its own port (injected from core/workspaces.mjs),
+			// so a send can never hit another account's runner. The draft id rides
+			// along so the runner can refuse a duplicate Send for the same draft.
 			let RUNNER_PORTS = "__RUNNER_PORTS__";
 			if (typeof RUNNER_PORTS !== 'object' || RUNNER_PORTS === null) RUNNER_PORTS = {};
 			function runnerBaseFor(workspace_id) {
-				const port = RUNNER_PORTS[workspace_id] || 9773;
+				const port = workspace_id ? RUNNER_PORTS[workspace_id] : 9773;
+				if (!port) return null;
 				return 'http://127.0.0.1:' + port;
 			}
-			const afRunnerStates = new Map();
 
-			function afWorkspaceLabel(d) {
-				return d.workspace_label ?? WORKSPACES_LIST.find((w) => w.id === d.workspace_id)?.label ?? workspaceFilter;
+			function hasAppfolioRunner(d) {
+				return !!runnerBaseFor(d.workspace_id);
 			}
 
-			function currentAfRunnerState() {
-				const state = afRunnerStates.get(workspaceFilter);
-				return state?.active ? state : null;
-			}
-
-			function stopAfRunnerState(state, { reject = true } = {}) {
-				if (!state) return;
-				state.active = false;
-				state.draft = null;
-				if (state.poller) {
-					clearInterval(state.poller);
-					state.poller = null;
-				}
-				if (reject) fetch(`${state.base}/reject`, { method: 'POST' }).catch(() => {});
-			}
-
-			function openAppfolioRunner(d, body) {
+			function appfolioTenantStartUrl(d, body) {
 				const to = d.channel === 'vendor_appfolio' ? 'Vendor' : 'Tenant';
-				const params = { flow: 'text', to, message: body };
-				// Pin the account so the runner uses the right AppFolio login/session.
+				const params = { flow: 'text', to, message: body, auto: '1', draft_id: d.id };
 				if (d.workspace_id) params.workspace = d.workspace_id;
-				// A draft may pin the AppFolio SRN directly (test WOs whose issue row
-				// has no appfolio_srn); otherwise the runner resolves it from issue_id.
 				if (d.appfolio_srn) params.srn = String(d.appfolio_srn);
 				else params.issue_id = d.issue_id ?? '';
-				const workspaceLabel = afWorkspaceLabel(d);
 				const base = runnerBaseFor(d.workspace_id);
-				const qs = new URLSearchParams(params);
-				startAppfolioRunner(workspaceLabel, {
-					base,
-					workspace_id: d.workspace_id ?? null,
-					draft: { id: d.id, messages: [{ body }] },
-					startUrl: `${base}/?${qs}`
-				});
-				// If launched from the Work Orders pane, jump to Chat so the right
-				// pane (where the runner now lives) is on screen.
-				// chat thread is always visible in the IDE layout — no tab switch needed
+				if (!base) return null;
+				return `${base}/?${new URLSearchParams(params)}`;
 			}
 
-			function openAppfolioVendorRunner(d, body) {
-				// Vendor drafts carry the vendor name in `to`/`to_participants`, not a
-				// `vendor` field — read those (legacy `d.vendor` first, just in case).
+			function appfolioVendorStartUrl(d, body) {
 				const vendor = d.vendor ?? d.to ?? (d.to_participants && d.to_participants[0]) ?? '';
-				const params = { flow: 'vendor', vendor, message: body ?? '' };
+				const params = { flow: 'vendor', vendor, message: body ?? '', auto: '1', draft_id: d.id };
 				if (d.workspace_id) params.workspace = d.workspace_id;
 				if (d.appfolio_srn) params.srn = String(d.appfolio_srn);
 				else params.issue_id = d.issue_id ?? '';
-				const workspaceLabel = afWorkspaceLabel(d);
 				const base = runnerBaseFor(d.workspace_id);
-				startAppfolioRunner(workspaceLabel, {
-					base,
-					workspace_id: d.workspace_id ?? null,
-					draft: { id: d.id, messages: [{ body: body ?? '' }] },
-					startUrl: `${base}/?${new URLSearchParams(params)}`
-				});
-				// chat thread is always visible in the IDE layout — no tab switch needed
+				if (!base) return null;
+				return `${base}/?${new URLSearchParams(params)}`;
 			}
 
-			async function startAppfolioRunner(workspaceLabel, opts) {
-				stopAfRunnerState(afRunnerStates.get(workspaceLabel), { reject: false });
-				const state = {
-					workspaceLabel,
-					workspace_id: opts.workspace_id,
-					base: opts.base,
-					draft: opts.draft,
-					resolved: false,
-					active: true,
-					poller: null
-				};
-				afRunnerStates.set(workspaceLabel, state);
-				renderAppfolioRunnerForWorkspace();
-				// GET with the run params triggers startRun server-side.
-				try { await fetch(opts.startUrl); } catch {}
-				afTick(state);
-				if (!state.poller) state.poller = setInterval(() => afTick(state), 1000);
+			function runAppfolioTenantDraft(d, body, btn) {
+				runAppfolioDraftInBackground(d, body, btn, appfolioTenantStartUrl(d, body));
 			}
 
-			function renderAppfolioRunnerForWorkspace() {
-				const state = currentAfRunnerState();
-				if (!state) {
-					chatThreadEl.classList.remove('runner-mode');
-					return false;
+			function runAppfolioVendorDraft(d, body, btn) {
+				runAppfolioDraftInBackground(d, body, btn, appfolioVendorStartUrl(d, body));
+			}
+
+			async function runAppfolioDraftInBackground(d, body, btn, startUrl) {
+				if (!startUrl) {
+					toast('No AppFolio runner for this workspace', 'error');
+					return;
 				}
-				chatThreadEl.classList.add('runner-mode');
-				chatThreadEl.innerHTML =
-					'<div class="af-runner">' +
-					'  <div class="af-head">' +
-					'    <h3>AppFolio step runner</h3>' +
-					'    <span class="af-flow" id="af-flow"></span>' +
-					'    <button class="af-close" id="af-close">Close</button>' +
-					'  </div>' +
-					'  <div class="af-body">' +
-					'    <div class="af-side">' +
-					'      <p class="af-sub">Approve each step. The final Send/Save is LIVE and will fire.</p>' +
-					'      <ol class="af-steps" id="af-steps"></ol>' +
-					'      <div class="af-bar">' +
-					'        <button class="primary" id="af-approve">Approve next step</button>' +
-					'        <button class="primary" id="af-login" style="display:none">Log in to AppFolio</button>' +
-					'        <button class="danger" id="af-reject">Reject / stop</button>' +
-					'      </div>' +
-					'      <div class="af-status" id="af-status"></div>' +
-					'    </div>' +
-					'    <div class="af-shotwrap"><img class="af-shot" id="af-shot" src="' +
-					state.base + '/stream" alt=""></div>' +
-					'  </div>' +
-					'</div>';
-				document.getElementById('af-close').onclick = closeAppfolioRunner;
-				document.getElementById('af-approve').onclick = async () => {
-					await fetch(`${state.base}/approve`, { method: 'POST' }).catch(() => {});
-					afTick(state);
-				};
-				document.getElementById('af-reject').onclick = async () => {
-					await fetch(`${state.base}/reject`, { method: 'POST' }).catch(() => {});
-					afTick(state);
-				};
-				document.getElementById('af-login').onclick = async () => {
-					await fetch(`${state.base}/login`, { method: 'POST' }).catch(() => {});
-					afTick(state);
-				};
-				return true;
-			}
-
-			async function afTick(state) {
-				if (!state?.active) return;
-				let s;
-				try { s = await (await fetch(`${state.base}/state`)).json(); } catch { return; }
-				const visible = state === currentAfRunnerState();
-				const flowEl = document.getElementById('af-flow');
-				// The flow finished a LIVE Send/Save — resolve the originating draft
-				// (log it as a send + drop it). The send already happened in AppFolio,
-				// so this never re-sends; the server's appfolio-done route skips the dylib.
-				if (s.status === 'done' && state.draft && !state.resolved) {
-					state.resolved = true;
-					fetch('/api/drafts/' + state.draft.id + '/appfolio-done', {
+				btn.disabled = true;
+				const originalText = btn.textContent;
+				btn.textContent = 'Running via AppFolio…';
+				const base = runnerBaseFor(d.workspace_id);
+				if (!base) {
+					toast('No AppFolio runner for this workspace', 'error');
+					btn.disabled = false;
+					btn.textContent = originalText;
+					return;
+				}
+				// Send-once guard: claim the draft server-side BEFORE firing the runner.
+				// A refused claim means it's already sending or sent — bail without
+				// triggering another real AppFolio send (this is what stops dup sends).
+				const claim = await fetch('/api/drafts/' + d.id + '/appfolio-claim', { method: 'POST' });
+				if (!claim.ok) {
+					const reason = (await claim.json().catch(() => ({}))).reason;
+					toast(reason === 'sent' ? 'Already sent' : 'Already sending — not re-sending', 'error');
+					btn.disabled = true; // keep it locked; it must not fire again
+					return;
+				}
+				let result = null;
+				try {
+					// Reset any stale completed/error run so this click owns the runner.
+					await fetch(`${base}/reject`, { method: 'POST' }).catch(() => {});
+					await fetch(startUrl);
+					result = await driveAppfolioRunner(base);
+					if (result.status !== 'done') throw new Error(result.error || result.status || 'runner stopped');
+					const res = await fetch('/api/drafts/' + d.id + '/appfolio-done', {
 						method: 'POST',
 						headers: { 'content-type': 'application/json' },
-						body: JSON.stringify({ messages: state.draft.messages })
-					}).then(() => loadChatThread()).catch(() => {});
+						body: JSON.stringify({ messages: [{ body }] })
+					});
+					if (!res.ok) throw new Error(await res.text());
+					toast('sent via AppFolio');
+					await refresh();
+				} catch (err) {
+					// Reopen for retry ONLY when the send genuinely did not happen (runner
+					// never reached 'done'). If it DID send but post-send bookkeeping
+					// failed, leave the draft locked so it can never re-send — the text
+					// already went out; clearing it is a manual call.
+					const sent = result?.status === 'done';
+					if (!sent) {
+						await fetch('/api/drafts/' + d.id + '/appfolio-release', { method: 'POST' }).catch(() => {});
+						btn.disabled = false;
+						btn.textContent = originalText;
+						toast(`AppFolio send failed: ${err.message}`, 'error');
+					} else {
+						btn.disabled = true;
+						toast(`Sent in AppFolio, but couldn't close the draft — clear it manually. (${err.message})`, 'error');
+					}
 				}
-				if (!visible || !flowEl) return; // another workspace owns the visible pane
-				flowEl.textContent = (s.flowName || '') + ' flow';
-				document.getElementById('af-steps').innerHTML = (s.steps || [])
-					.map((st, i) => {
-						let cls = 'pend';
-						let mark = i + 1;
-						if (i < s.idx) { cls = 'done'; mark = '✓'; }
-						else if (st.gate) { cls = 'gate'; mark = '!'; }
-						else if (i === s.idx) { cls = 'cur'; }
-						return (
-							'<li class="' + cls + '"><span class="af-dot">' + mark +
-							'</span><span class="af-nm">' + escapeHtml(st.name) + '</span></li>'
-						);
-					})
-					.join('');
-				const ap = document.getElementById('af-approve');
-				ap.disabled = ['idle', 'gated', 'done', 'error', 'running', 'needs_login', 'logging_in', 'verifying_2fa', 'awaiting_2fa'].includes(s.status);
-				ap.textContent = s.status === 'running' ? 'running…' : 'Approve next step';
-				// Offer auto-login when the session has expired (or a login attempt errored).
-				const loginBtn = document.getElementById('af-login');
-				if (loginBtn) loginBtn.style.display = (s.status === 'needs_login' || s.status === 'error') ? 'inline-block' : 'none';
-				const msg =
-					{
-						idle: 'No active run.',
-						starting: 'Starting…',
-						ready: 'Ready — click Approve to run step 1.',
-						paused: 'Step done — approve the next.',
-						running: 'Running…',
-						gated: 'Reached the gated final step. Nothing sent/saved.',
-						done: 'Done — sent/saved via AppFolio.',
-						needs_login: (s.error || 'Logged out') + ' — click “Log in to AppFolio”.',
-						logging_in: 'Signing in to AppFolio…',
-						verifying_2fa: 'Reading the texted 2FA code and signing in automatically…',
-						awaiting_2fa: 'A login window opened — the texted code should auto-fill; otherwise type it there.',
-						error: 'Error: ' + s.error
-					}[s.status] || s.status;
-				const stEl = document.getElementById('af-status');
-				stEl.textContent = msg;
-				stEl.classList.toggle('err', s.status === 'error');
-				// The shot <img> is a live MJPEG stream set once at start — don't
-				// reassign src here or it would tear down and restart the stream.
 			}
 
-			function closeAppfolioRunner() {
-				stopAfRunnerState(currentAfRunnerState());
-				chatThreadEl.classList.remove('runner-mode');
-				renderedChatThreadKey = ''; // force a fresh thread paint
-				chatThreadCache = null;
-				chatThreadEl.innerHTML = '<div class="empty">Loading conversation…</div>';
-				loadChatThread();
+			async function driveAppfolioRunner(base) {
+				const deadline = Date.now() + 5 * 60 * 1000;
+				const startBy = Date.now() + 20 * 1000; // run must leave the pre-start state within 20s
+				let last = null;
+				let started = false;
+				while (Date.now() < deadline) {
+					const res = await fetch(`${base}/state`);
+					if (!res.ok) throw new Error(`runner state ${res.status}`);
+					const s = await res.json();
+					last = s;
+					// 'idle'/'starting' are PRE-run states: startRun is fired fire-and-forget
+					// and only flips status after an async issue→workspace lookup, so the
+					// first poll can race ahead of it. Treating that leading 'idle' as
+					// terminal made the UI report "send failed: idle" while the run kept
+					// going and actually sent — a false negative that invited re-clicks and
+					// duplicate sends. Wait until the run has actually started.
+					if (!['idle', 'starting'].includes(s.status)) started = true;
+					if (s.status === 'done' || s.status === 'error') return s;
+					if (started && s.status === 'idle') return s; // an active run got reset/cancelled
+					if (!started && Date.now() > startBy) {
+						return { status: 'error', error: 'runner never started (still idle)' };
+					}
+					await new Promise((r) => setTimeout(r, 1000));
+				}
+				return { status: 'error', error: last?.error || 'runner timed out' };
 			}
 
 			function renderNotes(wrap, r) {
@@ -3011,16 +2944,11 @@
 			// flash the row once the list has rendered.
 			function focusIssue(issueId, wsLabel) {
 				if (!issueId) return;
-				if (wsLabel && wsLabel !== 'unknown' && wsLabel !== workspaceFilter) {
-					workspaceFilter = wsLabel;
-					localStorage.setItem(WS_KEY, workspaceFilter);
-					renderWsTabs();
-					renderedDraftIds = '';
-					renderedChatIds = '';
-					renderedIssuesKey = null;
-					renderedChatThreadKey = '';
-				}
 				pendingFocusIssueId = issueId;
+				if (wsLabel && wsLabel !== 'unknown' && wsLabel !== workspaceFilter) {
+					selectWorkspace(wsLabel);
+					return;
+				}
 				loadIssues(); // issues pane is always visible; loadIssues applies the pending focus
 			}
 
@@ -3166,7 +3094,7 @@
 			document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && memOpen) closeMemory(); });
 
 			// Single-key shortcuts: "m" toggles the memory graph for the current
-			// workspace, "[" opens the Drafts drawer, "]" opens Turns. All skipped
+				// workspace, "[" opens the Queue drawer, "]" opens Turns. All skipped
 			// while typing in a field (so they never eat a literal keystroke in a
 			// draft/search box) or with a modifier held.
 			document.addEventListener('keydown', (e) => {
@@ -3194,16 +3122,16 @@
 					if (!res.ok) return;
 					const k = await res.json();
 					const matched = k.scope === workspaceFilter;
-					const days = k.window_days ?? 30;
+						const windowLabel = k.window === 'today' ? 'today' : ((k.window_days ?? 30) + 'd');
 					const pct = matched && k.send_without_edit_rate != null ? Math.round(k.send_without_edit_rate * 100) + '%' : '0%';
 					const sent = matched ? k.sent_total : 0;
 					const actions = matched ? k.recent_responses : 0;
 					document.getElementById('kpi-strip').innerHTML =
-						'<div class="turns-kpi">' +
-						'<div class="stat"><span class="v">' + pct + '</span><span class="l">send-without-edit · ' + days + 'd</span></div>' +
-						'<div class="stat"><span class="v">' + sent + '</span><span class="l">messages sent</span></div>' +
-						'<div class="stat"><span class="v">' + actions + '</span><span class="l">actions · ' + days + 'd</span></div>' +
-						'</div>';
+							'<div class="turns-kpi">' +
+							'<div class="stat"><span class="v">' + pct + '</span><span class="l">send-without-edit · ' + windowLabel + '</span></div>' +
+							'<div class="stat"><span class="v">' + sent + '</span><span class="l">messages sent · ' + windowLabel + '</span></div>' +
+							'<div class="stat"><span class="v">' + actions + '</span><span class="l">actions · ' + windowLabel + '</span></div>' +
+							'</div>';
 				} catch {}
 			}
 			// Initial applyTab() runs at the very END of the script — see below.
@@ -3660,13 +3588,28 @@
 				});
 			}
 
+			// Use the PM-visible send time for sent work-order summaries. The
+			// orchestrator can draft several minutes before a human sends the queue
+			// item; threading by draft time makes later PM replies look attached to
+			// work orders they had not seen yet.
+			function turnTimelineTs(t) {
+				if (
+					t &&
+					t.event === 'new_issue' &&
+					t.outcome &&
+					t.outcome.action === 'send' &&
+					t.outcome.timestamp
+				) return t.outcome.timestamp;
+				return (t && t.ts) || '';
+			}
+
 			// Reorder the flat turn log into threads: a new_issue opens a thread on its
 			// chat_guid; the PM's later replies on that guid sit beneath it. Within a
 			// thread we keep oldest→newest (new issue on top, follow-ups below); threads
 			// are ordered by most-recent activity so the freshest work order is at the top.
 			// Returns a flat array with the first turn of each thread tagged _threadStart.
 			function orderTurnsThreaded(turns) {
-				const chrono = [...turns].reverse(); // API gives newest-first → build oldest-first
+				const chrono = [...turns].sort((a, b) => new Date(turnTimelineTs(a)) - new Date(turnTimelineTs(b)));
 				const threadOf = new Map();
 				const threads = [];
 				for (const t of chrono) {
@@ -3675,7 +3618,7 @@
 					if (t.event === 'new_issue' || !cur) { cur = []; threads.push(cur); threadOf.set(key, cur); }
 					cur.push(t);
 				}
-				threads.sort((a, b) => new Date(b[b.length - 1].ts) - new Date(a[a.length - 1].ts));
+				threads.sort((a, b) => new Date(turnTimelineTs(b[b.length - 1])) - new Date(turnTimelineTs(a[a.length - 1])));
 				const flat = [];
 				for (const th of threads) th.forEach((t, i) => { t._threadStart = i === 0; flat.push(t); });
 				return flat;
@@ -3697,6 +3640,7 @@
 						const failed = t.kind === 'failure';
 						const skipped = t.kind === 'precheck_short_circuit';
 						const ev = t.event || 'turn';
+						const timelineTs = turnTimelineTs(t);
 						const tools = t.tool_calls ?? [];
 						let toolsHtml;
 						if (skipped) {
@@ -3788,7 +3732,7 @@
 								'<div class="tl-entry">' +
 									'<div class="tl-node ev-' + evCls + '"></div>' +
 									'<div class="tl-hd">' +
-										'<span class="tl-time" title="' + escapeHtml(fmtTurnFull(t.ts)) + '">' + escapeHtml(fmtTurnTime(t.ts)) + '</span>' +
+										'<span class="tl-time" title="' + escapeHtml(fmtTurnFull(timelineTs)) + '">' + escapeHtml(fmtTurnTime(timelineTs)) + '</span>' +
 										'<span class="tl-ev ' + evCls + '">' + escapeHtml(evLabel) + '</span>' +
 										(urgent ? '<span class="iurgent">urgent</span>' : '') +
 										chip +
@@ -4038,7 +3982,7 @@
 			async function loadChatThread() {
 				if (chatThreadLoading) return;
 				chatThreadLoading = true;
-				if (!chatThreadCache && !currentAfRunnerState()) {
+				if (!chatThreadCache) {
 					chatThreadEl.innerHTML = '<div class="empty">Loading conversation…</div>';
 				}
 				try {
@@ -4082,9 +4026,9 @@
 				// Mirror the Work Orders pane: same passesFilter() against the
 				// active workspace toggle (prod | test), so anything visible in
 				// Work Orders is also listed in the chat rail.
-				const drafts = (allDrafts ?? [])
+				const drafts = orderedQueueItems((allDrafts ?? [])
 					.filter((d) => passesFilter(d.workspace_label))
-					.filter((d) => !pendingDismiss.has(d.id));
+					.filter((d) => !pendingDismiss.has(d.id)));
 				const idsKey = drafts.map((d) => d.id).join('|');
 				if (idsKey === renderedChatDraftIds && drafts.length > 0) {
 					for (const d of drafts) {
@@ -4100,14 +4044,14 @@
 				if (!drafts.length) {
 					const e = document.createElement('div');
 					e.className = 'rail-empty';
-					e.textContent = 'No pending drafts.';
+					e.textContent = 'No pending actions.';
 					chatDraftsRailEl.appendChild(e);
 					return;
 				}
 
-				for (const d of drafts) {
-					chatDraftsRailEl.appendChild(createDraftCard(d, chatCardRefs));
-				}
+					for (const [i, d] of drafts.entries()) {
+						chatDraftsRailEl.appendChild(createDraftCard(d, chatCardRefs, { showActions: i === 0 }));
+					}
 				// Cards just landed; ensure their textareas size correctly even
 				// if the chat tab was hidden when render() fired upstream.
 				requestAnimationFrame(resizeAllDraftTextareas);
@@ -4200,7 +4144,6 @@
 			});
 
 			function renderChatThread() {
-				if (currentAfRunnerState()) return; // this workspace's runner owns the center pane
 				if (!chatThreadCache) return;
 				const msgs = chatThreadCache.messages ?? [];
 				// session_id in the key so boundaries repaint when the sessionizer
@@ -5326,6 +5269,158 @@
 			loadChatThread();
 			loadKpi();
 			applyDrawer();
+		</script>
+		<script>
+			// ── New-work-order notifications + alarm (PWA) ─────────────────────
+			// Anytime a new work order lands, fire a native macOS notification and
+			// play an alarm chime. A new WO reliably produces a new draft in
+			// /api/drafts (issue-poller: issues_v2 → new_issue → draft), and that
+			// endpoint is workspace-agnostic, so we poll it on our own (independent
+			// of the chat-tab poller) and diff draft ids. Works once notifications
+			// are granted and while the app/window is running.
+			(function () {
+				if ('serviceWorker' in navigator) {
+					navigator.serviceWorker.register('/sw.js').catch(() => {});
+				}
+				if ('Notification' in window && Notification.permission === 'default') {
+					Notification.requestPermission().catch(() => {});
+				}
+
+				// Audio must be unlocked by a user gesture (autoplay policy); grab the
+				// first click/keypress to create + resume the context.
+				let audioCtx = null;
+				function ensureAudio() {
+					try {
+						if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+						if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+					} catch (e) {}
+					return audioCtx;
+				}
+				['click', 'keydown'].forEach((ev) =>
+					window.addEventListener(ev, ensureAudio, { once: true })
+				);
+
+				// Urgent alarm: alternating two-tone square-wave beeps (~1.5s).
+				function playAlarm() {
+					const ctx = ensureAudio();
+					if (!ctx) return;
+					const t0 = ctx.currentTime;
+					const tones = [880, 1175, 880, 1175, 880, 1175]; // A5 / D6 alternating
+					const beep = 0.18,
+						gap = 0.07;
+					tones.forEach((freq, i) => {
+						const t = t0 + i * (beep + gap);
+						const osc = ctx.createOscillator();
+						const gain = ctx.createGain();
+						osc.type = 'square';
+						osc.frequency.setValueAtTime(freq, t);
+						gain.gain.setValueAtTime(0.0001, t);
+						gain.gain.exponentialRampToValueAtTime(0.22, t + 0.01);
+						gain.gain.exponentialRampToValueAtTime(0.0001, t + beep);
+						osc.connect(gain).connect(ctx.destination);
+						osc.start(t);
+						osc.stop(t + beep);
+					});
+				}
+
+				function notify(d) {
+					const ws = d.workspace_label ? ' · ' + d.workspace_label : '';
+					const msgs = Array.isArray(d.messages) ? d.messages : [{ body: d.body }];
+					const body = (msgs[0]?.body || 'A new work order is ready to review.').trim();
+					if ('Notification' in window && Notification.permission === 'granted') {
+						try {
+							const n = new Notification('New work order' + ws, {
+								body,
+								tag: 'wo-' + d.id,
+								renotify: true,
+								requireInteraction: true,
+								icon: '/icon-192.png',
+								badge: '/icon-192.png'
+							});
+							n.onclick = () => {
+								window.focus();
+								n.close();
+							};
+						} catch (e) {}
+					}
+					playAlarm();
+				}
+
+				function openNewWorkOrderDraft(d) {
+					if (typeof closeMemory === 'function') closeMemory();
+					if (typeof setDrawer === 'function') setDrawer('drafts');
+					if (d.issue_id && typeof focusIssue === 'function') {
+						focusIssue(d.issue_id, d.workspace_label);
+					} else if (d.workspace_label && typeof selectWorkspace === 'function') {
+						selectWorkspace(d.workspace_label);
+					}
+				}
+
+				let known = null; // Set of draft ids; null until the first poll baselines
+				async function poll() {
+					try {
+						const r = await fetch('/api/drafts');
+						if (!r.ok) return;
+						const drafts = await r.json();
+						const ids = new Set(drafts.map((d) => d.id));
+						if (known === null) {
+							known = ids; // baseline: don't alarm for WOs already present at launch
+							return;
+						}
+						const fresh = drafts.filter((d) => !known.has(d.id));
+						for (const d of fresh) notify(d);
+						if (fresh.length) openNewWorkOrderDraft(fresh[fresh.length - 1]);
+						known = ids;
+					} catch (e) {}
+				}
+
+				poll();
+				setInterval(poll, 2000);
+			})();
+
+			// ── Follow incoming PM messages to their workspace (PWA) ───────────
+			// Same intent as the new-work-order poller above, but driven off any
+			// incoming text from a property manager in a mapped group chat — not
+			// just new drafts. The server brings the window forward (`open -a`);
+			// this navigates the app to the message's workspace so the reply the
+			// PM is waiting on is on screen. /api/chat-log is workspace-agnostic
+			// and holds one row per incoming PM message (is_from_me:false), so we
+			// poll it independently and diff message_guids. No alarm — PM messages
+			// are frequent; this stays quiet and just navigates.
+			(function () {
+				let known = null; // Set of message_guids; null until the first poll baselines
+				async function poll() {
+					try {
+						const r = await fetch('/api/chat-log?limit=100');
+						if (!r.ok) return;
+						const msgs = await r.json();
+						const incoming = (Array.isArray(msgs) ? msgs : []).filter(
+							(m) => m && m.is_from_me === false && m.message_guid
+						);
+						const ids = new Set(incoming.map((m) => m.message_guid));
+						if (known === null) {
+							known = ids; // baseline: don't navigate for messages already present at launch
+							return;
+						}
+						const fresh = incoming.filter((m) => !known.has(m.message_guid));
+						known = ids;
+						if (!fresh.length) return;
+						// Follow the most recent fresh message to its workspace.
+						const latest = fresh.reduce((a, b) =>
+							new Date(b.received_at || 0) > new Date(a.received_at || 0) ? b : a
+						);
+						if (latest.workspace_label && typeof selectWorkspace === 'function') {
+							selectWorkspace(latest.workspace_label); // no-op if already there
+						}
+						try {
+							window.focus();
+						} catch (e) {}
+					} catch (e) {}
+				}
+
+				poll();
+				setInterval(poll, 2000);
+			})();
 		</script>
 	</body>
 </html>

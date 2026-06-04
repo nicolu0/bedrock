@@ -33,7 +33,17 @@ export async function buildSessionHistory(event, ctx) {
 	const chat_guid = event?.payload?.chat_guid ?? ctx?.chat_guid;
 	if (!chat_guid) return [];
 
+	// The live user content this turn — one message, or a settled burst. The
+	// poller passes the individual burst lines as ctx.liveBodies (the turn's text
+	// is them joined), so each is dropped from the history tail rather than the
+	// joined blob (which never matches a single stored row).
 	const currentText = String(event?.payload?.text ?? ctx?.text ?? '').trim();
+	const liveBodies =
+		Array.isArray(ctx?.liveBodies) && ctx.liveBodies.length
+			? ctx.liveBodies.map((b) => String(b ?? '').trim()).filter(Boolean)
+			: currentText
+				? [currentText]
+				: [];
 
 	try {
 		// Read the authoritative DB transcript, not getOpenSession().recent — that
@@ -42,17 +52,19 @@ export async function buildSessionHistory(event, ctx) {
 		const recent = await sessionizer.getRecentMessagesForChat(chat_guid, MAX_HISTORY);
 		if (!Array.isArray(recent) || recent.length === 0) return [];
 
+		// Multiset of live bodies still pending a drop — one decrement per match so
+		// the just-arrived message(s) ride in this turn's user content only, while a
+		// genuine earlier repeat of the same text survives in history.
+		const dropCounts = new Map();
+		for (const b of liveBodies) dropCounts.set(b, (dropCounts.get(b) ?? 0) + 1);
+
 		const messages = [];
-		let droppedCurrent = false;
 		for (const m of recent) {
 			const body = String(m?.body ?? '').trim();
 			if (!body) continue;
 			const role = m?.sender === 'agent' ? 'assistant' : 'user';
-			// Drop the just-arrived message — it rides in this turn's user content,
-			// not as history. Only drop one match (the live one), keep any genuine
-			// earlier repeat.
-			if (!droppedCurrent && role === 'user' && currentText && body === currentText) {
-				droppedCurrent = true;
+			if (role === 'user' && (dropCounts.get(body) ?? 0) > 0) {
+				dropCounts.set(body, dropCounts.get(body) - 1);
 				continue;
 			}
 			messages.push({ role, content: body });

@@ -1,0 +1,104 @@
+[
+  {
+    "id": "drf_preview_chat_001",
+    "created_at": "2026-06-03T21:00:00.000Z",
+    "hold_until": null,
+    "preview_only": true,
+    "trigger": "queue_preview",
+    "channel": "groupchat",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "issue_id": "preview-wo-001",
+    "to": "QUEUE_PREVIEW_ONLY",
+    "to_participants": [
+      "Test PM chat"
+    ],
+    "messages": [
+      {
+        "body": "Unit 4 at 11963 Walnut has a leaking kitchen faucet. I found Angel Plumbing as the best fit.\n\nShould I send them?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Unit 4 at 11963 Walnut has a leaking kitchen faucet. I found Angel Plumbing as the best fit.\n\nShould I send them?"
+      }
+    ]
+  },
+  {
+    "id": "drf_preview_tenant_001",
+    "created_at": "2026-06-03T21:00:01.000Z",
+    "hold_until": null,
+    "preview_only": true,
+    "trigger": "queue_preview",
+    "channel": "tenant_appfolio",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "issue_id": "preview-wo-001",
+    "appfolio_srn": "PREVIEW-001",
+    "to": "Maria Lopez",
+    "to_participants": [
+      "Maria Lopez"
+    ],
+    "messages": [
+      {
+        "body": "Hi Maria, we received your request about the leaking kitchen faucet. We are assigning a plumber and they will contact you to coordinate access."
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Hi Maria, we received your request about the leaking kitchen faucet. We are assigning a plumber and they will contact you to coordinate access."
+      }
+    ]
+  },
+  {
+    "id": "drf_preview_vendor_001",
+    "created_at": "2026-06-03T21:00:02.000Z",
+    "hold_until": null,
+    "preview_only": true,
+    "trigger": "queue_preview",
+    "channel": "vendor_appfolio",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "issue_id": "preview-wo-001",
+    "appfolio_srn": "PREVIEW-001",
+    "to": "Angel Plumbing Services",
+    "to_participants": [
+      "Angel Plumbing Services"
+    ],
+    "messages": [
+      {
+        "body": "Can you take a look at a leaking kitchen faucet at 11963 Walnut, Unit 4? Tenant is Maria Lopez. Please coordinate access with the tenant and update us after diagnosis."
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Can you take a look at a leaking kitchen faucet at 11963 Walnut, Unit 4? Tenant is Maria Lopez. Please coordinate access with the tenant and update us after diagnosis."
+      }
+    ]
+  },
+  {
+    "id": "drf_preview_chat_002",
+    "created_at": "2026-06-03T21:00:03.000Z",
+    "hold_until": null,
+    "preview_only": true,
+    "trigger": "queue_preview",
+    "channel": "groupchat",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "issue_id": null,
+    "to": "QUEUE_PREVIEW_ONLY",
+    "to_participants": [
+      "Test PM chat"
+    ],
+    "messages": [
+      {
+        "body": "Just to confirm, did you mean the Walnut faucet work order or the Primrose toilet leak?"
+      }
+    ],
+    "original_messages": [
+      {
+        "body": "Just to confirm, did you mean the Walnut faucet work order or the Primrose toilet leak?"
+      }
+    ]
+  }
+]

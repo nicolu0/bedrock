@@ -15,7 +15,7 @@ import {
 	fetchWorkspaceVendors,
 	formatPhone
 } from '../core/supabase.mjs';
-import { shortenVendorName } from '../core/vendor-name.mjs';
+import { shortenVendorName, firstName } from '../core/names.mjs';
 import * as db from '../state/helpers.mjs';
 
 function renderTenantBody({ tenant_name, vendor_name, vendor_phone }) {
@@ -77,7 +77,7 @@ export const draftTenant = {
 		// the raw name above for phone resolution; shorten only for display.
 		const roster = await fetchWorkspaceVendors(issue.workspace_id);
 		const body = renderTenantBody({
-			tenant_name: issue.tenant.name,
+			tenant_name: firstName(issue.tenant.name),
 			vendor_name: shortenVendorName(vendorName, roster),
 			vendor_phone: formatPhone(vendorPhone)
 		});

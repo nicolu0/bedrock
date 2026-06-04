@@ -10,7 +10,7 @@ import {
 	fetchWorkspaceVendors,
 	formatPhone
 } from '../core/supabase.mjs';
-import { shortenVendorName, lowerLead } from '../core/vendor-name.mjs';
+import { shortenVendorName, lowerLead } from '../core/names.mjs';
 import * as db from '../state/helpers.mjs';
 
 function renderVendorBody({ issue_summary, tenant_phone }) {

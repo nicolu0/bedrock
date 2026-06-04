@@ -1,5 +1,6 @@
-// Vendor display names + small text-casing helpers shared by the draft tools
-// and the reminder builder. All deterministic — no model call.
+// Display-name + text-casing helpers shared by the draft tools and the reminder
+// builder: vendor short names (shortenVendorName), tenant first name (firstName),
+// and mid-sentence casing (lowerLead). All deterministic — no model call.
 //
 // shortenVendorName: turn a vendor's canonical/legal name into how the PM
 // actually refers to them. Two transforms, in order:
@@ -114,6 +115,17 @@ export function shortenVendorName(name, roster = []) {
 	const base = stripSuffixes(name);
 	if (!looksLikePerson(base)) return base;
 	return firstNameCollides(base, name, roster) ? base : base.split(/\s+/)[0];
+}
+
+// First name only, for a tenant greeting ("Hi Nikayla N. Belford," → "Hi Nikayla,").
+// Drops middle names, initials, and surname. No collision guard (unlike vendor
+// names): the tenant reads their own message, so a shared first name is fine.
+// Tenant names are stored First-first ("Nikayla N. Belford"), so the first
+// whitespace token is the given name. Falls back to the trimmed input if empty.
+export function firstName(name) {
+	if (!name) return name;
+	const trimmed = String(name).trim();
+	return trimmed.split(/\s+/)[0] || trimmed;
 }
 
 // Lowercase a leading capital so an interpolated phrase reads mid-sentence

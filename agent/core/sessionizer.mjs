@@ -250,6 +250,24 @@ export async function getRecentMessagesForChat(chat_guid, n = RECENT_MSG_COUNT) 
 	}));
 }
 
+// Bodies of OUR outbound messages in a chat's open session, read from
+// chat_messages. The "open work orders" list uses this to scope candidates to
+// the live session by MEMBERSHIP — does this send belong to the current
+// session? — instead of comparing a sent-log dispatch timestamp to the
+// session's read-back start. That cross-store compare raced: the summary that
+// OPENS a session is logged ~100ms before the session's recorded start, so it
+// fell outside its own session and dropped off the open list. Returns
+// { session_id, bodies:Set } or null when no session is open (eval / first
+// contact) — callers treat null as "no session scoping".
+export async function outboundBodiesForOpenSession(chat_guid) {
+	if (!chat_guid) return null;
+	const row = await fetchOpenSessionRow(chat_guid);
+	if (!row) return null;
+	const rows = await fetchOutboundBodies(row.id);
+	const bodies = new Set(rows.map((m) => String(m.body ?? '').trim()).filter(Boolean));
+	return { session_id: row.id, bodies };
+}
+
 // ── internals: boundary decision ─────────────────────────────────────────────
 
 // macOS Messages tapbacks ("Liked X", "Loved Y", etc.) are acknowledgments
@@ -587,6 +605,20 @@ async function fetchSessionMessages(session_id) {
 		headers: authHeaders(key)
 	});
 	if (!res.ok) throw new Error(`fetchSessionMessages: ${res.status} ${await res.text()}`);
+	return res.json();
+}
+
+async function fetchOutboundBodies(session_id) {
+	const { url, key } = supabaseEnv();
+	const params = new URLSearchParams({
+		select: 'body',
+		session_id: `eq.${session_id}`,
+		is_from_me: 'is.true'
+	});
+	const res = await fetch(`${url}/rest/v1/chat_messages?${params}`, {
+		headers: authHeaders(key)
+	});
+	if (!res.ok) throw new Error(`fetchOutboundBodies: ${res.status} ${await res.text()}`);
 	return res.json();
 }
 

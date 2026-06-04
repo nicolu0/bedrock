@@ -1,0 +1,782 @@
+[
+  {
+    "received_at": "2026-05-25T10:47:10.860Z",
+    "message_guid": "FA98AD0C-4DE9-48BD-AC51-C053E9B10E90",
+    "chat_guid": "iMessage;-;andrew51@illinois.edu",
+    "workspace_id": "40d675ba-4dec-47dd-9222-79c0345c493f",
+    "workspace_label": "test",
+    "handle": "andrew51@illinois.edu",
+    "text": "Yes",
+    "is_from_me": false,
+    "db_date": 801398830135784600,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-05-25T10:47:20.177Z",
+    "agent_drafts_count": 3,
+    "agent_draft_ids": [
+      "drf_2e236239155e65f2",
+      "drf_47e8f726fbc5e0d7",
+      "drf_52e22ad5bc488063"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-25T18:18:46.783Z",
+    "message_guid": "E14FEAB7-C868-4A3F-A478-F82979E00489",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Send it to Abraham please",
+    "is_from_me": false,
+    "db_date": 801425925878277500,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-05-25T18:18:56.594Z",
+    "agent_drafts_count": 3,
+    "agent_draft_ids": [
+      "drf_3128438f93d7492a",
+      "drf_5dfab47b4d579ee1",
+      "drf_c3f31fdfab2d3baf"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-25T18:19:48.845Z",
+    "message_guid": "C2B202E5-4B83-45E0-A0BB-6BE31405AD65",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "It is probably something simple as flipping the breakers",
+    "is_from_me": false,
+    "db_date": 801425988546003800,
+    "agent_action": "learned",
+    "agent_runs_at": "2026-05-25T18:19:52.991Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-25T18:19:59.860Z",
+    "message_guid": "7AF61677-9D91-43D6-A27A-9CAA6C3C442C",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Have the residents try that please",
+    "is_from_me": false,
+    "db_date": 801425999220211500,
+    "agent_action": "learned",
+    "agent_runs_at": "2026-05-25T18:20:03.478Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-26T01:08:57.074Z",
+    "message_guid": "D18E98D0-2740-4669-A363-7F0863C263A0",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Yes please",
+    "is_from_me": false,
+    "db_date": 801450536708863000,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-05-26T01:09:14.755Z",
+    "agent_drafts_count": 3,
+    "agent_draft_ids": [
+      "drf_5f73f9e889ffe062",
+      "drf_6dc5e3ff6da9a8db",
+      "drf_22f97c2dda3871e0"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-26T17:32:16.028Z",
+    "message_guid": "9317161D-AC1D-4792-841C-ABC513F10FB9",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "I already took care of those work orders",
+    "is_from_me": false,
+    "db_date": 801509535095755400,
+    "agent_action": "learned",
+    "agent_runs_at": "2026-05-26T17:32:21.006Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-26T21:22:04.122Z",
+    "message_guid": "40D1009A-4A55-460A-9A98-0E8160E88B02",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Send the resident a message to send a photo of the drawer and the model number of the refrigerator. We can order the part",
+    "is_from_me": false,
+    "db_date": 801523323282673200,
+    "agent_action": "learned",
+    "agent_runs_at": "2026-05-26T21:22:12.003Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-26T22:04:42.399Z",
+    "message_guid": "CE29826C-A9C3-44D0-995B-28B72F2DFF71",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Thanks",
+    "is_from_me": false,
+    "db_date": 801525881685391900,
+    "agent_action": "learned",
+    "agent_runs_at": "2026-05-26T22:04:51.295Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-26T22:48:51.889Z",
+    "message_guid": "577FE5B6-6FDE-4770-9EC7-AFC0FA0CE5F7",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Send the drain specialist",
+    "is_from_me": false,
+    "db_date": 801528530937563600,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-05-26T22:48:59.085Z",
+    "agent_drafts_count": 3,
+    "agent_draft_ids": [
+      "drf_90b19c253ff8c8b6",
+      "drf_b87222f832935109",
+      "drf_5ed2dc73fa0ba69a"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-26T23:02:32.673Z",
+    "message_guid": "55AFCEA9-6BD5-4C9E-9FD6-5B909D8AEAA7",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "They are local",
+    "is_from_me": false,
+    "db_date": 801529351609064800,
+    "agent_action": "learned",
+    "agent_runs_at": "2026-05-26T23:02:36.960Z",
+    "agent_drafts_count": 0,
+    "agent_draft_ids": [],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-05-30T12:31:39.390Z",
+    "message_guid": "3508CAF9-9588-4781-B177-4338A4B3A908",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Yes, please",
+    "is_from_me": false,
+    "db_date": 801837098225138400,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-05-30T12:31:43.503Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_5ca69304d510ac06"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-01T15:29:47.940Z",
+    "message_guid": "287E7039-EF86-4F41-BE92-2C565EE2F30F",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Yes please send it to yonic",
+    "is_from_me": false,
+    "db_date": 802020586676086900,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-06-01T15:29:59.016Z",
+    "agent_drafts_count": 3,
+    "agent_draft_ids": [
+      "drf_b805f76043908147",
+      "drf_74ab3d3e69181d66",
+      "drf_3f188ba7371a04b6"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-01T16:22:42.830Z",
+    "message_guid": "85FB1B25-8F14-40BF-A836-225D63C6A6DB",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Yes",
+    "is_from_me": false,
+    "db_date": 802023762628209200,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-06-01T16:22:51.254Z",
+    "agent_drafts_count": 3,
+    "agent_draft_ids": [
+      "drf_8f643b37e5916485",
+      "drf_baaa7527dd757996",
+      "drf_ccc965e13b902e85"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-01T16:42:05.504Z",
+    "message_guid": "65BE38A7-3273-43F0-9CBE-516AF513C527",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Send it to the drain specialist",
+    "is_from_me": false,
+    "db_date": 802024924792757800,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-06-01T16:42:12.248Z",
+    "agent_drafts_count": 3,
+    "agent_draft_ids": [
+      "drf_f708540e2201c48c",
+      "drf_783be10dd71a94a0",
+      "drf_86724211c008598f"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-01T16:44:03.702Z",
+    "message_guid": "5C6AC5E1-4E9E-4610-8706-EBE944D89CF9",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Availability, he may be busy.",
+    "is_from_me": false,
+    "db_date": 802025042999803500,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-01T16:44:06.347Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_b61690a57b0ef196"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-01T16:44:26.722Z",
+    "message_guid": "C9FFB5AA-3964-40D8-811F-FF4F7DAF9E83",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "The other is a company with more workers",
+    "is_from_me": false,
+    "db_date": 802025066009529900,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-01T16:44:31.047Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_b3e5547ddd2f4092"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T14:35:02.144Z",
+    "message_guid": "4C8FF385-6B66-468A-906C-359E31F83316",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "No, for this property the owner is a GC and sends his guys",
+    "is_from_me": false,
+    "db_date": 802103701602793500,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T14:35:10.273Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_f40d471b79eb2698"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T14:35:10.275Z",
+    "message_guid": "E836DB27-35C6-4091-9E78-5575A0DC3352",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "Luis is his name",
+    "is_from_me": false,
+    "db_date": 802103709357527600,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T14:35:16.636Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_308c57529e95ed2b"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T14:43:18.624Z",
+    "message_guid": "9692FC51-09DA-48E3-AE05-97BF19C121FC",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "Can you send an email to the owner letting him know",
+    "is_from_me": false,
+    "db_date": 802104198097816400,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T14:43:20.498Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_c94d1f1b858d6a27"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T14:44:30.691Z",
+    "message_guid": "50EB6B12-4C8C-45D9-8C99-31446B426B94",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "Send an email through the work order",
+    "is_from_me": false,
+    "db_date": 802104270238252700,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T14:44:34.152Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_4a48ef5361464ab7"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T14:50:38.036Z",
+    "message_guid": "5953A34A-8E23-4D59-8C2A-7F144882F464",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "Yes, let me check",
+    "is_from_me": false,
+    "db_date": 802104637371821200,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T14:50:40.097Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_f4d737abf3f0761f"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T14:51:31.085Z",
+    "message_guid": "C619C150-B79C-4304-A337-D71185E8988F",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "When you click in a work order and go to actions there is one hat says notify owner.",
+    "is_from_me": false,
+    "db_date": 802104690480763000,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T14:51:33.997Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_d099e8082ef8c062"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T14:51:36.089Z",
+    "message_guid": "14D9518D-E15B-4892-A6D9-60F2C5EA974A",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "Can you see that?",
+    "is_from_me": false,
+    "db_date": 802104695391233700,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T14:51:38.245Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_d46abc09127ba188"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T14:52:31.054Z",
+    "message_guid": "A3589CF6-7349-4287-8358-C01912D5AE22",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "Ok let me check",
+    "is_from_me": false,
+    "db_date": 802104750907964300,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T14:52:32.567Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_8e7a73b298094573"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T15:08:24.935Z",
+    "message_guid": "7AA63E9F-7D1C-45DB-B012-4221EDA70B51",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "No, we’ll send in house maintenance.",
+    "is_from_me": false,
+    "db_date": 802105703756588000,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T15:08:31.492Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_0e798f1553ddf151"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T15:08:54.962Z",
+    "message_guid": "175BBA8C-1EDC-4AA4-A665-D929180E6F27",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "Andrew, can we start these at 9am so that Brooke can respond",
+    "is_from_me": false,
+    "db_date": 802105734377417600,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T15:08:56.892Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_a96a2180ba9d356e"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T15:18:10.672Z",
+    "message_guid": "28DA1208-4610-46DD-9A27-12B9AFB9100F",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "Ok, Andrew, reset and try now. It should show up to notify owners",
+    "is_from_me": false,
+    "db_date": 802106290415966700,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T15:18:12.927Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_c0eabe82fb1a9655"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T16:04:30.589Z",
+    "message_guid": "2D1F74A9-E7AF-4391-A3B4-1AE8CF87940D",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18055046160",
+    "text": "I will handle Ivar unit 6 thank you",
+    "is_from_me": false,
+    "db_date": 802109069556136600,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T16:04:33.366Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_00e7c005ae55260a"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T18:28:54.031Z",
+    "message_guid": "E829AD9D-F604-43C6-84F7-47E82BE8C0EF",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Let me check to see if he is back",
+    "is_from_me": false,
+    "db_date": 802117732783568100,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T18:29:03.169Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_348ab059a2283c0b"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T18:29:13.057Z",
+    "message_guid": "2C5EAEC1-BC1D-4FC2-AA02-7B9CAF33FEEB",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Yes, send it to yonic",
+    "is_from_me": false,
+    "db_date": 802117752827768600,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T18:29:14.787Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_2fdad1c5cb321c2c"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T21:08:26.441Z",
+    "message_guid": "A46DAA75-8562-43C8-9615-21A554EA248C",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "This is a duplicate",
+    "is_from_me": false,
+    "db_date": 802127305417670800,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T21:08:29.192Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_7e90ea0423db42cc"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T21:27:15.604Z",
+    "message_guid": "0850A4D4-128A-4CC0-925D-D05628113C41",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "I’ll send all residents an email shortly letting them know we are on it",
+    "is_from_me": false,
+    "db_date": 802128434860784500,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T21:27:17.256Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_8cc0908e0aa15e35"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T22:10:11.953Z",
+    "message_guid": "C95E2064-4E82-4D8B-842E-85A203ADBFD8",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Yes, send it to primex",
+    "is_from_me": false,
+    "db_date": 802131011019348400,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-06-02T22:10:19.292Z",
+    "agent_drafts_count": 3,
+    "agent_draft_ids": [
+      "drf_ba17894270ddad89",
+      "drf_b56b8cc4414f82bb",
+      "drf_3e2aff5df4430763"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T22:10:27.966Z",
+    "message_guid": "B986D3F5-38E1-4D4E-B572-B264C99D6D89",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "Send it to yonic",
+    "is_from_me": false,
+    "db_date": 802131027664419700,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T22:10:33.285Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_44fc607e73442e29"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T22:26:45.839Z",
+    "message_guid": "D42F8CA2-C934-4FF1-BA6A-B1F1E2BB85F9",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18055046160",
+    "text": "Yes",
+    "is_from_me": false,
+    "db_date": 802132005476391800,
+    "agent_action": "drafted",
+    "agent_runs_at": "2026-06-02T22:26:51.636Z",
+    "agent_drafts_count": 3,
+    "agent_draft_ids": [
+      "drf_0172368ed3f46c57",
+      "drf_8f07fc73da6d1aa2",
+      "drf_a90edba1ccdcf8a4"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T22:26:53.844Z",
+    "message_guid": "21880917-8495-441D-8C9F-424A9EDC6403",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18055046160",
+    "text": "I will handle the bathroom paint",
+    "is_from_me": false,
+    "db_date": 802132013704656600,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T22:26:55.201Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_0c97095ba08d658d"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T22:31:43.106Z",
+    "message_guid": "2911E548-9861-40F5-8F54-E8F0269BA5F7",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "Hi Andrew, try and see now. You should be able to notify the owner",
+    "is_from_me": false,
+    "db_date": 802132302416132200,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T22:31:45.202Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_1b3a7a8ccd0f4ddf"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T22:41:40.657Z",
+    "message_guid": "DF8FBB4F-B013-4868-A7F4-24F9FAB99FE5",
+    "chat_guid": "iMessage;+;chat157769184179351526",
+    "workspace_id": "5406e04f-8e22-4ed8-a54e-a6d08ff45ef7",
+    "workspace_label": "greenoak",
+    "handle": "+18472742377",
+    "text": "Liked “yes it's there now thanks”",
+    "is_from_me": false,
+    "db_date": 802132900486255400,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T22:41:43.201Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_200c5da01fa2f2af"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-02T23:50:54.282Z",
+    "message_guid": "B493577A-FCEF-4685-B5D8-9549FDBE4F99",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13106990643",
+    "text": "No, I’ll check it myself later today. You can let the tenants know please",
+    "is_from_me": false,
+    "db_date": 802137053015305100,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-02T23:50:59.601Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_54b2c3322c5b20e5"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-03T17:26:30.252Z",
+    "message_guid": "CA5646E1-DF9A-4D06-BE15-987B1839CA63",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13106990643",
+    "text": "I will be calling the elevator company right now",
+    "is_from_me": false,
+    "db_date": 802200389697653000,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-03T17:26:34.220Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_816ca0aa7a617f33"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-03T19:59:12.561Z",
+    "message_guid": "848C17F0-153C-47EC-B6F7-52F953924484",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "No, I’ll contact the owner directly for approval",
+    "is_from_me": false,
+    "db_date": 802209551768783700,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-03T19:59:18.521Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_6c57f4e9b95e7cb7"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-03T20:04:41.868Z",
+    "message_guid": "69AFAB6B-8072-480A-BCBD-5437D02C7C3C",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "I assigned it the cleaning crew already",
+    "is_from_me": false,
+    "db_date": 802209880945872100,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-03T20:04:46.218Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_b635f28580e631f1"
+    ],
+    "agent_error": null
+  },
+  {
+    "received_at": "2026-06-03T20:27:33.373Z",
+    "message_guid": "FF5733CC-1EE2-4466-935A-A5BB6D21F849",
+    "chat_guid": "iMessage;+;800f91610cea448fb5085603ab3ea973",
+    "workspace_id": "2e4373a0-40b8-42c2-a873-b08c99dbf76a",
+    "workspace_label": "prod",
+    "handle": "+13102663152",
+    "text": "We use her and Veisy",
+    "is_from_me": false,
+    "db_date": 802211252658271100,
+    "agent_action": "clarify",
+    "agent_runs_at": "2026-06-03T20:27:40.282Z",
+    "agent_drafts_count": 1,
+    "agent_draft_ids": [
+      "drf_f605e827fabdafb4"
+    ],
+    "agent_error": null
+  }
+]
