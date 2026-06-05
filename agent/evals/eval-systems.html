@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bedrock Agent Eval Systems</title>
+<style>
+	:root {
+		--bg: #000;
+		--fg: #fff;
+		--muted: #9a9a9a;
+		--card: #0d0d0d;
+		--line: #2a2a2a;
+		--good: #4cb782;
+		--warn: #f0bf00;
+		--blue: #9db8ff;
+	}
+	* { box-sizing: border-box; }
+	body {
+		margin: 0;
+		background: var(--bg);
+		color: var(--fg);
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+		line-height: 1.5;
+	}
+	.wrap { max-width: 980px; margin: 0 auto; padding: 38px 24px 88px; }
+	h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: 0; }
+	.sub { margin: 0 0 24px; color: var(--muted); }
+	h2 { margin: 34px 0 10px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 18px; }
+	h3 { margin: 0 0 8px; font-size: 15px; }
+	p { margin: 8px 0; }
+	code { background: #151515; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-family: ui-monospace, Menlo, monospace; font-size: .9em; }
+	.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+	.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+	.path { color: var(--blue); font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+	ul { margin: 8px 0 0; padding-left: 19px; }
+	li { margin: 4px 0; }
+	table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+	th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+	th { color: var(--muted); font-size: 12px; font-weight: 600; }
+	.callout { border-left: 3px solid var(--warn); background: rgba(240,191,0,.08); padding: 11px 13px; border-radius: 0 8px 8px 0; color: #f7df8a; }
+	@media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+	<h1>Bedrock Agent Eval Systems</h1>
+	<p class="sub">New directory split for evals. This is a scaffold only; the legacy runner still lives at <code>evals/run.mjs</code>.</p>
+
+	<div class="callout">
+		<p><b>Change:</b> stop treating evals as one giant suite with flags. Split by what is being tested: prompt behavior, memory quality, burst/session handling, and deterministic tools/PMS adapters.</p>
+	</div>
+
+	<h2>Systems</h2>
+	<div class="grid">
+		<section class="card">
+			<h3>1. Agent Prompt / Tool Calls</h3>
+			<p class="path">evals/agent-prompt/</p>
+			<ul>
+				<li>Checks tool choice and tool args.</li>
+				<li>Checks PM, tenant, and vendor message bodies inside tool calls.</li>
+				<li>Checks context/lane separation and status updates.</li>
+				<li>Assumes memory/context has already been provided.</li>
+			</ul>
+		</section>
+		<section class="card">
+			<h3>2. Memory</h3>
+			<p class="path">evals/memory/</p>
+			<ul>
+				<li>Checks retrieval quality, observations, and beliefs.</li>
+				<li>Owns conditional/procedural memory once implemented.</li>
+				<li>Existing <code>memory-graph</code> gold files belong here conceptually.</li>
+			</ul>
+		</section>
+		<section class="card">
+			<h3>3. Burst / Session</h3>
+			<p class="path">evals/burst-session/</p>
+			<ul>
+				<li>Checks how raw inbound messages become turns.</li>
+				<li>Owns typo-then-correction and final-intent-wins cases.</li>
+				<li>Checks queued turns and revalidation before action.</li>
+			</ul>
+		</section>
+		<section class="card">
+			<h3>4. Tool / PMS Adapter</h3>
+			<p class="path">evals/tool-pms-adapter/</p>
+			<ul>
+				<li>Checks deterministic tool behavior below the model.</li>
+				<li>Checks AppFolio draft/send/update correctness.</li>
+				<li>Checks failure surfaces and side effects.</li>
+			</ul>
+		</section>
+	</div>
+
+	<h2>What Moves Where</h2>
+	<table>
+		<tr><th>Current thing</th><th>Target system</th><th>Reason</th></tr>
+		<tr><td><code>chat:</code> scenarios about yes, vendor override, triage, self-handle</td><td><code>agent-prompt</code></td><td>They test prompt/tool/context behavior.</td></tr>
+		<tr><td>PM/tenant/vendor message body assertions</td><td><code>agent-prompt</code></td><td>Destination is determined by tool call; body quality belongs with that assertion.</td></tr>
+		<tr><td><code>read_memory</code> / <code>write_memory</code> usage inside a turn</td><td><code>agent-prompt</code></td><td>Only checks whether the agent used provided tools/context, not whether memory is good.</td></tr>
+		<tr><td>Memory retrieval ranking, observation gold, belief gold</td><td><code>memory</code></td><td>That is memory-system quality, not prompt behavior.</td></tr>
+		<tr><td>Typo then correction</td><td><code>burst-session</code></td><td>That tests how messages are coalesced before the agent sees the turn.</td></tr>
+		<tr><td>AppFolio session/tool behavior</td><td><code>tool-pms-adapter</code></td><td>Deterministic adapter behavior should not require an LLM judgment.</td></tr>
+	</table>
+
+	<h2>Current State</h2>
+	<p>The legacy files remain in place:</p>
+	<ul>
+		<li><code>evals/scenarios.mjs</code></li>
+		<li><code>evals/run.mjs</code></li>
+		<li><code>evals/judge.mjs</code></li>
+		<li><code>evals/belief-former-smoke.mjs</code></li>
+		<li><code>evals/memory-graph/</code></li>
+	</ul>
+	<p>This avoids breaking the existing suite while the new systems are introduced gradually.</p>
+</main>
+</body>
+</html>
