@@ -317,9 +317,14 @@ async function main() {
 	};
 
 	// Drafts UI. Send button calls the dylib via helper.send.
+	// Host defaults to loopback; set WORK_ORDERS_HOST=0.0.0.0 to reach it from
+	// the phone over Tailscale (http://<tailnet-ip>:<port>). Loopback-only is
+	// why phone access was flaky — nothing on the tailnet could bind to it.
 	const uiPort = Number(process.env.WORK_ORDERS_PORT ?? 7878);
+	const uiHost = process.env.WORK_ORDERS_HOST ?? '127.0.0.1';
 	await startUi({
 		port: uiPort,
+		host: uiHost,
 		log,
 		sendIMessage
 	});

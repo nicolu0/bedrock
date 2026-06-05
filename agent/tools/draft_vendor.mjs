@@ -78,8 +78,13 @@ export const draftVendor = {
 			workspace_id: issue.workspace_id,
 			workspace_label: ctx.workspace_label ?? null,
 			issue_id: issue.id,
+			// `to` is the canonical short name — what the PM (and the tenant message)
+			// see. `vendor_legal` is the FULL/legal name used only to select the right
+			// vendor in AppFolio at dispatch, so "Primex" can't resolve to the wrong
+			// "Primex …" company.
 			to: vendorName,
 			to_participants: [vendorName],
+			vendor_legal: rawVendorName,
 			messages: [{ body }],
 			hold_until: null
 		});

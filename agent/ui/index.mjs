@@ -450,6 +450,34 @@ export async function dispatchDraft({
 	return { ok: true, count: finals.length };
 }
 
+// Read a workspace runner's current state (idle/starting/running/done/error).
+// Returns null if the runner is unreachable. Used to tell whether a draft stuck
+// in 'sending' has a live send behind it or is a stranded claim.
+function runnerState(port) {
+	return new Promise((resolve) => {
+		const r = http.request(
+			{ host: '127.0.0.1', port, path: '/state', method: 'GET', timeout: 2000 },
+			(pres) => {
+				let s = '';
+				pres.on('data', (c) => (s += c));
+				pres.on('end', () => {
+					try {
+						resolve(JSON.parse(s));
+					} catch {
+						resolve(null);
+					}
+				});
+			}
+		);
+		r.on('error', () => resolve(null));
+		r.on('timeout', () => {
+			r.destroy();
+			resolve(null);
+		});
+		r.end();
+	});
+}
+
 export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, log = console.log } = {}) {
 	// Verify the page file exists at boot but read it on every request so edits
 	// to page.html show up on browser refresh without a server restart.
@@ -505,6 +533,49 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 					res.writeHead(404);
 					res.end('icon not found');
 				}
+				return;
+			}
+
+			// Same-origin proxy to a workspace's AppFolio runner. Lets the queue UI
+			// drive "Accept" (real send) from the phone over Tailscale without
+			// exposing the runner: it stays bound to 127.0.0.1, and this forwards
+			// /api/appfolio-runner/<port>/<path> to it. The port is whitelisted
+			// against the configured runner ports so this can't reach arbitrary
+			// local services.
+			const runnerProxyMatch = pathname.match(/^\/api\/appfolio-runner\/(\d+)(\/.*)?$/);
+			if (runnerProxyMatch) {
+				const port = Number(runnerProxyMatch[1]);
+				const allowed = new Set(Object.values(appfolioRunnerPorts()));
+				if (!allowed.has(port)) return text(res, 403, 'unknown runner port');
+				const rest = runnerProxyMatch[2] || '/';
+				let bodyBuf = null;
+				if (req.method !== 'GET' && req.method !== 'HEAD') {
+					const chunks = [];
+					for await (const c of req) chunks.push(c);
+					bodyBuf = Buffer.concat(chunks);
+				}
+				await new Promise((resolve) => {
+					const headers = {};
+					if (req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
+					if (bodyBuf) headers['content-length'] = bodyBuf.length;
+					const preq = http.request(
+						{ host: '127.0.0.1', port, method: req.method, path: rest + (url.search || ''), headers },
+						(pres) => {
+							res.writeHead(pres.statusCode || 502, {
+								'content-type': pres.headers['content-type'] || 'application/json'
+							});
+							pres.pipe(res);
+							pres.on('end', resolve);
+						}
+					);
+					preq.on('error', (e) => {
+						if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' });
+						res.end('runner unreachable: ' + e.message);
+						resolve();
+					});
+					if (bodyBuf) preq.write(bodyBuf);
+					preq.end();
+				});
 				return;
 			}
 
@@ -1012,7 +1083,24 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 			const afClaimMatch = pathname.match(/^\/api\/drafts\/([^/]+)\/appfolio-claim$/);
 			if (req.method === 'POST' && afClaimMatch) {
 				const [, id] = afClaimMatch;
-				const claim = await db.claimDraftSend(id);
+				let claim = await db.claimDraftSend(id);
+				// Stale-claim recovery: a draft stuck in 'sending' with no live runner
+				// means a prior attempt was stranded — e.g. the phone backgrounded
+				// mid-send so the browser never fired appfolio-release. If the
+				// workspace runner is idle/done/error (not actively sending), reconcile
+				// and grant the claim so retry works. If it's still running/starting we
+				// leave it locked — that's a real in-flight send (dup-send guard).
+				if (!claim.ok && claim.reason === 'sending') {
+					const ws = claim.draft?.workspace_id;
+					const port = ws ? appfolioRunnerPorts()[ws] : 9773;
+					const st = port ? await runnerState(port) : null;
+					if (!st || ['idle', 'done', 'error'].includes(st.status)) {
+						await db.releaseDraftSend(id);
+						claim = await db.claimDraftSend(id);
+						if (claim.ok)
+							log(`[appfolio] released stale 'sending' claim on ${id} (runner ${st?.status ?? 'unreachable'})`);
+					}
+				}
 				if (claim.reason === 'not_found') return text(res, 404, 'draft not found');
 				if (!claim.ok) return json(res, 409, { ok: false, reason: claim.reason });
 				return json(res, 200, { ok: true });

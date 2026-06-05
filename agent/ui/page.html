@@ -1856,6 +1856,42 @@
 			.ide .turns-view, .ide .sessions-view { max-width: none; margin: 0; padding: 10px 12px 50px; overflow: visible; height: auto; }
 			.right-body > [hidden] { display: none; }
 
+			/* ── Phone / thin viewport: drafts-only ──────────────────────── */
+			/* On a narrow screen the three-pane IDE doesn't fit, so collapse to
+			   just the Queue (drafts) pane. Drop the desktop 1.28x zoom too so
+			   the rail renders at native phone scale. */
+			@media (max-width: 640px) {
+				/* Lock the document so the page itself can't scroll — otherwise the
+				   whole thing (incl. the Queue/Turns bar) slides under the status bar.
+				   The only scroller becomes .right-body, below the fixed .pane-head. */
+				html, body { height: 100%; overflow: hidden; overscroll-behavior-y: none; }
+				#zoomwrap { transform: none; width: 100%; height: 100vh; height: 100dvh; overflow: hidden; }
+				.pane-issues, .pane-chat { display: none; }
+				/* Pin the drafts pane to the viewport so the header stays put and the
+				   list scrolls the full height. position:fixed resolves against the
+				   viewport (the #zoomwrap transform is off on mobile), which sidesteps
+				   the flex height-resolution quirks that left dead space below. */
+				.pane-right {
+					position: fixed; top: 0; left: 0; right: 0;
+					height: 100vh; height: 100dvh;
+					width: 100%; border-left: 0;
+					display: flex; flex-direction: column; min-height: 0;
+				}
+				.pane-head { flex: 0 0 auto; }
+				.right-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+				/* Never clip a draft on mobile: the bubble textarea autosizes via
+				   JS, which can mismeasure (font reflow / layout timing). overflow
+				   hidden on the card + textarea would then cut the message off, so
+				   let both spill rather than truncate. */
+				.pane-right .draft { overflow: visible; }
+				.pane-right .draft .bubble textarea { overflow: visible; }
+				/* Clear the iOS Safari bottom toolbar so the last card's Accept/Deny
+				   buttons are reachable. */
+				#chat-drafts-rail.ide-rail { padding-bottom: 140px; }
+				/* Bigger touch targets for the per-card action bar. */
+				.pane-right .draft.next-up .actions button { padding: 15px 12px; font-size: 14px; }
+			}
+
 			/* memory graph: full-screen overlay (not a tab) */
 			.memback { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 320; display: none; }
 			.memback.show { display: block; }
@@ -2569,6 +2605,23 @@
 				for (const ta of tas) autoSize(ta);
 			}
 
+			// Mobile only: re-run draft textarea autosize once layout settles so
+			// multi-line drafts aren't clipped. Initial autosize can mismeasure on
+			// the phone (web-font reflow, orientation, toolbar collapse). Gated on
+			// the mobile media query so desktop behavior is untouched.
+			const MOBILE_Q = window.matchMedia('(max-width: 640px)');
+			if (document.fonts?.ready)
+				document.fonts.ready.then(() => { if (MOBILE_Q.matches) resizeAllDraftTextareas(); });
+			window.addEventListener('orientationchange', () => {
+				if (MOBILE_Q.matches) setTimeout(resizeAllDraftTextareas, 150);
+			});
+			let _railResizeT;
+			window.addEventListener('resize', () => {
+				if (!MOBILE_Q.matches) return;
+				clearTimeout(_railResizeT);
+				_railResizeT = setTimeout(resizeAllDraftTextareas, 120);
+			});
+
 			function render(drafts) {
 				drafts = orderedQueueItems(drafts.filter((d) => !pendingDismiss.has(d.id)));
 				const idsKey = drafts.map((d) => d.id).join('|');
@@ -2769,7 +2822,11 @@
 			function runnerBaseFor(workspace_id) {
 				const port = workspace_id ? RUNNER_PORTS[workspace_id] : 9773;
 				if (!port) return null;
-				return 'http://127.0.0.1:' + port;
+				// Same-origin proxy on the UI server → 127.0.0.1:<port>. Keeps the
+				// runner loopback-only while letting the phone (over Tailscale) drive
+				// it through the reachable UI server. On desktop this resolves to the
+				// same host, so behavior is unchanged.
+				return '/api/appfolio-runner/' + port;
 			}
 
 			function hasAppfolioRunner(d) {
@@ -2788,7 +2845,12 @@
 			}
 
 			function appfolioVendorStartUrl(d, body) {
-				const vendor = d.vendor ?? d.to ?? (d.to_participants && d.to_participants[0]) ?? '';
+				// Select the vendor in AppFolio by FULL legal name (vendor_legal) so
+				// "Primex" can't resolve to the wrong "Primex …" company. The short name
+				// (to) is only for the PM/tenant-facing text; fall back to it for older
+				// drafts created before vendor_legal existed.
+				const vendor =
+					d.vendor_legal ?? d.vendor ?? d.to ?? (d.to_participants && d.to_participants[0]) ?? '';
 				const params = { flow: 'vendor', vendor, message: body ?? '', auto: '1', draft_id: d.id };
 				if (d.workspace_id) params.workspace = d.workspace_id;
 				if (d.appfolio_srn) params.srn = String(d.appfolio_srn);

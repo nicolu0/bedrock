@@ -241,22 +241,47 @@ function vendorFlow({ srn, vendor, message, baseUrl }) {
 				await p.waitForTimeout(1500);
 				const results = p.locator('#select2-drop .select2-results li');
 				const texts = (await results.allTextContents()).map((t) => t.replace(/\s+/g, ' ').trim());
-				const m = texts.filter((t) => t.toLowerCase().includes(String(vendor).toLowerCase()));
-				if (m.length === 0) throw new Error(`vendor "${vendor}" matched 0 of [ ${texts.join(' | ')} ]`);
-				await results.filter({ hasText: vendor }).first().click();
+				const norm = (s) => String(s).toLowerCase().replace(/\s+/g, ' ').trim();
+				const want = norm(vendor);
+				// Pick by EXACT name first. Only fall back to a substring match when it
+				// is unambiguous — NEVER click the first of several partial matches, or
+				// we can dispatch the wrong vendor (this is exactly the "Primex" →
+				// "Primex Clinical Labs" instead of "Primex Termite Co" bug). Ambiguity
+				// is a hard error for the human to resolve, not a guess.
+				let idx = texts.findIndex((t) => norm(t) === want);
+				if (idx < 0) {
+					const subs = texts.map((t, i) => ({ t, i })).filter((o) => norm(o.t).includes(want));
+					if (subs.length === 1) idx = subs[0].i;
+					else if (subs.length === 0)
+						throw new Error(`vendor "${vendor}" matched none of [ ${texts.join(' | ')} ]`);
+					else
+						throw new Error(
+							`vendor "${vendor}" is ambiguous — matched ${subs.length}: [ ${subs
+								.map((o) => o.t)
+								.join(' | ')} ]. Refusing to guess; pass the full vendor name.`
+						);
+				}
+				await results.nth(idx).click();
 			}
 		},
 		{
 			name: 'Tick secure-link boxes (Text + Email)',
 			run: async (p) => {
-				// These appear only after a vendor is selected (the prior step).
+				// These appear only after a vendor is selected (the prior step). A box
+				// can render *disabled* when AppFolio won't send that channel (e.g. the
+				// vendor has no textable number) — calling .check() on a disabled box
+				// hangs the full actionability timeout and then errors, so tick only the
+				// boxes that are actually enabled and move on.
 				for (const id of [
 					'#maintenance_work_order_send_vendor_text',
 					'#maintenance_work_order_send_vendor_wo_link'
 				]) {
 					const box = p.locator(id);
-					await box.waitFor({ state: 'visible', timeout: 10000 });
-					await box.check();
+					await box.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+					if (!(await box.count())) continue;
+					if (!(await box.isEnabled().catch(() => false))) continue; // disabled → skip
+					if (await box.isChecked().catch(() => false)) continue; // already ticked
+					await box.check().catch(() => {});
 				}
 			}
 		},
