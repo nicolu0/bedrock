@@ -14,6 +14,10 @@ export const WORKSPACES = {
 		label: 'test',
 		display: 'Test',
 		chatEnv: 'TEST_CHAT_GUID',
+		// PMS this workspace runs on. Customer-facing tools resolve it via
+		// pmsFor() so they stay PMS-agnostic — the draft channel becomes
+		// tenant_<pms> / vendor_<pms> and the right send automation picks it up.
+		pms: 'appfolio',
 		// Cleared for live reactive autosend (same as LAPM) so the test chat
 		// exercises the real live path, not the draft path.
 		reactiveAutosend: true,
@@ -32,6 +36,7 @@ export const WORKSPACES = {
 		label: 'prod',
 		display: 'LAPM',
 		chatEnv: 'JOSE_CHAT_GUID',
+		pms: 'appfolio',
 		// AppFolio Reports API access (global APPFOLIO_* creds point at this
 		// vhost). Workspaces without it (Green Oak — crawler-only, no Reporting
 		// API) must skip the reports fetch in enrich_issue and derive everything
@@ -69,6 +74,7 @@ export const WORKSPACES = {
 		label: 'greenoak',
 		display: 'Green Oak',
 		chatEnv: 'GREENOAK_CHAT_GUID',
+		pms: 'appfolio',
 		appfolioVhost: 'greenoakpropertymanagement.appfolio.com',
 		appfolioRunnerPort: 9774,
 		pm_handles: ['+18472742377', '+18055046160'],
@@ -84,6 +90,15 @@ export function listWorkspacesForUi() {
 	return Object.entries(WORKSPACES)
 		.map(([id, w]) => ({ id, label: w.label, display: w.display ?? w.label }))
 		.sort((a, b) => (a.label === 'test' ? 1 : 0) - (b.label === 'test' ? 1 : 0));
+}
+
+// The PMS a workspace runs on. Customer-facing tools resolve it here instead of
+// hardcoding 'appfolio', so the same tool plugs into any PMS by reading the
+// workspace config. Drives the draft channel (tenant_<pms> / vendor_<pms>) and,
+// downstream, which send automation claims the draft. Defaults to 'appfolio' —
+// every current workspace is on AppFolio.
+export function pmsFor(workspace_id) {
+	return WORKSPACES[workspace_id]?.pms ?? 'appfolio';
 }
 
 // AppFolio tenant subdomain for a workspace (null if it has no AppFolio account).

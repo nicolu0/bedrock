@@ -228,22 +228,31 @@ export async function updateChatMessage(messageGuid, patch) {
 	});
 }
 
-// Issue ids that have already been ack'd by the chat skill (i.e. have an
-// existing tenant_appfolio or vendor_appfolio draft, pending or processed).
-// Used by recentSentForChat to exclude already-handled issues from the
-// candidate list so the model doesn't get ambiguous yes-replies.
-async function alreadyDraftedFollowupIds() {
-	const FOLLOWUP_CHANNELS = new Set(['tenant_appfolio', 'vendor_appfolio']);
+// Issue ids the chat skill has already DISPATCHED — they have a vendor draft
+// (vendor_<pms>) staged or sent. Used by recentSentForChat to drop them from the
+// candidate list so a later "yes" can't re-approve an in-flight dispatch.
+//
+// We key on the VENDOR channel ONLY — the unambiguous "we acted on it" signal.
+// A tenant draft is deliberately NOT enough: text_tenant stages a tenant_<pms>
+// draft for a TRIAGE question ("send me a photo") too, and that's mid-conversation
+// info-gathering, not a closed action. Excluding on the tenant draft would evict
+// the WO the moment we asked the tenant something, so the PM's next "ok send the
+// vendor" would hit (none open) and bounce — the 2026-06-04 Reckon & Reckon
+// regression. A real dispatch always stages a vendor draft alongside the tenant
+// one, so vendor-only still catches every genuinely-dispatched WO. Prefix match
+// keeps it PMS-agnostic (vendor_appfolio, vendor_propertyware, …).
+async function alreadyDispatchedIssueIds() {
+	const isDispatch = (channel) => String(channel ?? '').startsWith('vendor_');
 	const [drafts, responses] = await Promise.all([
 		readJson(FILES.drafts, []),
 		readJson(FILES.response, [])
 	]);
 	const ids = new Set();
 	for (const d of drafts) {
-		if (d.issue_id && FOLLOWUP_CHANNELS.has(d.channel)) ids.add(d.issue_id);
+		if (d.issue_id && isDispatch(d.channel)) ids.add(d.issue_id);
 	}
 	for (const r of responses) {
-		if (r.issue_id && FOLLOWUP_CHANNELS.has(r.channel)) ids.add(r.issue_id);
+		if (r.issue_id && isDispatch(r.channel)) ids.add(r.issue_id);
 	}
 	return ids;
 }
@@ -286,10 +295,11 @@ export async function clearWorkspaceLocalState(workspace_label) {
 // likely replying to.
 //
 // Filters by chat_guid so we only see candidates from THIS chat. Also
-// excludes issues that already have tenant/vendor drafts — once the chat
-// skill has acted on an issue, it shouldn't show up as a candidate again
+// excludes issues we've already DISPATCHED (a vendor draft exists) — once the
+// chat skill has acted on an issue, it shouldn't show up as a candidate again
 // (otherwise a later "yes" gets ambiguous between the new send and the
-// already-handled one).
+// already-handled one). A triage tenant draft does NOT exclude — see
+// alreadyDispatchedIssueIds.
 //
 // Work-order lifecycle states that mean "no longer an open candidate the PM
 // could be replying to". Mirrors the issues_v2 status enum written by
@@ -337,9 +347,9 @@ export async function recentSentForChat({
 	sessionSendBodies = null
 } = {}) {
 	if (!chat_guid) return [];
-	const [all, drafted] = await Promise.all([
+	const [all, dispatched] = await Promise.all([
 		readJson(FILES.sent, []),
-		alreadyDraftedFollowupIds()
+		alreadyDispatchedIssueIds()
 	]);
 	const cutoff = Date.now() - withinMs;
 	const matches = all.filter((row) => {
@@ -367,7 +377,7 @@ export async function recentSentForChat({
 		}
 		seen.get(key).bodies.push(row.body);
 	}
-	let open = [...seen.values()].filter((b) => !drafted.has(b.issue_id));
+	let open = [...seen.values()].filter((b) => !dispatched.has(b.issue_id));
 	// Drop work orders whose lifecycle has advanced past "open candidate". The PM
 	// has already responded to these (we dispatched, they self-handled, we're
 	// triaging, etc.), so a fresh "yes" can't be approving them — leaving them in

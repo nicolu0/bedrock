@@ -151,6 +151,23 @@ const VENDORS_TWO_LUIS = [
 	{ id: 'ven-luis-r', name: 'Luis Ramos' }
 ];
 
+// ── GreenOak 2026-06-04 session fixture (text_tenant triage + dispatch-after-triage)
+// We texted Brooke "Should I send Reckon & Reckon Plumbing?" for a clogged sink;
+// she asked us to get more info from the tenant (dishwasher vs sink? + photos),
+// then later approved the dispatch. Base status 'awaiting_pm' (open); the
+// dispatch-after-triage scenario overrides it to 'triaging' via the supabase mock.
+const ISSUE_SINK = {
+	id: 'iss-sink-greenoak-050',
+	workspace_id: TEST_WS,
+	property: { name: '829 Bunker Hill' },
+	unit: { name: '829 Bunker Hill' },
+	tenant: { name: 'Diego Reyes' },
+	vendor: { name: 'Reckon & Reckon Plumbing' },
+	name: 'clogged kitchen sink drain',
+	description: 'tenant reports the kitchen sink drain is clogged',
+	status: 'awaiting_pm'
+};
+
 // Helper: build a sent-log bundle for the test chat referring to one issue.
 // Line 1 = unit.name verbatim (canonical address from the normalized units table).
 function sentBundle(issue, { ago_min = 5 } = {}) {
@@ -302,10 +319,10 @@ export const scenarios = [
 		expected: {
 			// Confirmation now also logs an observation of the dispatch decision.
 			// Everything drafts (ack included), so nothing hits the outbox.
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'write_memory'],
 			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
-			drafts_include: ['Anna', 'Mario', 'kitchen faucet leaking'],
+			drafts_include: ['Mario', 'kitchen faucet leaking'],
 			outbox_count: 0
 		}
 	},
@@ -330,7 +347,7 @@ export const scenarios = [
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
 		expected: {
 			tool_calls_set_includes: ['send_text'],
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor'],
 			drafts_count: 1,
 			outbox_count: 0,
 			judge: {
@@ -355,7 +372,7 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'go ahead with the faucet' },
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'update_issue'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'update_issue'],
 			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
 			drafts_include: ['Mario'],
@@ -375,11 +392,11 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'no send Luigi instead' },
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'write_memory'],
 			// Everything drafts now (ack+question included), so nothing is live.
 			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
-			drafts_include: ['Anna', 'Luigi', 'kitchen faucet leaking'],
+			drafts_include: ['Luigi', 'kitchen faucet leaking'],
 			outbox_count: 0
 		}
 	},
@@ -396,11 +413,11 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'send Yonic' },
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'write_memory'],
 			// Everything drafts now (ack+question included), so nothing is live.
 			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
-			drafts_include: ['Anna', 'Yonic', 'kitchen faucet leaking'],
+			drafts_include: ['Yonic', 'kitchen faucet leaking'],
 			outbox_count: 0
 		}
 	},
@@ -434,10 +451,10 @@ export const scenarios = [
 			text: 'yes go ahead\nwait\nactually send Luigi instead of Mario'
 		},
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'write_memory'],
 			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
-			drafts_include: ['Anna', 'Luigi', 'kitchen faucet leaking'],
+			drafts_include: ['Luigi', 'kitchen faucet leaking'],
 			drafts_excludes: ['sent this to Mario'],
 			outbox_count: 0
 		}
@@ -468,7 +485,7 @@ export const scenarios = [
 			// Dispatch already happened on the override turn (no re-dispatch). Record
 			// the reason AND give a brief natural ack of the answer (option-2 reply).
 			tool_calls_set_includes: ['write_memory', 'send_text'],
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -514,7 +531,7 @@ export const scenarios = [
 			// Record the reason; reply with a brief ack. Must NOT clarify or dispatch
 			// the unrelated open WOs.
 			tool_calls_set_includes: ['write_memory', 'send_text'],
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -546,7 +563,7 @@ export const scenarios = [
 			text: 'send Luigi instead'
 		},
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'write_memory'],
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
 			drafts_include: ['Luigi'],
 			// The bug: ack said "sending Luigi". Any of these in the ack = regression.
@@ -571,7 +588,7 @@ export const scenarios = [
 		// finds nothing; the reply says it's not on file. No dispatch, no invented code.
 		expected: {
 			tool_calls_set_includes: ['send_text'],
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor', 'update_issue'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -589,7 +606,7 @@ export const scenarios = [
 		// A bare "ok" out of nowhere is the genuinely-ambiguous edge: a brief reply
 		// ("all good?") is fine, and so is staying quiet. Hard line: no dispatch.
 		expected: {
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor', 'update_issue'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -609,7 +626,7 @@ export const scenarios = [
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yep send Mario' },
 		expected: {
 			// Confirming our suggested vendor still logs the dispatch decision.
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'write_memory'],
 			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
 		}
@@ -624,7 +641,7 @@ export const scenarios = [
 		// ghost: reply and surface the gap. No dispatch.
 		expected: {
 			tool_calls_set_includes: ['send_text'],
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor', 'update_issue'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -657,7 +674,7 @@ export const scenarios = [
 		// the faucet WO via update_issue). 2026-05-18 guard still holds: outbox empty,
 		// and the reply must NOT be the robotic "No action taken."
 		expected: {
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -692,7 +709,7 @@ export const scenarios = [
 		// Isolation test: the only send is in a DIFFERENT (prod) chat, so this chat has
 		// nothing pending. Reply must surface that and must NOT touch the prod WO.
 		expected: {
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor', 'update_issue'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor', 'update_issue'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -727,7 +744,7 @@ export const scenarios = [
 		},
 		expected: {
 			tool_args: { update_issue: { status: 'pm_handling' } },
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -753,7 +770,7 @@ export const scenarios = [
 		},
 		expected: {
 			tool_args: { update_issue: { status: 'triaging' } },
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -782,7 +799,7 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'Yes, please' },
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'update_issue'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'update_issue'],
 			tool_args: { update_issue: { status: 'dispatched' } },
 			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
@@ -816,7 +833,7 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'Yes, please' },
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor'],
 			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
 			judge: {
@@ -847,7 +864,7 @@ export const scenarios = [
 			text: 'ok go ahead and send Cross Appliance'
 		},
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'update_issue'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'update_issue'],
 			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
 			judge: {
@@ -864,8 +881,8 @@ export const scenarios = [
 	//   "to Osalpa Electric."  → legal suffix stripped (not "...Electric, INC.")
 	//   "to Yonic."            → individual collapsed to first name
 	//   "to Luis Herrera."     → first-name collision → full name kept
-	//   "Hi Cecilia,"          → tenant greeting drops surname
-	//   "Hi Andrea,"           → tenant greeting drops middle initial + surname
+	// (The tenant draft no longer carries a "Hi {name}," greeting, so the vendor
+	// short-name is now asserted via the dispatch line "I sent this to {vendor}.")
 
 	{
 		name: 'chat voice: legal name + Title-cased issue → suffix stripped + issue lowercased',
@@ -877,11 +894,11 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor'],
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
-			// tenant draft greets by first name + names the suffix-stripped vendor;
+			// tenant dispatch line names the suffix-stripped vendor;
 			// vendor draft lowercases the issue.
-			drafts_include: ['Hi Cecilia,', 'to Osalpa Electric.', 'for dead outlets after spark'],
+			drafts_include: ['to Osalpa Electric.', 'for dead outlets after spark'],
 			outbox_count: 0
 		}
 	},
@@ -899,10 +916,10 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor'],
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
-			// "Andrea M. Fesi" → greeting drops the middle initial + surname.
-			drafts_include: ['Hi Andrea,', 'to Yonic.'],
+			// individual vendor collapses to first name in the dispatch line.
+			drafts_include: ['to Yonic.'],
 			outbox_count: 0
 		}
 	},
@@ -917,11 +934,110 @@ export const scenarios = [
 		},
 		ctx: { chat_guid: TEST_CHAT, workspace_label: 'test', text: 'yes' },
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor'],
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
 			// must NOT collapse to bare "Luis" — the trailing "." after "Herrera" proves it.
 			drafts_include: ['to Luis Herrera.'],
 			outbox_count: 0
+		}
+	},
+
+	// ─── GreenOak 2026-06-04 session — the two text_tenant bugs ─────────────
+	// Bug 1: PM asks us to get more info from the tenant (clarify dishwasher vs
+	// kitchen sink, ask for photos). The old agent fired a dispatch ack ("got it")
+	// and never messaged the tenant. It must TRIAGE — text_tenant with a free-form
+	// question to the tenant — and NOT dispatch a vendor.
+	{
+		name: 'chat: GreenOak triage redirect ("clarify + ask for photos") → text_tenant question, no dispatch',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_SINK, { ago_min: 5 }),
+			supabase: { [ISSUE_SINK.id]: ISSUE_SINK }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: "Let's get more information. Also, my translate says it's the dishwasher not the kitchen sink can you clarify? Also ask for photos"
+		},
+		expected: {
+			// The fix: ack the PM (send_text — required, they asked us to do something)
+			// AND message the tenant (text_tenant), do NOT dispatch. drafts_channels
+			// reads only the direct writes (the tenant triage draft), a stable check
+			// that we messaged the tenant and staged no vendor draft.
+			tool_calls_set_includes: ['send_text', 'text_tenant'],
+			tool_calls_excludes: ['draft_vendor'],
+			drafts_channels: ['tenant_appfolio'],
+			judge: {
+				target: 'drafts',
+				criteria:
+					'The output contains a message addressed to the TENANT that: (a) opens by referencing the issue they reported (e.g. starts with "For the kitchen sink / clogged sink you reported, …"), (b) asks them to clarify whether the problem is the dishwasher or the kitchen sink, and (c) asks them to send photos. A separate brief acknowledgment to the property manager (e.g. "got it, i\'ll ask them") may ALSO be present and is perfectly fine — grade ONLY the tenant-facing message, not the PM ack.'
+			}
+		}
+	},
+
+	// Bug 2 (continuation): after we triaged the tenant — status moved to 'triaging'
+	// and a tenant_appfolio TRIAGE draft was staged — Brooke said "ok send reckon
+	// and reckon". The old agent bounced ("not sure what you're referring to")
+	// because the WO had fallen off the open list: 'triaging' was treated as
+	// resolved AND the triage tenant draft tripped the already-dispatched filter.
+	// Both are fixed now (triaging stays open; only a vendor draft marks dispatch),
+	// so the WO is still a candidate and this DISPATCHES.
+	{
+		name: 'chat: GreenOak dispatch after triage ("ok send reckon and reckon") → dispatch, not "not sure"',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_SINK, { ago_min: 20 }),
+			supabase: { [ISSUE_SINK.id]: { ...ISSUE_SINK, status: 'triaging' } },
+			// The triage question staged last turn. A tenant_appfolio draft must NOT
+			// evict the WO from the candidate list — only a vendor dispatch draft does.
+			drafts: [
+				{
+					id: 'drf-sink-triage',
+					trigger: 'groupchat_reply',
+					channel: 'tenant_appfolio',
+					pms: 'appfolio',
+					triage: true,
+					issue_id: ISSUE_SINK.id,
+					workspace_id: TEST_WS,
+					workspace_label: 'test',
+					to: ISSUE_SINK.tenant.name,
+					messages: [
+						{
+							body: 'For the clogged sink you reported, is it the dishwasher or the kitchen sink? Could you send a few photos?\n\nBest,\nJose'
+						}
+					]
+				}
+			]
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: 'Ok please send reckon and reckon',
+			history: [
+				{
+					role: 'assistant',
+					content:
+						'829 Bunker Hill\nThe kitchen sink drain is clogged.\n\nShould I send Reckon & Reckon Plumbing?'
+				},
+				{
+					role: 'user',
+					content:
+						"Let's get more information. Also, my translate says it's the dishwasher not the kitchen sink can you clarify? Also ask for photos"
+				},
+				{ role: 'assistant', content: "got it, i'll ask the tenant to clarify and send photos" }
+			]
+		},
+		expected: {
+			// The fix: the triaged WO is still a candidate, so this dispatches rather
+			// than bouncing with "not sure what you're referring to". The dispatch
+			// tool calls (text_tenant + draft_vendor + update_issue:dispatched) ARE the
+			// proof it didn't bounce — no judge needed (judge can't see direct drafts).
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'update_issue'],
+			tool_args: { update_issue: { status: 'dispatched' } },
+			// New this turn: PM ack (staged) + tenant dispatch notice + vendor draft.
+			drafts_count: 3,
+			// The dispatch names the approved vendor in the tenant/vendor drafts.
+			drafts_include: ['Reckon & Reckon Plumbing']
 		}
 	},
 
@@ -939,7 +1055,7 @@ export const scenarios = [
 		expected: {
 			// Record the preference AND give a brief ack (option-2). No dispatch.
 			tool_calls_set_includes: ['write_memory', 'send_text'],
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -961,7 +1077,7 @@ export const scenarios = [
 		expected: {
 			// Record the per-property quirk AND give a brief ack (option-2). No dispatch.
 			tool_calls_set_includes: ['write_memory', 'send_text'],
-			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			tool_calls_excludes: ['text_tenant', 'draft_vendor'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',
@@ -987,7 +1103,7 @@ export const scenarios = [
 			text: 'yes go ahead. and just so you know we always use Yonic for plumbing here.'
 		},
 		expected: {
-			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			tool_calls_set_includes: ['send_text', 'text_tenant', 'draft_vendor', 'write_memory'],
 			drafts_count: 3,
 			drafts_channels: ['tenant_appfolio', 'vendor_appfolio']
 		}
@@ -1194,7 +1310,7 @@ export const scenarios = [
 			tool_calls_excludes: [
 				'recall_beliefs',
 				'recall_observations',
-				'draft_tenant',
+				'text_tenant',
 				'draft_vendor'
 			],
 			outbox_count: 0,

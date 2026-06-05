@@ -1,13 +1,25 @@
-// appfolio_text_tenant — send a free-form text to the tenant on a work order.
+// text_tenant — message the tenant on a work order. Two modes, chosen by whether
+// `body` is present:
 //
-// The upgrade over draft_tenant: the agent writes the message body itself, so it
-// can ask triage questions (request photos, clarify the issue, get a model
-// number) instead of being stuck with one hardcoded "a vendor is coming"
-// template. The tool still resolves the recipient + (when a vendor is named) the
-// vendor's phone, so the agent never has to know or guess a number.
+//   • TRIAGE (pass `body`): the agent writes a free-form question to the tenant
+//     to triage the issue — ask for a photo, a model number, clarify the
+//     problem. This is the new capability: before this the agent physically
+//     could not put a question in front of the tenant. The body should name the
+//     issue for context ("For the garbage disposal you reported, …").
 //
-// GATING: despite the "Send" framing the agent sees, this still writes a draft
-// row (channel='tenant_appfolio') for human review — never auto-sends. The
+//   • DISPATCH (omit `body`): the templated "a vendor is coming" notification —
+//     unchanged from draft_tenant. Resolves the vendor's phone and tells the
+//     tenant to expect a call. Pass `vendor_name` to override the issue's vendor.
+//
+// Either way the message is formal and signed "Best, Jose" — no "Hi {name},"
+// greeting (product decision).
+//
+// PMS-AGNOSTIC: the draft channel is tenant_<pms> via pmsFor() (tenant_appfolio
+// today). Plug a workspace into another PMS by setting its `pms` in
+// core/workspaces.mjs — no tool change.
+//
+// GATING: despite the "send" framing the agent sees, this always writes a draft
+// for human review — it never sends to the PMS / tenant directly. The
 // always-draft safety lives at the function level here, not in the prompt.
 
 import {
@@ -16,33 +28,39 @@ import {
 	fetchWorkspaceVendors,
 	formatPhone
 } from '../core/supabase.mjs';
-import { shortenVendorName, firstName } from '../core/names.mjs';
+import { pmsFor } from '../core/workspaces.mjs';
+import { shortenVendorName } from '../core/names.mjs';
 import * as db from '../state/helpers.mjs';
 
-// Keep the formal tenant wrapper on the tool side (greeting + signature) so the
-// agent only writes the substance and tenant comms stay uniform. A vendor
-// contact line is appended only when a vendor is named (and has a phone on file
-// — no placeholder leaks).
-function renderTenantBody({ tenant_name, body, vendor_name, vendor_phone }) {
-	const lines = [`Hi ${tenant_name},`, '', body.trim()];
-	if (vendor_name) {
-		const at = vendor_phone ? ` at ${vendor_phone}` : '';
-		lines.push('', `${vendor_name} can be reached${at}.`);
-	}
-	lines.push('', 'Best,', 'Jose');
-	return lines.join('\n');
+// Formal tenant signature, kept tool-side so tenant comms stay uniform and the
+// agent only ever writes the substance. No greeting line.
+function sign(bodyText) {
+	return `${bodyText.trim()}\n\nBest,\nJose`;
+}
+
+// The dispatch notification — same wording as the old draft_tenant, minus the
+// greeting. Drops the phone clause if none is on file (no placeholder leak).
+function renderDispatchBody({ vendor_name, vendor_phone }) {
+	const at = vendor_phone ? ` at ${vendor_phone}` : '';
+	return sign(
+		`I sent this to ${vendor_name}. Please expect a call from them${at}. They will schedule with you.`
+	);
 }
 
 export const textTenant = {
-	name: 'appfolio_text_tenant',
+	name: 'text_tenant',
 	description:
-		'Send a free-form text to the tenant on a work order. Use it to ask the ' +
-		'tenant questions during triage (request photos, clarify the issue, get a ' +
-		'model number) OR to notify them a vendor was dispatched. You write the ' +
-		'message body in your own words; the greeting ("Hi {name},") and signature ' +
-		'("Best, Jose") are added for you, so write only the substance. Pass ' +
-		'vendor_name on a dispatch notification to append the vendor\'s phone — ' +
-		'never hand-type a phone number. Recipient is always the tenant on the issue.',
+		'Message the tenant on a work order. TWO uses, picked by whether you pass `body`:\n' +
+		'(1) Triage question — pass `body` to ask the tenant something in your own words ' +
+		'(request a photo, a model number, clarify the problem). Name the issue for ' +
+		'context, e.g. "For the broken garbage disposal you reported, could you send a ' +
+		'photo of the unit underneath?".\n' +
+		'(2) Vendor-dispatch notification — OMIT `body` and the tool sends the standard ' +
+		'"a vendor is coming, expect a call at {phone}" message; pass `vendor_name` only to ' +
+		'override the vendor on the issue.\n' +
+		'The "Best, Jose" signature is added for you — write only the substance, formally ' +
+		'(this goes to the tenant, not the PM). Recipient is always the tenant on the issue. ' +
+		'Always staged as a draft for human review — never auto-sent.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -53,51 +71,73 @@ export const textTenant = {
 			body: {
 				type: 'string',
 				description:
-					'The message to the tenant, in your own words — the substance only. Do NOT include a greeting or sign-off; those are added for you. Keep it formal (this goes to the tenant, not the PM).'
+					'Triage mode. The question to the tenant, in your own words — the substance only, no greeting or sign-off. ALWAYS open by naming the issue they reported so they know which request it is about — start with "For the {issue} you reported, …", then ask. Omit this to send the vendor-dispatch notification instead.'
 			},
 			vendor_name: {
 				type: 'string',
 				description:
-					'Optional. Pass only when notifying the tenant a vendor was dispatched. The tool resolves that vendor\'s phone and appends a contact line. Omit it for triage questions.'
+					'Dispatch mode only (used when `body` is omitted). The vendor to name; the tool resolves their phone. Omit to fall back to the vendor on the issue. Ignored when `body` is set.'
 			}
 		},
-		required: ['issue_id', 'body']
+		required: ['issue_id']
 	},
 	async run({ issue_id, body, vendor_name }, ctx) {
 		const issue = await fetchIssueById(issue_id);
 		if (!issue) return { ok: false, error: `issue not found: ${issue_id}` };
 		if (!issue.tenant?.name) return { ok: false, error: `issue ${issue_id} has no tenant on file` };
-		if (!body || !body.trim()) return { ok: false, error: 'body is required' };
 
-		// Resolve the vendor's phone only when a vendor is named. An override that
-		// names the vendor already on the issue → use the joined row; a genuine
-		// override → look it up by name so we don't quote the wrong number.
-		let vendorDisplay = null;
-		let vendorPhone = null;
-		const override = (vendor_name ?? '').trim();
-		if (override) {
+		const triage = Boolean(body && body.trim());
+		let renderedBody;
+
+		if (triage) {
+			// Free-form triage question — the agent wrote the substance.
+			renderedBody = sign(body);
+		} else {
+			// Dispatch notification — templated, resolves the vendor's phone. Same
+			// behavior as the old draft_tenant: vendor_name overrides the issue's
+			// vendor; without it we fall back to the vendor on the issue row.
+			const override = (vendor_name ?? '').trim();
+			const vendorName = override || issue.vendor?.name;
+			if (!vendorName)
+				return {
+					ok: false,
+					error: `issue ${issue_id}: pass a body (triage question) or a vendor (none on file, none passed via vendor_name)`
+				};
+
+			// No override (or it names the vendor already on the issue) → use the
+			// joined row; a genuine override → look it up so we don't quote the
+			// wrong number.
+			let vendorPhone = null;
 			const sameAsIssue =
 				issue.vendor?.name && override.toLowerCase() === issue.vendor.name.toLowerCase();
-			if (sameAsIssue) {
+			if (!override || sameAsIssue) {
 				vendorPhone = issue.vendor?.phone ?? null;
 			} else {
 				const match = await fetchVendorByName(issue.workspace_id, override);
 				vendorPhone = match?.phone ?? null;
 			}
+
 			const roster = await fetchWorkspaceVendors(issue.workspace_id);
-			vendorDisplay = shortenVendorName(override, roster);
+			renderedBody = renderDispatchBody({
+				vendor_name: shortenVendorName(vendorName, roster),
+				vendor_phone: formatPhone(vendorPhone)
+			});
 		}
 
-		const renderedBody = renderTenantBody({
-			tenant_name: firstName(issue.tenant.name),
-			body,
-			vendor_name: vendorDisplay,
-			vendor_phone: formatPhone(vendorPhone)
-		});
+		// Resolve the workspace's PMS so the draft is tagged for the right send
+		// surface. channel stays tenant_appfolio for AppFolio workspaces (back-compat
+		// with the followup/runner consumers); flips automatically for any other PMS.
+		const pms = pmsFor(issue.workspace_id);
+		const channel = `tenant_${pms}`;
 
 		const draft = await db.createDraft({
 			trigger: 'groupchat_reply',
-			channel: 'tenant_appfolio',
+			channel,
+			pms,
+			// A triage question is mid-conversation info-gathering, NOT a dispatch —
+			// the human reviewer (and candidate-list filtering) treats it differently
+			// from the "a vendor is coming" notice. See alreadyDispatchedIssueIds.
+			triage,
 			workspace_id: issue.workspace_id,
 			workspace_label: ctx.workspace_label ?? null,
 			issue_id: issue.id,
@@ -111,6 +151,6 @@ export const textTenant = {
 		ctx.draftIds = ctx.draftIds ?? [];
 		ctx.draftIds.push(draft.id);
 
-		return { ok: true, draft_id: draft.id, channel: 'tenant_appfolio' };
+		return { ok: true, draft_id: draft.id, channel, mode: triage ? 'triage' : 'dispatch' };
 	}
 };
