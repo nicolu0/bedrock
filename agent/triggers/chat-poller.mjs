@@ -191,6 +191,15 @@ export function appleDateToISO(date) {
 	return new Date(ms).toISOString();
 }
 
+// Tapbacks (👍 ❤️ "Liked"/"Le gustó"…) land as their own message rows carrying
+// an associated_message_type in the reaction range: 2000–2005 add, 3000–3005
+// remove. We never fire a turn on a reaction — text-replying to a 👍 is a loop,
+// and the locale-synthesized string ("Le gustó") slips past English-only string
+// matching anyway. Keying on the column catches every locale.
+function isTapbackRow(row) {
+	return Number(row.associated_message_type) >= 2000;
+}
+
 function fetchLatestRowId(log) {
 	try {
 		const row = getDb().prepare('SELECT COALESCE(MAX(ROWID),0) AS max_rowid FROM message').get();
@@ -219,6 +228,7 @@ function fetchNewMessages(afterRowId, groupchatGuids, log) {
 			  m.date,
 			  m.is_from_me,
 			  m.service,
+			  m.associated_message_type,
 			  COALESCE(m.cache_has_attachments, 0) AS has_attachments,
 			  h.id AS handle,
 			  c.guid AS chat_guid,
@@ -454,6 +464,9 @@ export async function startChatPoller({ helper, chatGuidIndex, log, onUserMessag
 		}
 		const text = liveBodies.join('\n');
 
+		// Did any bubble actually ship live this turn? Drives the 'replied' action
+		// label (live acks have no draft, so without this they'd log as no_match).
+		let liveSent = false;
 		const onEvent = async (ev) => {
 			if (ev.type === 'read') {
 				await markRead(chatGuid);
@@ -462,7 +475,10 @@ export async function startChatPoller({ helper, chatGuidIndex, log, onUserMessag
 				await sleep(typingDwellMs(ev.content));
 				await setTyping(chatGuid, false);
 				const ok = await sendPart(chatGuid, ev.content);
-				if (ok) log(`→ ${ws.label}: "${ev.content}"`);
+				if (ok) {
+					liveSent = true;
+					log(`→ ${ws.label}: "${ev.content}"`);
+				}
 			} else if (ev.type === 'tool_call') {
 				const args = JSON.stringify(ev.args ?? {});
 				log(`  · ${ev.name}(${args.length > 80 ? args.slice(0, 77) + '...' : args})`);
@@ -484,12 +500,17 @@ export async function startChatPoller({ helper, chatGuidIndex, log, onUserMessag
 			workspace_id: ws.workspace_id,
 			workspace_label: ws.label,
 			onEvent,
-			// Draft, never live: the agent stages everything it would say to the PM
-			// (acks, the "why" follow-up, clarifying questions) as drafts for the
-			// human to review and send. Nothing is auto-texted to the PM. draft_tenant
-			// /draft_vendor already write drafts; send_text now drafts too via this mode.
-			sendMode: 'draft',
-			isPmHandle: false,
+			// Reactive autosend gate (per-workspace, see workspaces.mjs). When the
+			// workspace is cleared, the conversational send_text (acks + clarifying
+			// questions to the PM) goes out LIVE; otherwise it stages a draft, exactly
+			// as before. This gates the REACTIVE path ONLY — draft_tenant/draft_vendor
+			// and the intake WO summary are never auto-sent by it.
+			sendMode: ws.reactiveAutosend ? 'live' : 'draft',
+			// isPmHandle arms send_text's last-ditch live-send guard. Keep it armed
+			// (true) on draft-gated workspaces so even an accidental live sendMode
+			// refuses; clear it (false) on a cleared workspace to authorize the live
+			// send into the groupchat.
+			isPmHandle: !ws.reactiveAutosend,
 			session_id,
 			source_message_id: lastRow.guid ?? null,
 			liveBodies
@@ -561,7 +582,9 @@ export async function startChatPoller({ helper, chatGuidIndex, log, onUserMessag
 						? 'clarify'
 						: calledWriteMemory
 							? 'learned'
-							: 'no_match';
+							: liveSent
+								? 'replied'
+								: 'no_match';
 
 		// Patch the action onto the burst's final row — the message that closed the
 		// thought and whose guid this turn carried. Earlier burst rows stay plain
@@ -695,6 +718,14 @@ export async function startChatPoller({ helper, chatGuidIndex, log, onUserMessag
 				// tenant/owner replies for now (correlator design only triggers
 				// on PM).
 				if (!ws.pm_handles.has(handle)) continue;
+				// Ignore tapbacks/reactions entirely on the turn path: text-replying to
+				// a 👍 is a loop, and the locale-synthesized string slips past English
+				// matching. The sessionizer above already ingested the row so the
+				// transcript stays faithful; we just skip the turn, the dots, and the UI.
+				if (isTapbackRow(row)) {
+					log(`◉ ${ws.label} ← ${shortHandle(handle)}: (tapback, ignored)`);
+					continue;
+				}
 				// Record + read-receipt immediately (per row), then debounce the
 				// turn: the settle buffer coalesces a rapid burst into one runTurn.
 				try {

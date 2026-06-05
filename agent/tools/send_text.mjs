@@ -15,12 +15,20 @@
 export const sendText = {
 	name: 'send_text',
 	description:
-		'Send one customer-visible message. Each call becomes one bubble. Newlines INSIDE the content stay within that bubble — use them to format multi-line bubbles when the skill calls for it. To send several separate bubbles in a row, make multiple send_text calls. Pass draft:true to stage this message for human review instead of sending it live — use this for clarifying questions the human should approve before the PM sees them (it routes to the drafts queue exactly like a new-issue summary).',
+		'Send one customer-visible message. Each call becomes one bubble. Newlines INSIDE the content stay within that bubble — use them to format multi-line bubbles when the skill calls for it. To send several separate bubbles in a row, make multiple send_text calls. By default a message is delivered; pass draft:true only when you have a specific reason to stage it for human review instead.',
 	parameters: {
 		type: 'object',
 		properties: {
-			content: { type: 'string', description: 'The text body for this one bubble. May contain newlines for multi-line formatting.' },
-			draft: { type: 'boolean', description: 'When true, stage this message as a draft for human review instead of sending it live, regardless of the turn default. Use for clarifying questions to the PM.' }
+			content: {
+				type: 'string',
+				description:
+					'The text body for this one bubble. May contain newlines for multi-line formatting.'
+			},
+			draft: {
+				type: 'boolean',
+				description:
+					'When true, stage this message as a draft for human review instead of sending it live, regardless of the turn default. Off by default — only set it when you have a specific reason to gate a message.'
+			}
 		},
 		required: ['content']
 	},

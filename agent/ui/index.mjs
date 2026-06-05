@@ -752,6 +752,13 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				const byIssue = new Map();
 				for (const r of responses) {
 					if (!r.issue_id) continue;
+					// Only new_issue turns carry a top-level issue_id, so they're the only
+					// turns this outcome gets folded into. Scope the match to the WO
+					// summary's own response (trigger 'new_issue') — otherwise a later
+					// AppFolio tenant/vendor dispatch send for the SAME issue (latest by
+					// timestamp) would overwrite it and the turn's preview/chip would show
+					// the tenant text instead of the work-order summary.
+					if (r.trigger !== 'new_issue') continue;
 					const prev = byIssue.get(r.issue_id);
 					if (!prev || new Date(r.timestamp) >= new Date(prev.timestamp)) byIssue.set(r.issue_id, r);
 				}
@@ -772,6 +779,44 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 							notes: r.notes ?? ''
 						}
 					};
+				});
+
+				// Attach `outbound` — the ordered list of messages the agent produced this
+				// turn, so the Turns timeline can render each as its own sent bubble. Text
+				// replies (send_text) carry their body in the call args; AppFolio tenant /
+				// vendor dispatches (draft_tenant / draft_vendor) do NOT — the tool returns
+				// only a draft_id, and the body lives in the response-log (once sent) or the
+				// draft store (while pending). Join by draft_id. Prefer the agent's own
+				// original text so the bubble shows what it drafted "out of the loop".
+				const drafts = await db.loadDrafts();
+				const respByDraft = new Map();
+				for (const r of responses) if (r.draft_id) respByDraft.set(r.draft_id, r);
+				const draftById = new Map();
+				for (const d of drafts) if (d.id) draftById.set(d.id, d);
+				const bodyForDraft = (draftId) => {
+					const r = respByDraft.get(draftId);
+					if (r) return r.messages_original?.[0] ?? r.messages_final?.[0] ?? null;
+					const d = draftById.get(draftId);
+					if (d) return d.original_messages?.[0]?.body ?? d.messages?.[0]?.body ?? null;
+					return null;
+				};
+				items = items.map((t) => {
+					const steps = Array.isArray(t.steps) ? t.steps : [];
+					const outbound = [];
+					for (const s of steps) {
+						for (const c of s.tool_calls ?? []) {
+							if (c.name === 'send_text') {
+								const text = c.args?.content ?? c.args?.body;
+								if (text) outbound.push({ channel: 'text', text: String(text) });
+							} else if (c.name === 'draft_tenant' || c.name === 'draft_vendor') {
+								const channel = c.result?.channel ?? (c.name === 'draft_tenant' ? 'tenant_appfolio' : 'vendor_appfolio');
+								const draftId = c.result?.draft_id ?? null;
+								const text = draftId ? bodyForDraft(draftId) : null;
+								if (text) outbound.push({ channel, text: String(text), draft_id: draftId });
+							}
+						}
+					}
+					return outbound.length ? { ...t, outbound } : t;
 				});
 				return json(res, 200, items);
 			}
@@ -936,10 +981,15 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 				const since = dayStart.getTime();
 				const recentSent = sent.filter((r) => new Date(r.sent_at).getTime() >= since);
 				const recent = responses.filter((r) => new Date(r.timestamp).getTime() >= since);
-				const sends = recent.filter((r) => r.action === 'send');
+				// Manual sends (no agent draft) are excluded from the agent-quality
+				// rate — they have no original to edit, so counting them as "clean"
+				// would inflate send-without-edit. They get their own counter instead.
+				const sends = recent.filter((r) => r.action === 'send' && !r.manual);
 				const cleanSends = sends.filter((r) => !r.edited);
+				const manualSent = recent.filter((r) => r.action === 'send' && r.manual).length;
 				const byChannel = {};
 				for (const r of recent) {
+					if (r.manual) continue;
 					const c = (byChannel[r.channel] ??= { send: 0, copy: 0, dismiss: 0, edited: 0 });
 					c[r.action] = (c[r.action] ?? 0) + 1;
 					if (r.edited) c.edited++;
@@ -950,6 +1000,7 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 					sent_total: recentSent.length,
 					responses_total: responses.length,
 					recent_responses: recent.length,
+					manual_sent: manualSent,
 					send_without_edit_rate: sends.length ? cleanSends.length / sends.length : null,
 					by_channel: byChannel
 				});
@@ -1006,6 +1057,58 @@ export async function startUi({ port = 7878, host = '127.0.0.1', sendIMessage, l
 					log
 				});
 				if (!result.ok) return text(res, 500, result.error);
+				return json(res, 200, { ok: true });
+			}
+
+			// Manual send: a message the operator types straight into the chat
+			// composer, with no agent draft behind it. Goes out the same dylib path
+			// as a draft send, but logs `manual: true` to both the sent-log and the
+			// response-log so it (a) shows in the live thread + sent count and (b) is
+			// distinguishable in KPIs/digests as an agent MISS — a message the agent
+			// should have drafted but didn't.
+			if (req.method === 'POST' && pathname === '/api/manual-send') {
+				const payload = await readBody(req);
+				const body = String(payload.body ?? '').trim();
+				if (!body) return text(res, 400, 'message body required');
+				const wsLabel = url.searchParams.get('workspace') || payload.workspace || 'prod';
+				const entry = Object.entries(WORKSPACES).find(([, w]) => w.label === wsLabel);
+				if (!entry) return text(res, 400, `unknown workspace: ${wsLabel}`);
+				const [workspace_id, w] = entry;
+				const chat_guid = process.env[w.chatEnv];
+				if (!chat_guid) return text(res, 400, `no chat configured for ${wsLabel}`);
+				if (!sendIMessage) return text(res, 500, 'sendIMessage not configured');
+				const result = await sendIMessage({ chatGuid: chat_guid, body });
+				if (!result?.ok) return text(res, 500, result?.error ?? 'send failed');
+				await db.appendSent({
+					message_guid: result.guid ?? null,
+					bundle_id: null,
+					part_index: 0,
+					issue_id: null,
+					channel: 'groupchat',
+					workspace_id,
+					workspace_label: wsLabel,
+					chat_guid,
+					body,
+					manual: true
+				});
+				await db.appendResponse({
+					draft_id: null,
+					issue_id: null,
+					channel: 'groupchat',
+					trigger: 'manual',
+					workspace_id,
+					workspace_label: wsLabel,
+					to: chat_guid,
+					to_participants: [],
+					action: 'send',
+					denial_reason: null,
+					messages_original: [],
+					messages_final: [body],
+					edited: false,
+					diffs: [null],
+					forced_send: false,
+					manual: true
+				});
 				return json(res, 200, { ok: true });
 			}
 

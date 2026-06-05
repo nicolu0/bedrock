@@ -14,6 +14,9 @@ export const WORKSPACES = {
 		label: 'test',
 		display: 'Test',
 		chatEnv: 'TEST_CHAT_GUID',
+		// Cleared for live reactive autosend (same as LAPM) so the test chat
+		// exercises the real live path, not the draft path.
+		reactiveAutosend: true,
 		pm_handles: ['andrew51@illinois.edu'],
 		pm_label: 'Test User'
 	},
@@ -44,6 +47,13 @@ export const WORKSPACES = {
 		// server.mjs spawns one per workspace; the UI routes per draft.workspace_id.
 		// LAPM keeps 9773 for back-compat with the original single-runner default.
 		appfolioRunnerPort: 9773,
+		// Reactive autosend: when true, the chat poller's conversational send_text
+		// (acks + clarifying questions back to the PM) goes out LIVE instead of
+		// staging a draft. Scoped to the REACTIVE path only — the intake WO summary
+		// and all customer-facing tenant/vendor messages stay drafts regardless.
+		// LAPM is the first workspace cleared for it; every other workspace stays
+		// draft-gated until explicitly flipped here.
+		reactiveAutosend: true,
 		pm_handles: ['+13106990643', '+13102663152'],
 		agent_handles: ['+19496566275', '+15109358199'],
 		pm_label: 'Jose'
@@ -127,6 +137,7 @@ export function buildChatGuidIndex(env = process.env) {
 		index.set(chat_guid, {
 			workspace_id,
 			label: w.label,
+			reactiveAutosend: Boolean(w.reactiveAutosend),
 			pm_handles: new Set((w.pm_handles ?? []).map(normalizeHandle))
 		});
 	}

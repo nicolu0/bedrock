@@ -293,14 +293,17 @@ export async function clearWorkspaceLocalState(workspace_label) {
 //
 // Work-order lifecycle states that mean "no longer an open candidate the PM
 // could be replying to". Mirrors the issues_v2 status enum written by
-// update_issue. `new` and `awaiting_pm` (and unknown) remain candidates.
-const RESOLVED_STATUSES = new Set([
-	'triaging',
-	'dispatched',
-	'scheduled',
-	'pm_handling',
-	'completed'
-]);
+// update_issue. `new`, `awaiting_pm`, and `triaging` (plus unknown) remain
+// candidates.
+//
+// `triaging` is deliberately NOT here: it's an actively in-flight state (we're
+// gathering info mid-conversation), not a closed one. Treating it as resolved
+// dropped a WO from the open list the instant the agent ack'd a "get more info"
+// reply — so the PM's very next "ok send the vendor" hit (none open) and got a
+// "not sure what you're referring to" bounce (2026-06-04 Reckon & Reckon bug).
+// Session-membership scoping already bounds candidates to this conversation, so
+// a triaging WO can't leak across sessions.
+const RESOLVED_STATUSES = new Set(['dispatched', 'scheduled', 'pm_handling', 'completed']);
 
 // Filter candidate bundles to those whose issue is still open. Reads
 // issues_v2.status per candidate (parallel). Best-effort: a missing status

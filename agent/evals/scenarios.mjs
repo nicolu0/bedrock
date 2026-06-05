@@ -460,7 +460,7 @@ export const scenarios = [
 				{ role: 'user', content: 'no send Luigi instead' },
 				{
 					role: 'assistant',
-					content: 'On it, sending Luigi. Any reason you prefer him over Yonic?'
+					content: 'on it. any reason you prefer Luigi over Yonic?'
 				}
 			]
 		},
@@ -475,6 +475,83 @@ export const scenarios = [
 				criteria:
 					'A brief reply that takes in the reason the PM gave. Both a plain "makes sense, thanks" and a restatement like "got it, Luigi for drains then" are fine. It must only NOT re-dispatch a vendor/tenant and NOT ask a clarifying question.'
 			}
+		}
+	},
+
+	{
+		// Regression (2026-06-03 prod): the drain-specialist WO was dispatched the
+		// turn before, so it had ALREADY left the open list. Jose's terse reason
+		// "Local plumber" (answering "any reason you prefer the drain specialist
+		// over Yonic?") then arrived with only UNRELATED WOs open (an AC and a
+		// light). The agent tried to map the reason onto the open list, matched
+		// neither, and drafted "not sure which one you mean, can you point me to the
+		// work order?" — losing the reason entirely. Recency must win: the reply
+		// answers the pending question → write_memory, no clarify, no dispatch of the
+		// unrelated open WOs. This is the harder cousin of "he's cheaper" above —
+		// terse answer AND a non-empty (but unrelated) open-WO list to distract.
+		name: 'chat: terse follow-up answer ("local plumber") with only unrelated WOs open → write_memory, no clarify',
+		skill: 'chat',
+		setup: {
+			sent_log: [
+				...sentBundle(ISSUE_AC, { ago_min: 660 }),
+				...sentBundle(ISSUE_LIGHT, { ago_min: 480 })
+			],
+			supabase: { [ISSUE_AC.id]: ISSUE_AC, [ISSUE_LIGHT.id]: ISSUE_LIGHT }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: 'local plumber',
+			history: [
+				{ role: 'user', content: 'send it to the drain specialist' },
+				{
+					role: 'assistant',
+					content: 'on it. any reason you prefer the drain specialist over Yonic?'
+				}
+			]
+		},
+		expected: {
+			// Record the reason; reply with a brief ack. Must NOT clarify or dispatch
+			// the unrelated open WOs.
+			tool_calls_set_includes: ['write_memory', 'send_text'],
+			tool_calls_excludes: ['draft_tenant', 'draft_vendor'],
+			outbox_count: 0,
+			judge: {
+				target: 'drafts',
+				criteria:
+					'A brief reply that takes in the reason the PM gave (they prefer the local plumber / drain specialist over Yonic). It must NOT ask which work order the PM means, must NOT say it cannot find the work order or ask to be pointed to it, and must NOT dispatch a vendor or tenant.'
+			}
+		}
+	},
+
+	{
+		// Regression (2026-06-03): vendor override must dispatch AND ask why, but the
+		// ack must be ACTION-NEUTRAL — never "sending X" / "dispatching X" / "going
+		// with X". The skill used to prescribe "on it, sending Luigi..." verbatim, so
+		// the model narrated an in-progress send before it was reported done (and the
+		// vendor message is still only a staged draft at that point). The exclude scans
+		// the ack bubble; the tenant template says "I sent this to <vendor>" (past
+		// tense, no "sending") and the vendor template "Please schedule..." — neither
+		// trips these substrings, so a hit means the ACK reintroduced the banned verb.
+		name: 'chat: vendor override ack is action-neutral (no "sending"/"dispatching" verb)',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_FAUCET),
+			supabase: { [ISSUE_FAUCET.id]: ISSUE_FAUCET }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			// We suggested Mario; PM overrides to Luigi → dispatch + ask why, verb-free.
+			text: 'send Luigi instead'
+		},
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'write_memory'],
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			drafts_include: ['Luigi'],
+			// The bug: ack said "sending Luigi". Any of these in the ack = regression.
+			drafts_excludes: ['sending', 'dispatching', 'going with'],
+			outbox_count: 0
 		}
 	},
 
@@ -684,8 +761,12 @@ export const scenarios = [
 				// deterministically via tool_args above. The judge's target is 'drafts'
 				// (ack text only; no tool args), so a "moves to triaging" clause here
 				// would ask it to confirm something it can't see → flaky fails.
+				// The ONLY thing the ack must not do is falsely claim a dispatch; a bare
+				// "got it"/"will do" is a fine acknowledgment (restating "photo + model
+				// number" is welcome but NOT required — demanding it false-failed a
+				// correct triage where the operational behavior, asserted above, was right).
 				criteria:
-					'A brief, natural acknowledgment that it will gather the requested info first — a photo plus the fridge model number — before doing anything (e.g. "will do, getting a photo"). It must NOT claim a vendor is being dispatched.'
+					'A brief, natural acknowledgment of the PM\'s request (e.g. "got it", "will do"). It must NOT claim a vendor or tenant is being dispatched. Restating the specific info to gather (a photo, the fridge model number) is fine but NOT required — a bare ack passes.'
 			}
 		}
 	},
@@ -710,10 +791,13 @@ export const scenarios = [
 
 	{
 		// Sim 2 — the incident replay. All four WOs are in the sent-log, but the
-		// three Jose already answered are resolved in issues_v2 (pm_handling /
-		// triaging). recentSentForChat filters them out, leaving laundry as the
-		// ONLY open candidate — so "Yes, please" dispatches it instead of asking
-		// "which one?". This is the exact bug from 2026-05-30.
+		// three Jose already answered are resolved in issues_v2 (pm_handling).
+		// recentSentForChat filters them out, leaving laundry as the ONLY open
+		// candidate — so "Yes, please" dispatches it instead of asking "which one?".
+		// This is the exact bug from 2026-05-30. NB: `triaging` is deliberately NOT
+		// a resolved status (an in-flight triage WO stays an open candidate — see the
+		// Reckon & Reckon regression below), so the answered three all use pm_handling
+		// here, not triaging.
 		name: 'chat wo_status: resolved WOs excluded → lone "Yes, please" dispatches, not clarifies',
 		skill: 'chat',
 		setup: {
@@ -726,7 +810,7 @@ export const scenarios = [
 			supabase: {
 				[ISSUE_DRYER.id]: { ...ISSUE_DRYER, status: 'pm_handling' },
 				[ISSUE_LIGHT.id]: { ...ISSUE_LIGHT, status: 'pm_handling' },
-				[ISSUE_FRIDGE.id]: { ...ISSUE_FRIDGE, status: 'triaging' },
+				[ISSUE_FRIDGE.id]: { ...ISSUE_FRIDGE, status: 'pm_handling' },
 				[ISSUE_LAUNDRY.id]: { ...ISSUE_LAUNDRY, status: 'awaiting_pm' }
 			}
 		},
@@ -739,6 +823,37 @@ export const scenarios = [
 				target: 'drafts',
 				criteria:
 					'An ack confirming dispatch of the laundry machine work order (e.g. "got it" / "on it") plus tenant and vendor dispatch drafts. It must NOT be a clarifying question asking which work order the PM meant.'
+			}
+		}
+	},
+
+	{
+		// Regression — the 2026-06-04 Reckon & Reckon bug. The agent texted "Should
+		// I send <vendor>?", the PM said "get more info first", the agent ack'd and
+		// (correctly) moved the WO to `triaging`. The PM then approved dispatch ("ok
+		// send the vendor") — but because `triaging` USED to be a resolved status,
+		// the WO had vanished from the open-WO list, so the agent bounced the reply
+		// with "not sure what you're referring to". A mid-triage WO is still the live
+		// thing the PM is replying to: it must stay an open candidate and dispatch.
+		name: 'chat wo_status: in-triage WO + "ok send the vendor" → dispatch, not "not sure what you mean"',
+		skill: 'chat',
+		setup: {
+			sent_log: sentBundle(ISSUE_FRIDGE, { ago_min: 18 }),
+			supabase: { [ISSUE_FRIDGE.id]: { ...ISSUE_FRIDGE, status: 'triaging' } }
+		},
+		ctx: {
+			chat_guid: TEST_CHAT,
+			workspace_label: 'test',
+			text: 'ok go ahead and send Cross Appliance'
+		},
+		expected: {
+			tool_calls_set_includes: ['send_text', 'draft_tenant', 'draft_vendor', 'update_issue'],
+			drafts_count: 3,
+			drafts_channels: ['tenant_appfolio', 'vendor_appfolio'],
+			judge: {
+				target: 'drafts',
+				criteria:
+					'An ack confirming dispatch of the refrigerator work order to the vendor (e.g. "got it" / "on it"), plus tenant and vendor dispatch drafts. It must NOT be a clarifying or confused reply like "not sure what you\'re referring to" or "which work order?".'
 			}
 		}
 	},

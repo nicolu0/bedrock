@@ -1836,6 +1836,14 @@
 			.chat-scroll { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 			.ide-chat { height: auto; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 			.ide-chat .chat-thread { height: auto; flex: 1 1 auto; min-height: 0; overflow-y: auto; max-width: 720px; width: 100%; margin: 0 auto; padding: 18px 18px 24px; }
+			/* manual composer: sits between the thread and the bottom bar */
+			.chat-composer { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 8px; padding: 10px 16px; max-width: 720px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+			.chat-composer textarea { flex: 1 1 auto; resize: none; background: #1c1917; border: 1px solid #33302d; border-radius: 10px; color: #fafaf9; font: inherit; font-size: 14px; line-height: 1.4; padding: 9px 12px; max-height: 160px; overflow-y: auto; }
+			.chat-composer textarea:focus { outline: none; border-color: #2a82f0; }
+			.chat-composer textarea::placeholder { color: #78716c; }
+			.chat-composer button { flex: 0 0 auto; background: #2a82f0; border: 0; color: #fff; font: inherit; font-size: 13px; font-weight: 600; border-radius: 9px; padding: 9px 16px; cursor: pointer; }
+			.chat-composer button:hover { background: #1d6ee2; }
+			.chat-composer button:disabled { opacity: .5; cursor: default; }
 			.chat-bottom { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px; border-top: 1px solid #292524; }
 			.chat-bottom .ws-tabs { margin-left: 0; }
 			.chat-bottom .mem-btn { margin-left: auto; display: flex; align-items: center; gap: 7px; background: #1c1917; border: 1px solid #292524; color: #a8a29e; border-radius: 7px; padding: 5px 11px; font: inherit; font-size: 12px; cursor: pointer; }
@@ -1879,6 +1887,7 @@
 			.turns-view .tl-time { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #78716c; }
 			.turns-view .tl-ev { font-size: 12.5px; }
 			.turns-view .tl-ev.new { color: #9db8ff; }
+			.turns-view .tl-ev.agent { color: #9db8ff; }
 			.turns-view .tl-ev.user { color: #c7a3ff; }
 			.turns-view .tl-ev.anon { color: #d9a366; }
 			.turns-view .tl-hd .stc { margin-left: auto; }
@@ -1887,6 +1896,15 @@
 			.turns-view .tl-ref .sub { color: #78716c; font-weight: 400; }
 			.turns-view .tl-prev { font-size: 12px; color: #a8a29e; font-style: italic; border-left: 2px solid #33302d; padding: 1px 0 1px 9px; margin: 6px 0 0; cursor: pointer; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 			.turns-view .tl-prev:hover { color: #d6d3d1; border-left-color: #1d6ee2; }
+			/* inbound = the PM/sender's own message, on its own dot (received bubble) */
+			.turns-view .tl-in { font-size: 13px; color: #d6d3d1; border-left: 2px solid #44403c; padding: 1px 0 1px 9px; margin: 6px 0 0; cursor: pointer; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+			.turns-view .tl-in:hover { color: #fafaf9; }
+			/* outbound = what the agent sent/drafted this turn — brighter, blue rail, ↗ marker */
+			.turns-view .tl-out { font-size: 12px; color: #cdd9f5; border-left: 2px solid #1d6ee2; padding: 1px 0 1px 9px; margin: 6px 0 0; cursor: pointer; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+			.turns-view .tl-out::before { content: '↗ '; color: #1d6ee2; font-weight: 600; }
+			.turns-view .tl-out:hover { color: #eef3ff; }
+			/* channel tag on an outbound bubble — marks AppFolio tenant/vendor dispatches */
+			.turns-view .tl-chan { display: inline-block; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #9db8ff; background: rgba(29, 110, 226, 0.16); border: 1px solid rgba(29, 110, 226, 0.4); border-radius: 4px; padding: 0 4px; margin-right: 6px; vertical-align: 1px; font-weight: 600; }
 			.turns-view .tl-steps { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 0; }
 			.turns-view .tl-steps .step { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: #a8a29e; display: flex; align-items: center; gap: 8px; }
 			.turns-view .tl-steps .step::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #44403c; flex: 0 0 auto; }
@@ -1949,6 +1967,13 @@
 					<div class="chat-scroll">
 						<section id="view-chat" class="chat-view ide-chat"><div id="chat-thread" class="chat-thread"></div></section>
 					</div>
+					<!-- Manual composer: type a message to send straight to the active
+					     workspace's chat when the agent didn't draft one. Logged as a
+					     manual send so it's tracked in KPIs + the daily digest. -->
+					<form class="chat-composer" id="chat-composer">
+						<textarea id="composer-input" rows="1" placeholder="Send a message manually…" aria-label="Send a message manually"></textarea>
+						<button type="submit" id="composer-send" title="Send (↵) — Shift+↵ for newline">Send</button>
+					</form>
 					<div class="chat-bottom">
 						<div class="ws-tabs" id="ws-tabs" role="tablist" aria-label="Workspace"></div>
 						<button class="mem-btn" id="open-memory">⟜ Memory graph<span class="ws-key">m</span></button>
@@ -2133,6 +2158,11 @@
 			let lastWorkspaceShortcut = '';
 			let lastWorkspaceShortcutAt = 0;
 			function handleWorkspaceShortcut(e) {
+				// Never hijack keystrokes destined for a text field — typing a digit
+				// in the composer or a draft textarea must insert the digit, not
+				// switch workspace (the beforeinput path would otherwise eat it).
+				const t = e.target;
+				if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
 				const idx = workspaceShortcutIndex(e);
 				if (idx < 0) return;
 				const keyId = `${idx}:${e.metaKey ? 'm' : ''}`;
@@ -3175,7 +3205,7 @@
 					// e.g. new_issue turns run before the chat session exists.
 					turnByReply = {}; turnByTrigger = {}; turnById = {}; turnsBySession = {}; newIssueByGuid = {};
 					try {
-						const tr = await fetch('/api/turns');
+						const tr = await fetch('/api/turns?workspace=' + sessionsWorkspace());
 						if (tr.ok) {
 							const norm = (s) => (s || '').trim();
 							for (const t of await tr.json()) {
@@ -3419,6 +3449,13 @@
 						// after the draft was edited.
 						let reply = turnByReply[norm(m.body)];
 						if (reply && usedTurns.has(reply)) reply = null;
+						// turnByReply is keyed only by reply text and is global across the
+						// loaded turns, so an identical agent line in ANOTHER session (e.g.
+						// "got it") collides here. A reply turn carries its own session_id —
+						// if it names a different session, it isn't ours; drop it and let the
+						// session-scoped fallback below find the right turn. (new_issue openers
+						// have null session_id and are claimed via openerTurn, so they pass.)
+						if (reply && reply.session_id && reply.session_id !== sessionId) reply = null;
 						// Fallback only when this bubble directly answers the PM message above
 						// it AND the next pending reply turn was triggered by that same message
 						// — so the new_issue opener and tapbacks can't steal a reply turn.
@@ -3444,7 +3481,9 @@
 					lastInbound = norm(m.body);
 					// a turn triggered by this inbound message that produced no reply (learn-only)
 					const trig = turnByTrigger[norm(m.body)];
-					if (trig && !usedTurns.has(trig)) { usedTurns.add(trig); html += turnSteps(trig); html += turnStatus('learn'); lastSender = 'agent'; lastInbound = null; }
+					// Same cross-session text collision guard as the reply path: a learn-only
+					// turn that names a different session isn't this message's turn.
+					if (trig && !usedTurns.has(trig) && (!trig.session_id || trig.session_id === sessionId)) { usedTurns.add(trig); html += turnSteps(trig); html += turnStatus('learn'); lastSender = 'agent'; lastInbound = null; }
 				}
 				return html;
 			}
@@ -3603,25 +3642,215 @@
 				return (t && t.ts) || '';
 			}
 
-			// Reorder the flat turn log into threads: a new_issue opens a thread on its
-			// chat_guid; the PM's later replies on that guid sit beneath it. Within a
-			// thread we keep oldest→newest (new issue on top, follow-ups below); threads
-			// are ordered by most-recent activity so the freshest work order is at the top.
-			// Returns a flat array with the first turn of each thread tagged _threadStart.
+			// The work order a turn actually resolved. new_issue carries it on the row;
+			// a PM reply carries it in the tool calls it fired (dispatch, triage, and
+			// close-out all pass issue_id). This — NOT wall-clock recency — is what a
+			// reply should thread under. Reads from steps[].tool_calls (the top-level
+			// tool_calls summary drops args); null when the turn touched no work order.
+			function resolvedIssueIdForTurn(t) {
+				if (t.event === 'new_issue') return t.issue_id || null;
+				const flat = (Array.isArray(t.steps) && t.steps.length)
+					? t.steps.flatMap((s) => s.tool_calls || [])
+					: [];
+				for (const c of flat) {
+					if (!c || !c.args || !c.args.issue_id) continue;
+					if (c.name === 'update_issue' || c.name === 'draft_tenant' || c.name === 'draft_vendor')
+						return c.args.issue_id;
+				}
+				return null;
+			}
+
+			// Reorder the flat turn log into threads: a new_issue opens a thread for its
+			// work order; the PM's later replies sit beneath the work order they RESOLVED
+			// (by issue_id from the reply's tool calls), not merely the most-recent one on
+			// the chat. A reply that resolved no work order falls back to the chat's
+			// current thread by recency. Within a thread the new_issue is pinned first
+			// and follow-ups run oldest→newest; threads are ordered by most-recent
+			// activity so the freshest work order is at the top. Returns a flat array
+			// with the first turn of each thread tagged _threadStart.
 			function orderTurnsThreaded(turns) {
 				const chrono = [...turns].sort((a, b) => new Date(turnTimelineTs(a)) - new Date(turnTimelineTs(b)));
-				const threadOf = new Map();
+				const threadByIssue = new Map();
 				const threads = [];
+				// Pass 1: open every new_issue's thread up front. The summary is drafted
+				// earlier but SENT from the queue later, so a reply can be logged just
+				// before its work order's recorded send time — pre-creating the thread
+				// lets that reply still find its work order instead of bucketing under
+				// the previous one (the kitchen-sink-under-dishwasher mis-thread).
 				for (const t of chrono) {
-					const key = t.chat_guid || ('solo:' + (t.turn_id || threads.length));
-					let cur = threadOf.get(key);
-					if (t.event === 'new_issue' || !cur) { cur = []; threads.push(cur); threadOf.set(key, cur); }
+					if (t.event !== 'new_issue') continue;
+					const cur = [t];
+					threads.push(cur);
+					if (t.issue_id) threadByIssue.set(t.issue_id, cur);
+				}
+				// Pass 2: attach each follow-up turn — to its resolved work order's
+				// thread when known, else to the thread of the PREVIOUS turn in this
+				// chat, else a solo thread. A follow-up reason ("local plumber", "he is
+				// local") carries no issue_id but continues the exchange right above it,
+				// so we fall back to the last turn's thread — NOT the most-recent
+				// new_issue. That keeps the answer with the work order the conversation
+				// is actually on even when a newer summary was sent in the meantime.
+				const lastThreadByChat = new Map();
+				for (const t of chrono) {
+					const chatKey = t.chat_guid || ('solo:' + (t.turn_id || threads.length));
+					if (t.event === 'new_issue') {
+						const own = t.issue_id && threadByIssue.get(t.issue_id);
+						if (own) lastThreadByChat.set(chatKey, own);
+						continue;
+					}
+					const rid = resolvedIssueIdForTurn(t);
+					let cur = (rid && threadByIssue.get(rid)) || lastThreadByChat.get(chatKey);
+					if (!cur) { cur = []; threads.push(cur); }
+					lastThreadByChat.set(chatKey, cur);
 					cur.push(t);
 				}
-				threads.sort((a, b) => new Date(turnTimelineTs(b[b.length - 1])) - new Date(turnTimelineTs(a[a.length - 1])));
+				const recency = (th) => Math.max(...th.map((t) => new Date(turnTimelineTs(t)).getTime() || 0));
+				for (const th of threads) {
+					th.sort((a, b) => {
+						if (a.event === 'new_issue' && b.event !== 'new_issue') return -1;
+						if (b.event === 'new_issue' && a.event !== 'new_issue') return 1;
+						return new Date(turnTimelineTs(a)) - new Date(turnTimelineTs(b));
+					});
+				}
+				threads.sort((a, b) => recency(b) - recency(a));
 				const flat = [];
 				for (const th of threads) th.forEach((t, i) => { t._threadStart = i === 0; flat.push(t); });
 				return flat;
+			}
+
+			function addMs(iso, ms) {
+				if (!iso) return iso || '';
+				const base = Date.parse(iso);
+				if (!isFinite(base) || !ms) return iso;
+				return new Date(base + ms).toISOString();
+			}
+
+			// One turn-log row can carry two actors: the PM/unknown sender who triggered
+			// it (inbound message) and the agent's response (tools + outbound messages).
+			// deriveTurn computes every field once; the timeline then renders them as
+			// SEPARATE dots (sender, then agent) so the thread reads as alternating turns
+			// instead of bundling the agent's reply under the sender's dot.
+			function deriveTurn(t, idx) {
+				const tid = t.turn_id || ('idx-' + idx);
+				turnsById.set(tid, t);
+				const failed = t.kind === 'failure';
+				const skipped = t.kind === 'precheck_short_circuit';
+				const iters = t.iterations != null ? ' · ' + t.iterations + 'it' : '';
+				const dur = t.duration_ms != null ? (t.duration_ms / 1000).toFixed(1) + 's' : '—';
+				const counts = [];
+				if (t.outbox_count) counts.push(t.outbox_count + ' sent');
+				if (t.drafts_count) counts.push(t.drafts_count + ' draft' + (t.drafts_count === 1 ? '' : 's'));
+				const issue = t.trigger && t.trigger.payload && t.trigger.payload.issue;
+				const refSub = issue ? ((issue.unit && issue.unit.name) || (issue.property && issue.property.name) || '') : '';
+				// Inbound = the message that triggered the turn (the sender's words).
+				// Outbound = every message the agent produced this turn, each {channel,text}.
+				// The server attaches `t.outbound` — text replies (send_text) AND AppFolio
+				// tenant/vendor dispatches (joined to their bodies by draft_id). Drafts are
+				// shown exactly as sent — out of the loop. Fallback (turns logged before the
+				// enrichment): text replies only, pulled from send_text args in steps.
+				const stepCalls = (Array.isArray(t.steps) && t.steps.length) ? t.steps.flatMap((s) => s.tool_calls || []) : [];
+				const inbound = (t.trigger && t.trigger.payload && t.trigger.payload.text) ? String(t.trigger.payload.text) : '';
+				let outMsgs = [];
+				if (Array.isArray(t.outbound) && t.outbound.length) {
+					outMsgs = t.outbound.filter((o) => o && o.text).map((o) => ({ channel: o.channel || 'text', text: String(o.text) }));
+				} else {
+					for (const c of stepCalls) {
+						if (c.name !== 'send_text' || !c.args) continue;
+						const body = c.args.content || c.args.body;
+						if (body) outMsgs.push({ channel: 'text', text: String(body) });
+					}
+					if (!outMsgs.length && t.outcome && Array.isArray(t.outcome.messages_final)) {
+						for (const m of t.outcome.messages_final) { if (m) outMsgs.push({ channel: 'text', text: String(m) }); }
+					}
+				}
+				// status chip (agent node): human disposition if reviewed, else 'sent'.
+				let chip = '';
+				if (failed) chip = '<span class="stc fail">failed</span>';
+				else if (skipped) chip = '<span class="stc none">skipped</span>';
+				else if (t.outcome) {
+					const a = t.outcome.action;
+					const lbl = a === 'send' ? 'sent' : a === 'copy' ? 'copied' : a === 'dismiss' ? 'dismissed' : a;
+					chip = '<span class="stc ' + (a === 'dismiss' ? 'none' : 'good') + '">' + escapeHtml(lbl) + (t.outcome.edited ? ' · edited' : '') + '</span>';
+				} else if (outMsgs.length) {
+					chip = '<span class="stc good">sent</span>';
+				}
+				// steps = meaningful tool calls (skip send_text/use_skill), plain-English; click → modal
+				const flat = stepCalls.length ? stepCalls : (t.tool_calls || []);
+				const shown = flat.filter((c) => c.name && c.name !== 'send_text' && c.name !== 'use_skill');
+				t._calls = shown;
+				let stepsHtml = '';
+				if (skipped) stepsHtml = '<div class="step muted">precheck · short-circuit</div>';
+				else if (shown.length) {
+					stepsHtml = shown.map((c, i) => {
+						const ok = c.ok !== false;
+						const label = STEP_LABEL[c.name] || c.name;
+						return '<div class="step' + (ok ? '' : ' err') + (c.name === 'write_memory' ? ' mem' : '') + '" data-call="' + i + '">' +
+							escapeHtml(label) + (ok ? '' : ' — failed') + '</div>';
+					}).join('');
+				}
+				const jumpAttr =
+					(t.session_id ? ' data-jump-session="' + escapeHtml(t.session_id) + '"' : '') +
+					(t.issue_id ? ' data-jump-issue="' + escapeHtml(t.issue_id) + '"' : '');
+				const metaTxt = dur + iters + (counts.length ? ' · ' + counts.join(' · ') : '');
+				// t.ts is stamped at turn COMPLETION, so the inbound message arrived ~one
+				// duration earlier: sender dot = turn start (t.ts − duration), agent dot =
+				// completion (t.ts) — or, for a sent WO summary, the human send time.
+				const senderTs = addMs(t.ts, -(t.duration_ms || 0));
+				const agentTs = (t.event === 'new_issue') ? turnTimelineTs(t) : (t.ts || '');
+				return { t, tid, failed, skipped, issue, refSub, inbound, outMsgs, chip, stepsHtml, jumpAttr, metaTxt, senderTs, agentTs };
+			}
+
+			// Sender dot: just the inbound message (PM or unknown #), on its own node.
+			function renderSenderNode(v, threadStart) {
+				const t = v.t;
+				const cls = t.event === 'incoming_anon_message' ? 'anon' : 'user';
+				const label = t.event === 'incoming_anon_message' ? 'Unknown #' : 'PM';
+				return (
+					'<div class="turn-item tl-item' + (threadStart ? ' tl-thread-start' : '') + '" data-turn-id="' + escapeHtml(v.tid) + '">' +
+						'<div class="tl-entry">' +
+							'<div class="tl-node ev-' + cls + '"></div>' +
+							'<div class="tl-hd">' +
+								'<span class="tl-time" title="' + escapeHtml(fmtTurnFull(v.senderTs)) + '">' + escapeHtml(fmtTurnTime(v.senderTs)) + '</span>' +
+								'<span class="tl-ev ' + cls + '">' + escapeHtml(label) + '</span>' +
+							'</div>' +
+							(v.inbound ? '<div class="tl-in"' + v.jumpAttr + '>' + escapeHtml(v.inbound) + '</div>' : '') +
+						'</div>' +
+					'</div>'
+				);
+			}
+
+			// Agent dot: the agent's response — outbound messages (shown as sent) plus the
+			// tools it called, on its own node.
+			function renderAgentNode(v, threadStart) {
+				const t = v.t;
+				const issue = v.issue;
+				const urgent = issue && issue.urgent;
+				// Keep the descriptive summary for new work orders; for replies the bubbles
+				// speak for themselves, so summarize only when there's no outbound message.
+				let sum = '';
+				if (t.event === 'new_issue') sum = turnSummary(t);
+				else if (!v.outMsgs.length) sum = v.failed ? 'Reply failed' : (v.stepsHtml ? 'Triaged — no message' : 'No reply needed');
+				return (
+					'<div class="turn-item tl-item' + (v.failed ? ' failure' : '') + (threadStart ? ' tl-thread-start' : '') + '" data-turn-id="' + escapeHtml(v.tid) + '">' +
+						'<div class="tl-entry">' +
+							'<div class="tl-node ev-new"></div>' +
+							'<div class="tl-hd">' +
+								'<span class="tl-time" title="' + escapeHtml(fmtTurnFull(v.agentTs)) + '">' + escapeHtml(fmtTurnTime(v.agentTs)) + '</span>' +
+								'<span class="tl-ev agent">Agent</span>' +
+								(urgent ? '<span class="iurgent">urgent</span>' : '') +
+								v.chip +
+							'</div>' +
+							(sum ? '<div class="tl-sum">' + escapeHtml(sum) + '</div>' : '') +
+							(issue && issue.name ? '<div class="tl-ref"' + v.jumpAttr + '>↳ ' + escapeHtml(issue.name) + (v.refSub ? ' <span class="sub">· ' + escapeHtml(v.refSub) + '</span>' : '') + '</div>' : '') +
+							v.outMsgs.map((o) => {
+								const tag = (o.channel && o.channel !== 'text') ? '<span class="tl-chan">' + escapeHtml(queueActionLabel(o.channel)) + '</span>' : '';
+								return '<div class="tl-out"' + v.jumpAttr + '>' + tag + escapeHtml(o.text) + '</div>';
+							}).join('') +
+							(v.stepsHtml ? '<div class="tl-steps">' + v.stepsHtml + '</div>' : '') +
+							'<div class="tl-meta">' + escapeHtml(v.metaTxt) + '</div>' +
+						'</div>' +
+					'</div>'
+				);
 			}
 
 			function renderTurns(turns, kpi) {
@@ -3633,120 +3862,25 @@
 					return;
 				}
 				turnsById.clear();
-				turnsList.innerHTML = kpiHtml + orderTurnsThreaded(turns)
-					.map((t, idx) => {
-						const tid = t.turn_id || ('idx-' + idx);
-						turnsById.set(tid, t);
-						const failed = t.kind === 'failure';
-						const skipped = t.kind === 'precheck_short_circuit';
-						const ev = t.event || 'turn';
-						const timelineTs = turnTimelineTs(t);
-						const tools = t.tool_calls ?? [];
-						let toolsHtml;
-						if (skipped) {
-							toolsHtml = '<span class="tc"><span class="skipbadge">precheck · short-circuit</span></span>';
-						} else if (!tools.length) {
-							toolsHtml = '<span class="none">no tool calls</span>';
-						} else {
-							toolsHtml = tools
-								.map((c) => {
-									const ok = c.ok !== false;
-									const title = ok ? '' : ' title="' + escapeHtml(c.error || 'error') + '"';
-									const mark = ok ? '' : ' ✕';
-									return (
-										'<span class="' + (ok ? 'tc' : 'tc err') + '"' + title + '>' +
-										escapeHtml(c.name || '?') + mark + '</span>'
-									);
-								})
-								.join('');
-						}
-						const iters = t.iterations != null ? ' · ' + t.iterations + 'it' : '';
-						const dur = t.duration_ms != null ? (t.duration_ms / 1000).toFixed(1) + 's' : '—';
-						const counts = [];
-						if (t.outbox_count) counts.push(t.outbox_count + ' sent');
-						if (t.drafts_count) counts.push(t.drafts_count + ' draft' + (t.drafts_count === 1 ? '' : 's'));
-						// Human outcome (folded-in History): disposition of the draft.
-						let outcomeHtml = '';
-						if (t.outcome) {
-							const a = t.outcome.action;
-							const label = a === 'send' ? 'sent' : a === 'copy' ? 'copied' : a === 'dismiss' ? 'dismissed' : a;
-							const ocls = a === 'send' ? 'oc send' : a === 'dismiss' ? 'oc dismiss' : 'oc copy';
-							outcomeHtml =
-								'<span class="' + ocls + '">→ ' + escapeHtml(label) +
-								(t.outcome.edited ? ' · edited' : '') + '</span>';
-						} else if (t.drafts_count && t.event === 'new_issue') {
-							outcomeHtml = '<span class="oc pending">pending review</span>';
-						}
-						let link = '';
-						if (t.session_id) {
-							link =
-								'<button class="turn-link" data-session="' + escapeHtml(t.session_id) + '">session →</button>';
-						} else if (t.issue_id) {
-							link =
-								'<span class="turn-link issue" title="' + escapeHtml(String(t.issue_id)) + '">issue ' +
-								escapeHtml(String(t.issue_id).slice(0, 8)) + '</span>';
-						}
-						// ── timeline entry (event → summary → reference → preview → steps) ──
-						const evLabel = { new_issue: 'new issue', incoming_user_message: 'PM message', incoming_anon_message: 'unknown #' }[ev] || ev;
-						const evCls = { new_issue: 'new', incoming_user_message: 'user', incoming_anon_message: 'anon' }[ev] || 'ds';
-						const issue = t.trigger && t.trigger.payload && t.trigger.payload.issue;
-						const refSub = issue ? ((issue.unit && issue.unit.name) || (issue.property && issue.property.name) || '') : '';
-						// preview = the message it produced (or the inbound that triggered it)
-						let preview = '';
-						const draftCall = (t.tool_calls || []).find((c) => c.args && /^draft_/.test(c.name || ''));
-						if (t.outcome && Array.isArray(t.outcome.messages_final) && t.outcome.messages_final[0]) preview = t.outcome.messages_final[0];
-						else if (draftCall) preview = draftCall.args.content || draftCall.args.body || '';
-						else if (t.trigger && t.trigger.payload && t.trigger.payload.text) preview = t.trigger.payload.text;
-						// status chip
-						let chip = '';
-						if (failed) chip = '<span class="stc fail">failed</span>';
-						else if (skipped) chip = '<span class="stc none">skipped</span>';
-						else if (t.outcome) {
-							const a = t.outcome.action;
-							const lbl = a === 'send' ? 'sent' : a === 'copy' ? 'copied' : a === 'dismiss' ? 'dismissed' : a;
-							chip = '<span class="stc ' + (a === 'dismiss' ? 'none' : 'good') + '">' + escapeHtml(lbl) + (t.outcome.edited ? ' · edited' : '') + '</span>';
-						} else if (t.drafts_count && ev === 'new_issue') {
-							chip = '<span class="stc good">pending review</span>';
-						}
-						// steps = meaningful tool calls (skip send_text/use_skill), plain-English; click → modal
-						const flat = (Array.isArray(t.steps) && t.steps.length) ? t.steps.flatMap((s) => s.tool_calls || []) : (t.tool_calls || []);
-						const shown = flat.filter((c) => c.name && c.name !== 'send_text' && c.name !== 'use_skill');
-						t._calls = shown;
-						let stepsHtml = '';
-						if (skipped) stepsHtml = '<div class="step muted">precheck · short-circuit</div>';
-						else if (shown.length) {
-							stepsHtml = shown.map((c, i) => {
-								const ok = c.ok !== false;
-								const label = STEP_LABEL[c.name] || c.name;
-								return '<div class="step' + (ok ? '' : ' err') + (c.name === 'write_memory' ? ' mem' : '') + '" data-call="' + i + '">' +
-									escapeHtml(label) + (ok ? '' : ' — failed') + '</div>';
-							}).join('');
-						}
-						const jumpAttr =
-							(t.session_id ? ' data-jump-session="' + escapeHtml(t.session_id) + '"' : '') +
-							(t.issue_id ? ' data-jump-issue="' + escapeHtml(t.issue_id) + '"' : '');
-						const urgent = issue && issue.urgent;
-						const metaTxt = dur + iters + (counts.length ? ' · ' + counts.join(' · ') : '');
-						return (
-							'<div class="turn-item tl-item' + (failed ? ' failure' : '') + (t._threadStart && idx > 0 ? ' tl-thread-start' : '') + '" data-turn-id="' + escapeHtml(tid) + '">' +
-								'<div class="tl-entry">' +
-									'<div class="tl-node ev-' + evCls + '"></div>' +
-									'<div class="tl-hd">' +
-										'<span class="tl-time" title="' + escapeHtml(fmtTurnFull(timelineTs)) + '">' + escapeHtml(fmtTurnTime(timelineTs)) + '</span>' +
-										'<span class="tl-ev ' + evCls + '">' + escapeHtml(evLabel) + '</span>' +
-										(urgent ? '<span class="iurgent">urgent</span>' : '') +
-										chip +
-									'</div>' +
-									'<div class="tl-sum">' + escapeHtml(turnSummary(t)) + '</div>' +
-									(issue && issue.name ? '<div class="tl-ref"' + jumpAttr + '>↳ ' + escapeHtml(issue.name) + (refSub ? ' <span class="sub">· ' + escapeHtml(refSub) + '</span>' : '') + '</div>' : '') +
-									(preview ? '<div class="tl-prev"' + jumpAttr + '>' + escapeHtml(preview) + '</div>' : '') +
-									(stepsHtml ? '<div class="tl-steps">' + stepsHtml + '</div>' : '') +
-									'<div class="tl-meta">' + escapeHtml(metaTxt) + '</div>' +
-								'</div>' +
-							'</div>'
-						);
-					})
-					.join('');
+				const out = [];
+				orderTurnsThreaded(turns).forEach((t, idx) => {
+					const v = deriveTurn(t, idx);
+					const threadStart = !!(t._threadStart && idx > 0);
+					// Split one turn into up to two dots: the sender (inbound) then the
+					// agent (response). new_issue is agent-only (proactive); a bare inbound
+					// with no agent action stays sender-only.
+					const hasSender = !!v.inbound && (t.event === 'incoming_user_message' || t.event === 'incoming_anon_message');
+					const agentActed = t.event === 'new_issue' || v.failed || v.skipped || v.outMsgs.length > 0 || !!v.stepsHtml;
+					const roles = [];
+					if (hasSender) roles.push('sender');
+					if (agentActed) roles.push('agent');
+					if (!roles.length) roles.push(hasSender ? 'sender' : 'agent');
+					roles.forEach((role, i) => {
+						const ts = threadStart && i === 0;
+						out.push(role === 'sender' ? renderSenderNode(v, ts) : renderAgentNode(v, ts));
+					});
+				});
+				turnsList.innerHTML = kpiHtml + out.join('');
 			}
 
 			// Build the expandable trace for one turn: trigger + per-iteration steps.
@@ -3978,6 +4112,65 @@
 			function chatThreadWorkspace() {
 				return workspaceFilter;
 			}
+
+			// ── Manual composer ────────────────────────────────────────────
+			// Sends a hand-typed message to the active workspace's chat via the
+			// same dylib path the agent uses, then refreshes the thread + KPIs.
+			const composerForm = document.getElementById('chat-composer');
+			const composerInput = document.getElementById('composer-input');
+			const composerSend = document.getElementById('composer-send');
+
+			function autoSizeComposer() {
+				composerInput.style.height = 'auto';
+				composerInput.style.height = Math.min(composerInput.scrollHeight, 160) + 'px';
+			}
+			composerInput.addEventListener('input', autoSizeComposer);
+
+			let composerSending = false;
+			async function sendManualMessage() {
+				const body = composerInput.value.trim();
+				if (!body || composerSending) return;
+				composerSending = true;
+				composerSend.disabled = true;
+				const ws = workspaceFilter;
+				try {
+					const res = await fetch('/api/manual-send?workspace=' + encodeURIComponent(ws), {
+						method: 'POST',
+						headers: { 'content-type': 'application/json' },
+						body: JSON.stringify({ workspace: ws, body })
+					});
+					if (!res.ok) throw new Error(await res.text());
+					composerInput.value = '';
+					autoSizeComposer();
+					// Pull the new send into the thread + counts right away rather than
+					// waiting on the 4s poll tick. Update IN PLACE: don't null the cache
+					// or reset the render key, or the thread flashes the "Loading…"
+					// placeholder and fully rebuilds (looks like a page refresh). The
+					// draft-send path leaves both intact; the new send's guid changes the
+					// render key on its own, so renderChatThread still appends the row.
+					loadChatThread();
+					loadKpi();
+					toast('Sent.');
+				} catch (err) {
+					toast('Send failed: ' + err.message, 'error');
+				} finally {
+					composerSending = false;
+					composerSend.disabled = false;
+					composerInput.focus();
+				}
+			}
+
+			composerForm.addEventListener('submit', (e) => {
+				e.preventDefault();
+				sendManualMessage();
+			});
+			// Enter sends, Shift+Enter inserts a newline (iMessage convention).
+			composerInput.addEventListener('keydown', (e) => {
+				if (e.key === 'Enter' && !e.shiftKey) {
+					e.preventDefault();
+					sendManualMessage();
+				}
+			});
 
 			async function loadChatThread() {
 				if (chatThreadLoading) return;
@@ -4247,6 +4440,9 @@
 			let simulation = null;
 			let selectedNodeId = null;
 			let hoveredNodeId = null;
+			// Set of matched node ids while a search is active, else null. When
+			// non-null the search dim takes priority: hover/click must not undim.
+			let searchMatched = null;
 
 			// AABB separation force. Each node carries `_bbox` (the rendered
 			// bounding box of its circle + label, relative to its center).
@@ -4658,16 +4854,21 @@
 					.on('click', (ev, d) => {
 						ev.stopPropagation();
 						selectedNodeId = d.id;
-						highlightNeighborhood(d.id);
+						// While a search is active its dim wins — don't undim the
+						// non-matches, just open the detail panel.
+						if (!searchMatched) highlightNeighborhood(d.id);
 						showDetail(d);
 					})
 					.on('mouseenter', (ev, d) => {
 						// Obsidian-style: hover dims everything except the node + its
 						// connected neighborhood. Does NOT change selectedNodeId.
+						// Suppressed while a search is active so matches stay dimmed.
+						if (searchMatched) return;
 						hoveredNodeId = d.id;
 						highlightNeighborhood(d.id);
 					})
 					.on('mouseleave', (ev, d) => {
+						if (searchMatched) return;
 						hoveredNodeId = null;
 						// Restore selection highlight if a node is selected, else clear.
 						if (selectedNodeId) highlightNeighborhood(selectedNodeId);
@@ -4765,7 +4966,10 @@
 
 				svg.on('click', () => {
 					selectedNodeId = null;
-					clearHighlight();
+					// Clicking empty space deselects, but a search dim must persist
+					// while the search box has text — re-apply it instead of clearing.
+					if (searchMatched) applySearchDim();
+					else clearHighlight();
 					hideDetail();
 				});
 
@@ -4843,6 +5047,10 @@
 				const endScale = 1.05;
 				const endTransform = d3.zoomIdentity.translate(cx * (1 - endScale), cy * (1 - endScale)).scale(endScale);
 				svg.call(zoomBehavior.transform, endTransform);
+
+				// If a search is active when the graph re-renders (e.g. after a
+				// belief create/delete reload), re-apply its dim to the new DOM.
+				applySearchDim();
 			}
 
 			function highlightNeighborhood(id) {
@@ -5234,12 +5442,30 @@
 				}
 			}
 
+			// Apply the current search dim to the graph: matches get `.match`,
+			// everything else is dimmed. Reads `searchMatched`; no-op if null.
+			// Kept separate from runSearch so a graph re-render can re-apply it.
+			function applySearchDim() {
+				if (!searchMatched) return;
+				const gsvg = d3.select(svgEl);
+				gsvg.selectAll('.node')
+					.classed('match', (d) => searchMatched.has(d.id))
+					.classed('dimmed', (d) => searchMatched.size > 0 && !searchMatched.has(d.id));
+				gsvg.selectAll('.link').classed(
+					'dimmed',
+					(l) => l && l.source && searchMatched.size > 0 && !(searchMatched.has(l.source.id) || searchMatched.has(l.target.id))
+				);
+			}
+
 			async function runSearch() {
 				const q = searchEl.value.trim();
 				// Always filter list items so the search works in list mode too.
 				filterListItems(q);
 				if (!q) {
+					searchMatched = null;
 					clearHighlight();
+					// Search cleared — restore any active selection's highlight.
+					if (selectedNodeId) highlightNeighborhood(selectedNodeId);
 					return;
 				}
 				try {
@@ -5248,15 +5474,8 @@
 					);
 					if (!res.ok) throw new Error(await res.text());
 					const hits = await res.json();
-					const matched = new Set([...(hits.observations ?? []), ...(hits.beliefs ?? [])]);
-					const gsvg = d3.select(svgEl);
-					gsvg.selectAll('.node')
-						.classed('match', (d) => matched.has(d.id))
-						.classed('dimmed', (d) => matched.size > 0 && !matched.has(d.id));
-					gsvg.selectAll('.link').classed(
-						'dimmed',
-						(l) => l && l.source && matched.size > 0 && !(matched.has(l.source.id) || matched.has(l.target.id))
-					);
+					searchMatched = new Set([...(hits.observations ?? []), ...(hits.beliefs ?? [])]);
+					applySearchDim();
 				} catch (err) {
 					toast(`search failed: ${err.message}`, 'error');
 				}
