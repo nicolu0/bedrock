@@ -1,18 +1,14 @@
-// Trigger: new row in issues_v2 → emit a new_issue event → orchestrator routes
-// to process_work_order skill → bundle draft.
+// Trigger: new row in issues_v2 → route workspace/chat → hand off to the
+// dedicated new-work-order intake module.
 //
 // Workspace-driven routing. The poller fetches issues across all mapped
 // workspaces (see WORKSPACES). Each issue's workspace_id resolves to a
 // display label (test/prod) AND a recipient chat env var. An issue from a
 // workspace not in the table is skipped — we don't know where to send it.
 //
-// The poller sets the issue up deterministically before the agent sees it: it
-// enriches the row (AppFolio unit + clean description + a mini-LLM title) and
-// fetches the workspace vendor roster, then emits a normalized AgentEvent with
-// the enriched issue + candidate vendors as payload. The orchestrator handles
-// only the decisions — read_memory, update_issue, send_text — via the
-// process_work_order skill. The poller then writes one draft row carrying
-// messages: [{ body }, ...].
+// The poller does not run the main agent loop. It polls, routes, dedups, and
+// calls processNewWorkOrder(), which owns enrichment, memory, drafting, queueing,
+// work-hours holds, and turn traces.
 //
 // Cursor + dedup state lives in state/issues-cursor.json:
 //   { lastCheckedAt: ISO, processedIds: { [issueId]: unixMs } }
@@ -22,11 +18,9 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import * as db from '../state/helpers.mjs';
-import { runTurn } from '../core/orchestrator.mjs';
-import { enrichIssue } from './enrich-issue.mjs';
 import { WORKSPACES } from '../core/workspaces.mjs';
 import { supabaseEnv } from '../core/supabase.mjs';
-import { nextSendTime } from '../core/work-hours.mjs';
+import { processNewWorkOrder } from './new-work-order-message.mjs';
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_PROCESSED_IDS = 1000;
@@ -75,12 +69,7 @@ function log(msg, extra) {
 async function fetchNewIssues(cursor) {
 	const { url, key } = supabaseEnv();
 	const params = new URLSearchParams({
-		select:
-			'id,workspace_id,appfolio_srn,name,description,urgent,created_at,property_id,vendor_id,' +
-			'tenant:tenants!tenant_id(name),' +
-			'property:properties!property_id(name),' +
-			'unit:units!unit_id(name),' +
-			'vendor:vendors!vendor_id(name)',
+		select: 'id,workspace_id,appfolio_srn,urgent,created_at',
 		order: 'created_at.asc',
 		limit: '20'
 	});
@@ -99,29 +88,6 @@ async function fetchNewIssues(cursor) {
 	return res.json();
 }
 
-// Per-poll cache: don't refetch a workspace's vendor list across multiple
-// issues from the same workspace in one tick.
-async function fetchWorkspaceVendors(workspace_id, cache) {
-	if (cache.has(workspace_id)) return cache.get(workspace_id);
-	const { url, key } = supabaseEnv();
-	const params = new URLSearchParams({
-		select: 'id,name',
-		workspace_id: `eq.${workspace_id}`,
-		order: 'name.asc'
-	});
-	const res = await fetch(`${url}/rest/v1/vendors?${params}`, {
-		headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' }
-	});
-	if (!res.ok) {
-		log(`vendor fetch failed for workspace=${workspace_id}: ${res.status}`);
-		cache.set(workspace_id, []);
-		return [];
-	}
-	const rows = await res.json();
-	cache.set(workspace_id, rows);
-	return rows;
-}
-
 // ── Poll loop ───────────────────────────────────────────────────────────────
 
 async function saveCursor(cursor) {
@@ -136,8 +102,6 @@ async function pollOnce({ onDraftCreated } = {}) {
 
 	const issues = await fetchNewIssues(cursor);
 	if (!issues.length) return;
-
-	const vendorCache = new Map();
 
 	for (const issue of issues) {
 		const ws = WORKSPACES[issue.workspace_id];
@@ -179,90 +143,32 @@ async function pollOnce({ onDraftCreated } = {}) {
 		});
 
 		try {
-			// Set up the issue before the agent sees it: enrich (unit + clean
-			// description + title) and the vendor roster run in parallel — both are
-			// just data-gathering. Enrich is best-effort; on failure we fall back to
-			// whatever the join already gave us rather than skip the draft.
-			const [candidate_vendors, enriched] = await Promise.all([
-				fetchWorkspaceVendors(issue.workspace_id, vendorCache),
-				enrichIssue(issue.id).catch((err) => {
-					log(`enrich failed for ${issue.id}: ${err.message}`);
-					return null;
-				})
-			]);
-			if (enriched?.ok) {
-				if (enriched.unit) issue.unit = enriched.unit;
-				if (enriched.tenant) issue.tenant = enriched.tenant;
-				if (enriched.property) issue.property = enriched.property;
-				if (enriched.name) issue.name = enriched.name;
-				if (enriched.description) issue.description = enriched.description;
-				// Urgency is the agent's call now (triaged in enrich), with the PMS
-				// flag as one input. It drives the hold below and rides the
-				// new_issue payload into the turn log for the Turns tab.
-				if (typeof enriched.urgent === 'boolean') issue.urgent = enriched.urgent;
-				if (enriched.urgency_reason) issue.urgency_reason = enriched.urgency_reason;
-			}
-
-			const event = {
-				type: 'new_issue',
-				payload: { issue, candidate_vendors }
-			};
-			const ctx = {
+			const result = await processNewWorkOrder({
+				issue_id: issue.id,
 				workspace_id: issue.workspace_id,
-				sendMode: 'draft',
-				workspace_label: ws.label,
-				chat_guid: chatGuid,
-				// Skill drafts a message bundle for a groupchat that includes the
-				// PM, but the orchestrator never live-sends from this path.
-				// Belt-and-suspenders.
-				isPmHandle: true
-			};
-			const result = await runTurn(event, ctx);
-			const messages = result.drafts;
-
-			// Failure is a warning, not a hard skip — if the loop produced a
-			// usable bundle (drafts present) we still want the human to see
-			// it. Only skip when the bundle is empty.
-			if (result.failure) {
-				log(`new_issue warning: ${JSON.stringify(result.failure)}`, {
-					id: issue.id,
-					drafts: messages?.length ?? 0
-				});
-			}
-			if (!messages?.length) {
-				log('empty message bundle, skipping draft', { id: issue.id });
+				workspace: ws,
+				chatGuid,
+				participants: resolveParticipants(chatGuid)
+			});
+			if (!result.ok) {
+				log(`new work order intake failed: ${JSON.stringify(result.failure)}`, { id: issue.id });
 				continue;
 			}
-
-			// Off-hours arrivals get held to the next work-hours open (the
-			// "Send later" path) — including urgent ones, so the PM still sees
-			// the "Send at 7 AM" option. Urgency no longer suppresses the hold;
-			// the human taps "Send" to override and fire now. Inside work hours
-			// nextSendTime() returns null, so there's no hold either way.
-			const hold = nextSendTime();
-			const draft = await db.createDraft({
-				trigger: 'new_issue',
-				channel: 'groupchat',
-				workspace_id: issue.workspace_id,
-				workspace_label: ws.label,
-				issue_id: issue.id,
-				to: chatGuid,
-				to_participants: resolveParticipants(chatGuid),
-				messages,
-				hold_until: hold
-			});
+			const { draft, issue: processedIssue } = result;
 			log('draft created', {
 				draft_id: draft.id,
 				workspace: ws.label,
-				message_count: messages.length,
-				hold_until: hold,
-				urgent: !!issue.urgent,
-				urgency_reason: issue.urgency_reason ?? null
+				message_count: draft.messages?.length ?? 0,
+				hold_until: draft.hold_until ?? null,
+				urgent: !!processedIssue.urgent,
+				urgency_reason: processedIssue.urgency_reason ?? null
 			});
 			if (onDraftCreated) {
-				Promise.resolve(onDraftCreated({ draft, issue, workspace: ws })).catch((err) => {
-					log(`draft-created hook failed for ${draft.id}: ${err.message}`);
-				});
+				Promise.resolve(onDraftCreated({ draft, issue: processedIssue, workspace: ws })).catch(
+					(err) => {
+						log(`draft-created hook failed for ${draft.id}: ${err.message}`);
+					}
+				);
 			}
 		} catch (err) {
 			log(`error processing ${issue.id}: ${err.message}`);

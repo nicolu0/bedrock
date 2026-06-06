@@ -7,10 +7,9 @@
 // can see the tag in conversation history on later turns and skip a redundant
 // re-load.
 //
-// The orchestrator can also auto-load a skill for the trigger event (e.g.
-// new_issue → process_work_order) before the first LLM iteration via the same
-// registry path, so some turns won't see this tool called explicitly. It
-// exists for:
+// The orchestrator can also auto-load a skill for an unambiguous trigger event
+// before the first LLM iteration via the same registry path, so some turns
+// won't see this tool called explicitly. It exists for:
 //   - heterogeneous events where the model decides whether a skill applies
 //   - mid-turn cross-domain pulls (rare today, but possible)
 //   - model-driven discovery when the trigger doesn't pick a skill

@@ -5,7 +5,7 @@
 //
 // Usage:
 //   node agent/evals/run.mjs                          # run all scenarios
-//   node agent/evals/run.mjs --filter process_wo      # only scenarios whose name includes 'process_wo'
+//   node agent/evals/run.mjs --filter chat            # only scenarios whose name includes 'chat'
 //   node agent/evals/run.mjs --filter "yes,vendor"    # comma-separated → match ANY substring
 //   node agent/evals/run.mjs --skip "no_match,opener" # comma-separated → exclude matching names
 //   node agent/evals/run.mjs --bail                   # stop at first failure
@@ -96,12 +96,6 @@ const { judge } = await import('./judge.mjs');
 function deriveEvent(scenario) {
 	if (scenario.event) return scenario.event;
 	const c = scenario.ctx ?? {};
-	if (scenario.skill === 'process_wo') {
-		return {
-			type: 'new_issue',
-			payload: { issue: c.issue, candidate_vendors: c.candidate_vendors }
-		};
-	}
 	if (scenario.skill === 'chat') {
 		return {
 			type: 'incoming_user_message',
@@ -143,7 +137,9 @@ async function resetState(scenario) {
 	// Clear turns.jsonl
 	try {
 		await fs.unlink(path.join(STATE_DIR, 'turns.jsonl'));
-	} catch {}
+	} catch {
+		// no prior turn log
+	}
 
 	// Demo skill memory seeding
 	if (scenario.skill === 'demo' && setup.memory) {
@@ -151,7 +147,9 @@ async function resetState(scenario) {
 			// Wipe + reseed in temp DATA_DIR
 			try {
 				await memory.resetHandle(handle);
-			} catch {}
+			} catch {
+				// no prior handle state
+			}
 			for (const [slug, value] of Object.entries(mem.profile ?? {})) {
 				await memory.updateProfile(handle, slug, value);
 			}
@@ -168,7 +166,9 @@ async function resetState(scenario) {
 		// Default: clean slate for the test handle.
 		try {
 			await memory.resetHandle(scenario.ctx.handle);
-		} catch {}
+		} catch {
+			// no prior handle state
+		}
 		resetConversation(scenario.ctx.handle);
 	}
 }
@@ -417,17 +417,14 @@ for (const scenario of scenarios) {
 	const ctx = {
 		...scenario.ctx,
 		// Live events (incoming_anon_message) emit messages via onEvent → capture in outbox.
-		onEvent: async (ev) => {
+		onEvent: async () => {
 			// outbox is auto-populated by tool implementations; orchestrator emits
 			// tool_call events which we ignore here.
 		},
 		// Default sendMode if not specified by the scenario.
-		// new_issue AND incoming_user_message draft for human review — the
-		// groupchat agent never auto-sends to the PM. Only the demo path
-		// (incoming_anon_message) is live (the demo bot streams to the prospect).
-		sendMode:
-			scenario.ctx?.sendMode ??
-			(event.type === 'new_issue' || event.type === 'incoming_user_message' ? 'draft' : 'live'),
+		// incoming_user_message drafts for human review — the groupchat agent never
+		// auto-sends to the PM. Only the demo path (incoming_anon_message) is live.
+		sendMode: scenario.ctx?.sendMode ?? (event.type === 'incoming_user_message' ? 'draft' : 'live'),
 		isPmHandle: scenario.ctx?.isPmHandle ?? false
 	};
 
@@ -489,7 +486,9 @@ const keep = args.includes('--keep');
 if (!keep) {
 	try {
 		await fs.rm(SCRATCH, { recursive: true, force: true });
-	} catch {}
+	} catch {
+		// scratch cleanup is best-effort
+	}
 } else {
 	console.log(`scratch: ${SCRATCH}`);
 }

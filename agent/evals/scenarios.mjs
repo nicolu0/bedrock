@@ -4,7 +4,8 @@
 //
 // Scenario shape: { name, skill, setup?, ctx, expected }
 //
-//   skill    — 'demo' | 'process_wo' | 'chat'. Determines which skill the runner loads.
+//   skill    — 'demo' | 'chat'. Proactive intake runs outside runTurn in
+//              triggers/new-work-order-message.mjs.
 //   setup    — optional pre-populated state for this scenario:
 //                sent_log:   rows pre-written to sent-log.json
 //                chat_log:   rows pre-written to chat-log.json
@@ -28,7 +29,6 @@
 //                judge:             { criteria, target } — fuzzy criteria + which output to judge
 //                                   target: 'drafts' | 'outbox' | 'all'
 
-const HUB_CHAMPAIGN = '196dc99d-4fc7-4e83-9b14-25a14dfd4f1f';
 const TEST_WS = '40d675ba-4dec-47dd-9222-79c0345c493f';
 const TEST_CHAT = 'iMessage;-;andrew51@illinois.edu';
 const NOW_ISO = () => new Date().toISOString();
@@ -192,116 +192,6 @@ function sentBundle(issue, { ago_min = 5 } = {}) {
 }
 
 export const scenarios = [
-	// ─── process_wo (read_memory → update_issue → send_text) ────────────────
-	// The poller enriches the issue before runTurn, so the agent receives a
-	// populated issue (property/unit/title) and never calls an enrich tool.
-	// Scenario fixtures are already enriched to match.
-
-	{
-		name: 'process_wo: standard issue with vendor candidate → one multi-line draft',
-		skill: 'process_wo',
-		ctx: {
-			issue: ISSUE_FAUCET,
-			workspace_id: TEST_WS,
-			sendMode: 'draft',
-			workspace_label: 'test',
-			chat_guid: TEST_CHAT
-		},
-		expected: {
-			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
-			drafts_count: 1,
-			drafts_include: ['Unit 701', 'Hub Champaign', 'Mario', 'Should I send']
-		}
-	},
-
-	{
-		name: 'process_wo: no candidate vendor → read_memory + 1 draft, no vendor question',
-		skill: 'process_wo',
-		ctx: {
-			issue: { ...ISSUE_FAUCET, vendor: null, name: 'wifi down' },
-			workspace_id: TEST_WS,
-			sendMode: 'draft',
-			workspace_label: 'test'
-		},
-		expected: {
-			tool_calls_set_includes: ['read_memory', 'send_text'],
-			tool_calls_excludes: ['update_issue'],
-			drafts_count: 1,
-			drafts_include: ['Unit 701', 'Hub Champaign'],
-			drafts_excludes: ['Should I send', 'URGENT'],
-			judge: {
-				target: 'drafts',
-				criteria:
-					'The draft is a short two-line bubble about Unit 701 / Hub Champaign and a wifi issue. The second sentence must read as natural English (full prose, not a headline fragment, no colons/em dashes/semicolons, no ungrammatical "has wifi down"). Acceptable second-sentence phrasings: "Has no wifi.", "The wifi is down.", "Wifi is out.", or any other natural rewording.'
-			}
-		}
-	},
-
-	{
-		name: 'process_wo: missing unit → location line is just the property',
-		skill: 'process_wo',
-		ctx: {
-			issue: { ...ISSUE_FAUCET, unit: null, name: 'roof leak in lobby' },
-			workspace_id: TEST_WS,
-			sendMode: 'draft',
-			workspace_label: 'test'
-		},
-		expected: {
-			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
-			drafts_count: 1,
-			drafts_include: ['Hub Champaign', '\n\nShould I send Mario?'],
-			drafts_excludes: ['Unit ', 'URGENT']
-		}
-	},
-
-	{
-		name: 'process_wo: awkward "has X" title → natural grammar on line 2',
-		skill: 'process_wo',
-		ctx: {
-			issue: { ...ISSUE_FAUCET, name: 'dryer not working' },
-			workspace_id: TEST_WS,
-			sendMode: 'draft',
-			workspace_label: 'test'
-		},
-		expected: {
-			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
-			drafts_count: 1,
-			drafts_include: ['Unit 701', 'Hub Champaign', '\n\nShould I send Mario?'],
-			drafts_excludes: ['has dryer not working', 'URGENT'],
-			judge: {
-				target: 'drafts',
-				criteria:
-					'The sentence describing the dryer issue reads as natural English — must NOT use a colon/em dash/semicolon, must NOT be a headline fragment. Acceptable phrasings: "Has a broken dryer.", "The dryer isn\'t working.", "Dryer is out.", or similar.'
-			}
-		}
-	},
-
-	{
-		name: 'process_wo: long description gets compact line 2',
-		skill: 'process_wo',
-		ctx: {
-			issue: {
-				...ISSUE_FAUCET,
-				description:
-					'tenant reports that the kitchen faucet has been leaking for several days, water has been pooling under the sink and damaging the cabinet floor, the leak appears to come from the base of the faucet and is worse when hot water is used, they have placed towels but they need replacing constantly'
-			},
-			workspace_id: TEST_WS,
-			sendMode: 'draft',
-			workspace_label: 'test'
-		},
-		expected: {
-			tool_calls_set_includes: ['read_memory', 'update_issue', 'send_text'],
-			drafts_count: 1,
-			drafts_include: ['Unit 701', 'Hub Champaign', '\n\nShould I send Mario?', 'faucet'],
-			drafts_excludes: ['URGENT', 'towels', 'cabinet', 'several days'],
-			judge: {
-				target: 'drafts',
-				criteria:
-					'The issue is summarized in ONE short sentence (under ~20 words) — NOT a multi-paragraph dump. Mentioning "faucet" is enough; "kitchen faucet" is also fine but not required.'
-			}
-		}
-	},
-
 	// ─── Chat (8) ──────────────────────────────────────────────────────────
 
 	{
@@ -1307,12 +1197,7 @@ export const scenarios = [
 		expected: {
 			// Record the preference AND give a brief ack (option-2). No recall, no dispatch.
 			tool_calls_set_includes: ['write_memory', 'send_text'],
-			tool_calls_excludes: [
-				'recall_beliefs',
-				'recall_observations',
-				'text_tenant',
-				'draft_vendor'
-			],
+			tool_calls_excludes: ['recall_beliefs', 'recall_observations', 'text_tenant', 'draft_vendor'],
 			outbox_count: 0,
 			judge: {
 				target: 'drafts',

@@ -36,13 +36,6 @@ import { buildSessionHistory } from './history.mjs';
 //     match is obvious. This keeps casual replies casual instead of forcing the
 //     skill's framing on every turn.
 const RESOLUTIONS = {
-	new_issue: {
-		skill: 'process_work_order',
-		model: process.env.WORK_ORDERS_MODEL || 'gpt-5.4-2026-03-05',
-		maxIterations: 8,
-		maxTokens: 500,
-		allowPlainContentSend: true
-	},
 	incoming_user_message: {
 		// No skill preload — heterogeneous trigger. Model decides via use_skill.
 		model: process.env.CHAT_MODEL || 'gpt-5.4-2026-03-05',

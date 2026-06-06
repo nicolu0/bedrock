@@ -4,8 +4,7 @@
 // drop blocks conditionally and to read in logs.
 //
 // Per spec §6. Block list:
-//   <event>                  — always: names the trigger (new_issue/incoming_user_message/incoming_anon_message)
-//   # issue context          — new_issue: issue block + candidate vendors
+//   <event>                  — always: names the trigger (incoming_user_message/incoming_anon_message)
 //   # recent sends in chat   — incoming_user_message: numbered list of recent groupchat sends
 //   # available skills       — always: skill menu (name + 1-line description)
 //   # environment            — always: today's date + workspace label
@@ -15,58 +14,12 @@
 //   # recalled beliefs       — workspace turns: top beliefs for the relevant entity
 
 import { loadSkill, getMenu } from './skills.mjs';
-import { shortenVendorName } from './names.mjs';
 import { recentSentForChat } from '../state/helpers.mjs';
 import * as memory from '../memory.mjs';
 import * as sessionizer from './sessionizer.mjs';
 
 function reminder(content) {
 	return `<system-reminder>\n${content}\n</system-reminder>`;
-}
-
-function slug(s) {
-	return String(s)
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-+|-+$/g, '');
-}
-
-function formatIssueContext(issue, candidate_vendors) {
-	const lines = [];
-	if (issue.id) lines.push(`issue_id: ${issue.id}`);
-	if (issue.property?.name) lines.push(`Property: ${issue.property.name}`);
-	if (issue.unit?.name) lines.push(`Unit: ${issue.unit.name}`);
-	if (issue.name) lines.push(`Title: ${issue.name}`);
-	if (issue.description) lines.push(`Description: ${issue.description}`);
-	if (issue.tenant?.name) lines.push(`Tenant: ${issue.tenant.name}`);
-	if (issue.urgent) lines.push('Urgent: yes');
-	const issueBlock = ['New work order:', ...lines].join('\n');
-
-	// Candidate vendors: prefer the explicit list (issue-poller fetches workspace
-	// vendors). Fall back to a single synthesized candidate from issue.vendor —
-	// keeps eval fixtures working without a separate candidates field, matching
-	// the pre-PR8.2 process_wo.buildContext fallback.
-	let cands = Array.isArray(candidate_vendors) ? candidate_vendors : [];
-	if (!cands.length && issue.vendor?.name) {
-		cands = [
-			{
-				id: issue.vendor.id ?? `eval-vendor-${slug(issue.vendor.name)}`,
-				name: issue.vendor.name
-			}
-		];
-	}
-	// Show vendors by the short name the PM uses (first name / dropped suffix),
-	// resolving collisions against the full candidate list — this is the name the
-	// model echoes into the WO summary and clarifications. The id keeps tool
-	// routing unambiguous.
-	const candidatesBlock = cands.length
-		? [
-				'Candidate vendors:',
-				...cands.map((c) => `  - ${shortenVendorName(c.name, cands)} (id: ${c.id})`)
-			].join('\n')
-		: 'Candidate vendors: (none provided — rely on read_memory)';
-
-	return `# issue context\n${issueBlock}\n\n${candidatesBlock}`;
 }
 
 function relativeAge(iso) {
@@ -188,7 +141,7 @@ function formatMenu(menu, loadedNames) {
 // Note (PR8.2): skill bodies are NOT injected here. They reach the model two
 // ways:
 //   - Preloaded (orchestrator concatenates the body with identityPrompt in
-//     the system message) for unambiguous events like new_issue / incoming_anon_message.
+//     the system message) for unambiguous events like incoming_anon_message.
 //   - Mid-turn (model calls use_skill → body comes back as a tool result
 //     wrapped in <skill_name>...</skill_name>) for heterogeneous events like
 //     incoming_user_message, where the model decides whether the message warrants a skill.
@@ -208,13 +161,6 @@ export async function buildReminders(event, ctx, skillName) {
 	if (skillName) await loadSkill(skillName);
 
 	// Event-specific situational blocks.
-	if (event.type === 'new_issue') {
-		const issue = event.payload?.issue ?? ctx.issue;
-		const candidate_vendors = event.payload?.candidate_vendors ?? ctx.candidate_vendors;
-		if (!issue) throw new Error('reminders: new_issue requires payload.issue');
-		blocks.push(reminder(formatIssueContext(issue, candidate_vendors)));
-	}
-
 	if (event.type === 'incoming_user_message') {
 		const chat_guid = event.payload?.chat_guid ?? ctx.chat_guid;
 		if (!chat_guid) throw new Error('reminders: incoming_user_message requires payload.chat_guid');
@@ -269,7 +215,6 @@ export async function buildReminders(event, ctx, skillName) {
 // Compose the full user-message content for the turn: reminders concatenated,
 // then (if the event has a "user said something" payload) the verbatim text
 // with a one-line framing that anchors it to the active skill's phase.
-// For new_issue there's no user text — the issue block is the whole content.
 export function composeUserContent(event, reminderBlocks) {
 	const reminderBody = reminderBlocks.join('\n\n');
 	const userText = event.payload?.text ?? null;

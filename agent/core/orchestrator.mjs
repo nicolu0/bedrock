@@ -2,7 +2,7 @@
 //
 //   runTurn(event, ctx)
 //
-// event = { type: 'new_issue' | 'incoming_user_message' | 'incoming_anon_message', payload: {...} }
+// event = { type: 'incoming_user_message' | 'incoming_anon_message', payload: {...} }
 // ctx   = transport hooks + per-turn state (handle, chat_guid, workspace_id,
 //         workspace_label, onEvent, sendMode, outbox, drafts, ...)
 //
@@ -93,8 +93,7 @@ export async function runTurn(event, ctx) {
 	// Identifying fields stamped on every turn-log row for this turn, so the
 	// Turns UI can link a turn back to its session / work order. ctx carries
 	// handle/chat_guid/workspace/session_id (set by the trigger that built it);
-	// issue_id rides on the new_issue payload. Anything absent for an event
-	// type is null (e.g. new_issue has no handle; incoming_user_message has no issue_id).
+	// Anything absent for an event type is null (e.g. incoming_user_message has no issue_id).
 	const turnIdentity = {
 		turn_id: `turn_${randomBytes(8).toString('hex')}`,
 		workspace_id: ctx.workspace_id ?? null,
@@ -342,9 +341,8 @@ export async function runTurn(event, ctx) {
 		//
 		// Opt-in: an event resolution may set allowPlainContentSend: true to
 		// keep a safety-net fallback that emits plain content as a message
-		// event (demo, process_work_order — prompts haven't been tightened to
-		// always route through send_text). New event resolutions should NOT
-		// opt in; tighten the prompt instead.
+		// event. New event resolutions should NOT opt in; tighten the prompt
+		// instead.
 		let plainSent = false;
 		if (plainContent.trim()) {
 			const text = plainContent.trim();
