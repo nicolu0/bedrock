@@ -28,22 +28,29 @@ import {
 	fetchWorkspaceVendors,
 	formatPhone
 } from '../core/supabase.mjs';
-import { pmsFor } from '../core/workspaces.mjs';
+import { pmsFor, WORKSPACES } from '../core/workspaces.mjs';
 import { shortenVendorName } from '../core/names.mjs';
 import * as db from '../state/helpers.mjs';
 
+// Who tenant drafts are signed as. Hard-coded "Jose" everywhere except GreenOak,
+// which signs as the maintenance desk rather than a person.
+function signerFor(workspace_id) {
+	return WORKSPACES[workspace_id]?.label === 'greenoak' ? 'Maintenance Team' : 'Jose';
+}
+
 // Formal tenant signature, kept tool-side so tenant comms stay uniform and the
 // agent only ever writes the substance. No greeting line.
-function sign(bodyText) {
-	return `${bodyText.trim()}\n\nBest,\nJose`;
+function sign(bodyText, signer) {
+	return `${bodyText.trim()}\n\nBest,\n${signer}`;
 }
 
 // The dispatch notification — same wording as the old draft_tenant, minus the
 // greeting. Drops the phone clause if none is on file (no placeholder leak).
-function renderDispatchBody({ vendor_name, vendor_phone }) {
+function renderDispatchBody({ vendor_name, vendor_phone, signer }) {
 	const at = vendor_phone ? ` at ${vendor_phone}` : '';
 	return sign(
-		`I sent this to ${vendor_name}. Please expect a call from them${at}. They will schedule with you.`
+		`I sent this to ${vendor_name}. Please expect a call from them${at}. They will schedule with you.`,
+		signer
 	);
 }
 
@@ -60,6 +67,9 @@ export const textTenant = {
 		'override the vendor on the issue.\n' +
 		'The "Best, Jose" signature is added for you — write only the substance, formally ' +
 		'(this goes to the tenant, not the PM). Recipient is always the tenant on the issue. ' +
+		'POV: you are writing AS the PM (Jose), in the FIRST PERSON. The message is signed by ' +
+		'them, so say "I" — "I\'ll be checking it later today", "I sent a plumber". NEVER refer ' +
+		'to the PM in the third person ("Jose will be checking it"); they are the sender. ' +
 		'Always staged as a draft for human review — never auto-sent.',
 	parameters: {
 		type: 'object',
@@ -71,7 +81,7 @@ export const textTenant = {
 			body: {
 				type: 'string',
 				description:
-					'Triage mode. The question to the tenant, in your own words — the substance only, no greeting or sign-off. ALWAYS open by naming the issue they reported so they know which request it is about — start with "For the {issue} you reported, …", then ask. Omit this to send the vendor-dispatch notification instead.'
+					'Triage mode. The message to the tenant, in your own words — the substance only, no greeting or sign-off. Write in the FIRST PERSON as the PM (the message is signed "Best, Jose"): say "I" — e.g. "I\'ll be taking a look later today", not "Jose will take a look". ALWAYS open by naming the issue they reported so they know which request it is about — start with "For the {issue} you reported, …", then continue. Omit this to send the vendor-dispatch notification instead.'
 			},
 			vendor_name: {
 				type: 'string',
@@ -87,11 +97,12 @@ export const textTenant = {
 		if (!issue.tenant?.name) return { ok: false, error: `issue ${issue_id} has no tenant on file` };
 
 		const triage = Boolean(body && body.trim());
+		const signer = signerFor(issue.workspace_id);
 		let renderedBody;
 
 		if (triage) {
 			// Free-form triage question — the agent wrote the substance.
-			renderedBody = sign(body);
+			renderedBody = sign(body, signer);
 		} else {
 			// Dispatch notification — templated, resolves the vendor's phone. Same
 			// behavior as the old draft_tenant: vendor_name overrides the issue's
@@ -120,7 +131,8 @@ export const textTenant = {
 			const roster = await fetchWorkspaceVendors(issue.workspace_id);
 			renderedBody = renderDispatchBody({
 				vendor_name: shortenVendorName(vendorName, roster),
-				vendor_phone: formatPhone(vendorPhone)
+				vendor_phone: formatPhone(vendorPhone),
+				signer
 			});
 		}
 
