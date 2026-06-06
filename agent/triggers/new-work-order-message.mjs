@@ -474,7 +474,7 @@ async function decideMessage({ issue, vendors, memory }) {
 						'Pick a vendor only when the roster and memory support a real fit. Use null for vendor_id and vendor_display when no suitable vendor is clear.',
 						'vendor_id must be exactly one id from the roster or null.',
 						'vendor_display is how to ask the PM, usually the shortened roster display name.',
-						'issue_sentence is one natural sentence under 15 words, ending with a period. No colons, semicolons, markdown, greetings, urgency prefix, owner approval, or signoff.',
+						'issue_sentence summarizes the problem(s) the tenant reported. If there is one issue, write one natural sentence under 15 words. If the tenant reported multiple distinct issues, name each one in a few words, comma-separated, in a single sentence that covers all of them (e.g. "leaking kitchen faucet, broken bedroom heater, and roaches in the unit"). End with a period. No colons, semicolons, markdown, greetings, urgency prefix, owner approval, or signoff.',
 						'urgent is true only for safety, health, or property-damage risk that cannot wait hours.'
 					].join('\n')
 				},
