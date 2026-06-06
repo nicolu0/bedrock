@@ -475,7 +475,8 @@ async function decideMessage({ issue, vendors, memory }) {
 						'vendor_id must be exactly one id from the roster or null.',
 						'vendor_display is how to ask the PM, usually the shortened roster display name.',
 						'issue_sentence summarizes the problem(s) the tenant reported. If there is one issue, write one natural sentence under 15 words. If the tenant reported multiple distinct issues, name each one in a few words, comma-separated, in a single sentence that covers all of them (e.g. "leaking kitchen faucet, broken bedroom heater, and roaches in the unit"). End with a period. No colons, semicolons, markdown, greetings, urgency prefix, owner approval, or signoff.',
-						'urgent is true only for safety, health, or property-damage risk that cannot wait hours.'
+						'urgent is true only for safety, health, or property-damage risk that cannot wait hours.',
+						'urgency_reason is always one short sentence on why it is or is not urgent.'
 					].join('\n')
 				},
 				{
@@ -520,7 +521,7 @@ function validateDecision(raw, vendors) {
 	const issue_sentence = String(raw.issue_sentence ?? '').trim();
 	if (!title) throw new Error('decision.title required');
 	if (typeof raw.urgent !== 'boolean') throw new Error('decision.urgent must be boolean');
-	if (!urgency_reason) throw new Error('decision.urgency_reason required');
+	if (raw.urgent && !urgency_reason) throw new Error('decision.urgency_reason required');
 	if (!issue_sentence) throw new Error('decision.issue_sentence required');
 	if (!/\.$/.test(issue_sentence)) throw new Error('decision.issue_sentence must end with period');
 	if (/[\n\r]/.test(issue_sentence)) throw new Error('decision.issue_sentence must be one line');
