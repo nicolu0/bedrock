@@ -6,7 +6,7 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<!-- PWA: installable as a standalone "Bedrock" app with native notifications. -->
 		<link rel="manifest" href="/manifest.webmanifest" />
-		<meta name="theme-color" content="#0c0a09" />
+		<meta name="theme-color" content="#000000" />
 		<link rel="icon" href="/icon-192.png" />
 		<link rel="apple-touch-icon" href="/icon-192.png" />
 		<meta name="apple-mobile-web-app-capable" content="yes" />
@@ -16,14 +16,14 @@
 			* { box-sizing: border-box; }
 			html, body {
 				margin: 0;
-				background: #0c0a09;
+				background: transparent;
 				color: #fafaf9;
 				font: 14px/1.5 -apple-system, ui-sans-serif, system-ui, sans-serif;
 				min-height: 100vh;
 				-webkit-font-smoothing: antialiased;
 				-moz-osx-font-smoothing: grayscale;
 			}
-			html { background-color: #0c0a09; }
+			html { background-color: rgba(0, 0, 0, 0.95); }
 			header {
 				padding: 18px 24px;
 				border-bottom: 1px solid #292524;
@@ -33,7 +33,7 @@
 				position: sticky;
 				top: 0;
 				z-index: 50;
-				background: #0c0a09;
+				background: rgba(0, 0, 0, 0.95);
 			}
 			header h1 {
 				margin: 0;
@@ -407,7 +407,7 @@
 			.notes .note-empty:hover { color: #a8a29e; }
 			.notes textarea {
 				width: 100%;
-				background: #0c0a09;
+				background: #000000;
 				color: #fafaf9;
 				border: 1px solid #44403c;
 				border-radius: 6px;
@@ -578,17 +578,37 @@
 
 			.memory-search {
 				margin-left: 10px;
-				background: #1c1917;
+				background: transparent;
 				border: 1px solid #292524;
 				color: #fafaf9;
-				padding: 6px 10px;
+				padding: 6px 30px 6px 10px;
 				border-radius: 6px;
 				font: inherit;
 				font-size: 12px;
 				width: 200px;
 				display: none;
 			}
-			.memory-search:focus { outline: none; border-color: #1d6ee2; }
+			.memory-search:focus { outline: none; }
+			.memory-search::placeholder { color: #78716c; }
+			/* search field + its "/" key hint */
+			.memory-search-wrap { position: relative; display: inline-flex; align-items: center; }
+			.memory-search-wrap .search-key {
+				position: absolute;
+				right: 6px;
+				pointer-events: none;
+				min-width: 16px;
+				height: 16px;
+				display: inline-grid;
+				place-items: center;
+				border-radius: 4px;
+				background: #44403c;
+				color: #d6d3d1;
+				font-family: ui-monospace, Menlo, monospace;
+				font-size: 10px;
+				line-height: 1;
+			}
+			/* hide the hint once the field is focused/typed into */
+			.memory-search:focus ~ .search-key { display: none; }
 
 			.view { display: none; }
 			.view.active { display: block; }
@@ -603,7 +623,7 @@
 			.memory-view svg {
 				width: 100%;
 				height: 100%;
-				background: #0c0a09;
+				background: #000000;
 				display: block;
 				cursor: grab;
 			}
@@ -811,7 +831,7 @@
 				letter-spacing: 0.05em;
 			}
 			.belief-dialog textarea, .belief-dialog input[type=text] {
-				background: #0c0a09;
+				background: #000000;
 				border: 1px solid #292524;
 				color: #fafaf9;
 				padding: 8px 10px;
@@ -958,7 +978,7 @@
 			}
 			.list-col { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid #292524; }
 			.list-col:last-child { border-right: none; }
-			.list-col-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #292524; background: #0c0a09; position: sticky; top: 0; z-index: 5; }
+			.list-col-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #292524; background: #000000; position: sticky; top: 0; z-index: 5; }
 			.list-col-header h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: #a8a29e; }
 			.list-col-header .count { color: #a8a29e; font-size: 11.5px; }
 			.list-col-body { flex: 1 1 auto; overflow-y: auto; padding: 8px 12px 24px; }
@@ -1605,7 +1625,7 @@
 			.chat-drafts-rail {
 				flex: 0 0 420px;
 				border-right: 1px solid #292524;
-				background: #0c0a09;
+				background: #000000;
 				padding: 14px 14px 80px;
 				overflow-y: auto;
 				min-height: 0; /* stretches to .chat-view height; scrolls internally */
@@ -1804,9 +1824,9 @@
 			/* ============================================================ */
 			#zoomwrap { display: flex; flex-direction: column; transform: scale(1.28); transform-origin: top left; width: calc(100% / 1.28); height: calc(100vh / 1.28); }
 			.ide { flex: 1 1 auto; min-height: 0; display: flex; }
-			.pane-issues { flex: 0 0 440px; width: 440px; border-right: 1px solid #292524; display: flex; flex-direction: column; min-height: 0; background: #0c0a09; }
-			.pane-chat { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: #0c0a09; }
-			.pane-right { flex: 0 0 520px; width: 520px; border-left: 1px solid #292524; display: flex; flex-direction: column; min-height: 0; background: #0c0a09; }
+			.pane-issues { flex: 0 0 440px; width: 440px; border-right: 1px solid #292524; display: flex; flex-direction: column; min-height: 0; background: #000000; }
+			.pane-chat { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: #000000; }
+			.pane-right { flex: 0 0 520px; width: 520px; border-left: 1px solid #292524; display: flex; flex-direction: column; min-height: 0; background: #000000; }
 
 			.pane-head { flex: 0 0 auto; display: flex; align-items: center; gap: 9px; height: 40px; padding: 0 14px; border-bottom: 1px solid #292524; }
 			.pane-head .htitle { display: flex; align-items: center; gap: 8px; line-height: 1; }
@@ -1895,9 +1915,9 @@
 			/* memory graph: full-screen overlay (not a tab) */
 			.memback { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 320; display: none; }
 			.memback.show { display: block; }
-			.memov { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 330; background: #0c0a09; display: none; flex-direction: column; overflow: hidden; }
+			.memov { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 330; background: #000000; display: none; flex-direction: column; overflow: hidden; }
 			.memov.show { display: flex; }
-			.memov .mhd { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #292524; }
+			.memov .mhd { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
 			.memov .mhd .t { font-size: 14px; font-weight: 650; color: #f5f5f4; }
 			.memov .mhd .memory-search { display: inline-block; margin-left: 4px; }
 			.memov .mclose { margin-left: auto; background: transparent; border: 0; color: #a8a29e; font-size: 22px; cursor: pointer; padding: 2px 8px; line-height: 1; }
@@ -1915,7 +1935,7 @@
 			/* continuous vertical spine running through the dots (no horizontal separators) */
 			.turns-view .tl-entry::before { content: ''; position: absolute; left: 7px; top: 4px; bottom: -10px; width: 1px; background: #33302d; }
 			.turns-view .tl-item:last-child .tl-entry::before { display: none; }
-			.turns-view .tl-node { position: absolute; left: 1px; top: 4px; width: 13px; height: 13px; border-radius: 50%; background: #0c0a09; border: 2px solid #78716c; }
+			.turns-view .tl-node { position: absolute; left: 1px; top: 4px; width: 13px; height: 13px; border-radius: 50%; background: #000000; border: 2px solid #78716c; }
 			.turns-view .tl-node.ev-new { border-color: #9db8ff; }
 			.turns-view .tl-node.ev-user { border-color: #c7a3ff; }
 			.turns-view .tl-node.ev-anon { border-color: #d9a366; }
@@ -1969,7 +1989,7 @@
 			/* turns drill-in modal */
 			.turn-modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 340; display: none; }
 			.turn-modal-back.show { display: block; }
-			.turn-modal { position: fixed; top: 6vh; left: 50%; transform: translateX(-50%); width: min(680px, 92vw); max-height: 86vh; z-index: 350; background: #0c0a09; border: 1px solid #44403c; border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.55); display: none; flex-direction: column; overflow: hidden; }
+			.turn-modal { position: fixed; top: 6vh; left: 50%; transform: translateX(-50%); width: min(680px, 92vw); max-height: 86vh; z-index: 350; background: #000000; border: 1px solid #44403c; border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.55); display: none; flex-direction: column; overflow: hidden; }
 			.turn-modal.show { display: flex; }
 			.turn-modal .tm-close { position: absolute; top: 9px; right: 12px; background: transparent; border: 0; color: #a8a29e; font-size: 22px; cursor: pointer; line-height: 1; padding: 2px 8px; z-index: 2; }
 			.turn-modal .tm-close:hover { color: #fafaf9; }
@@ -2010,7 +2030,7 @@
 					position: sticky;
 					top: 0;
 					z-index: 20;
-					background: #0c0a09;
+					background: #000000;
 				}
 				.rtabs { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 				.rtab { justify-content: center; height: 32px; }
@@ -2055,7 +2075,7 @@
 					border-radius: 9px;
 					padding: 0 10px 0 12px;
 					font-size: 13px;
-					background: #0c0a09;
+					background: #000000;
 				}
 				.mobile-workspace-bar .ws-tab.active { background: #292524; }
 				.mobile-workspace-bar .ws-dot { width: 9px; height: 9px; }
@@ -2118,12 +2138,14 @@
 			<div class="memback" id="memback"></div>
 			<div class="memov" id="memov">
 				<div class="mhd">
-					<span class="t">Memory graph</span>
 					<div class="memory-view-toggle" id="memory-view-toggle">
 						<button data-view="graph" class="active">Graph</button>
 						<button data-view="list">List</button>
 					</div>
-					<input id="memory-search" class="memory-search" type="search" placeholder="search memory…" />
+					<div class="memory-search-wrap">
+						<input id="memory-search" class="memory-search" type="search" placeholder="search memory…" />
+						<kbd class="search-key" id="memory-search-key">/</kbd>
+					</div>
 					<button class="mclose" id="memclose" aria-label="close">×</button>
 				</div>
 				<div class="mbody">
@@ -3264,6 +3286,9 @@
 				loadMemoryGraph();
 			}
 			function closeMemory() {
+				// Capture final drag positions so a later workspace-switch restore
+				// reflects them (re-opening the same ws just reuses the live DOM).
+				snapshotGraph();
 				memOpen = false;
 				memBackEl.classList.remove('show');
 				memOvEl.classList.remove('show');
@@ -3284,6 +3309,9 @@
 				if (e.key === 'm' || e.key === 'M') {
 					e.preventDefault();
 					memOpen ? closeMemory() : openMemory();
+				} else if (e.key === '/' && memOpen) {
+					e.preventDefault();
+					document.getElementById('memory-search').focus();
 				} else if (e.key === '[') {
 					e.preventDefault();
 					setDrawer('drafts');
@@ -3755,13 +3783,16 @@
 			const PT = 'America/Los_Angeles';
 			function fmtTurnTime(iso) {
 				if (!iso) return '—';
-				return new Date(iso).toLocaleTimeString('en-US', {
+				const d = new Date(iso);
+				const day = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: PT });
+				const tm = d.toLocaleTimeString('en-US', {
 					hour: '2-digit',
 					minute: '2-digit',
 					second: '2-digit',
 					hour12: false,
 					timeZone: PT
 				});
+				return day + ' ' + tm;
 			}
 			function fmtTurnFull(iso) {
 				if (!iso) return '';
@@ -4590,6 +4621,14 @@
 			let memoryState = { observations: [], beliefs: [], edges: [] };
 			let editingBeliefId = null; // null when creating new
 			let simulation = null;
+			// Per-workspace layout cache so re-opening / switching back doesn't
+			// re-fetch and re-run the force simulation. Keyed by workspace →
+			// { state, positions: {id:{x,y}}, transform }. `renderedWorkspace`
+			// tracks whose graph is currently in the SVG; `lastZoomTransform`
+			// mirrors the live pan/zoom so we can snapshot it.
+			const graphCache = new Map();
+			let renderedWorkspace = null;
+			let lastZoomTransform = null;
 			let selectedNodeId = null;
 			let hoveredNodeId = null;
 			// Set of matched node ids while a search is active, else null. When
@@ -4635,13 +4674,45 @@
 				return force;
 			}
 
-			async function loadMemoryGraph() {
+			// Snapshot the currently-rendered graph (node positions + zoom) into the
+			// cache so we can restore it verbatim later. No-op before the first render.
+			function snapshotGraph() {
+				if (!simulation || renderedWorkspace == null) return;
+				const positions = {};
+				for (const n of simulation.nodes()) positions[n.id] = { x: n.x, y: n.y };
+				graphCache.set(renderedWorkspace, {
+					state: memoryState,
+					positions,
+					transform: lastZoomTransform
+				});
+			}
+
+			async function loadMemoryGraph({ force = false } = {}) {
+				const ws = memoryWorkspace();
+				// Preserve the graph we're about to leave before swapping/returning.
+				snapshotGraph();
+				// Re-opening the same workspace: the SVG DOM survives close (we only
+				// toggle .show), so its positions + zoom are already on screen.
+				if (!force && renderedWorkspace === ws && simulation) return;
+				// A forced reload (belief edit/delete) must re-fetch fresh data.
+				if (force) graphCache.delete(ws);
+				// Switching to a workspace we've already laid out: restore from cache
+				// instead of re-fetching and re-simulating.
+				const cached = graphCache.get(ws);
+				if (cached) {
+					memoryState = cached.state;
+					renderGraph(cached);
+					renderBeliefList();
+					renderedWorkspace = ws;
+					return;
+				}
 				try {
-					const res = await fetch(`/api/memory/graph?workspace=${memoryWorkspace()}`);
+					const res = await fetch(`/api/memory/graph?workspace=${ws}`);
 					if (!res.ok) throw new Error(await res.text());
 					memoryState = await res.json();
 					renderGraph();
 					renderBeliefList();
+					renderedWorkspace = ws;
 				} catch (err) {
 					toast(`memory load failed: ${err.message}`, 'error');
 				}
@@ -4860,7 +4931,7 @@
 				renderBeliefDetail(belief);
 			});
 
-			function renderGraph() {
+			function renderGraph(cached) {
 				const svg = d3.select(svgEl);
 				svg.selectAll('*').remove();
 
@@ -4895,6 +4966,17 @@
 					...bel.map((b) => ({ ...b, _kind: 'belief' })),
 					...ents.map((e) => ({ ...e, _kind: 'entity' }))
 				];
+				// Restoring a cached layout: seed each node at its saved position so
+				// the simulation has nothing to solve (see the settle skip below).
+				if (cached && cached.positions) {
+					for (const n of nodes) {
+						const p = cached.positions[n.id];
+						if (p) {
+							n.x = p.x;
+							n.y = p.y;
+						}
+					}
+				}
 				const visibleIds = new Set(nodes.map((n) => n.id));
 				const evidenceLinks = memoryState.edges
 					.filter((e) => visibleIds.has(e.belief_id) && visibleIds.has(e.observation_id))
@@ -4970,7 +5052,10 @@
 				// to set the initial centered view).
 				const zoomBehavior = d3.zoom()
 					.scaleExtent([0.2, 4])
-					.on('zoom', (ev) => g.attr('transform', ev.transform));
+					.on('zoom', (ev) => {
+						g.attr('transform', ev.transform);
+						lastZoomTransform = ev.transform;
+					});
 				svg.call(zoomBehavior);
 
 				const link = g
@@ -5184,21 +5269,36 @@
 				// simulation so subsequent interaction (drag, filter change) only
 				// nudges things slightly.
 				simulation.stop();
-				for (let i = 0; i < 300; i++) simulation.tick();
-				link
-					.attr('x1', (d) => d.source.x)
-					.attr('y1', (d) => d.source.y)
-					.attr('x2', (d) => d.target.x)
-					.attr('y2', (d) => d.target.y);
-				node.attr('transform', (d) => `translate(${d.x},${d.y})`);
-				simulation.alpha(0.05).restart();
+				if (cached && cached.positions) {
+					// Positions restored from cache — skip the 300-tick settle and
+					// leave the simulation cool (drag handlers re-heat it locally).
+					link
+						.attr('x1', (d) => d.source.x)
+						.attr('y1', (d) => d.source.y)
+						.attr('x2', (d) => d.target.x)
+						.attr('y2', (d) => d.target.y);
+					node.attr('transform', (d) => `translate(${d.x},${d.y})`);
+				} else {
+					for (let i = 0; i < 300; i++) simulation.tick();
+					link
+						.attr('x1', (d) => d.source.x)
+						.attr('y1', (d) => d.source.y)
+						.attr('x2', (d) => d.target.x)
+						.attr('y2', (d) => d.target.y);
+					node.attr('transform', (d) => `translate(${d.x},${d.y})`);
+					simulation.alpha(0.05).restart();
+				}
 
-				// Center the view on the entity cluster at a readable scale (1.05×).
-				const cx = w / 2;
-				const cy = h / 2;
-				const endScale = 1.05;
-				const endTransform = d3.zoomIdentity.translate(cx * (1 - endScale), cy * (1 - endScale)).scale(endScale);
-				svg.call(zoomBehavior.transform, endTransform);
+				// Restore the cached pan/zoom, else center on the cluster at 1.05×.
+				if (cached && cached.transform) {
+					svg.call(zoomBehavior.transform, cached.transform);
+				} else {
+					const cx = w / 2;
+					const cy = h / 2;
+					const endScale = 1.05;
+					const endTransform = d3.zoomIdentity.translate(cx * (1 - endScale), cy * (1 - endScale)).scale(endScale);
+					svg.call(zoomBehavior.transform, endTransform);
+				}
 
 				// If a search is active when the graph re-renders (e.g. after a
 				// belief create/delete reload), re-apply its dim to the new DOM.
@@ -5552,7 +5652,7 @@
 					if (!res.ok) throw new Error(await res.text());
 					dialogEl.close();
 					toast(editingBeliefId ? 'belief updated' : 'belief created');
-					await loadMemoryGraph();
+					await loadMemoryGraph({ force: true });
 				} catch (err) {
 					toast(`save failed: ${err.message}`, 'error');
 				}
@@ -5565,7 +5665,7 @@
 					if (!res.ok) throw new Error(await res.text());
 					toast('belief deleted');
 					hideDetail();
-					await loadMemoryGraph();
+					await loadMemoryGraph({ force: true });
 				} catch (err) {
 					toast(`delete failed: ${err.message}`, 'error');
 				}

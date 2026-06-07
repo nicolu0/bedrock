@@ -514,43 +514,61 @@ async function decideMessage({ issue, vendors, memory }) {
 	return JSON.parse(content);
 }
 
-function validateDecision(raw, vendors) {
-	if (!raw || typeof raw !== 'object') throw new Error('decision is not an object');
-	const title = String(raw.title ?? '').trim();
-	const urgency_reason = String(raw.urgency_reason ?? '').trim();
-	const issue_sentence = String(raw.issue_sentence ?? '').trim();
-	if (!title) throw new Error('decision.title required');
-	if (typeof raw.urgent !== 'boolean') throw new Error('decision.urgent must be boolean');
-	if (raw.urgent && !urgency_reason) throw new Error('decision.urgency_reason required');
-	if (!issue_sentence) throw new Error('decision.issue_sentence required');
-	if (!/\.$/.test(issue_sentence)) throw new Error('decision.issue_sentence must end with period');
-	if (/[\n\r]/.test(issue_sentence)) throw new Error('decision.issue_sentence must be one line');
-	if (/[;:]/.test(issue_sentence))
-		throw new Error('decision.issue_sentence has forbidden punctuation');
-	if (/\{[a-z_]+\}/i.test(issue_sentence))
-		throw new Error('decision.issue_sentence has placeholder');
-	if (/^(urgent|URGENT)\b/.test(issue_sentence))
-		throw new Error('decision.issue_sentence has urgency prefix');
+// The issue_sentence is the one line of model prose in the draft. Earlier this code
+// hard-threw on any formatting slip (missing period, stray colon, newline, leading
+// "Urgent") — and any throw in validateDecision drops the whole work order with no
+// retry. Normalize in code instead so a punctuation slip can never lose a WO.
+function sanitizeIssueSentence(input) {
+	let s = String(input ?? '')
+		.replace(/[\n\r]+/g, ' ') // collapse to one line
+		.replace(/\{[a-z_]+\}/gi, '') // drop unfilled placeholder tokens
+		.replace(/[;:]/g, ',') // colon/semicolon → comma
+		.replace(/^\s*urgent\b[\s:,—–-]*/i, '') // strip a leading "Urgent" prefix
+		.replace(/\s+([,.])/g, '$1') // no space before , or .
+		.replace(/,{2,}/g, ',') // collapse repeated commas
+		.replace(/\s{2,}/g, ' ') // collapse runs of spaces
+		.replace(/[\s,]+$/, '') // drop trailing comma/space
+		.trim();
+	if (!s) return '';
+	if (!/[.?!]$/.test(s)) s += '.'; // ensure terminal punctuation
+	return s[0].toUpperCase() + s.slice(1); // re-capitalize (prefix strip may have lowercased)
+}
+
+// Degrade gracefully on EVERY field — a model-output quirk must never drop a work order.
+// Truly unrecoverable cases (issue not found, unknown workspace, no chat configured, OpenAI
+// total failure) hard-fail upstream, not here. Inside a parsed decision there is always a
+// sane fallback: the PMS title for the summary/title, the PMS urgent flag for urgency, and
+// "no vendor" (the 2-line draft) for a bad vendor pick. So this function never throws.
+function validateDecision(raw, vendors, issue = {}) {
+	const obj = raw && typeof raw === 'object' ? raw : {};
+	const pmsTitle = String(issue.name ?? '').trim();
+
+	const title = String(obj.title ?? '').trim().slice(0, 120) || pmsTitle || 'Work order';
+	// Missing/!boolean urgent → fall back to the PMS flag, exactly like the old triage did.
+	const urgent = typeof obj.urgent === 'boolean' ? obj.urgent : Boolean(issue.urgent);
+	// urgency_reason is best-effort: display-only (Turns tab), never a DB column, and `urgent`
+	// drives no behavior yet. A missing reason is fine; `urgent` is kept for the planned bypass.
+	const urgency_reason = String(obj.urgency_reason ?? '').trim().slice(0, 300);
+	// Formatting slips are normalized in code; an empty/placeholder-only sentence falls back to
+	// the PMS title so the PM still gets a usable summary.
+	const issue_sentence =
+		sanitizeIssueSentence(obj.issue_sentence) ||
+		sanitizeIssueSentence(pmsTitle) ||
+		'Maintenance issue reported.';
 
 	const byId = new Map(vendors.map((v) => [v.id, v]));
-	let vendor_id = raw.vendor_id == null ? null : String(raw.vendor_id).trim();
-	let vendor_display = raw.vendor_display == null ? null : String(raw.vendor_display).trim();
-	if (vendor_id) {
-		if (!byId.has(vendor_id)) throw new Error(`decision.vendor_id not in roster: ${vendor_id}`);
-		if (!vendor_display) throw new Error('decision.vendor_display required when vendor_id is set');
+	let vendor_id = obj.vendor_id == null ? null : String(obj.vendor_id).trim();
+	let vendor_display = obj.vendor_display == null ? null : String(obj.vendor_display).trim();
+	if (vendor_id && byId.has(vendor_id)) {
+		// Valid pick — derive the display name from the roster if the model omitted it.
+		if (!vendor_display) vendor_display = shortenVendorName(byId.get(vendor_id).name, vendors);
 	} else {
+		// Unknown/hallucinated vendor → send the summary with no vendor question, never drop the WO.
 		vendor_id = null;
 		vendor_display = null;
 	}
 
-	return {
-		title: title.slice(0, 120),
-		urgent: raw.urgent,
-		urgency_reason: urgency_reason.slice(0, 300),
-		issue_sentence,
-		vendor_id,
-		vendor_display
-	};
+	return { title, urgent, urgency_reason, issue_sentence, vendor_id, vendor_display };
 }
 
 function buildDraftMessage(issue, decision) {
@@ -729,7 +747,7 @@ export async function processNewWorkOrder({
 		});
 
 		const rawDecision = await decideMessage({ issue, vendors, memory });
-		const decision = validateDecision(rawDecision, vendors);
+		const decision = validateDecision(rawDecision, vendors, issue);
 		issue = {
 			...issue,
 			name: decision.title,
